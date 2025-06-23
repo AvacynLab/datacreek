@@ -60,49 +60,17 @@ def process_file(
     """Process a file using the appropriate parser
     
     Args:
-        file_path: Path to the file or URL to parse
-        output_dir: Directory to save parsed text (if None, uses config)
-        output_name: Custom filename for output (if None, uses original name)
+        file_path: Path or URL of the resource to parse
+        output_dir: Ignored, kept for backward compatibility
+        output_name: Ignored, kept for backward compatibility
         config: Configuration dictionary (if None, uses default)
-    
+
     Returns:
-        Path to the output file
+        Raw text content extracted from the source
     """
-    # Create output directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-    
     # Determine parser based on file type
     parser = determine_parser(file_path, config)
-    
+
     # Parse the file
     content = parser.parse(file_path)
-    
-    # Generate output filename if not provided
-    if not output_name:
-        if file_path.startswith(('http://', 'https://')):
-            # Extract filename from URL
-            if 'youtube.com' in file_path or 'youtu.be' in file_path:
-                # Use video ID for YouTube URLs
-                import re
-                video_id = re.search(r'(?:v=|\.be/)([^&]+)', file_path).group(1)
-                output_name = f"youtube_{video_id}.txt"
-            else:
-                # Use domain for other URLs
-                from urllib.parse import urlparse
-                domain = urlparse(file_path).netloc.replace('.', '_')
-                output_name = f"{domain}.txt"
-        else:
-            # Use original filename with .txt extension
-            base_name = os.path.basename(file_path)
-            output_name = os.path.splitext(base_name)[0] + '.txt'
-    
-    # Ensure .txt extension
-    if not output_name.endswith('.txt'):
-        output_name += '.txt'
-    
-    # Save the content
-    output_path = os.path.join(output_dir, output_name)
-    parser.save(content, output_path)
-    
-    return output_path
+    return content

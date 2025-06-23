@@ -2,7 +2,7 @@
 
 Tool for generating high-quality synthetic datasets to fine-tune LLMs.
 
-Generate Reasoning Traces, QA Pairs, save them to a fine-tuning format with a simple CLI.
+Generate reasoning traces and QA pairs and save them to common fine-tuning formats.
 
 > [Checkout our guide on using the tool to unlock task-specific reasoning in Llama-3 family](https://github.com/meta-llama/datacreek/tree/main/use-cases/adding_reasoning_to_llama_3)
 
@@ -17,21 +17,21 @@ Multiple tools support standardized formats. However, most of the times your dat
 This toolkit simplifies the journey of:
 
 - Using a LLM (vLLM or any local/external API endpoint) to generate examples
-- Modular 4 command flow
 - Converting your existing files to fine-tuning friendly formats
 - Creating synthetic datasets
 - Supporting various formats of post-training fine-tuning
 
-# How does Datacreek offer it? 
+# How does Datacreek offer it?
 
-The tool is designed to follow a simple CLI structure with 4 commands:
+The toolkit exposes a REST API that mirrors the main data preparation steps:
 
-- `ingest` various file formats
-- `create` your fine-tuning format: `QA` pairs, `QA` pairs with CoT, `summary` format
-- `curate`: Using Llama as a judge to curate high quality examples. 
-- `save-as`: After that you can simply save these to a format that your fine-tuning workflow requires.
+- `/ingest` for converting raw files to text
+- `/generate` for creating datasets
+- `/curate` for quality filtering
+- `/save` for exporting in common fine-tuning formats
 
-You can override any parameter or detail by either using the CLI or overriding the default YAML config.
+ All behaviour is driven from a YAML configuration file that you can override with your own values.
+
 
 
 ### Installation
@@ -56,10 +56,6 @@ cd datacreek
 pip install -e .
 ```
 
-To get an overview of commands type: 
-
-`datacreek --help`
-
 ### 1. Tool Setup
 
 - The tool expects respective files to be put in named folders.
@@ -79,20 +75,14 @@ vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 
 ### 2. Usage
 
-Start the REST API server with the CLI then interact with the endpoints.
+Start the REST API server and interact with the endpoints.
 
-```bash
-# Launch the API server
-datacreek serve --host 0.0.0.0 --port 8000
-```
-
-The API exposes `/ingest`, `/generate`, `/curate` and `/save` endpoints that mirror
-the previous CLI commands.
+The service exposes `/ingest`, `/generate`, `/curate` and `/save` routes that correspond to the data preparation flow.
 ## Configuration
 
 The toolkit uses a YAML configuration file (default: `configs/config.yaml`).
 
-Note, this can be overridden via either CLI arguments OR passing a custom YAML file
+You can override any value by providing a custom YAML file to the server.
 
 ```yaml
 # Example configuration using vLLM
@@ -128,10 +118,12 @@ api-endpoint:
 
 ### Customizing Configuration
 
-Create a overriding configuration file and use it with the `-c` flag:
+Create a custom configuration file and pass it via the `X-Config-Path` header:
 
 ```bash
-curl -X POST localhost:8000/ingest -d "path=docs/paper.pdf"
+curl -X POST localhost:8000/ingest \
+     -H "X-Config-Path: custom_config.yaml" \
+     -d "path=docs/paper.pdf"
 ```
 
 ## Examples
@@ -209,22 +201,23 @@ prompts:
 
 ```mermaid
 graph LR
-    SDK[datacreek] --> Serve[serve]
-    SDK --> Test[test]
+    API[REST API] --> Ingest
+    API --> Generate
+    API --> Curate
+    API --> Save
     Ingest --> HTMLFile[HTML File]
     Ingest --> YouTubeURL[File Format]
 
-    
-    Create --> CoT[CoT]
-    Create --> QA[QA Pairs]
-    Create --> Summary[Summary]
-    
+    Generate --> CoT[CoT]
+    Generate --> QA[QA Pairs]
+    Generate --> Summary[Summary]
+
     Curate --> Filter[Filter by Quality]
-    
-    SaveAs --> JSONL[JSONL Format]
-    SaveAs --> Alpaca[Alpaca Format]
-    SaveAs --> FT[Fine-Tuning Format]
-    SaveAs --> ChatML[ChatML Format]
+
+    Save --> JSONL[JSONL Format]
+    Save --> Alpaca[Alpaca Format]
+    Save --> FT[Fine-Tuning Format]
+    Save --> ChatML[ChatML Format]
 ```
 
 ## Troubleshooting FAQs:
@@ -244,8 +237,8 @@ If you encounter CUDA out of memory errors:
 
 ### JSON Parsing Issues
 
-If you encounter issues with the `curate` command:
-- Use the `-v` flag to enable verbose output
+If you encounter issues during the curation step:
+- Enable verbose logging
 - Set smaller batch sizes in your config.yaml
 - Ensure the LLM model supports proper JSON output
 - Install json5 for enhanced JSON parsing: `pip install json5`

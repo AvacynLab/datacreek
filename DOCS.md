@@ -5,21 +5,21 @@
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
 3. [Installation](#3-installation)
-4. [CLI Interface](#4-cli-interface)
-5. [Configuration System](#5-configuration-system)
-6. [Pipeline Stages](#6-pipeline-stages)
-7. [Component Reference](#7-component-reference)
-8. [Output Formats](#8-output-formats)
-9. [Environment Variables](#9-environment-variables)
-10. [Workflow Examples](#10-workflow-examples)
-11. [Customizing Prompts](#11-customizing-prompts)
-12. [Extending the Toolkit](#12-extending-the-toolkit)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Best Practices](#14-best-practices)
+4. [Configuration System](#4-configuration-system)
+5. [Pipeline Stages](#5-pipeline-stages)
+6. [Component Reference](#6-component-reference)
+7. [Output Formats](#7-output-formats)
+8. [Environment Variables](#8-environment-variables)
+9. [Workflow Examples](#9-workflow-examples)
+10. [Customizing Prompts](#10-customizing-prompts)
+11. [Extending the Toolkit](#11-extending-the-toolkit)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Best Practices](#13-best-practices)
 
 ## 1. Overview
 
-Datacreek is a toolkit for preparing high-quality synthetic datasets to fine-tune Large Language Models (LLMs). It provides a modular command-line interface (CLI) for the complete data preparation workflow, with 4 simple commands named after their respective actions.
+Datacreek is a toolkit for preparing high-quality synthetic datasets to fine-tune Large Language Models (LLMs). The primary interface is a REST API that exposes each step of the data preparation workflow.
+
 
 ### Design:
 
@@ -38,7 +38,7 @@ Datacreek follows a modular architecture with these main components:
 
 ```mermaid
 graph TD
-    CLI[CLI Interface] --> Core
+    API[REST API] --> Core
     Core --> Parsers
     Core --> Generators
     Core --> LLMClient
@@ -54,7 +54,7 @@ graph TD
     Generators --> QAGenerator
     Generators --> COTGenerator
     
-    Config[Configuration] --> CLI
+    Config[Configuration] --> API
     Config --> Core
     Config --> LLMClient
     Config --> Generators
@@ -81,7 +81,6 @@ graph TD
 datacreek/
 ├── datacreek/        # Package source code
 │   ├── __init__.py           # Package initialization
-│   ├── cli.py                # CLI entry point using Typer
 │   ├── core/                 # Core functionality
 │   │   ├── __init__.py
 │   │   ├── context.py        # Application context
@@ -180,14 +179,6 @@ classDiagram
         +save(content, output_path) None
     }
 
-    class CLIApp {
-        +callback(config)
-        +system_check(api_base)
-        +ingest(input, output_dir, name)
-        +create(input, content_type, output_dir, api_base, model, num_pairs, threshold)
-        +curate(input, output, threshold, api_base, model)
-        +save_as(input, format, output)
-    }
 
     Parser <|-- PDFParser
     Parser <|-- HTMLParser
@@ -197,9 +188,6 @@ classDiagram
     Parser <|-- TXTParser
 
     QAGenerator --> LLMClient
-    CLIApp --> AppContext
-    CLIApp --> QAGenerator
-    CLIApp --> Parser
 ```
 
 ### Data Flow
@@ -207,34 +195,34 @@ classDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant CLI
+    participant API
     participant Parsers
     participant LLMClient
     participant QAGenerator
     participant FormatConverter
-    
-    User->>CLI: datacreek ingest file.pdf
-    CLI->>Parsers: determine_parser(file.pdf)
-    Parsers-->>CLI: PDFParser
-    CLI->>Parsers: parse(file.pdf)
-    Parsers-->>CLI: Extracted text
-    CLI-->>User: Text saved to data/output/file.txt
-    
-    User->>CLI: datacreek create file.txt
-    CLI->>LLMClient: Initialize with config
-    CLI->>QAGenerator: process_document(text)
+
+    User->>API: POST /ingest file.pdf
+    API->>Parsers: determine_parser(file.pdf)
+    Parsers-->>API: PDFParser
+    API->>Parsers: parse(file.pdf)
+    Parsers-->>API: Extracted text
+    API-->>User: Text saved to data/output/file.txt
+
+    User->>API: POST /generate file.txt
+    API->>LLMClient: Initialize with config
+    API->>QAGenerator: process_document(text)
     QAGenerator->>LLMClient: generate_summary()
     LLMClient-->>QAGenerator: Summary
     QAGenerator->>LLMClient: generate_qa_pairs()
     LLMClient-->>QAGenerator: QA pairs
     QAGenerator->>LLMClient: rate_qa_pairs()
     LLMClient-->>QAGenerator: Rated pairs
-    QAGenerator-->>CLI: Results
-    CLI-->>User: QA pairs saved to data/generated/file_qa_pairs.json
-    
-    User->>CLI: datacreek curate file_qa_pairs.json -v
-    CLI->>LLMClient: Initialize with config
-    CLI->>QAGenerator: rate_qa_pairs()
+    QAGenerator-->>API: Results
+    API-->>User: QA pairs saved to data/generated/file_qa_pairs.json
+
+    User->>API: POST /curate file_qa_pairs.json
+    API->>LLMClient: Initialize with config
+    API->>QAGenerator: rate_qa_pairs()
     
     QAGenerator->>LLMClient: Process in batches
     LLMClient-->>QAGenerator: Batch responses
@@ -253,13 +241,13 @@ sequenceDiagram
     end
     
     QAGenerator->>QAGenerator: Apply threshold & metrics
-    QAGenerator-->>CLI: Filtered pairs with stats
-    CLI-->>User: Cleaned data saved to data/cleaned/file_cleaned.json
-    
-    User->>CLI: datacreek save-as file_cleaned.json -f ft
-    CLI->>FormatConverter: convert_format(input, output, format)
-    FormatConverter-->>CLI: Converted data
-    CLI-->>User: Data saved to data/final/file_ft.json
+    QAGenerator-->>API: Filtered pairs with stats
+    API-->>User: Cleaned data saved to data/cleaned/file_cleaned.json
+
+    User->>API: POST /save file_cleaned.json fmt=ft
+    API->>FormatConverter: convert_format(input, output, format)
+    FormatConverter-->>API: Converted data
+    API-->>User: Data saved to data/final/file_ft.json
 ```
 
 ## 3. Installation
@@ -296,66 +284,6 @@ pip install vllm
 vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 ```
 
-## 4. CLI Interface
-
-Datacreek provides a minimal Typer-based CLI used to run the application and execute tests.
-
-### Command Structure
-
-```
-datacreek [OPTIONS] COMMAND [ARGS]...
-```
-
-### Global Options
-
-| Option | Description |
-|--------|-------------|
-| `-c, --config PATH` | Path to custom configuration file |
-| `--help` | Show help message |
-
-### Commands Overview
-
-```mermaid
-graph LR
-    SDK[datacreek] --> Serve[serve]
-    SDK --> Test[test]
-```
-
-### `serve` Command
-
-Starts the REST API used by the application.
-
-```bash
-datacreek serve [OPTIONS]
-```
-
-#### Options:
-
-| Option | Description |
-|--------|-------------|
-| `--host TEXT` | Host address |
-| `--port INTEGER` | Port to bind |
-
-### `test` Command
-
-Runs the Python unit tests.
-
-```bash
-datacreek test
-```
-
-The `test` command does not accept additional options.
-
-### REST API
-
-Dataset operations are now performed through REST endpoints:
-
-- `POST /ingest` – ingest a file and store its text
-- `POST /generate` – generate a dataset from an ingested source
-- `POST /curate` – curate generated data
-- `POST /save` – convert the curated dataset to a different format
-
-Refer to the README for example requests.
 
 ## 5. Configuration System
 
@@ -450,17 +378,17 @@ prompts:
 
 ### Using Custom Configurations
 
-You can specify a custom configuration file using the `-c` option:
+Provide a custom configuration file when starting the service:
 
 ```bash
-datacreek -c custom_config.yaml ingest documents/paper.pdf
+curl -X POST localhost:8000/ingest -H "X-Config-Path: custom_config.yaml" -d "path=documents/paper.pdf"
 ```
 
 ### Configuration Priorities
 
-The toolkit uses the following priority for configuration values:
+The toolkit resolves configuration values in the following order:
 
-1. Command line arguments (highest priority)
+1. Environment variables
 2. Custom configuration file (if specified)
 3. Default configuration values (lowest priority)
 
@@ -712,7 +640,7 @@ The system includes several advanced features:
 2. **Environment Variable Overrides**: `SDK_BATCH_SIZE` for debugging and testing
 3. **Fallback Processing**: If batch processing fails, falls back to single-item processing
 4. **Robust JSON Parsing**: Multiple parsing methods to handle different LLM output formats
-5. **Verbose Mode**: Detailed diagnostic information with the `-v` flag
+5. **Verbose Mode: Enable detailed diagnostics with the `SDK_VERBOSE` environment variable
 
 ### Stage 4: Format Conversion (Save-as)
 
@@ -1031,7 +959,7 @@ Setting these variables can help with debugging and performance tuning:
 # Process one QA pair at a time with detailed output
 export SDK_VERBOSE=true
 export SDK_BATCH_SIZE=1
-datacreek curate data/generated/results.json
+curl -X POST localhost:8000/curate -d "ds_path=data/generated/results.json"
 ```
 
 ## 10. Workflow Examples
@@ -1043,19 +971,19 @@ datacreek curate data/generated/results.json
 vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 
 # Check if server is running
-datacreek system-check
+curl http://localhost:8000/v1/models
 
 # 1. Parse a PDF document
-datacreek ingest documents/paper.pdf
+curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf"
 
 # 2. Generate QA pairs from the parsed text
-datacreek create data/output/paper.txt
+curl -X POST localhost:8000/generate -d "src_id=1"
 
 # 3. Clean and filter the generated content
-datacreek curate data/generated/paper_qa_pairs.json
+curl -X POST localhost:8000/curate -d "ds_id=1"
 
 # 4. Convert to fine-tuning format
-datacreek save-as data/cleaned/paper_cleaned.json -f ft
+curl -X POST localhost:8000/save -d "ds_id=1&fmt=ft"
 ```
 
 ### Advanced Configuration Example
@@ -1101,10 +1029,10 @@ Use the custom configuration:
 
 ```bash
 # Process technical documentation with custom config
-datacreek -c technical_docs.yaml ingest documentation/api_docs.pdf
-datacreek -c technical_docs.yaml create data/output/api_docs.txt
-datacreek -c technical_docs.yaml curate data/generated/api_docs_qa_pairs.json
-datacreek -c technical_docs.yaml save-as data/cleaned/api_docs_cleaned.json -f ft
+curl -X POST localhost:8000/ingest -H "X-Config-Path: technical_docs.yaml" -d "path=documentation/api_docs.pdf"
+curl -X POST localhost:8000/generate -H "X-Config-Path: technical_docs.yaml" -d "src_id=1"
+curl -X POST localhost:8000/curate -H "X-Config-Path: technical_docs.yaml" -d "ds_id=1"
+curl -X POST localhost:8000/save -H "X-Config-Path: technical_docs.yaml" -d "ds_id=1&fmt=ft"
 ```
 
 ### Processing Multiple Files
@@ -1113,18 +1041,18 @@ datacreek -c technical_docs.yaml save-as data/cleaned/api_docs_cleaned.json -f f
 # Process all PDFs in a directory
 for file in documents/*.pdf; do
   filename=$(basename "$file" .pdf)
-  
+
   # Ingest
-  datacreek ingest "$file"
-  
+  curl -X POST localhost:8000/ingest -d "path=$file"
+
   # Create QA pairs
-  datacreek create "data/output/${filename}.txt" -n 20
-  
+  curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=20"
+
   # Curate
-  datacreek curate "data/generated/${filename}_qa_pairs.json" -t 7.5
-  
+  curl -X POST localhost:8000/curate -d "ds_id=1&threshold=7.5"
+
   # Save as fine-tuning format
-  datacreek save-as "data/cleaned/${filename}_cleaned.json" -f ft
+  curl -X POST localhost:8000/save -d "ds_id=1&fmt=ft"
 done
 ```
 
@@ -1459,7 +1387,7 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
 For optimal JSON parsing, you can:
 
 1. **Install json5**: `pip install json5` for enhanced JSON parsing capabilities
-2. **Use verbose mode**: Run commands with `-v` flag to see detailed parsing information
+2. **Enable verbose logging using the `SDK_VERBOSE` environment variable
 3. **Set environment variables**: `SDK_BATCH_SIZE=1` to process one item at a time for debugging
 4. **Adjust prompt templates**: Update config.yaml prompts for better JSON formatting
 
@@ -1500,10 +1428,7 @@ File not found: documents/paper.pdf
 #### Checking VLLM Server Status
 
 ```bash
-# Using the built-in system-check command
-datacreek system-check --api-base="http://localhost:8000/v1"
-
-# Direct API check
+# Check the running server
 curl -X GET http://localhost:8000/v1/models
 ```
 
@@ -1527,14 +1452,14 @@ jq '.metrics' data/cleaned/document_cleaned.json
 
 ```bash
 # Test just the parser
-datacreek ingest documents/paper.pdf -o test_output/
+curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf" -d "out=test_output/"
 
-# Test just content creation with a small text file
+# Test content creation with a small text file
 echo "This is a test document." > test.txt
-datacreek create test.txt -n 2
+curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=2"
 
-# Test just format conversion with a known good file
-datacreek save-as known_good_data.json -f jsonl
+# Test format conversion with a known good file
+curl -X POST localhost:8000/save -d "ds_id=1&fmt=jsonl"
 ```
 
 ## 14. Best Practices
@@ -1584,21 +1509,20 @@ datacreek save-as known_good_data.json -f jsonl
 1. [Overview](#1-overview)
 2. [Architecture](#2-architecture)
 3. [Installation](#3-installation)
-4. [CLI Interface](#4-cli-interface)
-5. [Configuration System](#5-configuration-system)
-6. [Pipeline Stages](#6-pipeline-stages)
-7. [Component Reference](#7-component-reference)
-8. [Output Formats](#8-output-formats)
-9. [Environment Variables](#9-environment-variables)
-10. [Workflow Examples](#10-workflow-examples)
-11. [Customizing Prompts](#11-customizing-prompts)
-12. [Extending the Toolkit](#12-extending-the-toolkit)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Best Practices](#14-best-practices)
+4. [Configuration System](#4-configuration-system)
+5. [Pipeline Stages](#5-pipeline-stages)
+6. [Component Reference](#6-component-reference)
+7. [Output Formats](#7-output-formats)
+8. [Environment Variables](#8-environment-variables)
+9. [Workflow Examples](#9-workflow-examples)
+10. [Customizing Prompts](#10-customizing-prompts)
+11. [Extending the Toolkit](#11-extending-the-toolkit)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Best Practices](#13-best-practices)
 
 ## 1. Overview
 
-Datacreek is a toolkit for preparing high-quality synthetic datasets to fine-tune Large Language Models (LLMs). It provides a modular command-line interface (CLI) for the complete data preparation workflow, with 4 simple commands named after their respective actions.
+Datacreek is a toolkit for preparing high-quality synthetic datasets to fine-tune Large Language Models (LLMs). The primary interface is a REST API that exposes each step of the data preparation workflow.
 
 ### Design:
 
@@ -1617,7 +1541,7 @@ Datacreek follows a modular architecture with these main components:
 
 ```mermaid
 graph TD
-    CLI[CLI Interface] --> Core
+    API[REST API] --> Core
     Core --> Parsers
     Core --> Generators
     Core --> LLMClient
@@ -1632,8 +1556,8 @@ graph TD
     
     Generators --> QAGenerator
     Generators --> COTGenerator
-    
-    Config[Configuration] --> CLI
+
+    Config[Configuration] --> API
     Config --> Core
     Config --> LLMClient
     Config --> Generators
@@ -1660,7 +1584,6 @@ graph TD
 datacreek/
 ├── datacreek/        # Package source code
 │   ├── __init__.py           # Package initialization
-│   ├── cli.py                # CLI entry point using Typer
 │   ├── core/                 # Core functionality
 │   │   ├── __init__.py
 │   │   ├── context.py        # Application context
@@ -1759,14 +1682,6 @@ classDiagram
         +save(content, output_path) None
     }
 
-    class CLIApp {
-        +callback(config)
-        +system_check(api_base)
-        +ingest(input, output_dir, name)
-        +create(input, content_type, output_dir, api_base, model, num_pairs, threshold)
-        +curate(input, output, threshold, api_base, model)
-        +save_as(input, format, output)
-    }
 
     Parser <|-- PDFParser
     Parser <|-- HTMLParser
@@ -1776,9 +1691,6 @@ classDiagram
     Parser <|-- TXTParser
 
     QAGenerator --> LLMClient
-    CLIApp --> AppContext
-    CLIApp --> QAGenerator
-    CLIApp --> Parser
 ```
 
 ### Data Flow
@@ -1786,34 +1698,34 @@ classDiagram
 ```mermaid
 sequenceDiagram
     participant User
-    participant CLI
+    participant API
     participant Parsers
     participant LLMClient
     participant QAGenerator
     participant FormatConverter
-    
-    User->>CLI: datacreek ingest file.pdf
-    CLI->>Parsers: determine_parser(file.pdf)
-    Parsers-->>CLI: PDFParser
-    CLI->>Parsers: parse(file.pdf)
-    Parsers-->>CLI: Extracted text
-    CLI-->>User: Text saved to data/output/file.txt
-    
-    User->>CLI: datacreek create file.txt
-    CLI->>LLMClient: Initialize with config
-    CLI->>QAGenerator: process_document(text)
+
+    User->>API: POST /ingest file.pdf
+    API->>Parsers: determine_parser(file.pdf)
+    Parsers-->>API: PDFParser
+    API->>Parsers: parse(file.pdf)
+    Parsers-->>API: Extracted text
+    API-->>User: Text saved to data/output/file.txt
+
+    User->>API: POST /generate file.txt
+    API->>LLMClient: Initialize with config
+    API->>QAGenerator: process_document(text)
     QAGenerator->>LLMClient: generate_summary()
     LLMClient-->>QAGenerator: Summary
     QAGenerator->>LLMClient: generate_qa_pairs()
     LLMClient-->>QAGenerator: QA pairs
     QAGenerator->>LLMClient: rate_qa_pairs()
     LLMClient-->>QAGenerator: Rated pairs
-    QAGenerator-->>CLI: Results
-    CLI-->>User: QA pairs saved to data/generated/file_qa_pairs.json
-    
-    User->>CLI: datacreek curate file_qa_pairs.json -v
-    CLI->>LLMClient: Initialize with config
-    CLI->>QAGenerator: rate_qa_pairs()
+    QAGenerator-->>API: Results
+    API-->>User: QA pairs saved to data/generated/file_qa_pairs.json
+
+    User->>API: POST /curate file_qa_pairs.json
+    API->>LLMClient: Initialize with config
+    API->>QAGenerator: rate_qa_pairs()
     
     QAGenerator->>LLMClient: Process in batches
     LLMClient-->>QAGenerator: Batch responses
@@ -1832,13 +1744,13 @@ sequenceDiagram
     end
     
     QAGenerator->>QAGenerator: Apply threshold & metrics
-    QAGenerator-->>CLI: Filtered pairs with stats
-    CLI-->>User: Cleaned data saved to data/cleaned/file_cleaned.json
-    
-    User->>CLI: datacreek save-as file_cleaned.json -f ft
-    CLI->>FormatConverter: convert_format(input, output, format)
-    FormatConverter-->>CLI: Converted data
-    CLI-->>User: Data saved to data/final/file_ft.json
+    QAGenerator-->>API: Filtered pairs with stats
+    API-->>User: Cleaned data saved to data/cleaned/file_cleaned.json
+
+    User->>API: POST /save file_cleaned.json fmt=ft
+    API->>FormatConverter: convert_format(input, output, format)
+    FormatConverter-->>API: Converted data
+    API-->>User: Data saved to data/final/file_ft.json
 ```
 
 ## 3. Installation
@@ -1875,194 +1787,6 @@ pip install vllm
 vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 ```
 
-## 4. CLI Interface
-
-Datacreek provides a minimal Typer-based CLI used to run the application and execute tests.
-
-### Command Structure
-
-```
-datacreek [OPTIONS] COMMAND [ARGS]...
-```
-
-### Global Options
-
-| Option | Description |
-|--------|-------------|
-| `-c, --config PATH` | Path to custom configuration file |
-| `--help` | Show help message |
-
-### Commands Overview
-
-```mermaid
-graph LR
-    SDK[datacreek] --> Serve[serve]
-    SDK --> Test[test]
-```
-
-### `serve` Command
-
-Starts the REST API used by the application.
-
-```bash
-datacreek serve [OPTIONS]
-```
-
-#### Options:
-
-| Option | Description |
-|--------|-------------|
-| `--host TEXT` | Host address |
-| `--port INTEGER` | Port to bind |
-
-### `test` Command
-
-Runs the Python unit tests.
-
-```bash
-datacreek test
-```
-
-#### Options:
-
-| Option | Description |
-|--------|-------------|
-| `-o, --output-dir PATH` | Directory to save parsed text |
-| `-n, --name TEXT` | Custom filename for output |
-
-#### Examples:
-
-```bash
-# Parse a PDF file
-datacreek ingest documents/paper.pdf
-
-# Parse with custom output directory
-datacreek ingest documents/paper.pdf -o custom_dir/
-
-# Parse a web page
-datacreek ingest "https://example.com/article"
-
-# Parse a YouTube video
-datacreek ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-```
-
-### `create` Command
-
-Generates content from text files.
-
-```bash
-datacreek create [OPTIONS] INPUT
-```
-
-#### Arguments:
-
-| Argument | Description |
-|----------|-------------|
-| `INPUT` | Text file to process |
-
-#### Options:
-
-| Option | Description |
-|--------|-------------|
-| `--type TEXT` | Content type to generate [qa\|summary\|cot] |
-| `-o, --output-dir PATH` | Directory to save generated content |
-| `--api-base TEXT` | VLLM API base URL |
-| `-m, --model TEXT` | Model to use |
-| `-n, --num-pairs INTEGER` | Number of QA pairs to generate |
-| `--threshold FLOAT` | Quality threshold (1-10) |
-
-#### Examples:
-
-```bash
-# Generate QA pairs
-datacreek create data/output/document.txt
-
-# Specify number of pairs
-datacreek create data/output/document.txt -n 30
-
-# Generate summary only
-datacreek create data/output/document.txt --type summary
-
-# Generate Chain of Thought (CoT) reasoning examples
-datacreek create data/output/document.txt --type cot
-
-# Use custom model
-datacreek create data/output/document.txt -m "meta-llama/Llama-3.3-8B-Instruct"
-```
-
-### `curate` Command
-
-Filters content based on quality.
-
-```bash
-datacreek curate [OPTIONS] INPUT
-```
-
-#### Arguments:
-
-| Argument | Description |
-|----------|-------------|
-| `INPUT` | File with QA pairs to clean |
-
-#### Options:
-
-| Option | Description |
-|--------|-------------|
-| `-o, --output PATH` | Output file path |
-| `-t, --threshold FLOAT` | Quality threshold (1-10) |
-| `--api-base TEXT` | VLLM API base URL |
-| `-m, --model TEXT` | Model to use |
-
-#### Examples:
-
-```bash
-# Clean with default settings
-datacreek curate data/generated/document_qa_pairs.json
-
-# Set higher quality threshold
-datacreek curate data/generated/document_qa_pairs.json -t 8.5
-
-# Specify output location
-datacreek curate data/generated/document_qa_pairs.json -o custom_path.json
-```
-
-### `save-as` Command
-
-Converts content to different formats.
-
-```bash
-datacreek save-as [OPTIONS] INPUT
-```
-
-#### Arguments:
-
-| Argument | Description |
-|----------|-------------|
-| `INPUT` | File to convert |
-
-#### Options:
-
-| Option | Description |
-|--------|-------------|
-| `-f, --format TEXT` | Output format [jsonl\|alpaca\|ft\|chatml] |
-| `--storage TEXT` | Storage format [json\|hf] (default: json) |
-| `-o, --output PATH` | Output file path |
-
-#### Examples:
-
-```bash
-# Convert to JSONL format
-datacreek save-as data/cleaned/document_cleaned.json -f jsonl
-
-# Convert to fine-tuning format (JSON file)
-datacreek save-as data/cleaned/document_cleaned.json -f ft
-
-# Convert to fine-tuning format (HF dataset)
-datacreek save-as data/cleaned/document_cleaned.json -f ft --storage hf
-
-# Convert to ChatML format (HF dataset) with specific output location 
-datacreek save-as data/cleaned/document_cleaned.json -f chatml --storage hf -o data/final/custom_name
-```
 
 ## 5. Configuration System
 
@@ -2157,17 +1881,17 @@ prompts:
 
 ### Using Custom Configurations
 
-You can specify a custom configuration file using the `-c` option:
+Provide a custom configuration file when starting the service:
 
 ```bash
-datacreek -c custom_config.yaml ingest documents/paper.pdf
+curl -X POST localhost:8000/ingest -H "X-Config-Path: custom_config.yaml" -d "path=documents/paper.pdf"
 ```
 
 ### Configuration Priorities
 
-The toolkit uses the following priority for configuration values:
+The toolkit resolves configuration values in the following order:
 
-1. Command line arguments (highest priority)
+1. Environment variables
 2. Custom configuration file (if specified)
 3. Default configuration values (lowest priority)
 
@@ -2419,7 +2143,7 @@ The system includes several advanced features:
 2. **Environment Variable Overrides**: `SDK_BATCH_SIZE` for debugging and testing
 3. **Fallback Processing**: If batch processing fails, falls back to single-item processing
 4. **Robust JSON Parsing**: Multiple parsing methods to handle different LLM output formats
-5. **Verbose Mode**: Detailed diagnostic information with the `-v` flag
+5. **Verbose Mode: Enable detailed diagnostics with the `SDK_VERBOSE` environment variable
 
 ### Stage 4: Format Conversion (Save-as)
 
@@ -2738,7 +2462,7 @@ Setting these variables can help with debugging and performance tuning:
 # Process one QA pair at a time with detailed output
 export SDK_VERBOSE=true
 export SDK_BATCH_SIZE=1
-datacreek curate data/generated/results.json
+curl -X POST localhost:8000/curate -d "ds_path=data/generated/results.json"
 ```
 
 ## 10. Workflow Examples
@@ -2750,19 +2474,19 @@ datacreek curate data/generated/results.json
 vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 
 # Check if server is running
-datacreek system-check
+curl http://localhost:8000/v1/models
 
 # 1. Parse a PDF document
-datacreek ingest documents/paper.pdf
+curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf"
 
 # 2. Generate QA pairs from the parsed text
-datacreek create data/output/paper.txt
+curl -X POST localhost:8000/generate -d "src_id=1"
 
 # 3. Clean and filter the generated content
-datacreek curate data/generated/paper_qa_pairs.json
+curl -X POST localhost:8000/curate -d "ds_id=1"
 
 # 4. Convert to fine-tuning format
-datacreek save-as data/cleaned/paper_cleaned.json -f ft
+curl -X POST localhost:8000/save -d "ds_id=1&fmt=ft"
 ```
 
 ### Advanced Configuration Example
@@ -2808,10 +2532,10 @@ Use the custom configuration:
 
 ```bash
 # Process technical documentation with custom config
-datacreek -c technical_docs.yaml ingest documentation/api_docs.pdf
-datacreek -c technical_docs.yaml create data/output/api_docs.txt
-datacreek -c technical_docs.yaml curate data/generated/api_docs_qa_pairs.json
-datacreek -c technical_docs.yaml save-as data/cleaned/api_docs_cleaned.json -f ft
+curl -X POST localhost:8000/ingest -H "X-Config-Path: technical_docs.yaml" -d "path=documentation/api_docs.pdf"
+curl -X POST localhost:8000/generate -H "X-Config-Path: technical_docs.yaml" -d "src_id=1"
+curl -X POST localhost:8000/curate -H "X-Config-Path: technical_docs.yaml" -d "ds_id=1"
+curl -X POST localhost:8000/save -H "X-Config-Path: technical_docs.yaml" -d "ds_id=1&fmt=ft"
 ```
 
 ### Processing Multiple Files
@@ -2822,16 +2546,16 @@ for file in documents/*.pdf; do
   filename=$(basename "$file" .pdf)
   
   # Ingest
-  datacreek ingest "$file"
-  
+  curl -X POST localhost:8000/ingest -d "path=$file"
+
   # Create QA pairs
-  datacreek create "data/output/${filename}.txt" -n 20
-  
+  curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=20"
+
   # Curate
-  datacreek curate "data/generated/${filename}_qa_pairs.json" -t 7.5
-  
+  curl -X POST localhost:8000/curate -d "ds_id=1&threshold=7.5"
+
   # Save as fine-tuning format
-  datacreek save-as "data/cleaned/${filename}_cleaned.json" -f ft
+  curl -X POST localhost:8000/save -d "ds_id=1&fmt=ft"
 done
 ```
 
@@ -3166,7 +2890,7 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
 For optimal JSON parsing, you can:
 
 1. **Install json5**: `pip install json5` for enhanced JSON parsing capabilities
-2. **Use verbose mode**: Run commands with `-v` flag to see detailed parsing information
+2. **Enable verbose logging using the `SDK_VERBOSE` environment variable
 3. **Set environment variables**: `SDK_BATCH_SIZE=1` to process one item at a time for debugging
 4. **Adjust prompt templates**: Update config.yaml prompts for better JSON formatting
 
@@ -3207,10 +2931,7 @@ File not found: documents/paper.pdf
 #### Checking VLLM Server Status
 
 ```bash
-# Using the built-in system-check command
-datacreek system-check --api-base="http://localhost:8000/v1"
-
-# Direct API check
+# Check the running server
 curl -X GET http://localhost:8000/v1/models
 ```
 
@@ -3234,14 +2955,14 @@ jq '.metrics' data/cleaned/document_cleaned.json
 
 ```bash
 # Test just the parser
-datacreek ingest documents/paper.pdf -o test_output/
+curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf" -d "out=test_output/"
 
-# Test just content creation with a small text file
+# Test content creation with a small text file
 echo "This is a test document." > test.txt
-datacreek create test.txt -n 2
+curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=2"
 
-# Test just format conversion with a known good file
-datacreek save-as known_good_data.json -f jsonl
+# Test format conversion with a known good file
+curl -X POST localhost:8000/save -d "ds_id=1&fmt=jsonl"
 ```
 
 ## 14. Best Practices
