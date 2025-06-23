@@ -81,6 +81,15 @@ The service exposes `/ingest`, `/generate`, `/curate` and `/save` routes that co
 ## Configuration
 
 The toolkit uses a YAML configuration file (default: `configs/config.yaml`).
+Database connection settings can be provided either through the
+`DATABASE_URL` environment variable or a `database.url` entry in the YAML
+file. By default a local SQLite file `datacreek.db` is used, but you can
+point this to any SQLAlchemy compatible database.
+
+### Database initialization
+
+Run `python -m datacreek.cli init-db` to create the tables before starting the
+server if they do not already exist.
 
 You can override any value by providing a custom YAML file to the server.
 

@@ -18,6 +18,10 @@ paths:
     cleaned: "data/cleaned"     # Where cleaned content is saved
     final: "data/final"         # Where final formatted content is saved
 
+# Database configuration
+database:
+  url: "sqlite:///./datacreek.db"
+
 # LLM Provider configuration
 llm:
   # Provider selection: "vllm" or "api-endpoint"
