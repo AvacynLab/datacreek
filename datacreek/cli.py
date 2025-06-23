@@ -8,6 +8,15 @@ def serve(host: str = "127.0.0.1", port: int = 8000):
     """Run the REST API server."""
     uvicorn.run("datacreek.api:app", host=host, port=port, reload=True)
 
+
+@app_cli.command()
+def init_db_cmd() -> None:
+    """Create database tables."""
+    from datacreek.db import init_db
+
+    init_db()
+    typer.echo("Database initialized")
+
 @app_cli.command()
 def test():
     """Run the unit test suite."""
@@ -16,3 +25,4 @@ def test():
 
 if __name__ == "__main__":
     app_cli()
+
