@@ -1,12 +1,12 @@
-# Synthetic Data Kit
+# Datacreek
 
 Tool for generating high-quality synthetic datasets to fine-tune LLMs.
 
 Generate Reasoning Traces, QA Pairs, save them to a fine-tuning format with a simple CLI.
 
-> [Checkout our guide on using the tool to unlock task-specific reasoning in Llama-3 family](https://github.com/meta-llama/synthetic-data-kit/tree/main/use-cases/adding_reasoning_to_llama_3)
+> [Checkout our guide on using the tool to unlock task-specific reasoning in Llama-3 family](https://github.com/meta-llama/datacreek/tree/main/use-cases/adding_reasoning_to_llama_3)
 
-# What does Synthetic Data Kit offer? 
+# What does Datacreek offer? 
 
 Fine-Tuning Large Language Models is easy. There are many mature tools that you can use to fine-tune Llama model family using various post-training techniques.
 
@@ -22,7 +22,7 @@ This toolkit simplifies the journey of:
 - Creating synthetic datasets
 - Supporting various formats of post-training fine-tuning
 
-# How does Synthetic Data Kit offer it? 
+# How does Datacreek offer it? 
 
 The tool is designed to follow a simple CLI structure with 4 commands:
 
@@ -45,20 +45,20 @@ conda create -n synthetic-data python=3.10
 
 conda activate synthetic-data
 
-pip install synthetic-data-kit
+pip install datacreek
 ```
 
 #### (Alternatively) From Source
 
 ```bash
-git clone https://github.com/meta-llama/synthetic-data-kit.git
-cd synthetic-data-kit
+git clone https://github.com/meta-llama/datacreek.git
+cd datacreek
 pip install -e .
 ```
 
 To get an overview of commands type: 
 
-`synthetic-data-kit --help`
+`datacreek --help`
 
 ### 1. Tool Setup
 
@@ -79,32 +79,15 @@ vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 
 ### 2. Usage
 
-The flow follows 4 simple steps: `ingest`, `create`, `curate`, `save-as`, please paste your file into the respective folder:
+Start the REST API server with the CLI then interact with the endpoints.
 
 ```bash
-# Check if your backend is running
-synthetic-data-kit system-check
-
-# Parse a document to text
-synthetic-data-kit ingest docs/report.pdf
-# This will save file to data/output/report.txt
-
-# Generate QA pairs (default)
-synthetic-data-kit create data/output/report.txt --type qa
-
-OR 
-
-# Generate Chain of Thought (CoT) reasoning examples
-synthetic-data-kit create data/output/report.txt --type cot
-
-# Both of these will save file to data/generated/report_qa_pairs.json
-
-# Filter content based on quality
-synthetic-data-kit curate data/generated/report_qa_pairs.json
-
-# Convert to alpaca fine-tuning format and save as HF arrow file
-synthetic-data-kit save-as data/cleaned/report_cleaned.json --format alpaca --storage hf
+# Launch the API server
+datacreek serve --host 0.0.0.0 --port 8000
 ```
+
+The API exposes `/ingest`, `/generate`, `/curate` and `/save` endpoints that mirror
+the previous CLI commands.
 ## Configuration
 
 The toolkit uses a YAML configuration file (default: `configs/config.yaml`).
@@ -148,7 +131,7 @@ api-endpoint:
 Create a overriding configuration file and use it with the `-c` flag:
 
 ```bash
-synthetic-data-kit -c my_config.yaml ingest docs/paper.pdf
+curl -X POST localhost:8000/ingest -d "path=docs/paper.pdf"
 ```
 
 ## Examples
@@ -157,29 +140,24 @@ synthetic-data-kit -c my_config.yaml ingest docs/paper.pdf
 
 ```bash
 # Ingest PDF
-synthetic-data-kit ingest research_paper.pdf
+curl -X POST localhost:8000/ingest -d "path=research_paper.pdf"
 
-# Generate QA pairs
-synthetic-data-kit create data/output/research_paper.txt -n 30 --threshold 8.0
+# Generate QA pairs (assuming source ID 1)
+curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=30"
 
-# Curate data
-synthetic-data-kit curate data/generated/research_paper_qa_pairs.json -t 8.5
+# Curate data (dataset ID 1)
+curl -X POST localhost:8000/curate -d "ds_id=1&threshold=8.5"
 
-# Save in OpenAI fine-tuning format (JSON)
-synthetic-data-kit save-as data/cleaned/research_paper_cleaned.json -f ft
-
-# Save in OpenAI fine-tuning format (HF dataset)
-synthetic-data-kit save-as data/cleaned/research_paper_cleaned.json -f ft --storage hf
+# Save in OpenAI fine-tuning format
+curl -X POST localhost:8000/save -d "ds_id=1&fmt=jsonl"
 ```
 
 ### Processing a YouTube Video
 
 ```bash
-# Extract transcript
-synthetic-data-kit ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-
-# Generate QA pairs with specific model
-synthetic-data-kit create data/output/youtube_dQw4w9WgXcQ.txt
+# Extract transcript and generate QA pairs
+curl -X POST localhost:8000/ingest -d "path=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl -X POST localhost:8000/generate -d "src_id=1"
 ```
 
 ### Processing Multiple Files
@@ -188,11 +166,11 @@ synthetic-data-kit create data/output/youtube_dQw4w9WgXcQ.txt
 # Bash script to process multiple files
 for file in data/pdf/*.pdf; do
   filename=$(basename "$file" .pdf)
-  
-  synthetic-data-kit ingest "$file"
-  synthetic-data-kit create "data/output/${filename}.txt" -n 20
-  synthetic-data-kit curate "data/generated/${filename}_qa_pairs.json" -t 7.5
-  synthetic-data-kit save-as "data/cleaned/${filename}_cleaned.json" -f chatml
+
+  curl -X POST localhost:8000/ingest -d "path=$file"
+  curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=20"
+  curl -X POST localhost:8000/curate -d "ds_id=1&threshold=7.5"
+  curl -X POST localhost:8000/save -d "ds_id=1&fmt=chatml"
 done
 ```
 
@@ -231,13 +209,8 @@ prompts:
 
 ```mermaid
 graph LR
-    SDK --> SystemCheck[system-check]
-    SDK[synthetic-data-kit] --> Ingest[ingest]
-    SDK --> Create[create]
-    SDK --> Curate[curate]
-    SDK --> SaveAs[save-as]
-    
-    Ingest --> PDFFile[PDF File]
+    SDK[datacreek] --> Serve[serve]
+    SDK --> Test[test]
     Ingest --> HTMLFile[HTML File]
     Ingest --> YouTubeURL[File Format]
 
@@ -260,7 +233,7 @@ graph LR
 
 - Ensure vLLM is installed: `pip install vllm`
 - Start server with: `vllm serve <model_name> --port 8000`
-- Check connection: `synthetic-data-kit system-check`
+- Check connection: `curl http://localhost:8000/docs`
 
 ### Memory Issues
 

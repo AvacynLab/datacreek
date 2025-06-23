@@ -1,2 +1,2 @@
-include synthetic_data_kit/config.yaml
+include datacreek/config.yaml
 recursive-include configs *.yaml
