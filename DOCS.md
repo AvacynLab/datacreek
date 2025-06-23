@@ -425,7 +425,11 @@ summary_prompt = get_prompt(config, "summary")
 
 ### Stage 1: Document Parsing (Ingest)
 
-The `ingest` stage converts various document formats to plain text.
+The `ingest` stage converts various document formats to plain text. Each dataset
+is backed by its own knowledge graph: as you ingest data, the documents and
+chunks are inserted into this graph with a `source` attribute linking back to
+their origin. Subsequent generation pipelines operate on the graph built for the
+current dataset.
 
 ```mermaid
 graph TD
@@ -674,9 +678,9 @@ graph TD
 ```python
 def convert_format(input_path, output_path, format_type):
     # Load input file
-    with open(input_path, 'r', encoding='utf-8') as f:
+    with open(input_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
+
     # Extract QA pairs
     if "filtered_pairs" in data:
         qa_pairs = data["filtered_pairs"]
@@ -684,7 +688,7 @@ def convert_format(input_path, output_path, format_type):
         qa_pairs = data["qa_pairs"]
     else:
         raise ValueError("No QA pairs found in input file")
-    
+
     # Convert to requested format
     if format_type == "jsonl":
         return to_jsonl(qa_pairs, output_path)
@@ -696,6 +700,45 @@ def convert_format(input_path, output_path, format_type):
         return to_chatml(qa_pairs, output_path)
     else:
         raise ValueError(f"Unknown format type: {format_type}")
+```
+
+### Dataset Generation Pipelines
+
+After ingestion, each dataset contains its own knowledge graph. Generation
+pipelines read from this per-dataset graph and are tailored to the downstream
+training goal.  The graph exposes simple search utilities to locate chunks
+matching a query:
+
+```python
+from datacreek import DatasetBuilder, DatasetType
+
+ds = DatasetBuilder(DatasetType.QA)
+ds.add_document("doc1", source="paper.pdf")
+ds.add_chunk("doc1", "c1", "hello world")
+matches = ds.search("world")
+doc_matches = ds.search_documents("paper")
+chunk_ids = ds.get_chunks_for_document("doc1")
+``` 
+
+| Dataset type | Compatible trainings |
+|--------------|---------------------|
+| `qa`         | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+| `cot`        | SFT, DPO, ORPO, DPO+SFT, RRHF |
+| `vqa`        | SFT |
+| `text`       | CPT |
+| `kg`         | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+| `pref_pair`  | PPO, DPO, ORPO, DPO+SFT, RLAIF |
+| `pref_list`  | GRPO, RRHF |
+| `tool`       | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+| `conversation` | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+| `multi_tool` | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+
+You can query the available pipelines in code:
+
+```python
+from datacreek import get_pipelines_for_training, TrainingGoal
+
+print(get_pipelines_for_training(TrainingGoal.SFT))
 ```
 
 ## 7. Component Reference
@@ -1928,7 +1971,10 @@ summary_prompt = get_prompt(config, "summary")
 
 ### Stage 1: Document Parsing (Ingest)
 
-The `ingest` stage converts various document formats to plain text.
+The `ingest` stage converts various document formats to plain text. For each
+dataset a dedicated knowledge graph is built; parsed documents and chunks are
+inserted with their original source. Generation pipelines later read from this
+graph.
 
 ```mermaid
 graph TD
