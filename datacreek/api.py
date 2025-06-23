@@ -25,6 +25,7 @@ class SourceData(Base):
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"))
     path = Column(String)
+    content = Column(Text)
 
 class Dataset(Base):
     __tablename__ = "datasets"
@@ -54,14 +55,12 @@ def create_user(username: str, api_key: str, db: Session = Depends(get_db)):
 
 @app.post("/ingest", summary="Ingest a file")
 def ingest(path: str, name: str | None = None, db: Session = Depends(get_db)):
-    output_dir = Path("data/ingested")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out = ingest_file(path, str(output_dir), name, None)
-    src = SourceData(owner_id=None, path=out)
+    content = ingest_file(path, None, name, None)
+    src = SourceData(owner_id=None, path=path, content=content)
     db.add(src)
     db.commit()
     db.refresh(src)
-    return {"id": src.id, "path": out}
+    return {"id": src.id}
 
 @app.post("/generate", summary="Generate dataset from source")
 def generate(src_id: int, content_type: str = "qa", num_pairs: int | None = None, db: Session = Depends(get_db)):
@@ -70,7 +69,7 @@ def generate(src_id: int, content_type: str = "qa", num_pairs: int | None = None
         raise HTTPException(status_code=404, detail="Source not found")
     output_dir = Path("data/generated")
     output_dir.mkdir(parents=True, exist_ok=True)
-    out = generate_data(src.path, content_type, str(output_dir), None, None, None, num_pairs, False)
+    out = generate_data(None, str(output_dir), None, None, None, content_type, num_pairs, False, document_text=src.content)
     ds = Dataset(owner_id=None, source_id=src_id, path=out)
     db.add(ds)
     db.commit()

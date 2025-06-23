@@ -27,7 +27,7 @@ def test_ingest(tmp_path):
 
 def test_full_pipeline(monkeypatch, tmp_path):
     # stub generation to avoid real LLM calls
-    def dummy_generate(path, content_type, output_dir, *args, **kwargs):
+    def dummy_generate(path, output_dir, *args, document_text=None, **kwargs):
         out = Path(output_dir) / "gen.json"
         with open(out, "w") as f:
             json.dump({"qa_pairs": [{"question": "q", "answer": "a"}]}, f)

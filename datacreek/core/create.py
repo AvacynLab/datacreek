@@ -22,7 +22,7 @@ def read_json(file_path):
 
 
 def process_file(
-    file_path: str,
+    file_path: Optional[str],
     output_dir: str,
     config_path: Optional[Path] = None,
     api_base: Optional[str] = None,
@@ -31,6 +31,7 @@ def process_file(
     num_pairs: Optional[int] = None,
     verbose: bool = False,
     provider: Optional[str] = None,
+    document_text: Optional[str] = None,
 ) -> str:
     """Process a file to generate content
     
@@ -63,13 +64,17 @@ def process_file(
     print(f"L Using {client.provider} provider")
     
     # Generate base filename for output
-    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    if file_path:
+        base_name = os.path.splitext(os.path.basename(file_path))[0]
+    else:
+        base_name = "input"
     
     # Generate content based on type
     if content_type == "qa":
         generator = QAGenerator(client, config_path)
 
-        document_text = read_json(file_path)
+        if document_text is None:
+            document_text = read_json(file_path)
         
         # Get num_pairs from args or config
         if num_pairs is None:
@@ -110,7 +115,8 @@ def process_file(
     elif content_type == "summary":
         generator = QAGenerator(client, config_path)
 
-        document_text = read_json(file_path)
+        if document_text is None:
+            document_text = read_json(file_path)
         
         # Generate just the summary
         summary = generator.generate_summary(document_text)
@@ -132,7 +138,8 @@ def process_file(
         # Initialize the CoT generator
         generator = COTGenerator(client, config_path)
 
-        document_text = read_json(file_path)
+        if document_text is None:
+            document_text = read_json(file_path)
         
         # Get num_examples from args or config
         if num_pairs is None:
@@ -170,7 +177,8 @@ def process_file(
         # Initialize the CoT generator
         generator = COTGenerator(client, config_path)
 
-        document_text = read_json(file_path)
+        if document_text is None:
+            document_text = read_json(file_path)
         
         # Get max_examples from args or config
         max_examples = None
