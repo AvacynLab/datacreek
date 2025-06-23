@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "synthetic-data-kit"
+name = "datacreek"
 version = "0.0.4b2"
 description = "Tool for generating high quality Synthetic datasets"
 readme = "README.md"
@@ -21,9 +21,8 @@ dependencies = [
     "rich>=13.4.2",
     "typer>=0.9.0",
     "openai>=1.0.0",
-    "flask>=2.0.0",
-    "flask-wtf>=1.0.0",
-    "bootstrap-flask>=2.2.0",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.27.0",
 ]
 
 # These fields appear in pip show
@@ -57,21 +56,21 @@ classifiers = [
 
 
 [project.urls]
-"Homepage" = "https://github.com/meta-llama/synthetic-data-kit"
-"Bug Tracker" = "https://github.com/meta-llama/synthetic-data-kit/issues"
-"Documentation" = "https://github.com/meta-llama/synthetic-data-kit#readme"
-"Getting Started" = "https://github.com/meta-llama/synthetic-data-kit/blob/main/getting-started/README.md"
+"Homepage" = "https://github.com/meta-llama/datacreek"
+"Bug Tracker" = "https://github.com/meta-llama/datacreek/issues"
+"Documentation" = "https://github.com/meta-llama/datacreek#readme"
+"Getting Started" = "https://github.com/meta-llama/datacreek/blob/main/getting-started/README.md"
 
 [project.scripts]
-synthetic-data-kit = "synthetic_data_kit.cli:app"
+datacreek = "datacreek.cli:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["synthetic_data_kit"]
+packages = ["datacreek"]
 include-package-data = true
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "synthetic_data_kit",
+    "datacreek",
     "configs/config.yaml",
     "README.md",
     "LICENSE",
