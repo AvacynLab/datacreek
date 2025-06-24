@@ -19,6 +19,8 @@ class KnowledgeGraph:
     index: EmbeddingIndex = field(default_factory=EmbeddingIndex)
 
     def add_document(self, doc_id: str, source: str) -> None:
+        if self.graph.has_node(doc_id):
+            raise ValueError(f"Document already exists: {doc_id}")
         self.graph.add_node(doc_id, type="document", source=source)
 
     def add_chunk(
@@ -26,6 +28,8 @@ class KnowledgeGraph:
     ) -> None:
         if source is None:
             source = self.graph.nodes[doc_id].get("source")
+        if self.graph.has_node(chunk_id):
+            raise ValueError(f"Chunk already exists: {chunk_id}")
         self.graph.add_node(chunk_id, type="chunk", text=text, source=source)
         self.graph.add_edge(doc_id, chunk_id, relation="has_chunk")
         self.index.add(chunk_id, text)
@@ -142,11 +146,20 @@ class KnowledgeGraph:
     # Neo4j helpers
     # ------------------------------------------------------------------
 
-    def to_neo4j(self, driver: Driver) -> None:
-        """Persist the graph to a Neo4j database."""
+    def to_neo4j(self, driver: Driver, *, clear: bool = True) -> None:
+        """Persist the graph to a Neo4j database.
+
+        Parameters
+        ----------
+        driver: Driver
+            Neo4j driver instance.
+        clear: bool, optional
+            Whether to remove existing nodes before writing.
+        """
 
         def _write(tx):
-            tx.run("MATCH (n) DETACH DELETE n")
+            if clear:
+                tx.run("MATCH (n) DETACH DELETE n")
             for n, data in self.graph.nodes(data=True):
                 label = data.get("type", "Node").capitalize()
                 tx.run(

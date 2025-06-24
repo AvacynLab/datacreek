@@ -1,4 +1,5 @@
 from datacreek.core.knowledge_graph import KnowledgeGraph
+import pytest
 
 
 def test_add_document_and_chunk():
@@ -47,3 +48,13 @@ def test_embedding_search():
     kg.index.build()
     results = kg.search_embeddings("hello", k=1)
     assert results[0] == "c1"
+
+
+def test_duplicate_checks():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    with pytest.raises(ValueError):
+        kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "text")
+    with pytest.raises(ValueError):
+        kg.add_chunk("d", "c1", "text")
