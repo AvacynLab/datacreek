@@ -21,12 +21,13 @@ from datacreek.parsers import (
 
 logger = logging.getLogger(__name__)
 
+
 def determine_parser(file_path: str, config: Dict[str, Any]):
     """Return a parser instance for the given resource."""
     # Check if it's a URL
-    if file_path.startswith(('http://', 'https://')):
+    if file_path.startswith(("http://", "https://")):
         # YouTube URL
-        if 'youtube.com' in file_path or 'youtu.be' in file_path:
+        if "youtube.com" in file_path or "youtu.be" in file_path:
             return YouTubeParser()
         # HTML URL
         else:
@@ -42,6 +43,7 @@ def determine_parser(file_path: str, config: Dict[str, Any]):
 
     logger.error("File not found: %s", file_path)
     raise FileNotFoundError(f"File not found: {file_path}")
+
 
 def process_file(
     file_path: str,
@@ -94,10 +96,10 @@ def to_kg(
 
     chunks = split_into_chunks(
         text,
-        chunk_size=gen_cfg.get("chunk_size", 4000),
-        overlap=gen_cfg.get("overlap", 200),
-        method=gen_cfg.get("chunk_method"),
-        similarity_drop=gen_cfg.get("similarity_drop", 0.3),
+        chunk_size=gen_cfg.chunk_size,
+        overlap=gen_cfg.overlap,
+        method=gen_cfg.chunk_method,
+        similarity_drop=gen_cfg.similarity_drop,
     )
 
     dataset.add_document(doc_id, source=doc_id)
@@ -121,4 +123,3 @@ def ingest_into_dataset(
     doc_id = doc_id or Path(file_path).stem
     to_kg(text, dataset, doc_id, config, build_index=True)
     return doc_id
-

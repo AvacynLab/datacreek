@@ -48,6 +48,9 @@ ingest:
 generation:
   temperature: 0.7   # Higher = more creative, lower = more deterministic
   top_p: 0.95        # Nucleus sampling parameter
+  frequency_penalty: 0.0  # Discourage repeating tokens
+  presence_penalty: 0.0   # Encourage mentioning new tokens
+  stop: null              # Optional stop sequences
   chunk_size: 4000   # Size of text chunks for processing
   overlap: 200       # Overlap between chunks to maintain context
   chunk_method: sliding  # Options: basic|sliding|semantic

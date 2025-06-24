@@ -20,6 +20,7 @@ from .pipelines import (
 from .core.knowledge_graph import KnowledgeGraph
 from .core.dataset import DatasetBuilder
 from .core.ingest import process_file as ingest_file, to_kg, ingest_into_dataset
+from .config_models import GenerationSettings
 
 __all__ = [
     "GenerationPipeline",
@@ -35,5 +36,5 @@ __all__ = [
     "ingest_file",
     "to_kg",
     "ingest_into_dataset",
+    "GenerationSettings",
 ]
-

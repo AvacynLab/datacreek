@@ -160,8 +160,12 @@ The `generation` section now exposes advanced chunking and retrieval options:
 generation:
   chunk_method: semantic  # or "sliding" for fixed windows
   similarity_drop: 0.25   # threshold when using semantic splitting
-  retrieval_top_k: 5      # number of chunks fetched using embeddings
+    retrieval_top_k: 5      # number of chunks fetched using embeddings
 ```
+
+Most options can also be overridden with environment variables. For example set
+`GEN_TEMPERATURE=0.5` to change the default temperature, or `LLM_MODEL` to use a
+different model without editing the YAML file.
 
 ```bash
 curl -X POST localhost:8000/tasks/ingest \
@@ -209,6 +213,17 @@ for file in data/pdf/*.pdf; do
   curl -X POST localhost:8000/tasks/save -d "ds_id=1&fmt=chatml" -H "X-API-Key: <key>"
 done
 ```
+
+### Command Line Generation
+
+You can also generate data directly without running the REST API.
+
+```bash
+python -m datacreek.cli generate ./docs/paper.txt --content-type qa \
+    --model llama-3 --temperature 0.6 --output-dir out
+```
+
+Pass `--prompt-file` to override the default prompt template for the run.
 
 ## Advanced Usage
 
