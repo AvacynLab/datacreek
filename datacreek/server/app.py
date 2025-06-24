@@ -4,15 +4,18 @@ Flask application for the Datacreek web interface.
 import os
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict
 
-import flask
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort, flash
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, IntegerField, SelectField, FileField, SubmitField
-from wtforms.validators import DataRequired, Optional as OptionalValidator
+from wtforms import StringField, IntegerField, SelectField, FileField, SubmitField
+from wtforms.validators import DataRequired
 
-from datacreek.utils.config import load_config, get_llm_provider, get_path_config
+from datacreek.utils.config import (
+    load_config,
+    get_llm_provider,
+    get_neo4j_config,
+)
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.ingest import (
@@ -20,6 +23,8 @@ from datacreek.core.ingest import (
     ingest_into_dataset,
 )
 from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.knowledge_graph import KnowledgeGraph
+from neo4j import GraphDatabase
 from datacreek.pipelines import DatasetType
 
 app = Flask(__name__)
@@ -36,6 +41,17 @@ DEFAULT_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load SDK config
 config = load_config()
+
+
+def get_neo4j_driver():
+    """Return a Neo4j driver using config or environment variables."""
+    cfg = get_neo4j_config(config)
+    uri = os.getenv("NEO4J_URI", cfg.get("uri"))
+    user = os.getenv("NEO4J_USER", cfg.get("user"))
+    password = os.getenv("NEO4J_PASSWORD", cfg.get("password"))
+    if not uri or not user or not password:
+        return None
+    return GraphDatabase.driver(uri, auth=(user, password))
 
 # In-memory store of datasets being built
 DATASETS: Dict[str, DatasetBuilder] = {}
@@ -129,6 +145,20 @@ def dataset_graph(name: str):
     return jsonify(ds.graph.to_dict())
 
 
+@app.get('/datasets/<name>/search')
+def dataset_search(name: str):
+    """Return node ids matching the query."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    query = request.args.get('q')
+    node_type = request.args.get('type', 'chunk')
+    if not query:
+        return jsonify([])
+    ids = ds.graph.search(query, node_type=node_type)
+    return jsonify(ids)
+
+
 @app.post('/datasets/<name>/ingest')
 def dataset_ingest(name: str):
     """Ingest a file or URL into the dataset knowledge graph."""
@@ -148,6 +178,36 @@ def dataset_ingest(name: str):
     except Exception as e:  # pragma: no cover - flash message only
         flash(f'Error ingesting document: {e}', 'danger')
 
+    return redirect(url_for('dataset_detail', name=name))
+
+
+@app.post('/datasets/<name>/save_neo4j')
+def save_dataset_neo4j(name: str):
+    """Persist the dataset graph to Neo4j."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    driver = get_neo4j_driver()
+    if not driver:
+        abort(500, description='Neo4j not configured')
+    ds.graph.to_neo4j(driver)
+    driver.close()
+    flash('Graph saved to Neo4j', 'success')
+    return redirect(url_for('dataset_detail', name=name))
+
+
+@app.post('/datasets/<name>/load_neo4j')
+def load_dataset_neo4j(name: str):
+    """Load the dataset graph from Neo4j."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    driver = get_neo4j_driver()
+    if not driver:
+        abort(500, description='Neo4j not configured')
+    ds.graph = KnowledgeGraph.from_neo4j(driver)
+    driver.close()
+    flash('Graph loaded from Neo4j', 'success')
     return redirect(url_for('dataset_detail', name=name))
 
 
@@ -228,7 +288,6 @@ def curate():
     if form.validate_on_submit():
         try:
             input_file = form.input_file.data
-            num_pairs = form.num_pairs.data
             model = form.model.data or None
             api_base = form.api_base.data or None
             
@@ -299,7 +358,7 @@ def view_file(file_path):
             has_conversations = 'conversations' in file_content
             has_summary = 'summary' in file_content
             
-        except Exception as e:
+        except Exception:
             # If JSON parsing fails, treat as text
             with open(full_path, 'r') as f:
                 file_content = f.read()
@@ -380,7 +439,7 @@ def ingest():
             if input_type == 'file' and temp_path.exists():
                 try:
                     temp_path.unlink()
-                except:
+                except Exception:
                     pass
             
             flash(f'Successfully parsed document! Output saved to: {output_path}', 'success')
@@ -428,7 +487,7 @@ def qa_json(file_path):
         with open(full_path, 'r') as f:
             data = json.load(f)
         return jsonify(data)
-    except:
+    except Exception:
         abort(500)
         
 @app.route('/api/edit_item/<path:file_path>', methods=['POST'])
