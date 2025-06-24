@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from datacreek.config_models import GenerationSettings
+
 import yaml
 
 # Default config location relative to the package (original)
@@ -121,12 +123,36 @@ def get_openai_config(config: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def get_generation_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Get generation configuration"""
-    return config.get(
+def _env_override(key: str) -> Optional[str]:
+    """Helper to fetch environment variable overrides."""
+    env_key = f"GEN_{key.upper()}"
+    return os.environ.get(env_key)
+
+
+def get_generation_config(config: Dict[str, Any]) -> GenerationSettings:
+    """Return generation configuration as :class:`GenerationSettings`."""
+
+    defaults = config.get(
         "generation",
-        {"temperature": 0.7, "top_p": 0.95, "chunk_size": 4000, "overlap": 200, "max_tokens": 4096},
+        {
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "chunk_size": 4000,
+            "overlap": 200,
+            "max_tokens": 4096,
+            "batch_size": 32,
+        },
     )
+
+    # Apply environment variable overrides if present
+    env_overrides = {
+        k: type(defaults.get(k))(v)  # type: ignore
+        for k in defaults.keys()
+        if (v := _env_override(k)) is not None
+    }
+
+    cfg = {**defaults, **env_overrides}
+    return GenerationSettings.from_dict(cfg)
 
 
 def get_curate_config(config: Dict[str, Any]) -> Dict[str, Any]:
