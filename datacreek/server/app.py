@@ -15,7 +15,10 @@ from wtforms.validators import DataRequired, Optional as OptionalValidator
 from datacreek.utils.config import load_config, get_llm_provider, get_path_config
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
-from datacreek.core.ingest import process_file as ingest_process_file
+from datacreek.core.ingest import (
+    process_file as ingest_process_file,
+    ingest_into_dataset,
+)
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 
@@ -115,6 +118,37 @@ def dataset_detail(name: str):
     if not ds:
         abort(404)
     return render_template('dataset_detail.html', dataset=ds)
+
+
+@app.get('/datasets/<name>/graph')
+def dataset_graph(name: str):
+    """Return dataset knowledge graph as JSON."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    return jsonify(ds.graph.to_dict())
+
+
+@app.post('/datasets/<name>/ingest')
+def dataset_ingest(name: str):
+    """Ingest a file or URL into the dataset knowledge graph."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+
+    input_path = request.form.get('input_path')
+    doc_id = request.form.get('doc_id') or None
+    if not input_path:
+        flash('Input path is required', 'warning')
+        return redirect(url_for('dataset_detail', name=name))
+
+    try:
+        ingest_into_dataset(input_path, ds, doc_id=doc_id, config=config)
+        flash('Document ingested', 'success')
+    except Exception as e:  # pragma: no cover - flash message only
+        flash(f'Error ingesting document: {e}', 'danger')
+
+    return redirect(url_for('dataset_detail', name=name))
 
 
 @app.post('/datasets/<name>/delete')
