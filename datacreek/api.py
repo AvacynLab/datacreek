@@ -1,23 +1,35 @@
-from pathlib import Path
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from datacreek.core.ingest import process_file as ingest_file
-from datacreek.core.create import process_file as generate_data
-from datacreek.core.curate import curate_qa_pairs
-from datacreek.core.save_as import convert_format
-from datacreek.db import SessionLocal, init_db, User, SourceData, Dataset
+from datacreek.tasks import (
+    celery_app,
+    ingest_task,
+    generate_task,
+    curate_task,
+    save_task,
+)
+
+from datacreek.db import SessionLocal, init_db, User, Dataset
 from datacreek.schemas import (
     UserCreate,
     UserOut,
+    UserWithKey,
     SourceCreate,
     SourceOut,
     GenerateParams,
     DatasetOut,
+    DatasetCreate,
+    DatasetUpdate,
     CurateParams,
     SaveParams,
 )
-from datacreek.services import create_user, create_source, create_dataset
+from datacreek.services import (
+    create_user,
+    create_user_with_generated_key,
+    create_dataset,
+    get_user_by_key,
+)
 
 init_db()
 app = FastAPI(title="Datacreek API")
@@ -31,62 +43,147 @@ def get_db():
         db.close()
 
 
-@app.post("/users", response_model=UserOut, summary="Create a user")
-def create_user_route(payload: UserCreate, db: Session = Depends(get_db)):
-    user = create_user(db, payload.username, payload.api_key)
+def get_current_user(
+    api_key: str = Header(..., alias="X-API-Key"),
+    db: Session = Depends(get_db),
+) -> User:
+    user = get_user_by_key(db, api_key)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid API key")
     return user
 
 
-@app.post("/ingest", response_model=SourceOut, summary="Ingest a file")
-def ingest(payload: SourceCreate, db: Session = Depends(get_db)):
-    content = ingest_file(payload.path, None, payload.name, None)
-    src = create_source(db, None, payload.path, content)
-    return src
+@app.post("/users", response_model=UserWithKey, summary="Create a user")
+def create_user_route(payload: UserCreate, db: Session = Depends(get_db)):
+    user, key = create_user_with_generated_key(db, payload.username)
+    return {"id": user.id, "username": user.username, "api_key": key}
 
 
-@app.post("/generate", response_model=DatasetOut, summary="Generate dataset from source")
-def generate(params: GenerateParams, db: Session = Depends(get_db)):
-    src = db.get(SourceData, params.src_id)
-    if not src:
-        raise HTTPException(status_code=404, detail="Source not found")
-    output_dir = Path("data/generated")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    out = generate_data(
-        None,
-        str(output_dir),
-        None,
-        None,
-        None,
-        params.content_type,
-        params.num_pairs,
-        False,
-        document_text=src.content,
+@app.post("/datasets", response_model=DatasetOut, summary="Add a dataset")
+def add_dataset(
+    payload: DatasetCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ds = create_dataset(db, current_user.id, payload.source_id, payload.path)
+    return ds
+
+
+@app.get("/datasets", response_model=list[DatasetOut], summary="List datasets")
+def list_datasets(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(Dataset).filter(Dataset.owner_id == current_user.id).all()
+
+
+@app.get("/datasets/{ds_id}", response_model=DatasetOut, summary="Get dataset")
+def get_dataset(
+    ds_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ds = db.get(Dataset, ds_id)
+    if not ds or ds.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return ds
+
+
+@app.patch("/datasets/{ds_id}", response_model=DatasetOut, summary="Update dataset")
+def update_dataset(
+    ds_id: int,
+    payload: DatasetUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ds = db.get(Dataset, ds_id)
+    if not ds or ds.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    if payload.path:
+        ds.path = payload.path
+    db.commit()
+    db.refresh(ds)
+    return ds
+
+
+@app.delete("/datasets/{ds_id}", summary="Delete dataset")
+def delete_dataset_route(
+    ds_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ds = db.get(Dataset, ds_id)
+    if not ds or ds.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    db.delete(ds)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@app.get("/datasets/{ds_id}/download", summary="Download dataset")
+def download_dataset(
+    ds_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ds = db.get(Dataset, ds_id)
+    if not ds or ds.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return FileResponse(ds.path)
+
+
+# ----- Asynchronous task endpoints -----
+
+
+@app.post("/tasks/ingest", summary="Ingest a file asynchronously")
+async def ingest_async(
+    payload: SourceCreate,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    celery_task = ingest_task.apply_async(args=[current_user.id, payload.path])
+    return {"task_id": celery_task.id}
+
+
+@app.post("/tasks/generate", summary="Generate dataset asynchronously")
+async def generate_async(
+    params: GenerateParams,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    celery_task = generate_task.apply_async(
+        args=[current_user.id, params.src_id, params.content_type, params.num_pairs]
     )
-    ds = create_dataset(db, None, params.src_id, out)
-    return ds
+    return {"task_id": celery_task.id}
 
 
-@app.post("/curate", response_model=DatasetOut, summary="Curate a dataset")
-def curate(params: CurateParams, db: Session = Depends(get_db)):
-    ds = db.get(Dataset, params.ds_id)
-    if not ds:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    output_path = Path(ds.path).with_name(Path(ds.path).stem + "_curated.json")
-    curate_qa_pairs(ds.path, str(output_path), params.threshold, None, None, None, False)
-    ds.path = str(output_path)
-    db.commit()
-    db.refresh(ds)
-    return ds
+@app.post("/tasks/curate", summary="Curate a dataset asynchronously")
+async def curate_async(
+    params: CurateParams,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    celery_task = curate_task.apply_async(
+        args=[current_user.id, params.ds_id, params.threshold]
+    )
+    return {"task_id": celery_task.id}
 
 
-@app.post("/save", response_model=DatasetOut, summary="Convert dataset format")
-def save(params: SaveParams, db: Session = Depends(get_db)):
-    ds = db.get(Dataset, params.ds_id)
-    if not ds:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    out = convert_format(ds.path, None, params.fmt, {}, "json")
-    ds.path = out
-    db.commit()
-    db.refresh(ds)
-    return ds
+@app.post("/tasks/save", summary="Convert dataset asynchronously")
+async def save_async(
+    params: SaveParams,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    celery_task = save_task.apply_async(
+        args=[current_user.id, params.ds_id, params.fmt]
+    )
+    return {"task_id": celery_task.id}
 
+
+@app.get("/tasks/{task_id}", summary="Get background task status")
+async def get_task(task_id: str) -> dict:
+    res = celery_app.AsyncResult(task_id)
+    if res.state in {"PENDING", "STARTED"}:
+        return {"status": "running"}
+    if res.state == "SUCCESS":
+        return {"status": "finished", "result": res.result}
+    if res.state == "FAILURE":
+        return {"status": "failed", "error": str(res.result)}
+    return {"status": res.state.lower()}

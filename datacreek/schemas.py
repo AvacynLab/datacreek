@@ -2,7 +2,6 @@ from pydantic import BaseModel
 
 class UserCreate(BaseModel):
     username: str
-    api_key: str
 
 class UserOut(BaseModel):
     id: int
@@ -40,3 +39,16 @@ class CurateParams(BaseModel):
 class SaveParams(BaseModel):
     ds_id: int
     fmt: str = "jsonl"
+
+
+class UserWithKey(UserOut):
+    api_key: str
+
+
+class DatasetCreate(BaseModel):
+    source_id: int
+    path: str
+
+
+class DatasetUpdate(BaseModel):
+    path: str | None = None

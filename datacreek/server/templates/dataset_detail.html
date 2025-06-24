@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Dataset {{ dataset.name }}{% endblock %}
+
+{% block content %}
+<h2>{{ dataset.name }}</h2>
+<ul class="nav nav-tabs" id="myTab" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw" type="button" role="tab">Donnée brute</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="kg-tab" data-bs-toggle="tab" data-bs-target="#kg" type="button" role="tab">Knowledge Graph</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="gen-tab" data-bs-toggle="tab" data-bs-target="#gen" type="button" role="tab">Génération</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="cur-tab" data-bs-toggle="tab" data-bs-target="#cur" type="button" role="tab">Curation</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="exp-tab" data-bs-toggle="tab" data-bs-target="#exp" type="button" role="tab">Exportation</button>
+  </li>
+</ul>
+<div class="tab-content mt-3">
+  <div class="tab-pane fade show active" id="raw" role="tabpanel">
+    <p class="text-muted">Manage raw data here.</p>
+  </div>
+  <div class="tab-pane fade" id="kg" role="tabpanel">
+    <p class="text-muted">Knowledge graph visualisation placeholder.</p>
+  </div>
+  <div class="tab-pane fade" id="gen" role="tabpanel">
+    <p class="text-muted">Generation parameters placeholder.</p>
+  </div>
+  <div class="tab-pane fade" id="cur" role="tabpanel">
+    <p class="text-muted">Curation operations placeholder.</p>
+  </div>
+  <div class="tab-pane fade" id="exp" role="tabpanel">
+    <p class="text-muted">Export options placeholder.</p>
+  </div>
+</div>
+{% endblock %}

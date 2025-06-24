@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
+from copy import deepcopy
 
 from .knowledge_graph import KnowledgeGraph
 from ..pipelines import DatasetType
@@ -36,3 +37,7 @@ class DatasetBuilder:
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
+
+    def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
+        """Return a deep copy of this dataset with a new optional name."""
+        return DatasetBuilder(self.dataset_type, name, deepcopy(self.graph))

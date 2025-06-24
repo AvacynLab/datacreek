@@ -23,12 +23,14 @@ This toolkit simplifies the journey of:
 
 # How does Datacreek offer it?
 
-The toolkit exposes a REST API that mirrors the main data preparation steps:
+The toolkit exposes a REST API that mirrors the main data preparation steps. All
+operations are asynchronous and keyed by users:
 
-- `/ingest` for converting raw files to text
-- `/generate` for creating datasets
-- `/curate` for quality filtering
-- `/save` for exporting in common fine-tuning formats
+- `/tasks/ingest` for converting raw files to text
+- `/tasks/generate` for creating datasets
+- `/tasks/curate` for quality filtering
+- `/tasks/save` for exporting in common fine-tuning formats
+- `/datasets` to manage generated datasets
 
  All behaviour is driven from a YAML configuration file that you can override with your own values.
 
@@ -77,7 +79,18 @@ vllm serve meta-llama/Llama-3.3-70B-Instruct --port 8000
 
 Start the REST API server and interact with the endpoints.
 
-The service exposes `/ingest`, `/generate`, `/curate` and `/save` routes that correspond to the data preparation flow.
+All operations run asynchronously. Use `/tasks/ingest`, `/tasks/generate`,
+`/tasks/curate` and `/tasks/save` to launch long running processes in the
+background. Each request returns a `task_id` which can be polled via
+`/tasks/{task_id}`.
+
+Tasks are executed by [Celery](https://docs.celeryq.dev/). By default an in-memory
+broker is used, but in production you should set `CELERY_BROKER_URL` and
+`CELERY_RESULT_BACKEND` to a Redis or RabbitMQ instance.
+
+Datasets can be managed through `/datasets` (create, list, update, delete and
+download). Every request must include an `X-API-Key` header issued when creating
+a user via `/users`.
 ## Configuration
 
 The toolkit uses a YAML configuration file (default: `configs/config.yaml`).
@@ -130,8 +143,9 @@ api-endpoint:
 Create a custom configuration file and pass it via the `X-Config-Path` header:
 
 ```bash
-curl -X POST localhost:8000/ingest \
+curl -X POST localhost:8000/tasks/ingest \
      -H "X-Config-Path: custom_config.yaml" \
+     -H "X-API-Key: <key>" \
      -d "path=docs/paper.pdf"
 ```
 
@@ -141,24 +155,24 @@ curl -X POST localhost:8000/ingest \
 
 ```bash
 # Ingest PDF
-curl -X POST localhost:8000/ingest -d "path=research_paper.pdf"
+curl -X POST localhost:8000/tasks/ingest -d "path=research_paper.pdf" -H "X-API-Key: <key>"
 
 # Generate QA pairs (assuming source ID 1)
-curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=30"
+curl -X POST localhost:8000/tasks/generate -d "src_id=1&num_pairs=30" -H "X-API-Key: <key>"
 
 # Curate data (dataset ID 1)
-curl -X POST localhost:8000/curate -d "ds_id=1&threshold=8.5"
+curl -X POST localhost:8000/tasks/curate -d "ds_id=1&threshold=8.5" -H "X-API-Key: <key>"
 
 # Save in OpenAI fine-tuning format
-curl -X POST localhost:8000/save -d "ds_id=1&fmt=jsonl"
+curl -X POST localhost:8000/tasks/save -d "ds_id=1&fmt=jsonl" -H "X-API-Key: <key>"
 ```
 
 ### Processing a YouTube Video
 
 ```bash
 # Extract transcript and generate QA pairs
-curl -X POST localhost:8000/ingest -d "path=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-curl -X POST localhost:8000/generate -d "src_id=1"
+curl -X POST localhost:8000/tasks/ingest -d "path=https://www.youtube.com/watch?v=dQw4w9WgXcQ" -H "X-API-Key: <key>"
+curl -X POST localhost:8000/tasks/generate -d "src_id=1" -H "X-API-Key: <key>"
 ```
 
 ### Processing Multiple Files
@@ -168,10 +182,10 @@ curl -X POST localhost:8000/generate -d "src_id=1"
 for file in data/pdf/*.pdf; do
   filename=$(basename "$file" .pdf)
 
-  curl -X POST localhost:8000/ingest -d "path=$file"
-  curl -X POST localhost:8000/generate -d "src_id=1&num_pairs=20"
-  curl -X POST localhost:8000/curate -d "ds_id=1&threshold=7.5"
-  curl -X POST localhost:8000/save -d "ds_id=1&fmt=chatml"
+  curl -X POST localhost:8000/tasks/ingest -d "path=$file" -H "X-API-Key: <key>"
+  curl -X POST localhost:8000/tasks/generate -d "src_id=1&num_pairs=20" -H "X-API-Key: <key>"
+  curl -X POST localhost:8000/tasks/curate -d "ds_id=1&threshold=7.5" -H "X-API-Key: <key>"
+  curl -X POST localhost:8000/tasks/save -d "ds_id=1&fmt=chatml" -H "X-API-Key: <key>"
 done
 ```
 
@@ -220,6 +234,9 @@ ds.add_chunk("doc1", "c1", "hello world")
 print(ds.search("hello"))  # ["c1"]
 print(ds.search_documents("paper"))  # ["doc1"]
 print(ds.get_chunks_for_document("doc1"))  # ["c1"]
+
+# Clone a dataset to experiment with different cleaning steps
+ds_copy = ds.clone(name="copy")
 ```
 
 ### Mental Model:
