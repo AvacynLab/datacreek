@@ -54,6 +54,8 @@ def _wait_task(task_id: str) -> dict:
 
 def test_async_pipeline(monkeypatch, tmp_path):
     def dummy_generate(path, output_dir, *args, document_text=None, **kwargs):
+        assert kwargs.get("config_overrides") == {"generation": {"temperature": 0.1}}
+        assert kwargs.get("provider") == "api-endpoint"
         out = Path(output_dir) / "gen.json"
         with open(out, "w") as f:
             json.dump({"qa_pairs": [{"question": "q", "answer": "a"}]}, f)
@@ -83,7 +85,15 @@ def test_async_pipeline(monkeypatch, tmp_path):
     result = _wait_task(task_id)
     src_id = result["id"]
 
-    res = client.post("/tasks/generate", json={"src_id": src_id}, headers=headers)
+    res = client.post(
+        "/tasks/generate",
+        json={
+            "src_id": src_id,
+            "provider": "api-endpoint",
+            "generation": {"temperature": 0.1},
+        },
+        headers=headers,
+    )
     task_id = res.json()["task_id"]
     result = _wait_task(task_id)
     ds_id = result["id"]

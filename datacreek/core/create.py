@@ -32,6 +32,7 @@ def process_file(
     verbose: bool = False,
     provider: Optional[str] = None,
     document_text: Optional[str] = None,
+    config_overrides: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Process a file to generate content
     
@@ -71,7 +72,7 @@ def process_file(
     
     # Generate content based on type
     if content_type == "qa":
-        generator = QAGenerator(client, config_path)
+        generator = QAGenerator(client, config_path, config_overrides=config_overrides)
 
         if document_text is None:
             document_text = read_json(file_path)
@@ -113,7 +114,7 @@ def process_file(
         return output_path
     
     elif content_type == "summary":
-        generator = QAGenerator(client, config_path)
+        generator = QAGenerator(client, config_path, config_overrides=config_overrides)
 
         if document_text is None:
             document_text = read_json(file_path)
@@ -136,7 +137,7 @@ def process_file(
         from datacreek.generators.cot_generator import COTGenerator
         
         # Initialize the CoT generator
-        generator = COTGenerator(client, config_path)
+        generator = COTGenerator(client, config_path, config_overrides=config_overrides)
 
         if document_text is None:
             document_text = read_json(file_path)
@@ -175,7 +176,7 @@ def process_file(
         from tqdm import tqdm
         
         # Initialize the CoT generator
-        generator = COTGenerator(client, config_path)
+        generator = COTGenerator(client, config_path, config_overrides=config_overrides)
 
         if document_text is None:
             document_text = read_json(file_path)

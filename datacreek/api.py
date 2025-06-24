@@ -148,9 +148,17 @@ async def ingest_async(
 async def generate_async(
     params: GenerateParams,
     current_user: User = Depends(get_current_user),
+    x_config_path: str | None = Header(None, alias="X-Config-Path"),
 ) -> dict:
     celery_task = generate_task.apply_async(
-        args=[current_user.id, params.src_id, params.content_type, params.num_pairs]
+        args=[current_user.id, params.src_id, params.content_type, params.num_pairs],
+        kwargs={
+            "provider": params.provider,
+            "model": params.model,
+            "api_base": params.api_base,
+            "config_path": x_config_path,
+            "generation": params.generation,
+        },
     )
     return {"task_id": celery_task.id}
 

@@ -32,7 +32,18 @@ def ingest_task(user_id: int, path: str) -> dict:
 
 
 @celery_app.task
-def generate_task(user_id: int, src_id: int, content_type: str, num_pairs: int | None) -> dict:
+def generate_task(
+    user_id: int,
+    src_id: int,
+    content_type: str,
+    num_pairs: int | None,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+    api_base: str | None = None,
+    config_path: str | None = None,
+    generation: dict | None = None,
+) -> dict:
     with SessionLocal() as db:
         src = db.get(SourceData, src_id)
         if not src or src.owner_id != user_id:
@@ -42,13 +53,15 @@ def generate_task(user_id: int, src_id: int, content_type: str, num_pairs: int |
         out = generate_data(
             None,
             str(output_dir),
-            None,
-            None,
-            None,
+            Path(config_path) if config_path else None,
+            api_base,
+            model,
             content_type,
             num_pairs,
             False,
+            provider=provider,
             document_text=src.content,
+            config_overrides={"generation": generation} if generation else None,
         )
         ds = create_dataset(db, user_id, src_id, out)
         return {"id": ds.id}
