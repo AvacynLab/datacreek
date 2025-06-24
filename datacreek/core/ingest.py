@@ -6,6 +6,7 @@
 # Ingest different file formats
 
 import os
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -17,6 +18,8 @@ from datacreek.parsers import (
     HTMLParser,
     YouTubeParser,
 )
+
+logger = logging.getLogger(__name__)
 
 def determine_parser(file_path: str, config: Dict[str, Any]):
     """Return a parser instance for the given resource."""
@@ -34,8 +37,10 @@ def determine_parser(file_path: str, config: Dict[str, Any]):
         parser = get_parser_for_extension(ext)
         if parser:
             return parser
+        logger.error("Unsupported file extension: %s", ext)
         raise ValueError(f"Unsupported file extension: {ext}")
 
+    logger.error("File not found: %s", file_path)
     raise FileNotFoundError(f"File not found: {file_path}")
 
 def process_file(
@@ -60,8 +65,8 @@ def process_file(
     try:
         parser.save(content, str(out_path))
     except Exception:
-        # saving should not block ingestion
-        pass
+        # saving should not block ingestion but should be logged
+        logger.exception("Failed to save parsed content to %s", out_path)
 
     return content
 
@@ -71,8 +76,18 @@ def to_kg(
     dataset: DatasetBuilder,
     doc_id: str,
     config: Optional[Dict[str, Any]] = None,
+    *,
+    build_index: bool = True,
 ) -> None:
-    """Split ``text`` and populate ``dataset`` with nodes."""
+    """Split ``text`` and populate ``dataset`` with nodes.
+
+    Parameters
+    ----------
+    build_index: bool, optional
+        Whether to rebuild the embedding index after inserting chunks. Set to
+        ``False`` when ingesting many files sequentially to build the index once
+        at the end.
+    """
 
     cfg = config or load_config()
     gen_cfg = get_generation_config(cfg)
@@ -90,7 +105,8 @@ def to_kg(
         cid = f"{doc_id}_chunk_{i}"
         dataset.add_chunk(doc_id, cid, chunk)
 
-    dataset.graph.index.build()
+    if build_index:
+        dataset.graph.index.build()
 
 
 def ingest_into_dataset(
@@ -103,6 +119,6 @@ def ingest_into_dataset(
 
     text = process_file(file_path, config=config)
     doc_id = doc_id or Path(file_path).stem
-    to_kg(text, dataset, doc_id, config)
+    to_kg(text, dataset, doc_id, config, build_index=True)
     return doc_id
 
