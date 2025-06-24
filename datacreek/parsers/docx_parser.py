@@ -7,7 +7,9 @@
 import os
 from typing import Dict, Any
 
-class DOCXParser:
+from .base import BaseParser
+
+class DOCXParser(BaseParser):
     """Parser for Microsoft Word documents"""
     
     def parse(self, file_path: str) -> str:

@@ -8,7 +8,9 @@
 import os
 from typing import Dict, Any
 
-class YouTubeParser:
+from .base import BaseParser
+
+class YouTubeParser(BaseParser):
     """Parser for YouTube transcripts"""
     
     def parse(self, url: str) -> str:

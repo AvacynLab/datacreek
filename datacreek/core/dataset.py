@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+import json
+import os
 from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
 
-from .knowledge_graph import KnowledgeGraph
+import redis
+
 from ..pipelines import DatasetType
+from .knowledge_graph import KnowledgeGraph
 
 
 @dataclass
@@ -41,3 +45,50 @@ class DatasetBuilder:
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
         """Return a deep copy of this dataset with a new optional name."""
         return DatasetBuilder(self.dataset_type, name, deepcopy(self.graph))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize this dataset to a Python dictionary."""
+
+        return {
+            "dataset_type": self.dataset_type.value,
+            "name": self.name,
+            "graph": self.graph.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DatasetBuilder":
+        ds = cls(DatasetType(data["dataset_type"]), data.get("name"))
+        ds.graph = KnowledgeGraph.from_dict(data.get("graph", {}))
+        return ds
+
+    def to_json(self, path: str) -> str:
+        """Save this dataset to ``path`` in JSON format."""
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        return path
+
+    @classmethod
+    def from_json(cls, path: str) -> "DatasetBuilder":
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+    # ------------------------------------------------------------------
+    # Redis helpers
+    # ------------------------------------------------------------------
+
+    def to_redis(self, client: redis.Redis, key: str | None = None) -> str:
+        """Persist the dataset in Redis under ``key``."""
+
+        key = key or (self.name or "dataset")
+        client.set(key, json.dumps(self.to_dict()))
+        return key
+
+    @classmethod
+    def from_redis(cls, client: redis.Redis, key: str) -> "DatasetBuilder":
+        data = client.get(key)
+        if data is None:
+            raise KeyError(key)
+        return cls.from_dict(json.loads(data))

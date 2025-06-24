@@ -27,6 +27,8 @@ dependencies = [
     "celery>=5.3.6",
     "SQLAlchemy>=2.0",
     "scikit-learn>=1.7.0",
+    "redis>=5.0.0",
+    "neo4j>=5.17.0",
 ]
 
 # These fields appear in pip show

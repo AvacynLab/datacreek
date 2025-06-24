@@ -104,6 +104,16 @@ point this to any SQLAlchemy compatible database.
 Run `python -m datacreek.cli init-db` to create the tables before starting the
 server if they do not already exist.
 
+### Starting Redis and Neo4j with Docker
+
+Use the provided `docker-compose.yml` to launch Redis and Neo4j locally:
+
+```bash
+./scripts/start_services.sh
+```
+
+Redis will listen on `6379` while Neo4j exposes ports `7474` and `7687`.
+
 You can override any value by providing a custom YAML file to the server.
 
 ```yaml
@@ -237,7 +247,7 @@ source.  Generation steps query this cleaned graph instead of the raw files.
 The graph exposes simple search helpers so you can explore the content:
 
 ```python
-from datacreek import DatasetBuilder, DatasetType
+from datacreek import DatasetBuilder, DatasetType, KnowledgeGraph
 
 ds = DatasetBuilder(DatasetType.QA, name="example")
 ds.add_document("doc1", source="paper.pdf")
@@ -248,6 +258,30 @@ print(ds.get_chunks_for_document("doc1"))  # ["c1"]
 
 # Clone a dataset to experiment with different cleaning steps
 ds_copy = ds.clone(name="copy")
+
+# Persist and reload later using Redis and Neo4j
+import redis
+from neo4j import GraphDatabase
+
+client = redis.Redis(host="localhost", port=6379)
+driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "neo4j"))
+
+ds.to_redis(client, "dataset:example")
+ds.graph.to_neo4j(driver)
+
+ds_loaded = DatasetBuilder.from_redis(client, "dataset:example")
+ds_loaded.graph = KnowledgeGraph.from_neo4j(driver)
+```
+
+Ingestion now has two phases. First `ingest_file()` parses a file into raw
+text, then `to_kg()` splits it into chunks and inserts them into your
+dataset's knowledge graph:
+
+```python
+from datacreek import ingest_file, to_kg
+
+text = ingest_file("paper.pdf")
+to_kg(text, ds, "paper")
 ```
 
 ### Mental Model:

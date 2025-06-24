@@ -7,7 +7,9 @@
 import os
 from typing import Dict, Any
 
-class PDFParser:
+from .base import BaseParser
+
+class PDFParser(BaseParser):
     """Parser for PDF documents"""
     
     def parse(self, file_path: str) -> str:

@@ -8,7 +8,9 @@
 import os
 from typing import Dict, Any
 
-class PPTParser:
+from .base import BaseParser
+
+class PPTParser(BaseParser):
     """Parser for PowerPoint presentations"""
     
     def parse(self, file_path: str) -> str:
