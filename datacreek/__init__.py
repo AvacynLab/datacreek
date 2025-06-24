@@ -19,6 +19,7 @@ from .pipelines import (
 )
 from .core.knowledge_graph import KnowledgeGraph
 from .core.dataset import DatasetBuilder
+from .core.ingest import process_file as ingest_file, to_kg, ingest_into_dataset
 
 __all__ = [
     "GenerationPipeline",
@@ -31,4 +32,8 @@ __all__ = [
     "get_pipelines_for_training",
     "KnowledgeGraph",
     "DatasetBuilder",
+    "ingest_file",
+    "to_kg",
+    "ingest_into_dataset",
 ]
+

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Any, Dict, List, Optional
+
 import networkx as nx
+from neo4j import Driver, GraphDatabase
 
 from ..utils.retrieval import EmbeddingIndex
 
@@ -39,7 +43,10 @@ class KnowledgeGraph:
             if data.get("type") != node_type:
                 continue
             if node_type == "document":
-                if query_lower in node.lower() or query_lower in str(data.get("source", "")).lower():
+                if (
+                    query_lower in node.lower()
+                    or query_lower in str(data.get("source", "")).lower()
+                ):
                     results.append(node)
             else:
                 if query_lower in str(data.get("text", "")).lower():
@@ -87,5 +94,96 @@ class KnowledgeGraph:
         """Return all chunk IDs that belong to the given document."""
 
         return [
-            tgt for src, tgt, data in self.graph.edges(doc_id, data=True) if data.get("relation") == "has_chunk"
+            tgt
+            for src, tgt, data in self.graph.edges(doc_id, data=True)
+            if data.get("relation") == "has_chunk"
         ]
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize the graph to a dictionary."""
+
+        return {
+            "nodes": [{"id": n, **data} for n, data in self.graph.nodes(data=True)],
+            "edges": [
+                {"source": u, "target": v, **data} for u, v, data in self.graph.edges(data=True)
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "KnowledgeGraph":
+        kg = cls()
+        for node in data.get("nodes", []):
+            node_id = node.pop("id")
+            kg.graph.add_node(node_id, **node)
+            if node.get("type") == "chunk" and "text" in node:
+                kg.index.add(node_id, node["text"])
+        for edge in data.get("edges", []):
+            src = edge.pop("source")
+            tgt = edge.pop("target")
+            kg.graph.add_edge(src, tgt, **edge)
+        kg.index.build()
+        return kg
+
+    def to_json(self, path: str) -> str:
+        """Save the graph to a JSON file."""
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        return path
+
+    @classmethod
+    def from_json(cls, path: str) -> "KnowledgeGraph":
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+    # ------------------------------------------------------------------
+    # Neo4j helpers
+    # ------------------------------------------------------------------
+
+    def to_neo4j(self, driver: Driver) -> None:
+        """Persist the graph to a Neo4j database."""
+
+        def _write(tx):
+            tx.run("MATCH (n) DETACH DELETE n")
+            for n, data in self.graph.nodes(data=True):
+                label = data.get("type", "Node").capitalize()
+                tx.run(
+                    f"MERGE (m:{label} {{id:$id}}) SET m += $props",
+                    id=n,
+                    props={k: v for k, v in data.items() if k != "type"},
+                )
+            for u, v, edata in self.graph.edges(data=True):
+                rel = edata.get("relation", "RELATED_TO").upper()
+                tx.run(
+                    f"MATCH (a {{id:$u}}), (b {{id:$v}}) MERGE (a)-[r:{rel}]->(b) SET r += $props",
+                    u=u,
+                    v=v,
+                    props={k: v for k, v in edata.items() if k != "relation"},
+                )
+
+        with driver.session() as session:
+            session.execute_write(_write)
+
+    @classmethod
+    def from_neo4j(cls, driver: Driver) -> "KnowledgeGraph":
+        kg = cls()
+
+        def _read(tx):
+            nodes = tx.run("MATCH (n) RETURN n, labels(n)[0] AS label")
+            for record in nodes:
+                props = record["n"]
+                node_id = props.pop("id")
+                node_type = props.pop("type", record["label"]).lower()
+                kg.graph.add_node(node_id, type=node_type, **props)
+                if node_type == "chunk" and "text" in props:
+                    kg.index.add(node_id, props["text"])
+            edges = tx.run("MATCH (a)-[r]->(b) RETURN a.id AS src, type(r) AS rel, b.id AS tgt")
+            for record in edges:
+                kg.graph.add_edge(record["src"], record["tgt"], relation=record["rel"].lower())
+
+        with driver.session() as session:
+            session.execute_read(_read)
+        kg.index.build()
+        return kg

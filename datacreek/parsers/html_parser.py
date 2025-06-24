@@ -10,7 +10,9 @@ import requests
 from typing import Dict, Any
 from urllib.parse import urlparse
 
-class HTMLParser:
+from .base import BaseParser
+
+class HTMLParser(BaseParser):
     """Parser for HTML files and web pages"""
     
     def parse(self, file_path: str) -> str:
@@ -67,3 +69,4 @@ class HTMLParser:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(content)
+
