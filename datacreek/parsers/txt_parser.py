@@ -7,7 +7,9 @@
 import os
 from typing import Dict, Any
 
-class TXTParser:
+from .base import BaseParser
+
+class TXTParser(BaseParser):
     """Parser for plain text files"""
     
     def parse(self, file_path: str) -> str:

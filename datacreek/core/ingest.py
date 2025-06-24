@@ -6,22 +6,20 @@
 # Ingest different file formats
 
 import os
-import sys
 from pathlib import Path
 from typing import Optional, Dict, Any
-import importlib
 
-from datacreek.utils.config import get_path_config
+from datacreek.utils.config import get_path_config, load_config, get_generation_config
+from datacreek.utils.text import split_into_chunks
+from datacreek.core.dataset import DatasetBuilder
+from datacreek.parsers import (
+    get_parser_for_extension,
+    HTMLParser,
+    YouTubeParser,
+)
 
 def determine_parser(file_path: str, config: Dict[str, Any]):
-    """Determine the appropriate parser for a file or URL"""
-    from datacreek.parsers.pdf_parser import PDFParser
-    from datacreek.parsers.html_parser import HTMLParser
-    from datacreek.parsers.youtube_parser import YouTubeParser
-    from datacreek.parsers.docx_parser import DOCXParser
-    from datacreek.parsers.ppt_parser import PPTParser
-    from datacreek.parsers.txt_parser import TXTParser
-    
+    """Return a parser instance for the given resource."""
     # Check if it's a URL
     if file_path.startswith(('http://', 'https://')):
         # YouTube URL
@@ -30,25 +28,14 @@ def determine_parser(file_path: str, config: Dict[str, Any]):
         # HTML URL
         else:
             return HTMLParser()
-    
-    # File path - determine by extension
+
     if os.path.exists(file_path):
         ext = os.path.splitext(file_path)[1].lower()
-        
-        parsers = {
-            '.pdf': PDFParser(),
-            '.html': HTMLParser(),
-            '.htm': HTMLParser(),
-            '.docx': DOCXParser(),
-            '.pptx': PPTParser(),
-            '.txt': TXTParser(),
-        }
-        
-        if ext in parsers:
-            return parsers[ext]
-        else:
-            raise ValueError(f"Unsupported file extension: {ext}")
-    
+        parser = get_parser_for_extension(ext)
+        if parser:
+            return parser
+        raise ValueError(f"Unsupported file extension: {ext}")
+
     raise FileNotFoundError(f"File not found: {file_path}")
 
 def process_file(
@@ -57,20 +44,65 @@ def process_file(
     output_name: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Process a file using the appropriate parser
-    
-    Args:
-        file_path: Path or URL of the resource to parse
-        output_dir: Ignored, kept for backward compatibility
-        output_name: Ignored, kept for backward compatibility
-        config: Configuration dictionary (if None, uses default)
+    """Parse ``file_path`` and optionally save the result."""
 
-    Returns:
-        Raw text content extracted from the source
-    """
-    # Determine parser based on file type
-    parser = determine_parser(file_path, config)
+    cfg = config or load_config()
 
-    # Parse the file
+    parser = determine_parser(file_path, cfg)
     content = parser.parse(file_path)
+
+    out_dir = Path(output_dir or get_path_config(cfg, "output", "parsed"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if output_name is None:
+        stem = Path(file_path).stem
+        output_name = f"{stem}.txt"
+    out_path = out_dir / output_name
+    try:
+        parser.save(content, str(out_path))
+    except Exception:
+        # saving should not block ingestion
+        pass
+
     return content
+
+
+def to_kg(
+    text: str,
+    dataset: DatasetBuilder,
+    doc_id: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Split ``text`` and populate ``dataset`` with nodes."""
+
+    cfg = config or load_config()
+    gen_cfg = get_generation_config(cfg)
+
+    chunks = split_into_chunks(
+        text,
+        chunk_size=gen_cfg.get("chunk_size", 4000),
+        overlap=gen_cfg.get("overlap", 200),
+        method=gen_cfg.get("chunk_method"),
+        similarity_drop=gen_cfg.get("similarity_drop", 0.3),
+    )
+
+    dataset.add_document(doc_id, source=doc_id)
+    for i, chunk in enumerate(chunks):
+        cid = f"{doc_id}_chunk_{i}"
+        dataset.add_chunk(doc_id, cid, chunk)
+
+    dataset.graph.index.build()
+
+
+def ingest_into_dataset(
+    file_path: str,
+    dataset: DatasetBuilder,
+    doc_id: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Convenience helper to parse ``file_path`` and load it into ``dataset``."""
+
+    text = process_file(file_path, config=config)
+    doc_id = doc_id or Path(file_path).stem
+    to_kg(text, dataset, doc_id, config)
+    return doc_id
+

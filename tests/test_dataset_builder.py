@@ -1,3 +1,5 @@
+import fakeredis
+
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 
@@ -33,3 +35,15 @@ def test_dataset_clone():
     assert ds.search("more") == []
     assert clone.search("more") == ["c2"]
 
+
+def test_dataset_persistence_redis():
+    ds = DatasetBuilder(DatasetType.TEXT, name="test")
+    ds.add_document("d", source="source.txt")
+    ds.add_chunk("d", "c1", "hello world")
+
+    client = fakeredis.FakeStrictRedis()
+    ds.to_redis(client, "ds:test")
+    loaded = DatasetBuilder.from_redis(client, "ds:test")
+
+    assert loaded.name == "test"
+    assert loaded.search_chunks("hello") == ["c1"]
