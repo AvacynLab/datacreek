@@ -4,18 +4,16 @@ Flask application for the Datacreek web interface.
 import os
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict
 
-import flask
 from flask import Flask, render_template, request, redirect, url_for, jsonify, abort, flash
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextAreaField, IntegerField, SelectField, FileField, SubmitField
-from wtforms.validators import DataRequired, Optional as OptionalValidator
+from wtforms import StringField, IntegerField, SelectField, FileField, SubmitField
+from wtforms.validators import DataRequired
 
 from datacreek.utils.config import (
     load_config,
     get_llm_provider,
-    get_path_config,
     get_neo4j_config,
 )
 from datacreek.core.create import process_file
@@ -290,7 +288,6 @@ def curate():
     if form.validate_on_submit():
         try:
             input_file = form.input_file.data
-            num_pairs = form.num_pairs.data
             model = form.model.data or None
             api_base = form.api_base.data or None
             
@@ -361,7 +358,7 @@ def view_file(file_path):
             has_conversations = 'conversations' in file_content
             has_summary = 'summary' in file_content
             
-        except Exception as e:
+        except Exception:
             # If JSON parsing fails, treat as text
             with open(full_path, 'r') as f:
                 file_content = f.read()
@@ -442,7 +439,7 @@ def ingest():
             if input_type == 'file' and temp_path.exists():
                 try:
                     temp_path.unlink()
-                except:
+                except Exception:
                     pass
             
             flash(f'Successfully parsed document! Output saved to: {output_path}', 'success')
@@ -490,7 +487,7 @@ def qa_json(file_path):
         with open(full_path, 'r') as f:
             data = json.load(f)
         return jsonify(data)
-    except:
+    except Exception:
         abort(500)
         
 @app.route('/api/edit_item/<path:file_path>', methods=['POST'])
