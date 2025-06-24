@@ -14,15 +14,18 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, Ti
 
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.text import split_into_chunks
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.utils.llm_processing import parse_qa_pairs, parse_ratings, convert_to_conversation_format
 from datacreek.utils.config import load_config, get_generation_config, get_curate_config, get_prompt
 
 class QAGenerator:
-    def __init__(self, 
+    def __init__(self,
                  client: LLMClient,
-                 config_path: Optional[Path] = None):
+                 config_path: Optional[Path] = None,
+                 kg: Optional[KnowledgeGraph] = None):
         """Initialize the QA Generator with an LLM client and optional config"""
         self.client = client
+        self.kg = kg
         
         # Load config
         self.config = load_config(config_path)
@@ -54,10 +57,13 @@ class QAGenerator:
             print(f"Summary generated ({len(summary)} chars)")
         return summary
     
-    def generate_qa_pairs(self, 
-                        document_text: str, 
-                        summary: str, 
-                        num_pairs: int = 25) -> List[Dict[str, str]]:
+    def generate_qa_pairs(
+        self,
+        document_text: str,
+        summary: str,
+        num_pairs: int = 25,
+        query: Optional[str] = None,
+    ) -> List[Dict[str, str]]:
         """Generate QA pairs from the document using batched processing"""
         verbose = os.environ.get('SDK_VERBOSE', 'false').lower() == 'true'
         
@@ -66,13 +72,29 @@ class QAGenerator:
         temperature = self.generation_config.get("temperature", 0.7)
         overlap = self.generation_config.get("overlap", 200)
         batch_size = self.generation_config.get("batch_size", 32)
+        chunk_method = self.generation_config.get("chunk_method")
+        similarity_drop = self.generation_config.get("similarity_drop", 0.3)
+        top_k = self.generation_config.get("retrieval_top_k", 3)
         
         # Split text into chunks
         chunks = split_into_chunks(
-            document_text, 
-            chunk_size=chunk_size, 
-            overlap=overlap
+            document_text,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            method=chunk_method,
+            similarity_drop=similarity_drop,
         )
+
+        if self.kg and chunk_method in {"sliding", "semantic"}:
+            # index chunks in knowledge graph if provided
+            for i, chunk in enumerate(chunks):
+                cid = f"chunk-{i}"
+                self.kg.add_document("doc", source="inline") if "doc" not in self.kg.graph else None
+                self.kg.add_chunk("doc", cid, chunk)
+
+        if query and self.kg:
+            selected_ids = self.kg.search_embeddings(query, k=top_k)
+            chunks = [self.kg.graph.nodes[c]["text"] for c in selected_ids if c in self.kg.graph]
         
         if verbose:
             print(f"Generating QA pairs...")

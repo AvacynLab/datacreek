@@ -50,6 +50,9 @@ generation:
   top_p: 0.95        # Nucleus sampling parameter
   chunk_size: 4000   # Size of text chunks for processing
   overlap: 200       # Overlap between chunks to maintain context
+  chunk_method: sliding  # Options: basic|sliding|semantic
+  similarity_drop: 0.3   # Threshold for semantic splitting
+  retrieval_top_k: 3     # Number of chunks to retrieve for QA generation
   max_tokens: 4096   # Maximum tokens in LLM responses
   num_pairs: 25      # Default number of QA pairs to generate
   num_cot_examples: 5  # Default number of Chain of Thought examples to generate

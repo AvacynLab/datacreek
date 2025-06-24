@@ -37,3 +37,13 @@ def test_document_helpers():
 
     assert set(kg.search_documents("doc")) == {"doc1"}
     assert kg.get_chunks_for_document("doc1") == ["c1", "c2"]
+
+
+def test_embedding_search():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello world")
+    kg.add_chunk("d", "c2", "another world")
+    kg.index.build()
+    results = kg.search_embeddings("hello", k=1)
+    assert results[0] == "c1"
