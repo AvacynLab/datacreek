@@ -118,6 +118,8 @@ vllm:
 generation:
   temperature: 0.7
   chunk_size: 4000
+  chunk_method: sliding  # basic|sliding|semantic
+  retrieval_top_k: 3
   num_pairs: 25
 
 curate:
@@ -141,6 +143,15 @@ api-endpoint:
 ### Customizing Configuration
 
 Create a custom configuration file and pass it via the `X-Config-Path` header:
+
+The `generation` section now exposes advanced chunking and retrieval options:
+
+```
+generation:
+  chunk_method: semantic  # or "sliding" for fixed windows
+  similarity_drop: 0.25   # threshold when using semantic splitting
+  retrieval_top_k: 5      # number of chunks fetched using embeddings
+```
 
 ```bash
 curl -X POST localhost:8000/tasks/ingest \

@@ -512,33 +512,28 @@ graph TD
 
 #### Text Chunking
 
-For long documents, the text is split into manageable chunks:
+For long documents, the text is split into manageable chunks. Datacreek provides
+multiple strategies controlled via the configuration:
+
+* **basic** – split on paragraphs with limited overlap (default)
+* **sliding** – fixed-size sliding window with overlap
+* **semantic** – break sentences where the embedding similarity drops below a threshold
+
+Example implementation:
 
 ```python
-def split_into_chunks(text: str, chunk_size: int = 4000, overlap: int = 200) -> List[str]:
-    paragraphs = text.split("\n\n")
-    chunks = []
-    current_chunk = ""
-    
-    for para in paragraphs:
-        if len(current_chunk) + len(para) > chunk_size and current_chunk:
-            chunks.append(current_chunk)
-            # Keep some overlap for context
-            sentences = current_chunk.split('. ')
-            if len(sentences) > 3:
-                current_chunk = '. '.join(sentences[-3:]) + "\n\n" + para
-            else:
-                current_chunk = para
-        else:
-            if current_chunk:
-                current_chunk += "\n\n" + para
-            else:
-                current_chunk = para
-    
-    if current_chunk:
-        chunks.append(current_chunk)
-    
-    return chunks
+def split_into_chunks(
+    text: str,
+    chunk_size: int = 4000,
+    overlap: int = 200,
+    method: str | None = None,
+    similarity_drop: float = 0.3,
+) -> List[str]:
+    if method == "sliding":
+        return sliding_window_chunks(text, chunk_size, overlap)
+    if method == "semantic":
+        return semantic_chunk_split(text, chunk_size, similarity_drop)
+    ...
 ```
 
 ### Stage 3: Content Filtering (Cleanup)
@@ -722,6 +717,10 @@ ds.add_chunk("doc1", "c1", "hello world")
 matches = ds.search("world")
 doc_matches = ds.search_documents("paper")
 chunk_ids = ds.get_chunks_for_document("doc1")
+
+# Embedding-based retrieval
+ds.graph.index.build()
+retrieved = ds.graph.search_embeddings("hello", k=1)
 
 # Clone the dataset to try different curation strategies
 ds_copy = ds.clone(name="copy")

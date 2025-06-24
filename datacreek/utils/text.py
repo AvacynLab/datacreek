@@ -6,21 +6,32 @@
 # Text processing utilities
 import re
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-def split_into_chunks(text: str, chunk_size: int = 4000, overlap: int = 200) -> List[str]:
-    """Split text into chunks with optional overlap"""
+from .chunking import sliding_window_chunks, semantic_chunk_split
+
+def split_into_chunks(
+    text: str,
+    chunk_size: int = 4000,
+    overlap: int = 200,
+    method: str | None = None,
+    similarity_drop: float = 0.3,
+) -> List[str]:
+    """Split text into chunks using the configured method."""
+    if method == "sliding":
+        return sliding_window_chunks(text, chunk_size, overlap)
+    if method == "semantic":
+        return semantic_chunk_split(text, max_tokens=chunk_size, similarity_drop=similarity_drop)
+
     paragraphs = text.split("\n\n")
     chunks = []
     current_chunk = ""
-    
     for para in paragraphs:
         if len(current_chunk) + len(para) > chunk_size and current_chunk:
             chunks.append(current_chunk)
-            # Keep some overlap for context
-            sentences = current_chunk.split('. ')
+            sentences = current_chunk.split(". ")
             if len(sentences) > 3:
-                current_chunk = '. '.join(sentences[-3:]) + "\n\n" + para
+                current_chunk = ". ".join(sentences[-3:]) + "\n\n" + para
             else:
                 current_chunk = para
         else:
@@ -28,10 +39,8 @@ def split_into_chunks(text: str, chunk_size: int = 4000, overlap: int = 200) -> 
                 current_chunk += "\n\n" + para
             else:
                 current_chunk = para
-    
     if current_chunk:
         chunks.append(current_chunk)
-    
     return chunks
 
 def extract_json_from_text(text: str) -> Dict[str, Any]:
