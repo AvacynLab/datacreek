@@ -15,11 +15,26 @@ from datacreek.utils.config import get_prompt, get_generation_config
 
 class COTGenerator:
     """Generates chain-of-thought reasoning examples"""
-    
-    def __init__(self, client: LLMClient, config_path: Optional[Path] = None):
+
+    def __init__(
+        self,
+        client: LLMClient,
+        config_path: Optional[Path] = None,
+        config_overrides: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize the CoT Generator with an LLM client and optional config"""
         self.client = client
-        self.config = client.config
+
+        if config_path:
+            base_cfg = load_config(config_path)
+        else:
+            base_cfg = client.config
+
+        if config_overrides:
+            from datacreek.utils.config import merge_configs
+            base_cfg = merge_configs(base_cfg, config_overrides)
+
+        self.config = base_cfg
         self.generation_config = get_generation_config(self.config)
     
     def parse_json_output(self, output_text: str) -> Optional[List[Dict]]:

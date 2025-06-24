@@ -65,6 +65,10 @@
                             <div id="collapseAdvanced" class="accordion-collapse collapse" data-bs-parent="#advancedOptions">
                                 <div class="accordion-body">
                                     <div class="mb-3">
+                                        <label for="provider" class="form-label">{{ form.provider.label }}</label>
+                                        {{ form.provider(class="form-select") }}
+                                    </div>
+                                    <div class="mb-3">
                                         <label for="model" class="form-label">{{ form.model.label }}</label>
                                         {{ form.model(class="form-control", placeholder="Leave blank for default model") }}
                                         <div class="form-text">Specify a model name to use instead of the default.</div>

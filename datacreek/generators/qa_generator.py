@@ -19,17 +19,23 @@ from datacreek.utils.llm_processing import parse_qa_pairs, parse_ratings, conver
 from datacreek.utils.config import load_config, get_generation_config, get_curate_config, get_prompt
 
 class QAGenerator:
-    def __init__(self,
-                 client: LLMClient,
-                 config_path: Optional[Path] = None,
-                 kg: Optional[KnowledgeGraph] = None):
+    def __init__(
+        self,
+        client: LLMClient,
+        config_path: Optional[Path] = None,
+        kg: Optional[KnowledgeGraph] = None,
+        config_overrides: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize the QA Generator with an LLM client and optional config"""
         self.client = client
         self.kg = kg
-        
-        # Load config
+
+        # Load config and merge overrides if provided
         self.config = load_config(config_path)
-        
+        if config_overrides:
+            from datacreek.utils.config import merge_configs
+            self.config = merge_configs(self.config, config_overrides)
+
         # Get specific configurations
         self.generation_config = get_generation_config(self.config)
         self.curate_config = get_curate_config(self.config)

@@ -67,6 +67,11 @@ class CreateForm(FlaskForm):
         ('cot-enhance', 'CoT Enhancement')
     ], default='qa')
     num_pairs = IntegerField('Number of QA Pairs', default=10)
+    provider = SelectField(
+        'Provider',
+        choices=[('vllm', 'vLLM'), ('api-endpoint', 'API Endpoint')],
+        default='vllm',
+    )
     model = StringField('Model Name (optional)')
     api_base = StringField('API Base URL (optional)')
     submit = SubmitField('Generate Content')
@@ -87,6 +92,11 @@ class CurateForm(FlaskForm):
     """Form for curating QA pairs"""
     input_file = StringField('Input JSON File Path', validators=[DataRequired()])
     num_pairs = IntegerField('Number of QA Pairs to Keep', default=0)
+    provider = SelectField(
+        'Provider',
+        choices=[('vllm', 'vLLM'), ('api-endpoint', 'API Endpoint')],
+        default='vllm',
+    )
     model = StringField('Model Name (optional)')
     api_base = StringField('API Base URL (optional)')
     submit = SubmitField('Curate QA Pairs')
@@ -236,7 +246,12 @@ def copy_dataset(name: str):
 def create():
     """Create content from text"""
     form = CreateForm()
-    provider = get_llm_provider(config)
+    default_provider = get_llm_provider(config)
+
+    if not form.provider.data:
+        form.provider.data = default_provider
+
+    provider = form.provider.data or default_provider
     
     if form.validate_on_submit():
         try:
@@ -283,7 +298,12 @@ def create():
 def curate():
     """Curate QA pairs interface"""
     form = CurateForm()
-    provider = get_llm_provider(config)
+    default_provider = get_llm_provider(config)
+
+    if not form.provider.data:
+        form.provider.data = default_provider
+
+    provider = form.provider.data or default_provider
     
     if form.validate_on_submit():
         try:

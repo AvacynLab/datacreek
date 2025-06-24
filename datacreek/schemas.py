@@ -24,6 +24,10 @@ class GenerateParams(BaseModel):
     src_id: int
     content_type: str = "qa"
     num_pairs: int | None = None
+    provider: str | None = None
+    model: str | None = None
+    api_base: str | None = None
+    generation: dict | None = None
 
 class DatasetOut(BaseModel):
     id: int
