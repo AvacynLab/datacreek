@@ -1,43 +1,58 @@
 import os
 import json
+import time
 from pathlib import Path
 from fastapi.testclient import TestClient
 
+os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
+
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 from datacreek.api import app
-from datacreek.db import SessionLocal, User, SourceData, Dataset
+from datacreek.db import SessionLocal, User, Dataset
 from datacreek.services import hash_key
 
 client = TestClient(app)
+
 
 def teardown_module(module):
     if os.path.exists("test.db"):
         os.remove("test.db")
 
-def test_create_user():
-    res = client.post("/users", json={"username": "alice", "api_key": "key"})
+
+def _create_user() -> tuple[int, str]:
+    name = f"u{int(time.time()*1000)}"
+    res = client.post("/users", json={"username": name})
     assert res.status_code == 200
-    user_id = res.json()["id"]
+    body = res.json()
+    return body["id"], body["api_key"]
+
+
+def test_create_user():
+    res = client.post("/users", json={"username": "alice"})
+    assert res.status_code == 200
+    body = res.json()
+    key = body["api_key"]
+    user_id = body["id"]
     with SessionLocal() as db:
         user = db.get(User, user_id)
         assert user is not None
         assert user.username == "alice"
-        assert user.api_key == hash_key("key")
-
-def test_ingest(tmp_path):
-    text_file = tmp_path / "example.txt"
-    text_file.write_text("hello")
-    res = client.post("/ingest", json={"path": str(text_file)})
-    assert res.status_code == 200
-    src_id = res.json()["id"]
-    with SessionLocal() as db:
-        src = db.get(SourceData, src_id)
-        assert src is not None
-        assert src.path == str(text_file)
+        assert user.api_key == hash_key(key)
 
 
-def test_full_pipeline(monkeypatch, tmp_path):
-    # stub generation to avoid real LLM calls
+
+
+def _wait_task(task_id: str) -> dict:
+    for _ in range(50):
+        res = client.get(f"/tasks/{task_id}")
+        body = res.json()
+        if body["status"] == "finished":
+            return body["result"]
+        time.sleep(0.01)
+    raise AssertionError("task did not finish")
+
+
+def test_async_pipeline(monkeypatch, tmp_path):
     def dummy_generate(path, output_dir, *args, document_text=None, **kwargs):
         out = Path(output_dir) / "gen.json"
         with open(out, "w") as f:
@@ -53,27 +68,49 @@ def test_full_pipeline(monkeypatch, tmp_path):
         Path(out).write_text(Path(input_path).read_text())
         return str(out)
 
-    monkeypatch.setattr("datacreek.api.generate_data", dummy_generate)
-    monkeypatch.setattr("datacreek.api.curate_qa_pairs", dummy_curate)
-    monkeypatch.setattr("datacreek.api.convert_format", dummy_save)
+    monkeypatch.setattr("datacreek.tasks.generate_data", dummy_generate)
+    monkeypatch.setattr("datacreek.tasks.curate_qa_pairs", dummy_curate)
+    monkeypatch.setattr("datacreek.tasks.convert_format", dummy_save)
+
+    user_id, key = _create_user()
+    headers = {"X-API-Key": key}
 
     src_file = tmp_path / "src.txt"
     src_file.write_text("hi")
 
-    res = client.post("/ingest", json={"path": str(src_file)})
-    src_id = res.json()["id"]
+    res = client.post("/tasks/ingest", json={"path": str(src_file)}, headers=headers)
+    task_id = res.json()["task_id"]
+    result = _wait_task(task_id)
+    src_id = result["id"]
 
-    res = client.post("/generate", json={"src_id": src_id})
-    assert res.status_code == 200
-    ds_id = res.json()["id"]
+    res = client.post("/tasks/generate", json={"src_id": src_id}, headers=headers)
+    task_id = res.json()["task_id"]
+    result = _wait_task(task_id)
+    ds_id = result["id"]
 
-    res = client.post("/curate", json={"ds_id": ds_id})
+    res = client.post("/tasks/curate", json={"ds_id": ds_id}, headers=headers)
+    task_id = res.json()["task_id"]
+    _wait_task(task_id)
+
+    res = client.post("/tasks/save", json={"ds_id": ds_id, "fmt": "jsonl"}, headers=headers)
+    task_id = res.json()["task_id"]
+    _wait_task(task_id)
+
+    res = client.get("/datasets", headers=headers)
+    assert len(res.json()) == 1
+
+    # download dataset
+    res = client.get(f"/datasets/{ds_id}/download", headers=headers)
     assert res.status_code == 200
 
-    res = client.post("/save", json={"ds_id": ds_id, "fmt": "jsonl"})
-    assert res.status_code == 200
+    # update dataset path
+    new_path = str(tmp_path / "new.json")
+    res = client.patch(f"/datasets/{ds_id}", json={"path": new_path}, headers=headers)
+    assert res.json()["path"] == new_path
+
+    res = client.delete(f"/datasets/{ds_id}", headers=headers)
+    assert res.json()["status"] == "deleted"
 
     with SessionLocal() as db:
         ds = db.get(Dataset, ds_id)
-        assert ds is not None
-        assert ds.path.endswith("jsonl")
+        assert ds is None

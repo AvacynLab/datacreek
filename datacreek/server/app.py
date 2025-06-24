@@ -16,6 +16,8 @@ from datacreek.utils.config import load_config, get_llm_provider, get_path_confi
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.ingest import process_file as ingest_process_file
+from datacreek.core.dataset import DatasetBuilder
+from datacreek.pipelines import DatasetType
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24)
@@ -31,6 +33,9 @@ DEFAULT_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load SDK config
 config = load_config()
+
+# In-memory store of datasets being built
+DATASETS: Dict[str, DatasetBuilder] = {}
 
 # Forms
 class CreateForm(FlaskForm):
@@ -72,12 +77,66 @@ class UploadForm(FlaskForm):
     file = FileField('Upload File', validators=[DataRequired()])
     submit = SubmitField('Upload')
 
+
+class DatasetForm(FlaskForm):
+    """Form for creating a new dataset"""
+    name = StringField('Dataset Name', validators=[DataRequired()])
+    dataset_type = SelectField(
+        'Dataset Type',
+        choices=[(dt.value, dt.value) for dt in DatasetType],
+        default=DatasetType.QA.value,
+    )
+    submit = SubmitField('Create Dataset')
+
 # Routes
 @app.route('/')
 def index():
     """Main index page"""
     provider = get_llm_provider(config)
     return render_template('index.html', provider=provider)
+
+
+@app.route('/datasets', methods=['GET', 'POST'])
+def datasets():
+    """List and create datasets"""
+    form = DatasetForm()
+    if form.validate_on_submit():
+        name = form.name.data
+        ds_type = DatasetType(form.dataset_type.data)
+        DATASETS[name] = DatasetBuilder(ds_type, name=name)
+        flash('Dataset created', 'success')
+        return redirect(url_for('dataset_detail', name=name))
+    return render_template('datasets.html', datasets=DATASETS, form=form)
+
+
+@app.route('/datasets/<name>')
+def dataset_detail(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    return render_template('dataset_detail.html', dataset=ds)
+
+
+@app.post('/datasets/<name>/delete')
+def delete_dataset(name: str):
+    DATASETS.pop(name, None)
+    flash('Dataset deleted', 'success')
+    return redirect(url_for('datasets'))
+
+
+@app.post('/datasets/<name>/copy')
+def copy_dataset(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    new_name = f"{name}_copy"
+    counter = 1
+    while new_name in DATASETS:
+        counter += 1
+        new_name = f"{name}_copy{counter}"
+    DATASETS[new_name] = ds.clone(name=new_name)
+    flash('Dataset copied', 'success')
+    return redirect(url_for('dataset_detail', name=new_name))
 
 @app.route('/create', methods=['GET', 'POST'])
 def create():

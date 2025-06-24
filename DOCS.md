@@ -20,6 +20,10 @@
 
 Datacreek is a toolkit for preparing high-quality synthetic datasets to fine-tune Large Language Models (LLMs). The primary interface is a REST API that exposes each step of the data preparation workflow.
 
+All routes are asynchronous. Launch ingestion, generation, curation or saving through `/tasks/ingest`, `/tasks/generate`, `/tasks/curate` and `/tasks/save` and monitor progress via `/tasks/{task_id}`.
+Datasets created by these jobs can be managed with `/datasets` (create, update, delete and download) and every request requires an `X-API-Key` header associated with a user.
+Background jobs are handled by Celery. Configure `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` to use an external broker such as Redis.
+
 
 ### Design:
 
@@ -718,7 +722,10 @@ ds.add_chunk("doc1", "c1", "hello world")
 matches = ds.search("world")
 doc_matches = ds.search_documents("paper")
 chunk_ids = ds.get_chunks_for_document("doc1")
-``` 
+
+# Clone the dataset to try different curation strategies
+ds_copy = ds.clone(name="copy")
+```
 
 | Dataset type | Compatible trainings |
 |--------------|---------------------|

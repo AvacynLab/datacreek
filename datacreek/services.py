@@ -1,4 +1,5 @@
 from hashlib import sha256
+import secrets
 from sqlalchemy.orm import Session
 
 from datacreek.db import User, SourceData, Dataset
@@ -8,12 +9,29 @@ def hash_key(api_key: str) -> str:
     return sha256(api_key.encode()).hexdigest()
 
 
+def generate_api_key() -> str:
+    """Return a new random API key."""
+    return secrets.token_hex(16)
+
+
+def get_user_by_key(db: Session, api_key: str) -> User | None:
+    hashed = hash_key(api_key)
+    return db.query(User).filter_by(api_key=hashed).first()
+
+
 def create_user(db: Session, username: str, api_key: str) -> User:
     user = User(username=username, api_key=hash_key(api_key))
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
+
+
+def create_user_with_generated_key(db: Session, username: str) -> tuple[User, str]:
+    """Create a user and return the record along with the plain API key."""
+    api_key = generate_api_key()
+    user = create_user(db, username, api_key)
+    return user, api_key
 
 
 def create_source(db: Session, owner_id: int | None, path: str, content: str) -> SourceData:

@@ -21,3 +21,15 @@ def test_dataset_search_wrappers():
     assert ds.search_documents("d") == ["d"]
     assert ds.get_chunks_for_document("d") == ["c"]
 
+
+def test_dataset_clone():
+    ds = DatasetBuilder(DatasetType.QA, name="orig")
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "text")
+    clone = ds.clone(name="copy")
+    clone.add_chunk("d", "c2", "more")
+
+    # original should not have the new chunk
+    assert ds.search("more") == []
+    assert clone.search("more") == ["c2"]
+
