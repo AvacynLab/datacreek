@@ -12,6 +12,7 @@ export default function DatasetDetail() {
   const [graph, setGraph] = useState(null);
   const [content, setContent] = useState([]);
   const [filters, setFilters] = useState({ document: true, chunk: true });
+  const [sourceFilter, setSourceFilter] = useState("");
   const [curQuery, setCurQuery] = useState("");
   const graphRef = useRef();
 
@@ -29,8 +30,15 @@ export default function DatasetDetail() {
 
   const filteredGraph = useMemo(() => {
     if (!graph) return null;
+    const sf = sourceFilter.toLowerCase();
     const nodeSet = new Set(
-      graph.nodes.filter((n) => filters[n.type]).map((n) => n.id),
+      graph.nodes
+        .filter(
+          (n) =>
+            filters[n.type] &&
+            (!sf || String(n.source || "").toLowerCase().includes(sf)),
+        )
+        .map((n) => n.id),
     );
     return {
       nodes: graph.nodes.filter((n) => nodeSet.has(n.id)),
@@ -38,7 +46,7 @@ export default function DatasetDetail() {
         (e) => nodeSet.has(e.source) && nodeSet.has(e.target),
       ),
     };
-  }, [graph, filters]);
+  }, [graph, filters, sourceFilter]);
 
   const curChunks = useMemo(() => {
     const all = content.flatMap((d) => d.chunks);
@@ -58,6 +66,13 @@ export default function DatasetDetail() {
     fetch(`/api/datasets/${name}`)
       .then((r) => r.json())
       .then(setInfo);
+  }
+
+  async function deduplicate() {
+    const res = await fetch(`/api/datasets/${name}/deduplicate`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+    fetch(`/api/datasets/${name}/content`).then(r => r.json()).then(setContent)
   }
 
   async function exportDataset() {
@@ -95,6 +110,8 @@ export default function DatasetDetail() {
             <CardHeader>Info</CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-y-2 text-sm">
+                <dt className="font-medium">ID</dt>
+                <dd>{info.id}</dd>
                 <dt className="font-medium">Type</dt>
                 <dd>{info.type}</dd>
                 <dt className="font-medium">Created</dt>
@@ -103,6 +120,8 @@ export default function DatasetDetail() {
                 <dd>{info.num_documents}</dd>
                 <dt className="font-medium">Chunks</dt>
                 <dd>{info.num_chunks}</dd>
+                <dt className="font-medium">Size</dt>
+                <dd>{info.size}</dd>
               </dl>
             </CardContent>
           </Card>
@@ -206,6 +225,12 @@ export default function DatasetDetail() {
                     </label>
                   ))}
                 </div>
+                <input
+                  className="border rounded p-2 text-sm"
+                  placeholder="Filter by source"
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
+                />
                 <div className="h-96">
                   <ForceGraph3D
                     ref={graphRef}
@@ -227,6 +252,9 @@ export default function DatasetDetail() {
             <Card>
               <CardHeader>Curation</CardHeader>
               <CardContent className="space-y-4">
+                <div className="flex justify-end">
+                  <Button type="button" onClick={deduplicate}>Deduplicate</Button>
+                </div>
                 <input
                   className="border rounded p-2 w-full text-sm"
                   placeholder="Filter chunks"

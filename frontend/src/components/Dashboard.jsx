@@ -5,17 +5,27 @@ import { Card, CardHeader, CardContent, Progress, Button } from './ui'
 
 export default function Dashboard() {
   const [datasets, setDatasets] = useState([])
+  const [tasks, setTasks] = useState({})
 
   useEffect(() => {
     fetch('/api/datasets')
       .then(r => r.json())
       .then(names => Promise.all(names.map(n => fetch(`/api/datasets/${n}`).then(r => r.json()))))
       .then(setDatasets)
+    const intv = setInterval(() => {
+      fetch('/api/tasks').then(r => r.json()).then(setTasks)
+    }, 2000)
+    return () => clearInterval(intv)
   }, [])
 
-  const activities = datasets.flatMap(ds =>
-    ds.history.slice(-3).map(msg => ({ name: ds.name, msg }))
-  ).slice(-5).reverse()
+  const activities = [
+    ...Object.entries(tasks)
+      .filter(([, t]) => t.status === 'running')
+      .map(([id, t]) => ({ name: t.label, msg: t.status })),
+    ...datasets.flatMap(ds =>
+      ds.history.slice(-3).map(msg => ({ name: ds.name, msg }))
+    ),
+  ].slice(-5).reverse()
 
   return (
     <div className="grid md:grid-cols-2 gap-4">

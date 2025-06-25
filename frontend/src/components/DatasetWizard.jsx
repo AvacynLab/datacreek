@@ -54,12 +54,25 @@ export default function DatasetWizard() {
     } catch {
       // ignore parse errors
     }
-    await fetch(`/api/datasets/${name}/generate`, {
+    const res = await fetch(`/api/datasets/${name}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ params: genParams })
     })
-    navigate(`/datasets/${name}`)
+    if (!res.ok) return
+    const { task_id } = await res.json()
+    if (task_id) {
+      const poll = setInterval(async () => {
+        const r = await fetch(`/api/tasks/${task_id}`)
+        const data = await r.json()
+        if (data.status !== 'running') {
+          clearInterval(poll)
+          navigate(`/datasets/${name}`)
+        }
+      }, 1000)
+    } else {
+      navigate(`/datasets/${name}`)
+    }
   }
 
   function addDocField() {

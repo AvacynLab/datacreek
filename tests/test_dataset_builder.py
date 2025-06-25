@@ -47,3 +47,13 @@ def test_dataset_persistence_redis():
 
     assert loaded.name == "test"
     assert loaded.search_chunks("hello") == ["c1"]
+    # id should round-trip through persistence
+    assert loaded.id == ds.id
+
+
+def test_dataset_id_in_serialization():
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    data = ds.to_dict()
+    assert "id" in data
+    loaded = DatasetBuilder.from_dict(data)
+    assert loaded.id == ds.id

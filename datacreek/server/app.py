@@ -27,6 +27,9 @@ from datacreek.pipelines import DatasetType
 from datacreek.services import generate_api_key, hash_key
 from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
 
+import threading
+import uuid
+
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/")
@@ -34,6 +37,27 @@ app.config["SECRET_KEY"] = os.urandom(24)
 
 login_manager = LoginManager(app)
 login_manager.login_view = None
+
+# In-memory task store for simple progress reporting
+TASKS: Dict[str, Dict[str, str]] = {}
+
+
+def run_task(label: str, target, *args, **kwargs) -> str:
+    """Execute *target* in a background thread and track status."""
+
+    tid = uuid.uuid4().hex
+    TASKS[tid] = {"label": label, "status": "running"}
+
+    def wrapper():
+        try:
+            target(*args, **kwargs)
+            TASKS[tid]["status"] = "finished"
+        except Exception as exc:  # pragma: no cover - background task
+            TASKS[tid]["status"] = "failed"
+            TASKS[tid]["error"] = str(exc)
+
+    threading.Thread(target=wrapper, daemon=True).start()
+    return tid
 
 
 @login_manager.unauthorized_handler
@@ -177,6 +201,22 @@ def api_logout():
     return jsonify({"message": "logged out"})
 
 
+@app.get("/api/tasks")
+@login_required
+def api_tasks():
+    """Return status of running tasks."""
+    return jsonify(TASKS)
+
+
+@app.get("/api/tasks/<tid>")
+@login_required
+def api_task_status(tid: str):
+    task = TASKS.get(tid)
+    if not task:
+        abort(404)
+    return jsonify(task)
+
+
 @app.post("/api/register")
 def api_register():
     data = request.get_json() or {}
@@ -249,6 +289,11 @@ def api_dataset_detail(name: str):
     nodes = ds.graph.graph
     num_docs = sum(1 for _, d in nodes.nodes(data=True) if d.get("type") == "document")
     num_chunks = sum(1 for _, d in nodes.nodes(data=True) if d.get("type") == "chunk")
+    size = sum(
+        len(nodes.nodes[n].get("text", ""))
+        for n, d in nodes.nodes(data=True)
+        if d.get("type") == "chunk"
+    )
     quality = min(100, num_chunks * 5)
     tips = []
     if num_docs == 0:
@@ -256,6 +301,7 @@ def api_dataset_detail(name: str):
     if num_chunks == 0:
         tips.append("Ingest text chunks to improve quality")
     info = {
+        "id": ds.id,
         "name": ds.name,
         "type": ds.dataset_type.value,
         "created_at": ds.created_at.isoformat(),
@@ -263,6 +309,7 @@ def api_dataset_detail(name: str):
         "num_edges": len(nodes.edges),
         "num_documents": num_docs,
         "num_chunks": num_chunks,
+        "size": size,
         "quality": quality,
         "tips": tips,
         "history": ds.history,
@@ -321,15 +368,19 @@ def api_dataset_generate(name: str):
         abort(404)
     data = request.get_json() or {}
     params = data.get("params", {})
-    ds.versions.append(
-        {
-            "params": params,
-            "time": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    ds.stage = max(ds.stage, 2)
-    ds.history.append(f"Dataset generated (v{len(ds.versions)})")
-    return jsonify({"message": "generated", "version": len(ds.versions)})
+
+    def _generate() -> None:
+        ds.versions.append(
+            {
+                "params": params,
+                "time": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        ds.stage = max(ds.stage, 2)
+        ds.history.append(f"Dataset generated (v{len(ds.versions)})")
+
+    tid = run_task(f"generate {name}", _generate)
+    return jsonify({"task_id": tid})
 
 
 @app.delete("/api/datasets/<name>/chunks/<cid>")
@@ -340,6 +391,30 @@ def api_delete_chunk(name: str, cid: str):
         abort(404)
     ds.remove_chunk(cid)
     return jsonify({"message": "deleted"})
+
+
+@app.post("/api/datasets/<name>/deduplicate")
+@login_required
+def api_deduplicate(name: str):
+    """Remove duplicate chunks from the dataset."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    seen: set[str] = set()
+    removed = 0
+    for node, data in list(ds.graph.graph.nodes(data=True)):
+        if data.get("type") != "chunk":
+            continue
+        text = data.get("text", "")
+        if text in seen:
+            ds.remove_chunk(node)
+            removed += 1
+        else:
+            seen.add(text)
+    if removed:
+        ds.stage = max(ds.stage, 3)
+    ds.history.append(f"Removed {removed} duplicate chunks")
+    return jsonify({"removed": removed})
 
 
 @app.get("/api/datasets/<name>/export")
