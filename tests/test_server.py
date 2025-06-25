@@ -110,6 +110,22 @@ def test_dataset_ingest_route(tmp_path):
     DATASETS.clear()
 
 
+def test_dataset_detail_route():
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "hello")
+    DATASETS["demo"] = ds
+
+    with app.test_client() as client:
+        _login(client)
+        res = client.get("/api/datasets/demo")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["id"] == ds.id
+        assert data["size"] == len("hello")
+    DATASETS.clear()
+
+
 def test_save_dataset_neo4j(monkeypatch):
     ds = DatasetBuilder(DatasetType.QA, name="demo")
     ds.add_document("d1", source="s")

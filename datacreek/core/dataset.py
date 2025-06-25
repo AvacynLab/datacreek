@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ class DatasetBuilder:
     """Manage a dataset under construction with its own knowledge graph."""
 
     dataset_type: DatasetType
+    id: str = field(default_factory=lambda: secrets.token_hex(8))
     name: Optional[str] = None
     graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -66,7 +68,7 @@ class DatasetBuilder:
 
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
         """Return a deep copy of this dataset with a new optional name."""
-        clone = DatasetBuilder(self.dataset_type, name, deepcopy(self.graph))
+        clone = DatasetBuilder(self.dataset_type, name=name, graph=deepcopy(self.graph))
         clone.history = self.history.copy()
         clone.versions = deepcopy(self.versions)
         clone.stage = self.stage
@@ -77,6 +79,7 @@ class DatasetBuilder:
 
         return {
             "dataset_type": self.dataset_type.value,
+            "id": self.id,
             "name": self.name,
             "created_at": self.created_at.isoformat(),
             "history": self.history,
@@ -87,7 +90,9 @@ class DatasetBuilder:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DatasetBuilder":
-        ds = cls(DatasetType(data["dataset_type"]), data.get("name"))
+        ds = cls(DatasetType(data["dataset_type"]), name=data.get("name"))
+        if "id" in data:
+            ds.id = data["id"]
         if ts := data.get("created_at"):
             ds.created_at = datetime.fromisoformat(ts)
         ds.history = list(data.get("history", []))
