@@ -1,35 +1,28 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from datacreek.tasks import (
-    celery_app,
-    ingest_task,
-    generate_task,
-    curate_task,
-    save_task,
-)
-
-from datacreek.db import SessionLocal, init_db, User, Dataset
+from datacreek.db import Dataset, SessionLocal, User, init_db
 from datacreek.schemas import (
+    CurateParams,
+    DatasetCreate,
+    DatasetOut,
+    DatasetUpdate,
+    GenerateParams,
+    SaveParams,
+    SourceCreate,
+    SourceOut,
     UserCreate,
     UserOut,
     UserWithKey,
-    SourceCreate,
-    SourceOut,
-    GenerateParams,
-    DatasetOut,
-    DatasetCreate,
-    DatasetUpdate,
-    CurateParams,
-    SaveParams,
 )
 from datacreek.services import (
+    create_dataset,
     create_user,
     create_user_with_generated_key,
-    create_dataset,
     get_user_by_key,
 )
+from datacreek.tasks import celery_app, curate_task, generate_task, ingest_task, save_task
 
 init_db()
 app = FastAPI(title="Datacreek API")
@@ -168,9 +161,7 @@ async def curate_async(
     params: CurateParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    celery_task = curate_task.apply_async(
-        args=[current_user.id, params.ds_id, params.threshold]
-    )
+    celery_task = curate_task.apply_async(args=[current_user.id, params.ds_id, params.threshold])
     return {"task_id": celery_task.id}
 
 
@@ -179,9 +170,7 @@ async def save_async(
     params: SaveParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    celery_task = save_task.apply_async(
-        args=[current_user.id, params.ds_id, params.fmt]
-    )
+    celery_task = save_task.apply_async(args=[current_user.id, params.ds_id, params.fmt])
     return {"task_id": celery_task.id}
 
 

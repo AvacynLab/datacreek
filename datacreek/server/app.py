@@ -1,34 +1,29 @@
 """
 Flask application for the Datacreek web interface.
 """
-import os
+
 import json
+import os
 from pathlib import Path
 from typing import Dict
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, abort, flash
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_wtf import FlaskForm
-from wtforms import StringField, IntegerField, SelectField, FileField, SubmitField
+from neo4j import GraphDatabase
+from wtforms import FileField, IntegerField, SelectField, StringField, SubmitField
 from wtforms.validators import DataRequired
 
-from datacreek.utils.config import (
-    load_config,
-    get_llm_provider,
-    get_neo4j_config,
-)
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
-from datacreek.core.ingest import (
-    process_file as ingest_process_file,
-    ingest_into_dataset,
-)
 from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.ingest import ingest_into_dataset
+from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
-from neo4j import GraphDatabase
 from datacreek.pipelines import DatasetType
+from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.urandom(24)
+app.config["SECRET_KEY"] = os.urandom(24)
 
 # Set default paths
 DEFAULT_DATA_DIR = Path(__file__).parents[2] / "data"
@@ -53,79 +48,94 @@ def get_neo4j_driver():
         return None
     return GraphDatabase.driver(uri, auth=(user, password))
 
+
 # In-memory store of datasets being built
 DATASETS: Dict[str, DatasetBuilder] = {}
+
 
 # Forms
 class CreateForm(FlaskForm):
     """Form for creating content from text"""
-    input_file = StringField('Input File Path', validators=[DataRequired()])
-    content_type = SelectField('Content Type', choices=[
-        ('qa', 'Question-Answer Pairs'), 
-        ('summary', 'Summary'), 
-        ('cot', 'Chain of Thought'), 
-        ('cot-enhance', 'CoT Enhancement')
-    ], default='qa')
-    num_pairs = IntegerField('Number of QA Pairs', default=10)
-    provider = SelectField(
-        'Provider',
-        choices=[('vllm', 'vLLM'), ('api-endpoint', 'API Endpoint')],
-        default='vllm',
+
+    input_file = StringField("Input File Path", validators=[DataRequired()])
+    content_type = SelectField(
+        "Content Type",
+        choices=[
+            ("qa", "Question-Answer Pairs"),
+            ("summary", "Summary"),
+            ("cot", "Chain of Thought"),
+            ("cot-enhance", "CoT Enhancement"),
+        ],
+        default="qa",
     )
-    model = StringField('Model Name (optional)')
-    api_base = StringField('API Base URL (optional)')
-    submit = SubmitField('Generate Content')
-    
+    num_pairs = IntegerField("Number of QA Pairs", default=10)
+    provider = SelectField(
+        "Provider",
+        choices=[("vllm", "vLLM"), ("api-endpoint", "API Endpoint")],
+        default="vllm",
+    )
+    model = StringField("Model Name (optional)")
+    api_base = StringField("API Base URL (optional)")
+    submit = SubmitField("Generate Content")
+
+
 class IngestForm(FlaskForm):
     """Form for ingesting documents"""
-    input_type = SelectField('Input Type', choices=[
-        ('file', 'Upload File'),
-        ('url', 'URL'),
-        ('path', 'Local Path')
-    ], default='file')
-    upload_file = FileField('Upload Document')
-    input_path = StringField('File Path or URL')
-    output_name = StringField('Output Filename (optional)')
-    submit = SubmitField('Parse Document')
+
+    input_type = SelectField(
+        "Input Type",
+        choices=[("file", "Upload File"), ("url", "URL"), ("path", "Local Path")],
+        default="file",
+    )
+    upload_file = FileField("Upload Document")
+    input_path = StringField("File Path or URL")
+    output_name = StringField("Output Filename (optional)")
+    submit = SubmitField("Parse Document")
+
 
 class CurateForm(FlaskForm):
     """Form for curating QA pairs"""
-    input_file = StringField('Input JSON File Path', validators=[DataRequired()])
-    num_pairs = IntegerField('Number of QA Pairs to Keep', default=0)
+
+    input_file = StringField("Input JSON File Path", validators=[DataRequired()])
+    num_pairs = IntegerField("Number of QA Pairs to Keep", default=0)
     provider = SelectField(
-        'Provider',
-        choices=[('vllm', 'vLLM'), ('api-endpoint', 'API Endpoint')],
-        default='vllm',
+        "Provider",
+        choices=[("vllm", "vLLM"), ("api-endpoint", "API Endpoint")],
+        default="vllm",
     )
-    model = StringField('Model Name (optional)')
-    api_base = StringField('API Base URL (optional)')
-    submit = SubmitField('Curate QA Pairs')
+    model = StringField("Model Name (optional)")
+    api_base = StringField("API Base URL (optional)")
+    submit = SubmitField("Curate QA Pairs")
+
 
 class UploadForm(FlaskForm):
     """Form for uploading files"""
-    file = FileField('Upload File', validators=[DataRequired()])
-    submit = SubmitField('Upload')
+
+    file = FileField("Upload File", validators=[DataRequired()])
+    submit = SubmitField("Upload")
 
 
 class DatasetForm(FlaskForm):
     """Form for creating a new dataset"""
-    name = StringField('Dataset Name', validators=[DataRequired()])
+
+    name = StringField("Dataset Name", validators=[DataRequired()])
     dataset_type = SelectField(
-        'Dataset Type',
+        "Dataset Type",
         choices=[(dt.value, dt.value) for dt in DatasetType],
         default=DatasetType.QA.value,
     )
-    submit = SubmitField('Create Dataset')
+    submit = SubmitField("Create Dataset")
+
 
 # Routes
-@app.route('/')
+@app.route("/")
 def index():
     """Main index page"""
     provider = get_llm_provider(config)
-    return render_template('index.html', provider=provider)
+    return render_template("index.html", provider=provider)
 
 
-@app.route('/datasets', methods=['GET', 'POST'])
+@app.route("/datasets", methods=["GET", "POST"])
 def datasets():
     """List and create datasets"""
     form = DatasetForm()
@@ -133,20 +143,20 @@ def datasets():
         name = form.name.data
         ds_type = DatasetType(form.dataset_type.data)
         DATASETS[name] = DatasetBuilder(ds_type, name=name)
-        flash('Dataset created', 'success')
-        return redirect(url_for('dataset_detail', name=name))
-    return render_template('datasets.html', datasets=DATASETS, form=form)
+        flash("Dataset created", "success")
+        return redirect(url_for("dataset_detail", name=name))
+    return render_template("datasets.html", datasets=DATASETS, form=form)
 
 
-@app.route('/datasets/<name>')
+@app.route("/datasets/<name>")
 def dataset_detail(name: str):
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
-    return render_template('dataset_detail.html', dataset=ds)
+    return render_template("dataset_detail.html", dataset=ds)
 
 
-@app.get('/datasets/<name>/graph')
+@app.get("/datasets/<name>/graph")
 def dataset_graph(name: str):
     """Return dataset knowledge graph as JSON."""
     ds = DATASETS.get(name)
@@ -155,43 +165,43 @@ def dataset_graph(name: str):
     return jsonify(ds.graph.to_dict())
 
 
-@app.get('/datasets/<name>/search')
+@app.get("/datasets/<name>/search")
 def dataset_search(name: str):
     """Return node ids matching the query."""
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
-    query = request.args.get('q')
-    node_type = request.args.get('type', 'chunk')
+    query = request.args.get("q")
+    node_type = request.args.get("type", "chunk")
     if not query:
         return jsonify([])
     ids = ds.graph.search(query, node_type=node_type)
     return jsonify(ids)
 
 
-@app.post('/datasets/<name>/ingest')
+@app.post("/datasets/<name>/ingest")
 def dataset_ingest(name: str):
     """Ingest a file or URL into the dataset knowledge graph."""
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
 
-    input_path = request.form.get('input_path')
-    doc_id = request.form.get('doc_id') or None
+    input_path = request.form.get("input_path")
+    doc_id = request.form.get("doc_id") or None
     if not input_path:
-        flash('Input path is required', 'warning')
-        return redirect(url_for('dataset_detail', name=name))
+        flash("Input path is required", "warning")
+        return redirect(url_for("dataset_detail", name=name))
 
     try:
         ingest_into_dataset(input_path, ds, doc_id=doc_id, config=config)
-        flash('Document ingested', 'success')
+        flash("Document ingested", "success")
     except Exception as e:  # pragma: no cover - flash message only
-        flash(f'Error ingesting document: {e}', 'danger')
+        flash(f"Error ingesting document: {e}", "danger")
 
-    return redirect(url_for('dataset_detail', name=name))
+    return redirect(url_for("dataset_detail", name=name))
 
 
-@app.post('/datasets/<name>/save_neo4j')
+@app.post("/datasets/<name>/save_neo4j")
 def save_dataset_neo4j(name: str):
     """Persist the dataset graph to Neo4j."""
     ds = DATASETS.get(name)
@@ -199,14 +209,14 @@ def save_dataset_neo4j(name: str):
         abort(404)
     driver = get_neo4j_driver()
     if not driver:
-        abort(500, description='Neo4j not configured')
+        abort(500, description="Neo4j not configured")
     ds.graph.to_neo4j(driver)
     driver.close()
-    flash('Graph saved to Neo4j', 'success')
-    return redirect(url_for('dataset_detail', name=name))
+    flash("Graph saved to Neo4j", "success")
+    return redirect(url_for("dataset_detail", name=name))
 
 
-@app.post('/datasets/<name>/load_neo4j')
+@app.post("/datasets/<name>/load_neo4j")
 def load_dataset_neo4j(name: str):
     """Load the dataset graph from Neo4j."""
     ds = DATASETS.get(name)
@@ -214,21 +224,21 @@ def load_dataset_neo4j(name: str):
         abort(404)
     driver = get_neo4j_driver()
     if not driver:
-        abort(500, description='Neo4j not configured')
+        abort(500, description="Neo4j not configured")
     ds.graph = KnowledgeGraph.from_neo4j(driver)
     driver.close()
-    flash('Graph loaded from Neo4j', 'success')
-    return redirect(url_for('dataset_detail', name=name))
+    flash("Graph loaded from Neo4j", "success")
+    return redirect(url_for("dataset_detail", name=name))
 
 
-@app.post('/datasets/<name>/delete')
+@app.post("/datasets/<name>/delete")
 def delete_dataset(name: str):
     DATASETS.pop(name, None)
-    flash('Dataset deleted', 'success')
-    return redirect(url_for('datasets'))
+    flash("Dataset deleted", "success")
+    return redirect(url_for("datasets"))
 
 
-@app.post('/datasets/<name>/copy')
+@app.post("/datasets/<name>/copy")
 def copy_dataset(name: str):
     ds = DATASETS.get(name)
     if not ds:
@@ -239,10 +249,11 @@ def copy_dataset(name: str):
         counter += 1
         new_name = f"{name}_copy{counter}"
     DATASETS[new_name] = ds.clone(name=new_name)
-    flash('Dataset copied', 'success')
-    return redirect(url_for('dataset_detail', name=new_name))
+    flash("Dataset copied", "success")
+    return redirect(url_for("dataset_detail", name=new_name))
 
-@app.route('/create', methods=['GET', 'POST'])
+
+@app.route("/create", methods=["GET", "POST"])
 def create():
     """Create content from text"""
     form = CreateForm()
@@ -252,7 +263,7 @@ def create():
         form.provider.data = default_provider
 
     provider = form.provider.data or default_provider
-    
+
     if form.validate_on_submit():
         try:
             input_file = form.input_file.data
@@ -260,7 +271,7 @@ def create():
             num_pairs = form.num_pairs.data
             model = form.model.data or None
             api_base = form.api_base.data or None
-            
+
             output_path = process_file(
                 file_path=input_file,
                 output_dir=str(DEFAULT_GENERATED_DIR),
@@ -270,31 +281,41 @@ def create():
                 api_base=api_base,
                 model=model,
                 config_path=None,  # Use default config
-                verbose=True
+                verbose=True,
             )
-            
+
             content_type_labels = {
-                'qa': 'QA pairs',
-                'summary': 'summary',
-                'cot': 'Chain of Thought examples',
-                'cot-enhance': 'CoT enhanced conversation'
+                "qa": "QA pairs",
+                "summary": "summary",
+                "cot": "Chain of Thought examples",
+                "cot-enhance": "CoT enhanced conversation",
             }
             content_label = content_type_labels.get(content_type, content_type)
-            
-            flash(f'Successfully generated {content_label}! Output saved to: {output_path}', 'success')
-            return redirect(url_for('view_file', file_path=str(Path(output_path).relative_to(DEFAULT_DATA_DIR.parent))))
-            
+
+            flash(
+                f"Successfully generated {content_label}! Output saved to: {output_path}", "success"
+            )
+            return redirect(
+                url_for(
+                    "view_file",
+                    file_path=str(Path(output_path).relative_to(DEFAULT_DATA_DIR.parent)),
+                )
+            )
+
         except Exception as e:
-            flash(f'Error: {str(e)}', 'danger')
-    
+            flash(f"Error: {str(e)}", "danger")
+
     # Get the list of available input files
     input_files = []
     if DEFAULT_OUTPUT_DIR.exists():
-        input_files = [str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_OUTPUT_DIR.glob('*.txt')]
-    
-    return render_template('create.html', form=form, provider=provider, input_files=input_files)
+        input_files = [
+            str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_OUTPUT_DIR.glob("*.txt")
+        ]
 
-@app.route('/curate', methods=['GET', 'POST'])
+    return render_template("create.html", form=form, provider=provider, input_files=input_files)
+
+
+@app.route("/curate", methods=["GET", "POST"])
 def curate():
     """Curate QA pairs interface"""
     form = CurateForm()
@@ -304,83 +325,97 @@ def curate():
         form.provider.data = default_provider
 
     provider = form.provider.data or default_provider
-    
+
     if form.validate_on_submit():
         try:
             input_file = form.input_file.data
             model = form.model.data or None
             api_base = form.api_base.data or None
-            
+
             # Create output path
             filename = Path(input_file).stem
             output_file = f"{filename}_curated.json"
             output_path = str(Path(DEFAULT_GENERATED_DIR) / output_file)
-            
+
             result_path = curate_qa_pairs(
                 input_path=input_file,
                 output_path=output_path,
                 provider=provider,
-                api_base=api_base, 
+                api_base=api_base,
                 model=model,
                 config_path=None,  # Use default config
-                verbose=True
+                verbose=True,
             )
-            
-            flash(f'Successfully curated QA pairs! Output saved to: {result_path}', 'success')
-            return redirect(url_for('view_file', file_path=str(Path(result_path).relative_to(DEFAULT_DATA_DIR.parent))))
-            
+
+            flash(f"Successfully curated QA pairs! Output saved to: {result_path}", "success")
+            return redirect(
+                url_for(
+                    "view_file",
+                    file_path=str(Path(result_path).relative_to(DEFAULT_DATA_DIR.parent)),
+                )
+            )
+
         except Exception as e:
-            flash(f'Error: {str(e)}', 'danger')
-    
+            flash(f"Error: {str(e)}", "danger")
+
     # Get the list of available JSON files
     json_files = []
     if DEFAULT_GENERATED_DIR.exists():
-        json_files = [str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_GENERATED_DIR.glob('*.json')]
-    
-    return render_template('curate.html', form=form, provider=provider, json_files=json_files)
+        json_files = [
+            str(f.relative_to(DEFAULT_DATA_DIR.parent))
+            for f in DEFAULT_GENERATED_DIR.glob("*.json")
+        ]
 
-@app.route('/files')
+    return render_template("curate.html", form=form, provider=provider, json_files=json_files)
+
+
+@app.route("/files")
 def files():
     """File browser"""
     # Get all files in the data directory
     output_files = []
     generated_files = []
-    
-    if DEFAULT_OUTPUT_DIR.exists():
-        output_files = [str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_OUTPUT_DIR.glob('*.*')]
-    
-    if DEFAULT_GENERATED_DIR.exists():
-        generated_files = [str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_GENERATED_DIR.glob('*.*')]
-    
-    return render_template('files.html', output_files=output_files, generated_files=generated_files)
 
-@app.route('/view/<path:file_path>')
+    if DEFAULT_OUTPUT_DIR.exists():
+        output_files = [
+            str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_OUTPUT_DIR.glob("*.*")
+        ]
+
+    if DEFAULT_GENERATED_DIR.exists():
+        generated_files = [
+            str(f.relative_to(DEFAULT_DATA_DIR.parent)) for f in DEFAULT_GENERATED_DIR.glob("*.*")
+        ]
+
+    return render_template("files.html", output_files=output_files, generated_files=generated_files)
+
+
+@app.route("/view/<path:file_path>")
 def view_file(file_path):
     """View a file's contents"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
-    
+
     if not full_path.exists():
-        flash(f'File not found: {file_path}', 'danger')
-        return redirect(url_for('files'))
-    
+        flash(f"File not found: {file_path}", "danger")
+        return redirect(url_for("files"))
+
     file_content = None
     file_type = "text"
-    
-    if full_path.suffix.lower() == '.json':
+
+    if full_path.suffix.lower() == ".json":
         try:
-            with open(full_path, 'r') as f:
+            with open(full_path, "r") as f:
                 file_content = json.load(f)
             file_type = "json"
-            
+
             # Detect specific JSON formats
-            is_qa_pairs = 'qa_pairs' in file_content
-            is_cot_examples = 'cot_examples' in file_content
-            has_conversations = 'conversations' in file_content
-            has_summary = 'summary' in file_content
-            
+            is_qa_pairs = "qa_pairs" in file_content
+            is_cot_examples = "cot_examples" in file_content
+            has_conversations = "conversations" in file_content
+            has_summary = "summary" in file_content
+
         except Exception:
             # If JSON parsing fails, treat as text
-            with open(full_path, 'r') as f:
+            with open(full_path, "r") as f:
                 file_content = f.read()
             file_type = "text"
             is_qa_pairs = False
@@ -389,85 +424,90 @@ def view_file(file_path):
             has_summary = False
     else:
         # Read as text
-        with open(full_path, 'r') as f:
+        with open(full_path, "r") as f:
             file_content = f.read()
         file_type = "text"
         is_qa_pairs = False
         is_cot_examples = False
         has_conversations = False
         has_summary = False
-    
-    return render_template('view_file.html', 
-                          file_path=file_path, 
-                          file_type=file_type, 
-                          content=file_content,
-                          is_qa_pairs=is_qa_pairs,
-                          is_cot_examples=is_cot_examples,
-                          has_conversations=has_conversations,
-                          has_summary=has_summary)
 
-@app.route('/ingest', methods=['GET', 'POST'])
+    return render_template(
+        "view_file.html",
+        file_path=file_path,
+        file_type=file_type,
+        content=file_content,
+        is_qa_pairs=is_qa_pairs,
+        is_cot_examples=is_cot_examples,
+        has_conversations=has_conversations,
+        has_summary=has_summary,
+    )
+
+
+@app.route("/ingest", methods=["GET", "POST"])
 def ingest():
     """Ingest and parse documents"""
     form = IngestForm()
-    
+
     if form.validate_on_submit():
         try:
             input_type = form.input_type.data
             output_name = form.output_name.data or None
-            
+
             # Get default output directory for parsed files
             output_dir = str(DEFAULT_OUTPUT_DIR)
-            
-            if input_type == 'file':
+
+            if input_type == "file":
                 # Handle file upload
                 if not form.upload_file.data:
-                    flash('Please upload a file', 'warning')
-                    return render_template('ingest.html', form=form)
-                
+                    flash("Please upload a file", "warning")
+                    return render_template("ingest.html", form=form)
+
                 # Save the uploaded file to a temporary location
                 temp_file = form.upload_file.data
                 original_filename = temp_file.filename
                 file_extension = Path(original_filename).suffix
-                
+
                 # Use upload filename as the output name if not provided
                 if not output_name:
                     output_name = Path(original_filename).stem
-                
+
                 # Create a temporary file path in the output directory
                 temp_path = DEFAULT_OUTPUT_DIR / f"temp_{output_name}{file_extension}"
                 temp_file.save(temp_path)
-                
+
                 # Process the file
                 input_path = str(temp_path)
             else:
                 # URL or local path
                 input_path = form.input_path.data
                 if not input_path:
-                    flash('Please enter a valid path or URL', 'warning')
-                    return render_template('ingest.html', form=form)
-            
+                    flash("Please enter a valid path or URL", "warning")
+                    return render_template("ingest.html", form=form)
+
             # Process the file or URL
             output_path = ingest_process_file(
-                file_path=input_path,
-                output_dir=output_dir,
-                output_name=output_name,
-                config=config
+                file_path=input_path, output_dir=output_dir, output_name=output_name, config=config
             )
-            
+
             # Clean up temporary file if it was an upload
-            if input_type == 'file' and temp_path.exists():
+            if input_type == "file" and temp_path.exists():
                 try:
                     temp_path.unlink()
                 except Exception:
                     pass
-            
-            flash(f'Successfully parsed document! Output saved to: {output_path}', 'success')
-            return redirect(url_for('view_file', file_path=str(Path(output_path).relative_to(DEFAULT_DATA_DIR.parent))))
-            
+
+            flash(f"Successfully parsed document! Output saved to: {output_path}", "success")
+            return redirect(
+                url_for(
+                    "view_file",
+                    file_path=str(Path(output_path).relative_to(DEFAULT_DATA_DIR.parent)),
+                )
+            )
+
         except Exception as e:
-            flash(f'Error: {str(e)}', 'danger')
-    
+            flash(f"Error: {str(e)}", "danger")
+
     # Get some example URLs for different document types
     examples = {
         "PDF": "path/to/document.pdf",
@@ -475,141 +515,147 @@ def ingest():
         "Web Page": "https://example.com/article",
         "Word Document": "path/to/document.docx",
         "PowerPoint": "path/to/presentation.pptx",
-        "Text File": "path/to/document.txt"
+        "Text File": "path/to/document.txt",
     }
-    
-    return render_template('ingest.html', form=form, examples=examples)
 
-@app.route('/upload', methods=['GET', 'POST'])
+    return render_template("ingest.html", form=form, examples=examples)
+
+
+@app.route("/upload", methods=["GET", "POST"])
 def upload():
     """Upload a file to the data directory"""
     form = UploadForm()
-    
+
     if form.validate_on_submit():
         f = form.file.data
         filename = f.filename
         filepath = DEFAULT_OUTPUT_DIR / filename
         f.save(filepath)
-        flash(f'File uploaded successfully: {filename}', 'success')
-        return redirect(url_for('files'))
-    
-    return render_template('upload.html', form=form)
+        flash(f"File uploaded successfully: {filename}", "success")
+        return redirect(url_for("files"))
 
-@app.route('/api/qa_json/<path:file_path>')
+    return render_template("upload.html", form=form)
+
+
+@app.route("/api/qa_json/<path:file_path>")
 def qa_json(file_path):
     """Return QA pairs as JSON for the JSON viewer"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
-    
-    if not full_path.exists() or full_path.suffix.lower() != '.json':
+
+    if not full_path.exists() or full_path.suffix.lower() != ".json":
         abort(404)
-    
+
     try:
-        with open(full_path, 'r') as f:
+        with open(full_path, "r") as f:
             data = json.load(f)
         return jsonify(data)
     except Exception:
         abort(500)
-        
-@app.route('/api/edit_item/<path:file_path>', methods=['POST'])
+
+
+@app.route("/api/edit_item/<path:file_path>", methods=["POST"])
 def edit_item(file_path):
     """Edit an item in a JSON file"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
-    
-    if not full_path.exists() or full_path.suffix.lower() != '.json':
+
+    if not full_path.exists() or full_path.suffix.lower() != ".json":
         return jsonify({"success": False, "message": "File not found or not a JSON file"}), 404
-    
+
     try:
         # Get the request data
         data = request.json
-        item_type = data.get('item_type')  # qa_pairs, cot_examples, conversations
-        item_index = data.get('item_index')
-        item_content = data.get('item_content')
-        
+        item_type = data.get("item_type")  # qa_pairs, cot_examples, conversations
+        item_index = data.get("item_index")
+        item_content = data.get("item_content")
+
         if not all([item_type, item_index is not None, item_content]):
             return jsonify({"success": False, "message": "Missing required parameters"}), 400
-        
+
         # Read the file
-        with open(full_path, 'r') as f:
+        with open(full_path, "r") as f:
             file_content = json.load(f)
-        
+
         # Update the item
-        if item_type == 'qa_pairs' and 'qa_pairs' in file_content:
-            if 0 <= item_index < len(file_content['qa_pairs']):
-                file_content['qa_pairs'][item_index] = item_content
+        if item_type == "qa_pairs" and "qa_pairs" in file_content:
+            if 0 <= item_index < len(file_content["qa_pairs"]):
+                file_content["qa_pairs"][item_index] = item_content
             else:
                 return jsonify({"success": False, "message": "Invalid item index"}), 400
-        elif item_type == 'cot_examples' and 'cot_examples' in file_content:
-            if 0 <= item_index < len(file_content['cot_examples']):
-                file_content['cot_examples'][item_index] = item_content
+        elif item_type == "cot_examples" and "cot_examples" in file_content:
+            if 0 <= item_index < len(file_content["cot_examples"]):
+                file_content["cot_examples"][item_index] = item_content
             else:
                 return jsonify({"success": False, "message": "Invalid item index"}), 400
-        elif item_type == 'conversations' and 'conversations' in file_content:
-            if 0 <= item_index < len(file_content['conversations']):
-                file_content['conversations'][item_index] = item_content
+        elif item_type == "conversations" and "conversations" in file_content:
+            if 0 <= item_index < len(file_content["conversations"]):
+                file_content["conversations"][item_index] = item_content
             else:
                 return jsonify({"success": False, "message": "Invalid item index"}), 400
         else:
             return jsonify({"success": False, "message": "Invalid item type"}), 400
-        
+
         # Write back to the file
-        with open(full_path, 'w') as f:
+        with open(full_path, "w") as f:
             json.dump(file_content, f, indent=2)
-        
+
         return jsonify({"success": True, "message": "Item updated successfully"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-@app.route('/api/delete_item/<path:file_path>', methods=['POST'])
+
+@app.route("/api/delete_item/<path:file_path>", methods=["POST"])
 def delete_item(file_path):
     """Delete an item from a JSON file"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
-    
-    if not full_path.exists() or full_path.suffix.lower() != '.json':
+
+    if not full_path.exists() or full_path.suffix.lower() != ".json":
         return jsonify({"success": False, "message": "File not found or not a JSON file"}), 404
-    
+
     try:
         # Get the request data
         data = request.json
-        item_type = data.get('item_type')  # qa_pairs, cot_examples, conversations
-        item_index = data.get('item_index')
-        
+        item_type = data.get("item_type")  # qa_pairs, cot_examples, conversations
+        item_index = data.get("item_index")
+
         if not all([item_type, item_index is not None]):
             return jsonify({"success": False, "message": "Missing required parameters"}), 400
-        
+
         # Read the file
-        with open(full_path, 'r') as f:
+        with open(full_path, "r") as f:
             file_content = json.load(f)
-        
+
         # Delete the item
-        if item_type == 'qa_pairs' and 'qa_pairs' in file_content:
-            if 0 <= item_index < len(file_content['qa_pairs']):
-                file_content['qa_pairs'].pop(item_index)
+        if item_type == "qa_pairs" and "qa_pairs" in file_content:
+            if 0 <= item_index < len(file_content["qa_pairs"]):
+                file_content["qa_pairs"].pop(item_index)
             else:
                 return jsonify({"success": False, "message": "Invalid item index"}), 400
-        elif item_type == 'cot_examples' and 'cot_examples' in file_content:
-            if 0 <= item_index < len(file_content['cot_examples']):
-                file_content['cot_examples'].pop(item_index)
+        elif item_type == "cot_examples" and "cot_examples" in file_content:
+            if 0 <= item_index < len(file_content["cot_examples"]):
+                file_content["cot_examples"].pop(item_index)
             else:
                 return jsonify({"success": False, "message": "Invalid item index"}), 400
-        elif item_type == 'conversations' and 'conversations' in file_content:
-            if 0 <= item_index < len(file_content['conversations']):
-                file_content['conversations'].pop(item_index)
+        elif item_type == "conversations" and "conversations" in file_content:
+            if 0 <= item_index < len(file_content["conversations"]):
+                file_content["conversations"].pop(item_index)
             else:
                 return jsonify({"success": False, "message": "Invalid item index"}), 400
         else:
             return jsonify({"success": False, "message": "Invalid item type"}), 400
-        
+
         # Write back to the file
-        with open(full_path, 'w') as f:
+        with open(full_path, "w") as f:
             json.dump(file_content, f, indent=2)
-        
+
         return jsonify({"success": True, "message": "Item deleted successfully"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+
 def run_server(host="127.0.0.1", port=5000, debug=False):
     """Run the Flask server"""
     app.run(host=host, port=port, debug=debug)
+
 
 if __name__ == "__main__":
     run_server(debug=True)

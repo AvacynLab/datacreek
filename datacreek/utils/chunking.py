@@ -1,8 +1,9 @@
 """Advanced text chunking utilities."""
 
 from typing import List
-from sklearn.feature_extraction.text import TfidfVectorizer
+
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 def sliding_window_chunks(text: str, window_size: int, overlap: int) -> List[str]:
@@ -24,9 +25,7 @@ def sliding_window_chunks(text: str, window_size: int, overlap: int) -> List[str
     return chunks
 
 
-def semantic_chunk_split(
-    text: str, max_tokens: int, similarity_drop: float = 0.3
-) -> List[str]:
+def semantic_chunk_split(text: str, max_tokens: int, similarity_drop: float = 0.3) -> List[str]:
     """Split text into semantically coherent chunks.
 
     This uses a naive TF‑IDF embedding of sentences and creates a new chunk

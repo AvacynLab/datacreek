@@ -1,14 +1,15 @@
-import os
 import json
+import os
 import time
 from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
 
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 from datacreek.api import app
-from datacreek.db import SessionLocal, User, Dataset
+from datacreek.db import Dataset, SessionLocal, User
 from datacreek.services import hash_key
 
 client = TestClient(app)
@@ -38,8 +39,6 @@ def test_create_user():
         assert user is not None
         assert user.username == "alice"
         assert user.api_key == hash_key(key)
-
-
 
 
 def _wait_task(task_id: str) -> dict:

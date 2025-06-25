@@ -7,20 +7,22 @@
 
 __version__ = "0.0.1"
 
+from .config_models import GenerationSettings
+from .core.dataset import DatasetBuilder
+from .core.ingest import ingest_into_dataset
+from .core.ingest import process_file as ingest_file
+from .core.ingest import to_kg
+from .core.knowledge_graph import KnowledgeGraph
 from .pipelines import (
+    PIPELINES,
+    DatasetType,
     GenerationPipeline,
     TrainingGoal,
-    DatasetType,
-    PIPELINES,
-    get_pipeline,
-    get_trainings_for_dataset,
     get_dataset_types_for_training,
+    get_pipeline,
     get_pipelines_for_training,
+    get_trainings_for_dataset,
 )
-from .core.knowledge_graph import KnowledgeGraph
-from .core.dataset import DatasetBuilder
-from .core.ingest import process_file as ingest_file, to_kg, ingest_into_dataset
-from .config_models import GenerationSettings
 
 __all__ = [
     "GenerationPipeline",

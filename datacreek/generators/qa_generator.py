@@ -5,22 +5,23 @@
 # the root directory of this source tree.
 # Create QA Pairs
 
-from typing import Dict, List, Any, Optional, Tuple
 import json
-import time
 import os
+import time
 from pathlib import Path
-from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+from typing import Any, Dict, List, Optional, Tuple
 
-from datacreek.models.llm_client import LLMClient
-from datacreek.utils.text import split_into_chunks
+from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.models.llm_client import LLMClient
+from datacreek.utils.config import get_curate_config, get_generation_config, get_prompt, load_config
 from datacreek.utils.llm_processing import (
+    convert_to_conversation_format,
     parse_qa_pairs,
     parse_ratings,
-    convert_to_conversation_format,
 )
-from datacreek.utils.config import load_config, get_generation_config, get_curate_config, get_prompt
+from datacreek.utils.text import split_into_chunks
 
 
 class QAGenerator:
@@ -134,8 +135,8 @@ class QAGenerator:
         # Set up progress tracking based on verbose mode
         if verbose:
             from rich.progress import (
-                Progress,
                 BarColumn,
+                Progress,
                 TextColumn,
                 TimeElapsedColumn,
                 TimeRemainingColumn,

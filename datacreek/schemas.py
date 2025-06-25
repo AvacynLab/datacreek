@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 
+
 class UserCreate(BaseModel):
     username: str
+
 
 class UserOut(BaseModel):
     id: int
@@ -10,15 +12,18 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+
 class SourceCreate(BaseModel):
     path: str
     name: str | None = None
+
 
 class SourceOut(BaseModel):
     id: int
 
     class Config:
         from_attributes = True
+
 
 class GenerateParams(BaseModel):
     src_id: int
@@ -29,6 +34,7 @@ class GenerateParams(BaseModel):
     api_base: str | None = None
     generation: dict | None = None
 
+
 class DatasetOut(BaseModel):
     id: int
     path: str
@@ -36,9 +42,11 @@ class DatasetOut(BaseModel):
     class Config:
         from_attributes = True
 
+
 class CurateParams(BaseModel):
     ds_id: int
     threshold: float | None = None
+
 
 class SaveParams(BaseModel):
     ds_id: int

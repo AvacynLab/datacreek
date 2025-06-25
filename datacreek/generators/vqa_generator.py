@@ -5,18 +5,18 @@
 # the root directory of this source tree.
 # Visual Question Answering Generator
 
-import os
 import json
-from typing import Optional
+import os
 from pathlib import Path
+from typing import Optional
+
+from datacreek.models.llm_client import LLMClient
+from datacreek.utils.config import get_generation_config, load_config
 
 # Note: The following packages are required for this module:
 # - openai: For API access to vision models
 # - datasets: For handling HuggingFace datasets
 # - huggingface_hub: For accessing HuggingFace repositories
-
-from datacreek.models.llm_client import LLMClient
-from datacreek.utils.config import load_config, get_generation_config
 
 
 class VQAGenerator:
@@ -36,8 +36,8 @@ class VQAGenerator:
 
     def encode_image_base64(self, image):
         """Encode an image in base64 format"""
-        import io
         import base64
+        import io
 
         buffered = io.BytesIO()
         image.save(buffered, format="PNG")
@@ -156,8 +156,8 @@ class VQAGenerator:
             except FileNotFoundError as e:
                 # If the file doesn't exist, try to load it from the dataset hub
                 try:
-                    from huggingface_hub import HfApi
                     from datasets import load_dataset
+                    from huggingface_hub import HfApi
                 except ImportError:
                     raise ImportError(
                         "The 'huggingface_hub' and 'datasets' packages are required for this functionality. Please install them using 'pip install huggingface_hub datasets'."

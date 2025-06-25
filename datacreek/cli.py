@@ -1,10 +1,10 @@
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 import typer
 import uvicorn
-from pathlib import Path
-from typing import Optional, Dict, Any
 
 from datacreek.core.create import process_file
-
 
 app_cli = typer.Typer(help="Command line utilities for managing the datacreek application")
 

@@ -1,9 +1,9 @@
 from datacreek.pipelines import (
     DatasetType,
     TrainingGoal,
-    get_trainings_for_dataset,
     get_dataset_types_for_training,
     get_pipelines_for_training,
+    get_trainings_for_dataset,
 )
 
 

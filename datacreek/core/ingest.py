@@ -5,19 +5,15 @@
 # the root directory of this source tree.
 # Ingest different file formats
 
-import os
 import logging
+import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from datacreek.utils.config import get_path_config, load_config, get_generation_config
-from datacreek.utils.text import split_into_chunks
 from datacreek.core.dataset import DatasetBuilder
-from datacreek.parsers import (
-    get_parser_for_extension,
-    HTMLParser,
-    YouTubeParser,
-)
+from datacreek.parsers import HTMLParser, YouTubeParser, get_parser_for_extension
+from datacreek.utils.config import get_generation_config, get_path_config, load_config
+from datacreek.utils.text import split_into_chunks
 
 logger = logging.getLogger(__name__)
 

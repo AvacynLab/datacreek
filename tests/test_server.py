@@ -1,9 +1,9 @@
-from datacreek.server.app import app, DATASETS
-from datacreek.core.dataset import DatasetBuilder
-from datacreek.pipelines import DatasetType
-from datacreek.core.knowledge_graph import KnowledgeGraph
-
 import datacreek.server.app as app_module
+from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.pipelines import DatasetType
+from datacreek.server.app import DATASETS, app
+
 
 def test_dataset_graph_route():
     ds = DatasetBuilder(DatasetType.QA, name="demo")
@@ -58,19 +58,22 @@ def test_save_dataset_neo4j(monkeypatch):
     DATASETS["demo"] = ds
 
     called = {}
+
     def fake_to_neo4j(self, driver, clear=True):
-        called['called'] = True
+        called["called"] = True
+
     monkeypatch.setattr(KnowledgeGraph, "to_neo4j", fake_to_neo4j)
 
     class DummyDriver:
         def close(self):
             pass
+
     monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: DummyDriver())
 
     with app.test_client() as client:
         res = client.post("/datasets/demo/save_neo4j")
         assert res.status_code == 302
-    assert called.get('called')
+    assert called.get("called")
     DATASETS.clear()
 
 
@@ -86,6 +89,7 @@ def test_load_dataset_neo4j(monkeypatch):
     class DummyDriver:
         def close(self):
             pass
+
     monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: DummyDriver())
 
     with app.test_client() as client:

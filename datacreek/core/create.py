@@ -4,14 +4,14 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Generate the content: CoT/QA/Summary Datasets
-import os
 import json
+import os
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
-from datacreek.models.llm_client import LLMClient
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.generators.vqa_generator import VQAGenerator
+from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_generation_config
 
 
@@ -166,8 +166,9 @@ def process_file(
         return output_path
 
     elif content_type == "cot-enhance":
-        from datacreek.generators.cot_generator import COTGenerator
         from tqdm import tqdm
+
+        from datacreek.generators.cot_generator import COTGenerator
 
         # Initialize the CoT generator
         generator = COTGenerator(client, config_path, config_overrides=config_overrides)

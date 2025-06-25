@@ -1,8 +1,9 @@
-from hashlib import sha256
 import secrets
+from hashlib import sha256
+
 from sqlalchemy.orm import Session
 
-from datacreek.db import User, SourceData, Dataset
+from datacreek.db import Dataset, SourceData, User
 
 
 def hash_key(api_key: str) -> str:

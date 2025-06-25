@@ -56,6 +56,8 @@ pip install datacreek
 git clone https://github.com/meta-llama/datacreek.git
 cd datacreek
 pip install -e .
+pip install pre-commit
+pre-commit install
 ```
 
 ### 1. Tool Setup
@@ -102,17 +104,54 @@ point this to any SQLAlchemy compatible database.
 ### Database initialization
 
 Run `python -m datacreek.cli init-db` to create the tables before starting the
-server if they do not already exist.
+server if they do not already exist. The API container executes this step on
+startup so the database is ready when the services come online.
 
-### Starting Redis and Neo4j with Docker
+### Starting the stack with Docker
 
-Use the provided `docker-compose.yml` to launch Redis and Neo4j locally:
+Use the provided `docker-compose.yml` to launch the API, Celery worker,
+Redis, Neo4j and the front-end:
 
 ```bash
 ./scripts/start_services.sh
 ```
 
-Redis will listen on `6379` while Neo4j exposes ports `7474` and `7687`.
+If no `.env` file exists the script will copy `.env.example` so you only
+need to adjust values for production. The default configuration stores
+the SQLite database and generated datasets in `./data` which is mounted
+inside the containers.
+
+The API will be available on `http://localhost:8000` while the front-end is
+served on `http://localhost:3000`. Redis listens on `6379` and Neo4j exposes
+`7474` and `7687`.
+
+To rebuild the images after modifying the code simply run:
+
+```bash
+docker compose build
+```
+
+### Deployment
+
+Use the `scripts/deploy.sh` helper to update a remote host after pushing a new
+image. Export `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY` and `DEPLOY_PATH`
+before executing the script. Docker Compose automatically loads variables from
+an optional `.env` file located next to `docker-compose.yml`:
+
+```bash
+export DEPLOY_HOST=example.com
+export DEPLOY_USER=ubuntu
+export DEPLOY_PATH=/opt/datacreek
+export DEPLOY_KEY=~/.ssh/id_rsa
+scripts/deploy.sh
+```
+
+Environment variables can be configured via a `.env` file. See
+`.env.example` for defaults.
+
+At a minimum, set `NEO4J_URI`, `NEO4J_USER` and `NEO4J_PASSWORD` so the
+API can reach the Neo4j instance. `DATABASE_URL` defaults to storing the
+SQLite file inside the mounted `./data` directory.
 
 You can override any value by providing a custom YAML file to the server.
 
