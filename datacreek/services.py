@@ -2,9 +2,9 @@ import secrets
 from hashlib import sha256
 
 from sqlalchemy.orm import Session
+from werkzeug.security import generate_password_hash
 
 from datacreek.db import Dataset, SourceData, User
-from werkzeug.security import generate_password_hash
 
 
 def hash_key(api_key: str) -> str:
@@ -21,9 +21,7 @@ def get_user_by_key(db: Session, api_key: str) -> User | None:
     return db.query(User).filter_by(api_key=hashed).first()
 
 
-def create_user(
-    db: Session, username: str, api_key: str, password: str | None = None
-) -> User:
+def create_user(db: Session, username: str, api_key: str, password: str | None = None) -> User:
     user = User(
         username=username,
         api_key=hash_key(api_key),

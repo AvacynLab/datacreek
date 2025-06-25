@@ -4,3 +4,8 @@ __pycache__
 *.pyc
 .env
 .DS_Store
+data/
+frontend/node_modules/
+frontend/dist/
+frontend/package-lock.json
+test_server.db

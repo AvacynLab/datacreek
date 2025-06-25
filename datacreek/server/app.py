@@ -7,34 +7,12 @@ import os
 from pathlib import Path
 from typing import Dict
 
-from flask import (
-    Flask,
-    abort,
-    flash,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    url_for,
-)
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
+from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf import FlaskForm
-from flask_login import (
-    LoginManager,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
-)
-from werkzeug.security import check_password_hash, generate_password_hash
 from neo4j import GraphDatabase
-from wtforms import (
-    FileField,
-    IntegerField,
-    PasswordField,
-    SelectField,
-    StringField,
-    SubmitField,
-)
+from werkzeug.security import check_password_hash, generate_password_hash
+from wtforms import FileField, IntegerField, PasswordField, SelectField, StringField, SubmitField
 from wtforms.validators import DataRequired
 
 from datacreek.core.create import process_file
@@ -43,10 +21,10 @@ from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import ingest_into_dataset
 from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
-from datacreek.pipelines import DatasetType
-from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
 from datacreek.db import SessionLocal, User, init_db
+from datacreek.pipelines import DatasetType
 from datacreek.services import generate_api_key, hash_key
+from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
 
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
@@ -60,6 +38,7 @@ login_manager.login_view = None
 @login_manager.unauthorized_handler
 def unauthorized():
     return jsonify({"error": "login required"}), 401
+
 
 # Set default paths
 DEFAULT_DATA_DIR = Path(__file__).parents[2] / "data"
@@ -171,6 +150,7 @@ class DatasetForm(FlaskForm):
 
 
 # API Routes
+
 
 @app.post("/api/login")
 def api_login():

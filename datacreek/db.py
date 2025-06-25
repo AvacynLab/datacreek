@@ -1,8 +1,8 @@
 import os
 
+from flask_login import UserMixin
 from sqlalchemy import Column, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
-from flask_login import UserMixin
 
 from datacreek.utils.config import load_config
 

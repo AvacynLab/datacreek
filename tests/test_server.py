@@ -1,6 +1,7 @@
 import importlib
 import os
 import sys
+
 from werkzeug.security import generate_password_hash
 
 os.environ["DATABASE_URL"] = "sqlite:///test_server.db"
@@ -9,6 +10,7 @@ if os.path.exists("test_server.db"):
 if "datacreek.db" in sys.modules:
     importlib.reload(sys.modules["datacreek.db"])
 import datacreek.db as db
+
 db.init_db()
 with db.SessionLocal() as session:
     user = db.User(
@@ -22,9 +24,9 @@ with db.SessionLocal() as session:
 import datacreek.server.app as app_module
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.db import verify_password
 from datacreek.pipelines import DatasetType
 from datacreek.server.app import DATASETS, app
-from datacreek.db import verify_password
 
 app.config["WTF_CSRF_ENABLED"] = False
 
