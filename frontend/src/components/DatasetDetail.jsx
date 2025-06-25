@@ -1,0 +1,267 @@
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useParams } from "react-router-dom";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@radix-ui/react-tabs";
+import * as Checkbox from "@radix-ui/react-checkbox";
+import { CheckIcon } from "@radix-ui/react-icons";
+import ForceGraph3D from "react-force-graph-3d";
+import { Card, CardHeader, CardContent, Progress, Button } from "./ui";
+
+export default function DatasetDetail() {
+  const { name } = useParams();
+  const [info, setInfo] = useState(null);
+  const [graph, setGraph] = useState(null);
+  const [content, setContent] = useState([]);
+  const [filters, setFilters] = useState({ document: true, chunk: true });
+  const [curQuery, setCurQuery] = useState("");
+  const graphRef = useRef();
+
+  useEffect(() => {
+    fetch(`/api/datasets/${name}`)
+      .then((r) => r.json())
+      .then(setInfo);
+    fetch(`/datasets/${name}/graph`)
+      .then((r) => r.json())
+      .then(setGraph);
+    fetch(`/api/datasets/${name}/content`)
+      .then((r) => r.json())
+      .then(setContent);
+  }, [name]);
+
+  const filteredGraph = useMemo(() => {
+    if (!graph) return null;
+    const nodeSet = new Set(
+      graph.nodes.filter((n) => filters[n.type]).map((n) => n.id),
+    );
+    return {
+      nodes: graph.nodes.filter((n) => nodeSet.has(n.id)),
+      edges: graph.edges.filter(
+        (e) => nodeSet.has(e.source) && nodeSet.has(e.target),
+      ),
+    };
+  }, [graph, filters]);
+
+  const curChunks = useMemo(() => {
+    const all = content.flatMap((d) => d.chunks);
+    if (!curQuery) return all;
+    const q = curQuery.toLowerCase();
+    return all.filter((c) => c.text.toLowerCase().includes(q));
+  }, [content, curQuery]);
+
+  async function deleteChunk(id) {
+    await fetch(`/api/datasets/${name}/chunks/${id}`, { method: "DELETE" });
+    setContent((docs) =>
+      docs.map((doc) => ({
+        ...doc,
+        chunks: doc.chunks.filter((c) => c.id !== id),
+      })),
+    );
+    fetch(`/api/datasets/${name}`)
+      .then((r) => r.json())
+      .then(setInfo);
+  }
+
+  async function exportDataset() {
+    const res = await fetch(`/api/datasets/${name}/export`);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    fetch(`/api/datasets/${name}`)
+      .then((r) => r.json())
+      .then(setInfo);
+  }
+
+  if (!info) return <p>Loading...</p>;
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">{name}</h2>
+      <Tabs defaultValue="content">
+        <TabsList className="flex gap-2 mb-4">
+          <TabsTrigger value="content">Content</TabsTrigger>
+          {info.stage >= 1 && (
+            <TabsTrigger value="graph">Knowledge Graph</TabsTrigger>
+          )}
+          {info.stage >= 2 && (
+            <TabsTrigger value="curation">Curation</TabsTrigger>
+          )}
+        </TabsList>
+        <TabsContent value="content">
+          <Card className="mb-4">
+            <CardHeader>Info</CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-y-2 text-sm">
+                <dt className="font-medium">Type</dt>
+                <dd>{info.type}</dd>
+                <dt className="font-medium">Created</dt>
+                <dd>{new Date(info.created_at).toLocaleString()}</dd>
+                <dt className="font-medium">Documents</dt>
+                <dd>{info.num_documents}</dd>
+                <dt className="font-medium">Chunks</dt>
+                <dd>{info.num_chunks}</dd>
+              </dl>
+            </CardContent>
+          </Card>
+          <Card className="mb-4">
+            <CardHeader>Content</CardHeader>
+            <CardContent>
+              {content.length ? (
+                <ul className="space-y-2 text-sm">
+                  {content.map((doc) => (
+                    <li key={doc.id} className="border rounded p-2">
+                      <div className="font-medium mb-1">{doc.id}</div>
+                      <ul className="list-disc list-inside space-y-1">
+                        {doc.chunks.map((c) => (
+                          <li key={c.id}>{c.text.slice(0, 80)}</li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">No content</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="mb-4">
+            <CardHeader>Quality</CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-2">
+                <Progress value={info.quality} className="flex-1" />
+                <span className="text-sm">{info.quality}</span>
+              </div>
+              {info.tips.length > 0 && (
+                <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                  {info.tips.map((tip, i) => (
+                    <li key={i}>{tip}</li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+          {info.versions.length > 0 && (
+            <Card className="mb-4">
+              <CardHeader>Generations</CardHeader>
+              <CardContent>
+                <ul className="text-sm space-y-1">
+                  {info.versions.map((v, i) => (
+                    <li key={i} className="border-b last:border-none pb-1">
+                      <div className="font-medium">v{i + 1}</div>
+                      <div className="text-xs text-gray-500">
+                        {new Date(v.time).toLocaleString()}
+                      </div>
+                      {Object.keys(v.params || {}).length > 0 && (
+                        <pre className="text-xs bg-gray-50 p-1 rounded mt-1 whitespace-pre-wrap">
+                          {JSON.stringify(v.params, null, 2)}
+                        </pre>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+          <Card>
+            <CardHeader>History</CardHeader>
+            <CardContent>
+              {info.history.length ? (
+                <ul className="text-sm space-y-1">
+                  {info.history.map((h, i) => (
+                    <li key={i}>{h}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">No history</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="graph">
+          {info.stage < 1 ? (
+            <p className="text-sm text-muted">
+              Ingest documents to view the graph.
+            </p>
+          ) : (
+            filteredGraph && (
+              <div className="space-y-2">
+                <div className="flex gap-4 items-center text-sm">
+                  {["document", "chunk"].map((t) => (
+                    <label key={t} className="flex items-center gap-1">
+                      <Checkbox.Root
+                        className="h-4 w-4 border rounded"
+                        checked={filters[t]}
+                        onCheckedChange={(v) =>
+                          setFilters((f) => ({ ...f, [t]: v }))
+                        }
+                      >
+                        <Checkbox.Indicator className="flex items-center justify-center text-white bg-indigo-600">
+                          <CheckIcon className="w-3 h-3" />
+                        </Checkbox.Indicator>
+                      </Checkbox.Root>
+                      {t}
+                    </label>
+                  ))}
+                </div>
+                <div className="h-96">
+                  <ForceGraph3D
+                    ref={graphRef}
+                    graphData={filteredGraph}
+                    nodeLabel={(n) => `${n.id} (${n.type})`}
+                    nodeAutoColorBy="type"
+                  />
+                </div>
+              </div>
+            )
+          )}
+        </TabsContent>
+        <TabsContent value="curation">
+          {info.stage < 2 ? (
+            <p className="text-sm text-muted">
+              Generate dataset before curating.
+            </p>
+          ) : (
+            <Card>
+              <CardHeader>Curation</CardHeader>
+              <CardContent className="space-y-4">
+                <input
+                  className="border rounded p-2 w-full text-sm"
+                  placeholder="Filter chunks"
+                  value={curQuery}
+                  onChange={(e) => setCurQuery(e.target.value)}
+                />
+                <ul className="space-y-2 max-h-64 overflow-auto text-sm">
+                  {curChunks.map((c) => (
+                    <li
+                      key={c.id}
+                      className="border rounded p-2 flex justify-between gap-2"
+                    >
+                      <span className="flex-1">{c.text.slice(0, 80)}</span>
+                      <button
+                        className="text-red-600 text-xs"
+                        onClick={() => deleteChunk(c.id)}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                  {curChunks.length === 0 && (
+                    <li className="text-gray-500">No chunks</li>
+                  )}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+      {info.stage >= 3 && (
+        <div className="mt-4">
+          <Button onClick={exportDataset}>Export Dataset</Button>
+        </div>
+      )}
+    </div>
+  );
+}
