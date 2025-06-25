@@ -106,6 +106,8 @@ point this to any SQLAlchemy compatible database.
 Run `python -m datacreek.cli init-db` to create the tables before starting the
 server if they do not already exist. The API container executes this step on
 startup so the database is ready when the services come online.
+The command line interface is reserved for such maintenance operations (database
+setup, test runs) and is not intended for dataset generation.
 
 ### Starting the stack with Docker
 
@@ -207,8 +209,31 @@ generation:
 ```
 
 Most options can also be overridden with environment variables. For example set
-`GEN_TEMPERATURE=0.5` to change the default temperature, or `LLM_MODEL` to use a
-different model without editing the YAML file.
+`GEN_TEMPERATURE=0.5` to change the default temperature.
+
+| Variable | Description |
+|----------|-------------|
+| `GEN_TEMPERATURE` | Default sampling temperature |
+| `GEN_TOP_P` | Default top-p value |
+| `GEN_CHUNK_SIZE` | Override chunk size |
+| `GEN_OVERLAP` | Override overlap between chunks |
+| `GEN_BATCH_SIZE` | Batch size for generation |
+| `GEN_MAX_TOKENS` | Maximum tokens in completions |
+| `GEN_FREQUENCY_PENALTY` | Sampling frequency penalty |
+| `GEN_PRESENCE_PENALTY` | Sampling presence penalty |
+| `GEN_RETRIEVAL_TOP_K` | Top-k chunks retrieved |
+| `GEN_SUMMARY_TEMPERATURE` | Temperature for summaries |
+| `GEN_SUMMARY_MAX_TOKENS` | Max tokens for summaries |
+
+You can override prompt templates per request by sending a `prompts` object to
+`/tasks/generate`:
+
+```bash
+curl -X POST localhost:8000/tasks/generate \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: <key>" \
+     -d '{"src_id": 1, "prompts": {"qa_generation": "Ask three short questions"}}'
+```
 
 ```bash
 curl -X POST localhost:8000/tasks/ingest \
@@ -227,6 +252,12 @@ curl -X POST localhost:8000/tasks/ingest -d "path=research_paper.pdf" -H "X-API-
 
 # Generate QA pairs (assuming source ID 1)
 curl -X POST localhost:8000/tasks/generate -d "src_id=1&num_pairs=30" -H "X-API-Key: <key>"
+
+# Override the QA generation prompt for this request
+curl -X POST localhost:8000/tasks/generate \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: <key>" \
+     -d '{"src_id": 1, "prompts": {"qa_generation": "Ask three short questions"}}'
 
 # Curate data (dataset ID 1)
 curl -X POST localhost:8000/tasks/curate -d "ds_id=1&threshold=8.5" -H "X-API-Key: <key>"
@@ -256,17 +287,6 @@ for file in data/pdf/*.pdf; do
   curl -X POST localhost:8000/tasks/save -d "ds_id=1&fmt=chatml" -H "X-API-Key: <key>"
 done
 ```
-
-### Command Line Generation
-
-You can also generate data directly without running the REST API.
-
-```bash
-python -m datacreek.cli generate ./docs/paper.txt --content-type qa \
-    --model llama-3 --temperature 0.6 --output-dir out
-```
-
-Pass `--prompt-file` to override the default prompt template for the run.
 
 ## Advanced Usage
 

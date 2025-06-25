@@ -5,6 +5,7 @@
 # the root directory of this source tree.
 # Logic for generating CoT from scratch and also enhancing CoT (take existing format and add CoT)
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -12,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_generation_config, get_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class COTGenerator:
@@ -60,13 +63,13 @@ class COTGenerator:
             # Ensure it's a list
             if not isinstance(result, list):
                 if verbose:
-                    print("Warning: Expected a list but got another type")
+                    logger.warning("Expected a list but got another type")
                 return None
 
             return result
         except json.JSONDecodeError as e:
             if verbose:
-                print(f"Error parsing output: {e}")
+                logger.error("Error parsing output: %s", e)
             return None
 
     def generate_cot_examples(
@@ -90,7 +93,7 @@ class COTGenerator:
         max_tokens = self.generation_config.max_tokens
 
         if verbose:
-            print(f"Generating {num_examples} CoT examples...")
+            logger.info("Generating %d CoT examples...", num_examples)
 
         messages = [{"role": "system", "content": prompt}]
         response = self.client.chat_completion(
@@ -102,11 +105,11 @@ class COTGenerator:
 
         if examples is None:
             if verbose:
-                print("Failed to parse CoT examples, returning empty list")
+                logger.warning("Failed to parse CoT examples, returning empty list")
             return []
 
         if verbose:
-            print(f"Successfully generated {len(examples)} CoT examples")
+            logger.info("Successfully generated %d CoT examples", len(examples))
 
         return examples
 
@@ -120,9 +123,10 @@ class COTGenerator:
         prompt_template = get_prompt(self.config, "cot_enhancement")
 
         if verbose:
-            print(f"Debug - Conversations to enhance structure: {type(conversations)}")
-            print(
-                f"Debug - First conversation: {json.dumps(conversations[0] if conversations else {}, indent=2)[:100]}..."
+            logger.debug("Conversations structure: %s", type(conversations))
+            logger.debug(
+                "First conversation: %s",
+                json.dumps(conversations[0] if conversations else {}, indent=2)[:100],
             )
 
         # Format the prompt
@@ -136,7 +140,7 @@ class COTGenerator:
         max_tokens = self.generation_config.max_tokens
 
         if verbose:
-            print(f"Enhancing {len(conversations)} conversations with CoT...")
+            logger.info("Enhancing %d conversations with CoT...", len(conversations))
 
         messages = [{"role": "system", "content": prompt}]
         response = self.client.chat_completion(
@@ -148,11 +152,11 @@ class COTGenerator:
 
         if enhanced_conversations is None:
             if verbose:
-                print("Failed to parse enhanced conversations, returning original")
+                logger.warning("Failed to parse enhanced conversations, returning original")
             return conversations
 
         if verbose:
-            print(f"Successfully enhanced conversations with CoT")
+            logger.info("Successfully enhanced conversations with CoT")
 
         return enhanced_conversations
 
@@ -200,7 +204,6 @@ class COTGenerator:
         # Prepare result
         result = {"summary": summary, "cot_examples": examples, "conversations": conversations}
 
-        # Print stats
-        print(f"Generated {len(examples)} chain-of-thought examples")
+        logger.info("Generated %d chain-of-thought examples", len(examples))
 
         return result

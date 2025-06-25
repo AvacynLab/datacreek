@@ -6,6 +6,7 @@
 # Create QA Pairs
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ from datacreek.utils.llm_processing import (
     parse_ratings,
 )
 from datacreek.utils.text import split_into_chunks
+
+logger = logging.getLogger(__name__)
 
 
 class QAGenerator:
@@ -51,7 +54,7 @@ class QAGenerator:
         """Generate a summary of the document"""
         verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
         if verbose:
-            print("Generating document summary...")
+            logger.info("Generating document summary...")
 
         # Get summary prompt from config
         prompt = get_prompt(self.config, "summary")
@@ -61,12 +64,14 @@ class QAGenerator:
             {"role": "user", "content": document_text},
         ]
 
+        temperature = self.generation_config.summary_temperature
+        max_tokens = self.generation_config.summary_max_tokens
         summary = self.client.chat_completion(
-            messages, temperature=0.1  # Use lower temperature for summaries
+            messages, temperature=temperature, max_tokens=max_tokens
         )
 
         if verbose:
-            print(f"Summary generated ({len(summary)} chars)")
+            logger.info("Summary generated (%d chars)", len(summary))
         return summary
 
     def generate_qa_pairs(
@@ -109,9 +114,9 @@ class QAGenerator:
             chunks = [self.kg.graph.nodes[c]["text"] for c in selected_ids if c in self.kg.graph]
 
         if verbose:
-            print(f"Generating QA pairs...")
-            print(f"Document split into {len(chunks)} chunks")
-            print(f"Using batch size of {batch_size}")
+            logger.info("Generating QA pairs...")
+            logger.info("Document split into %d chunks", len(chunks))
+            logger.info("Using batch size of %d", batch_size)
 
         all_qa_pairs = []
         pairs_per_chunk = max(1, round(num_pairs / len(chunks)))
@@ -130,7 +135,7 @@ class QAGenerator:
             messages = [{"role": "system", "content": qa_prompt}]
             all_messages.append(messages)
 
-        print(f"Processing {len(chunks)} chunks to generate QA pairs...")
+        logger.info("Processing %d chunks to generate QA pairs...", len(chunks))
 
         # Set up progress tracking based on verbose mode
         if verbose:
@@ -168,16 +173,25 @@ class QAGenerator:
 
             # Simple progress indicator for non-verbose mode
             if not verbose:
-                print(f"Processing batch {batch_num}/{total_batches}...", end="\r")
+                logger.info(
+                    "Processing batch %d/%d...",
+                    batch_num,
+                    total_batches,
+                )
             else:
-                print(
-                    f"Processing batch {batch_num}/{total_batches} with {current_batch_size} chunks"
+                logger.info(
+                    "Processing batch %d/%d with %d chunks",
+                    batch_num,
+                    total_batches,
+                    current_batch_size,
                 )
 
             try:
                 # Process the batch
                 batch_responses = self.client.batch_completion(
-                    batch_messages, temperature=temperature, batch_size=batch_size
+                    batch_messages,
+                    temperature=temperature,
+                    batch_size=batch_size,
                 )
 
                 # Process each response in the batch
@@ -187,7 +201,11 @@ class QAGenerator:
                     all_qa_pairs.extend(chunk_pairs)
 
                     if verbose:
-                        print(f"  Generated {len(chunk_pairs)} pairs from chunk {chunk_index+1}")
+                        logger.info(
+                            "  Generated %d pairs from chunk %d",
+                            len(chunk_pairs),
+                            chunk_index + 1,
+                        )
 
                 # Update progress bar if in verbose mode
                 if progress_ctx and generate_task:
@@ -195,7 +213,7 @@ class QAGenerator:
 
             except Exception as e:
                 if verbose:
-                    print(f"  Error processing batch {batch_num}: {str(e)}")
+                    logger.error("  Error processing batch %d: %s", batch_num, str(e))
 
                 # Update progress bar if in verbose mode
                 if progress_ctx and generate_task:
@@ -207,11 +225,9 @@ class QAGenerator:
 
         # Clear the progress line in non-verbose mode
         if not verbose:
-            print(" " * 80, end="\r")
-            print("Batch processing complete.")
+            logger.info("Batch processing complete.")
 
-        # Always print summary information, even in non-verbose mode
-        print(f"Generated {len(all_qa_pairs)} QA pairs total")
+        logger.info("Generated %d QA pairs total", len(all_qa_pairs))
         return all_qa_pairs
 
     def rate_qa_pairs(
@@ -228,7 +244,7 @@ class QAGenerator:
             threshold = self.curate_config.get("threshold", 7.0)
 
         if verbose:
-            print(f"Evaluating {len(qa_pairs)} pairs...")
+            logger.info("Evaluating %d pairs...", len(qa_pairs))
 
         # Get rating config
         batch_size = self.curate_config.get("batch_size", 8)
@@ -257,7 +273,7 @@ class QAGenerator:
 
             for i, batch in enumerate(batches):
                 if verbose:
-                    print(f"Rating batch {i+1}/{len(batches)}...")
+                    logger.info("Rating batch %d/%d...", i + 1, len(batches))
                 batch_json = json.dumps(batch, indent=2)
 
                 # Format the rating prompt with pairs
@@ -278,7 +294,7 @@ class QAGenerator:
 
                 except Exception as e:
                     if verbose:
-                        print(f"Error rating batch {i+1}: {str(e)}")
+                        logger.error("Error rating batch %d: %s", i + 1, str(e))
 
                 time.sleep(0.5)  # Avoid rate limits
                 progress.update(rating_task, advance=1)
@@ -292,8 +308,13 @@ class QAGenerator:
         }
 
         # Always print summary information, even in non-verbose mode
-        print(f"Keeping {len(rated_pairs)} out of {len(qa_pairs)} pairs (threshold: {threshold})")
-        print(f"Average score: {metrics['avg_score']}")
+        logger.info(
+            "Keeping %d out of %d pairs (threshold: %s)",
+            len(rated_pairs),
+            len(qa_pairs),
+            threshold,
+        )
+        logger.info("Average score: %s", metrics["avg_score"])
         return rated_pairs, metrics
 
     def process_document(

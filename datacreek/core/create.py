@@ -88,16 +88,7 @@ def process_file(
         output_path = os.path.join(output_dir, f"{base_name}_qa_pairs.json")
         print(f"Saving result to {output_path}")
 
-        # First, let's save a basic test file to confirm the directory is writable
-        test_path = os.path.join(output_dir, "test_write.json")
-        try:
-            with open(test_path, "w", encoding="utf-8") as f:
-                f.write('{"test": "data"}')
-            print(f"Successfully wrote test file to {test_path}")
-        except Exception as e:
-            print(f"Error writing test file: {e}")
-
-        # Now save the actual result
+        # Save the actual result
         try:
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(result, f, indent=2)

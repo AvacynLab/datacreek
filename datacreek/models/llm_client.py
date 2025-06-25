@@ -453,6 +453,9 @@ class LLMClient:
         max_tokens: int = None,
         top_p: float = None,
         batch_size: int = None,
+        frequency_penalty: float = None,
+        presence_penalty: float = None,
+        stop: Optional[List[str]] = None,
     ) -> List[str]:
         """Process multiple message sets in batches
 
@@ -471,16 +474,43 @@ class LLMClient:
         batch_size = (
             batch_size if batch_size is not None else generation_config.get("batch_size", 32)
         )
+        frequency_penalty = (
+            frequency_penalty
+            if frequency_penalty is not None
+            else generation_config.get("frequency_penalty", 0.0)
+        )
+        presence_penalty = (
+            presence_penalty
+            if presence_penalty is not None
+            else generation_config.get("presence_penalty", 0.0)
+        )
+        stop = stop if stop is not None else generation_config.get("stop")
 
         verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
 
         if self.provider == "api-endpoint":
             return self._openai_batch_completion(
-                message_batches, temperature, max_tokens, top_p, batch_size, verbose
+                message_batches,
+                temperature,
+                max_tokens,
+                top_p,
+                batch_size,
+                frequency_penalty,
+                presence_penalty,
+                stop,
+                verbose,
             )
         else:  # Default to vLLM
             return self._vllm_batch_completion(
-                message_batches, temperature, max_tokens, top_p, batch_size, verbose
+                message_batches,
+                temperature,
+                max_tokens,
+                top_p,
+                batch_size,
+                frequency_penalty,
+                presence_penalty,
+                stop,
+                verbose,
             )
 
     async def _process_message_async(
@@ -489,6 +519,9 @@ class LLMClient:
         temperature: float,
         max_tokens: int,
         top_p: float,
+        frequency_penalty: float,
+        presence_penalty: float,
+        stop: Optional[List[str]],
         verbose: bool,
         debug_mode: bool,
     ):
@@ -518,6 +551,9 @@ class LLMClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     top_p=top_p,
+                    frequency_penalty=frequency_penalty,
+                    presence_penalty=presence_penalty,
+                    stop=stop,
                 )
 
                 if verbose:
@@ -674,6 +710,9 @@ class LLMClient:
         max_tokens: int,
         top_p: float,
         batch_size: int,
+        frequency_penalty: float,
+        presence_penalty: float,
+        stop: Optional[List[str]],
         verbose: bool,
     ) -> List[str]:
         """Process multiple message sets using the OpenAI API or compatible APIs asynchronously"""
@@ -705,6 +744,9 @@ class LLMClient:
                         temperature=temperature,
                         max_tokens=max_tokens,
                         top_p=top_p,
+                        frequency_penalty=frequency_penalty,
+                        presence_penalty=presence_penalty,
+                        stop=stop,
                         verbose=verbose,
                         debug_mode=debug_mode,
                     )
@@ -730,6 +772,9 @@ class LLMClient:
         max_tokens: int,
         top_p: float,
         batch_size: int,
+        frequency_penalty: float,
+        presence_penalty: float,
+        stop: Optional[List[str]],
         verbose: bool,
     ) -> List[str]:
         """Process multiple message sets in batches using vLLM's API"""
@@ -753,6 +798,9 @@ class LLMClient:
                         "temperature": temperature,
                         "max_tokens": max_tokens,
                         "top_p": top_p,
+                        "frequency_penalty": frequency_penalty,
+                        "presence_penalty": presence_penalty,
+                        "stop": stop,
                     }
                 )
 

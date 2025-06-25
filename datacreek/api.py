@@ -151,6 +151,7 @@ async def generate_async(
             "api_base": params.api_base,
             "config_path": x_config_path,
             "generation": params.generation,
+            "prompts": params.prompts,
         },
     )
     return {"task_id": celery_task.id}

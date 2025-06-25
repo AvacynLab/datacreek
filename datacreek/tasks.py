@@ -46,6 +46,7 @@ def generate_task(
     api_base: str | None = None,
     config_path: str | None = None,
     generation: dict | None = None,
+    prompts: dict | None = None,
 ) -> dict:
     with SessionLocal() as db:
         src = db.get(SourceData, src_id)
@@ -53,6 +54,11 @@ def generate_task(
             raise RuntimeError("Source not found")
         output_dir = Path("data/generated")
         output_dir.mkdir(parents=True, exist_ok=True)
+        overrides = {}
+        if generation is not None:
+            overrides["generation"] = generation
+        if prompts is not None:
+            overrides["prompts"] = prompts
         out = generate_data(
             None,
             str(output_dir),
@@ -64,7 +70,7 @@ def generate_task(
             False,
             provider=provider,
             document_text=src.content,
-            config_overrides={"generation": generation} if generation else None,
+            config_overrides=overrides if overrides else None,
         )
         ds = create_dataset(db, user_id, src_id, out)
         return {"id": ds.id}

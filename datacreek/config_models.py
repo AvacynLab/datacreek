@@ -21,6 +21,8 @@ class GenerationSettings:
     frequency_penalty: float = 0.0
     presence_penalty: float = 0.0
     stop: Optional[List[str]] = field(default=None)
+    summary_temperature: float = 0.1
+    summary_max_tokens: int = 1024
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GenerationSettings":
