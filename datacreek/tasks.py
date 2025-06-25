@@ -42,6 +42,7 @@ def generate_task(
     num_pairs: int | None,
     *,
     provider: str | None = None,
+    profile: str | None = None,
     model: str | None = None,
     api_base: str | None = None,
     config_path: str | None = None,
@@ -69,6 +70,7 @@ def generate_task(
             num_pairs,
             False,
             provider=provider,
+            profile=profile,
             document_text=src.content,
             config_overrides=overrides if overrides else None,
         )

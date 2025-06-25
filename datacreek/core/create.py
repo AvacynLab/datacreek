@@ -32,6 +32,7 @@ def process_file(
     num_pairs: Optional[int] = None,
     verbose: bool = False,
     provider: Optional[str] = None,
+    profile: Optional[str] = None,
     document_text: Optional[str] = None,
     config_overrides: Optional[Dict[str, Any]] = None,
 ) -> str:
@@ -56,7 +57,11 @@ def process_file(
 
     # Initialize LLM client
     client = LLMClient(
-        config_path=config_path, provider=provider, api_base=api_base, model_name=model
+        config_path=config_path,
+        provider=provider,
+        api_base=api_base,
+        model_name=model,
+        profile=profile,
     )
 
     # Debug: Print which provider is being used

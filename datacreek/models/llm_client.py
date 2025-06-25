@@ -38,6 +38,7 @@ class LLMClient:
         self,
         config_path: Optional[Path] = None,
         provider: Optional[str] = None,
+        profile: Optional[str] = None,
         api_base: Optional[str] = None,
         api_key: Optional[str] = None,
         model_name: Optional[str] = None,
@@ -49,6 +50,7 @@ class LLMClient:
         Args:
             config_path: Path to config file (if None, uses default)
             provider: Override provider from config ('vllm' or 'api-endpoint')
+            profile: Load settings from the named model profile in config
             api_base: Override API base URL from config
             api_key: Override API key for API endpoint (only needed for 'api-endpoint' provider)
             model_name: Override model name from config
@@ -58,8 +60,17 @@ class LLMClient:
         # Load config
         self.config = load_config(config_path)
 
-        # Determine provider with environment variable override
-        self.provider = provider or os.environ.get("LLM_PROVIDER") or get_llm_provider(self.config)
+        profile_cfg = {}
+        if profile:
+            profile_cfg = self.config.get("models", {}).get(profile, {})
+
+        # Determine provider with environment variable override or profile
+        self.provider = (
+            provider
+            or os.environ.get("LLM_PROVIDER")
+            or profile_cfg.get("provider")
+            or get_llm_provider(self.config)
+        )
 
         if self.provider == "api-endpoint":
             if not OPENAI_AVAILABLE:
@@ -67,12 +78,15 @@ class LLMClient:
                     "OpenAI package is not installed. Install with 'pip install openai>=1.0.0'"
                 )
 
-            # Load API endpoint configuration
-            api_endpoint_config = get_openai_config(self.config)
+            # Load API endpoint configuration and apply profile overrides
+            api_endpoint_config = {**get_openai_config(self.config), **profile_cfg}
 
             # Set parameters, with CLI/ENV overrides taking precedence
             self.api_base = (
-                api_base or os.environ.get("LLM_API_BASE") or api_endpoint_config.get("api_base")
+                api_base
+                or os.environ.get("LLM_API_BASE")
+                or profile_cfg.get("api_base")
+                or api_endpoint_config.get("api_base")
             )
 
             # Check for environment variables
@@ -83,7 +97,12 @@ class LLMClient:
             )
 
             # Set API key with priority: CLI arg > env var > config
-            self.api_key = api_key or api_endpoint_key or api_endpoint_config.get("api_key")
+            self.api_key = (
+                api_key
+                or api_endpoint_key
+                or profile_cfg.get("api_key")
+                or api_endpoint_config.get("api_key")
+            )
             logger.debug(
                 "Using API key: %s",
                 (
@@ -103,31 +122,42 @@ class LLMClient:
                 )
 
             self.model = (
-                model_name or os.environ.get("LLM_MODEL") or api_endpoint_config.get("model")
+                model_name
+                or os.environ.get("LLM_MODEL")
+                or profile_cfg.get("model")
+                or api_endpoint_config.get("model")
             )
             self.max_retries = max_retries or int(
-                os.environ.get("LLM_MAX_RETRIES", api_endpoint_config.get("max_retries"))
+                os.environ.get("LLM_MAX_RETRIES", profile_cfg.get("max_retries", api_endpoint_config.get("max_retries")))
             )
             self.retry_delay = retry_delay or float(
-                os.environ.get("LLM_RETRY_DELAY", api_endpoint_config.get("retry_delay"))
+                os.environ.get("LLM_RETRY_DELAY", profile_cfg.get("retry_delay", api_endpoint_config.get("retry_delay")))
             )
 
             # Initialize OpenAI client
             self._init_openai_client()
         else:  # Default to vLLM
-            # Load vLLM configuration
-            vllm_config = get_vllm_config(self.config)
+            # Load vLLM configuration and apply profile overrides
+            vllm_config = {**get_vllm_config(self.config), **profile_cfg}
 
             # Set parameters, with CLI overrides taking precedence
             self.api_base = (
-                api_base or os.environ.get("LLM_API_BASE") or vllm_config.get("api_base")
+                api_base
+                or os.environ.get("LLM_API_BASE")
+                or profile_cfg.get("api_base")
+                or vllm_config.get("api_base")
             )
-            self.model = model_name or os.environ.get("LLM_MODEL") or vllm_config.get("model")
+            self.model = (
+                model_name
+                or os.environ.get("LLM_MODEL")
+                or profile_cfg.get("model")
+                or vllm_config.get("model")
+            )
             self.max_retries = max_retries or int(
-                os.environ.get("LLM_MAX_RETRIES", vllm_config.get("max_retries"))
+                os.environ.get("LLM_MAX_RETRIES", profile_cfg.get("max_retries", vllm_config.get("max_retries")))
             )
             self.retry_delay = retry_delay or float(
-                os.environ.get("LLM_RETRY_DELAY", vllm_config.get("retry_delay"))
+                os.environ.get("LLM_RETRY_DELAY", profile_cfg.get("retry_delay", vllm_config.get("retry_delay")))
             )
 
             # No client to initialize for vLLM as we use requests directly

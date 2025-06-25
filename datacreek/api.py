@@ -147,10 +147,13 @@ async def generate_async(
         args=[current_user.id, params.src_id, params.content_type, params.num_pairs],
         kwargs={
             "provider": params.provider,
+            "profile": params.profile,
             "model": params.model,
             "api_base": params.api_base,
             "config_path": x_config_path,
-            "generation": params.generation,
+            "generation": params.generation.model_dump(exclude_none=True)
+            if params.generation
+            else None,
             "prompts": params.prompts,
         },
     )

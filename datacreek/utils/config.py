@@ -181,6 +181,14 @@ def merge_configs(base_config: Dict[str, Any], override_config: Dict[str, Any]) 
     return result
 
 
+def get_model_profile(config: Dict[str, Any], name: str) -> Dict[str, Any]:
+    """Retrieve a model profile by name."""
+    profiles = config.get("models", {})
+    if name not in profiles:
+        raise KeyError(f"Model profile '{name}' not found")
+    return profiles[name]
+
+
 def get_redis_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return config.get("databases", {}).get("redis", {"host": "localhost", "port": 6379})
 

@@ -217,13 +217,40 @@ Most options can also be overridden with environment variables. For example set
 | `GEN_TOP_P` | Default top-p value |
 | `GEN_CHUNK_SIZE` | Override chunk size |
 | `GEN_OVERLAP` | Override overlap between chunks |
+| `GEN_CHUNK_METHOD` | Chunking method (`basic`, `sliding`, `semantic`) |
+| `GEN_SIMILARITY_DROP` | Similarity threshold for semantic splits |
+| `GEN_RETRIEVAL_TOP_K` | Top-k chunks retrieved |
+| `GEN_NUM_PAIRS` | Default number of QA pairs |
+| `GEN_NUM_COT_EXAMPLES` | Default number of CoT examples |
+| `GEN_NUM_COT_ENHANCE_EXAMPLES` | Max conversations to enhance |
 | `GEN_BATCH_SIZE` | Batch size for generation |
 | `GEN_MAX_TOKENS` | Maximum tokens in completions |
 | `GEN_FREQUENCY_PENALTY` | Sampling frequency penalty |
 | `GEN_PRESENCE_PENALTY` | Sampling presence penalty |
-| `GEN_RETRIEVAL_TOP_K` | Top-k chunks retrieved |
 | `GEN_SUMMARY_TEMPERATURE` | Temperature for summaries |
 | `GEN_SUMMARY_MAX_TOKENS` | Max tokens for summaries |
+| `SDK_VERBOSE` | Enable detailed logs |
+| `SDK_DEBUG` | Log full model responses |
+
+### Model Profiles
+
+Define multiple model profiles in your configuration to easily switch between
+providers or models:
+
+```yaml
+models:
+  local-llama:
+    provider: vllm
+    api_base: "http://localhost:8000/v1"
+    model: "meta-llama/Llama-3.3-70B-Instruct"
+  llama-api:
+    provider: api-endpoint
+    api_base: "https://api.llama.com/v1"
+    model: "Llama-4-Maverick-17B-128E-Instruct-FP8"
+```
+
+Select a profile by passing `profile` when calling the API or constructing an
+``LLMClient``.
 
 You can override prompt templates per request by sending a `prompts` object to
 `/tasks/generate`:

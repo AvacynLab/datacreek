@@ -30,6 +30,17 @@ vllm:
   model: "meta-llama/Llama-3.3-70B-Instruct" # Default model to use
   max_retries: 3                       # Number of retries for API calls
   retry_delay: 1.0                     # Initial delay between retries (seconds)
+
+# Optional model profiles for quick switching
+models:
+  local-llama:
+    provider: "vllm"
+    api_base: "http://localhost:8000/v1"
+    model: "meta-llama/Llama-3.3-70B-Instruct"
+  llama-api:
+    provider: "api-endpoint"
+    api_base: "https://api.llama.com/v1"
+    model: "Llama-4-Maverick-17B-128E-Instruct-FP8"
   
 # API endpoint configuration
 api-endpoint:
