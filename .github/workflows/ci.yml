@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e . fakeredis flask flask-wtf wtforms pre-commit pytest
+      - run: pip install -e . fakeredis flask flask-wtf flask-login wtforms pre-commit pytest
       - run: pre-commit run --all-files --show-diff-on-failure
       - run: pytest -q
 
