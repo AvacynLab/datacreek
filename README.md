@@ -471,9 +471,18 @@ If you encounter issues during the curation step:
 
 ## Web Interface
 
-The `datacreek.server` module provides a simple Flask UI. Start the server and
-create an account at `/register` to obtain an API key, then log in to access the
-dataset tools. All routes are protected and require authentication.
+A lightweight React application built with Vite lives in the `frontend`
+directory. It uses Tailwind CSS v4 for styling and communicates with the Flask
+API for authentication and dataset operations.
+
+```bash
+cd frontend
+npm install
+npm run dev  # start the Vite dev server
+```
+
+Point your browser to `http://localhost:5173` while the Flask API runs on
+`http://localhost:8000`.
 
 ## License
 

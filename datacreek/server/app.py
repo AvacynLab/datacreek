@@ -7,7 +7,16 @@ import os
 from pathlib import Path
 from typing import Dict
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from flask_wtf import FlaskForm
 from flask_login import (
     LoginManager,
@@ -39,11 +48,18 @@ from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_conf
 from datacreek.db import SessionLocal, User, init_db
 from datacreek.services import generate_api_key, hash_key
 
-app = Flask(__name__)
+STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
+
+app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/")
 app.config["SECRET_KEY"] = os.urandom(24)
 
 login_manager = LoginManager(app)
-login_manager.login_view = "login"
+login_manager.login_view = None
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({"error": "login required"}), 401
 
 # Set default paths
 DEFAULT_DATA_DIR = Path(__file__).parents[2] / "data"
@@ -154,68 +170,65 @@ class DatasetForm(FlaskForm):
     submit = SubmitField("Create Dataset")
 
 
-class LoginForm(FlaskForm):
-    username = StringField("Username", validators=[DataRequired()])
-    password = PasswordField("Password", validators=[DataRequired()])
-    submit = SubmitField("Login")
+# API Routes
+
+@app.post("/api/login")
+def api_login():
+    data = request.get_json() or {}
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "missing credentials"}), 400
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(username=username).first()
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            return jsonify({"message": "logged in"})
+    return jsonify({"error": "invalid credentials"}), 401
 
 
-class RegisterForm(FlaskForm):
-    username = StringField("Username", validators=[DataRequired()])
-    password = PasswordField("Password", validators=[DataRequired()])
-    submit = SubmitField("Register")
-
-
-# Routes
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    form = LoginForm()
-    if form.validate_on_submit():
-        with SessionLocal() as db:
-            user = db.query(User).filter_by(username=form.username.data).first()
-            if user and check_password_hash(user.password_hash, form.password.data):
-                login_user(user)
-                flash("Logged in", "success")
-                next_page = request.args.get("next")
-                return redirect(next_page or url_for("index"))
-        flash("Invalid credentials", "danger")
-    return render_template("login.html", form=form)
-
-
-@app.route("/logout")
+@app.post("/api/logout")
 @login_required
-def logout():
+def api_logout():
     logout_user()
-    flash("Logged out", "success")
-    return redirect(url_for("index"))
+    return jsonify({"message": "logged out"})
 
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    form = RegisterForm()
-    api_key: str | None = None
-    if form.validate_on_submit():
-        with SessionLocal() as db:
-            if db.query(User).filter_by(username=form.username.data).first():
-                flash("Username already exists", "warning")
-            else:
-                api_key = generate_api_key()
-                user = User(
-                    username=form.username.data,
-                    api_key=hash_key(api_key),
-                    password_hash=generate_password_hash(form.password.data),
-                )
-                db.add(user)
-                db.commit()
-                flash("Account created", "success")
-    return render_template("register.html", form=form if api_key is None else None, api_key=api_key)
+@app.post("/api/register")
+def api_register():
+    data = request.get_json() or {}
+    username = data.get("username")
+    password = data.get("password")
+    if not username or not password:
+        return jsonify({"error": "missing credentials"}), 400
+    with SessionLocal() as db:
+        if db.query(User).filter_by(username=username).first():
+            return jsonify({"error": "username exists"}), 400
+        api_key = generate_api_key()
+        user = User(
+            username=username,
+            api_key=hash_key(api_key),
+            password_hash=generate_password_hash(password),
+        )
+        db.add(user)
+        db.commit()
+    return jsonify({"message": "account created", "api_key": api_key})
+
+
+@app.get("/api/session")
+def api_session():
+    if current_user.is_authenticated:
+        return jsonify({"username": current_user.username})
+    return jsonify({"username": None})
 
 
 @app.route("/")
 def index():
-    """Main index page"""
-    provider = get_llm_provider(config)
-    return render_template("index.html", provider=provider)
+    """Serve the front-end application."""
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return app.send_static_file("index.html")
+    return "Frontend not built", 200
 
 
 @app.route("/datasets", methods=["GET", "POST"])

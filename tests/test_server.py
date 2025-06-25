@@ -31,34 +31,31 @@ app.config["WTF_CSRF_ENABLED"] = False
 
 def _login(client):
     return client.post(
-        "/login",
-        data={"username": "alice", "password": "pw"},
-        follow_redirects=True,
+        "/api/login",
+        json={"username": "alice", "password": "pw"},
     )
 
 
 def test_register_and_login():
     with app.test_client() as client:
         res = client.post(
-            "/register",
-            data={"username": "bob", "password": "pw"},
-            follow_redirects=True,
+            "/api/register",
+            json={"username": "bob", "password": "pw"},
         )
-        assert b"API key" in res.data
+        data = res.get_json()
+        assert "api_key" in data
         # Now login with new user
         res = client.post(
-            "/login",
-            data={"username": "bob", "password": "pw"},
-            follow_redirects=True,
+            "/api/login",
+            json={"username": "bob", "password": "pw"},
         )
-        assert b"Logged in" in res.data
+        assert res.status_code == 200
 
 
 def test_login_required_redirect():
     with app.test_client() as client:
         res = client.get("/datasets")
-        assert res.status_code == 302
-        assert "/login" in res.headers["Location"]
+        assert res.status_code == 401
 
 
 def test_dataset_graph_route():
