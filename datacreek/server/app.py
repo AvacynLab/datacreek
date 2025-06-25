@@ -9,8 +9,23 @@ from typing import Dict
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_wtf import FlaskForm
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from werkzeug.security import check_password_hash, generate_password_hash
 from neo4j import GraphDatabase
-from wtforms import FileField, IntegerField, SelectField, StringField, SubmitField
+from wtforms import (
+    FileField,
+    IntegerField,
+    PasswordField,
+    SelectField,
+    StringField,
+    SubmitField,
+)
 from wtforms.validators import DataRequired
 
 from datacreek.core.create import process_file
@@ -21,9 +36,14 @@ from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.pipelines import DatasetType
 from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
+from datacreek.db import SessionLocal, User, init_db
+from datacreek.services import generate_api_key, hash_key
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.urandom(24)
+
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
 
 # Set default paths
 DEFAULT_DATA_DIR = Path(__file__).parents[2] / "data"
@@ -36,6 +56,13 @@ DEFAULT_GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load SDK config
 config = load_config()
+init_db()
+
+
+@login_manager.user_loader
+def load_user(user_id: str) -> User | None:
+    with SessionLocal() as db:
+        return db.get(User, int(user_id))
 
 
 def get_neo4j_driver():
@@ -127,7 +154,63 @@ class DatasetForm(FlaskForm):
     submit = SubmitField("Create Dataset")
 
 
+class LoginForm(FlaskForm):
+    username = StringField("Username", validators=[DataRequired()])
+    password = PasswordField("Password", validators=[DataRequired()])
+    submit = SubmitField("Login")
+
+
+class RegisterForm(FlaskForm):
+    username = StringField("Username", validators=[DataRequired()])
+    password = PasswordField("Password", validators=[DataRequired()])
+    submit = SubmitField("Register")
+
+
 # Routes
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        with SessionLocal() as db:
+            user = db.query(User).filter_by(username=form.username.data).first()
+            if user and check_password_hash(user.password_hash, form.password.data):
+                login_user(user)
+                flash("Logged in", "success")
+                next_page = request.args.get("next")
+                return redirect(next_page or url_for("index"))
+        flash("Invalid credentials", "danger")
+    return render_template("login.html", form=form)
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("Logged out", "success")
+    return redirect(url_for("index"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    form = RegisterForm()
+    api_key: str | None = None
+    if form.validate_on_submit():
+        with SessionLocal() as db:
+            if db.query(User).filter_by(username=form.username.data).first():
+                flash("Username already exists", "warning")
+            else:
+                api_key = generate_api_key()
+                user = User(
+                    username=form.username.data,
+                    api_key=hash_key(api_key),
+                    password_hash=generate_password_hash(form.password.data),
+                )
+                db.add(user)
+                db.commit()
+                flash("Account created", "success")
+    return render_template("register.html", form=form if api_key is None else None, api_key=api_key)
+
+
 @app.route("/")
 def index():
     """Main index page"""
@@ -136,6 +219,7 @@ def index():
 
 
 @app.route("/datasets", methods=["GET", "POST"])
+@login_required
 def datasets():
     """List and create datasets"""
     form = DatasetForm()
@@ -149,6 +233,7 @@ def datasets():
 
 
 @app.route("/datasets/<name>")
+@login_required
 def dataset_detail(name: str):
     ds = DATASETS.get(name)
     if not ds:
@@ -157,6 +242,7 @@ def dataset_detail(name: str):
 
 
 @app.get("/datasets/<name>/graph")
+@login_required
 def dataset_graph(name: str):
     """Return dataset knowledge graph as JSON."""
     ds = DATASETS.get(name)
@@ -166,6 +252,7 @@ def dataset_graph(name: str):
 
 
 @app.get("/datasets/<name>/search")
+@login_required
 def dataset_search(name: str):
     """Return node ids matching the query."""
     ds = DATASETS.get(name)
@@ -180,6 +267,7 @@ def dataset_search(name: str):
 
 
 @app.post("/datasets/<name>/ingest")
+@login_required
 def dataset_ingest(name: str):
     """Ingest a file or URL into the dataset knowledge graph."""
     ds = DATASETS.get(name)
@@ -202,6 +290,7 @@ def dataset_ingest(name: str):
 
 
 @app.post("/datasets/<name>/save_neo4j")
+@login_required
 def save_dataset_neo4j(name: str):
     """Persist the dataset graph to Neo4j."""
     ds = DATASETS.get(name)
@@ -217,6 +306,7 @@ def save_dataset_neo4j(name: str):
 
 
 @app.post("/datasets/<name>/load_neo4j")
+@login_required
 def load_dataset_neo4j(name: str):
     """Load the dataset graph from Neo4j."""
     ds = DATASETS.get(name)
@@ -232,6 +322,7 @@ def load_dataset_neo4j(name: str):
 
 
 @app.post("/datasets/<name>/delete")
+@login_required
 def delete_dataset(name: str):
     DATASETS.pop(name, None)
     flash("Dataset deleted", "success")
@@ -239,6 +330,7 @@ def delete_dataset(name: str):
 
 
 @app.post("/datasets/<name>/copy")
+@login_required
 def copy_dataset(name: str):
     ds = DATASETS.get(name)
     if not ds:
@@ -254,6 +346,7 @@ def copy_dataset(name: str):
 
 
 @app.route("/create", methods=["GET", "POST"])
+@login_required
 def create():
     """Create content from text"""
     form = CreateForm()
@@ -316,6 +409,7 @@ def create():
 
 
 @app.route("/curate", methods=["GET", "POST"])
+@login_required
 def curate():
     """Curate QA pairs interface"""
     form = CurateForm()
@@ -370,6 +464,7 @@ def curate():
 
 
 @app.route("/files")
+@login_required
 def files():
     """File browser"""
     # Get all files in the data directory
@@ -390,6 +485,7 @@ def files():
 
 
 @app.route("/view/<path:file_path>")
+@login_required
 def view_file(file_path):
     """View a file's contents"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
@@ -445,6 +541,7 @@ def view_file(file_path):
 
 
 @app.route("/ingest", methods=["GET", "POST"])
+@login_required
 def ingest():
     """Ingest and parse documents"""
     form = IngestForm()
@@ -522,6 +619,7 @@ def ingest():
 
 
 @app.route("/upload", methods=["GET", "POST"])
+@login_required
 def upload():
     """Upload a file to the data directory"""
     form = UploadForm()
@@ -538,6 +636,7 @@ def upload():
 
 
 @app.route("/api/qa_json/<path:file_path>")
+@login_required
 def qa_json(file_path):
     """Return QA pairs as JSON for the JSON viewer"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
@@ -554,6 +653,7 @@ def qa_json(file_path):
 
 
 @app.route("/api/edit_item/<path:file_path>", methods=["POST"])
+@login_required
 def edit_item(file_path):
     """Edit an item in a JSON file"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)
@@ -604,6 +704,7 @@ def edit_item(file_path):
 
 
 @app.route("/api/delete_item/<path:file_path>", methods=["POST"])
+@login_required
 def delete_item(file_path):
     """Delete an item from a JSON file"""
     full_path = Path(DEFAULT_DATA_DIR.parent, file_path)

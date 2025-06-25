@@ -4,6 +4,7 @@ from hashlib import sha256
 from sqlalchemy.orm import Session
 
 from datacreek.db import Dataset, SourceData, User
+from werkzeug.security import generate_password_hash
 
 
 def hash_key(api_key: str) -> str:
@@ -20,18 +21,26 @@ def get_user_by_key(db: Session, api_key: str) -> User | None:
     return db.query(User).filter_by(api_key=hashed).first()
 
 
-def create_user(db: Session, username: str, api_key: str) -> User:
-    user = User(username=username, api_key=hash_key(api_key))
+def create_user(
+    db: Session, username: str, api_key: str, password: str | None = None
+) -> User:
+    user = User(
+        username=username,
+        api_key=hash_key(api_key),
+        password_hash=generate_password_hash(password or ""),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-def create_user_with_generated_key(db: Session, username: str) -> tuple[User, str]:
+def create_user_with_generated_key(
+    db: Session, username: str, password: str | None = None
+) -> tuple[User, str]:
     """Create a user and return the record along with the plain API key."""
     api_key = generate_api_key()
-    user = create_user(db, username, api_key)
+    user = create_user(db, username, api_key, password=password)
     return user, api_key
 
 

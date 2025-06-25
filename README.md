@@ -469,6 +469,12 @@ If you encounter issues during the curation step:
   - DOCX: `pip install python-docx`
   - PPTX: `pip install python-pptx`
 
+## Web Interface
+
+The `datacreek.server` module provides a simple Flask UI. Start the server and
+create an account at `/register` to obtain an API key, then log in to access the
+dataset tools. All routes are protected and require authentication.
+
 ## License
 
 Read more about the [License](./LICENSE)
