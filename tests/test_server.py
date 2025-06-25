@@ -1,8 +1,63 @@
+import importlib
+import os
+import sys
+
+from werkzeug.security import generate_password_hash
+
+os.environ["DATABASE_URL"] = "sqlite:///test_server.db"
+if os.path.exists("test_server.db"):
+    os.remove("test_server.db")
+if "datacreek.db" in sys.modules:
+    importlib.reload(sys.modules["datacreek.db"])
+import datacreek.db as db
+
+db.init_db()
+with db.SessionLocal() as session:
+    user = db.User(
+        username="alice",
+        api_key="key",
+        password_hash=generate_password_hash("pw"),
+    )
+    session.add(user)
+    session.commit()
+
 import datacreek.server.app as app_module
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.db import verify_password
 from datacreek.pipelines import DatasetType
 from datacreek.server.app import DATASETS, app
+
+app.config["WTF_CSRF_ENABLED"] = False
+
+
+def _login(client):
+    return client.post(
+        "/api/login",
+        json={"username": "alice", "password": "pw"},
+    )
+
+
+def test_register_and_login():
+    with app.test_client() as client:
+        res = client.post(
+            "/api/register",
+            json={"username": "bob", "password": "pw"},
+        )
+        data = res.get_json()
+        assert "api_key" in data
+        # Now login with new user
+        res = client.post(
+            "/api/login",
+            json={"username": "bob", "password": "pw"},
+        )
+        assert res.status_code == 200
+
+
+def test_login_required_redirect():
+    with app.test_client() as client:
+        res = client.get("/datasets")
+        assert res.status_code == 401
 
 
 def test_dataset_graph_route():
@@ -12,6 +67,7 @@ def test_dataset_graph_route():
     DATASETS["demo"] = ds
 
     with app.test_client() as client:
+        _login(client)
         res = client.get("/datasets/demo/graph")
         assert res.status_code == 200
         data = res.get_json()
@@ -27,6 +83,7 @@ def test_dataset_search_route():
     DATASETS["demo"] = ds
 
     with app.test_client() as client:
+        _login(client)
         res = client.get("/datasets/demo/search", query_string={"q": "hello"})
         assert res.status_code == 200
         data = res.get_json()
@@ -42,6 +99,7 @@ def test_dataset_ingest_route(tmp_path):
     f.write_text("hello world")
 
     with app.test_client() as client:
+        _login(client)
         res = client.post(
             "/datasets/demo/ingest",
             data={"input_path": str(f), "doc_id": "doc1"},
@@ -71,6 +129,7 @@ def test_save_dataset_neo4j(monkeypatch):
     monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: DummyDriver())
 
     with app.test_client() as client:
+        _login(client)
         res = client.post("/datasets/demo/save_neo4j")
         assert res.status_code == 302
     assert called.get("called")
@@ -93,6 +152,7 @@ def test_load_dataset_neo4j(monkeypatch):
     monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: DummyDriver())
 
     with app.test_client() as client:
+        _login(client)
         res = client.post("/datasets/demo/load_neo4j")
         assert res.status_code == 302
     assert ds.graph is new_graph

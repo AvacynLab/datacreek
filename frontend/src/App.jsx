@@ -1,19 +1,67 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 function App() {
-  const [msg, setMsg] = useState('')
+  const [mode, setMode] = useState('login')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [apiKey, setApiKey] = useState('')
 
-  async function createUser() {
-    const res = await fetch('http://localhost:8000/users?username=test&api_key=key', { method: 'POST' })
+  useEffect(() => {
+    fetch('/api/session').then(res => res.json()).then(data => {
+      if (data.username) {
+        setMessage(`Logged in as ${data.username}`)
+      }
+    })
+  }, [])
+
+  async function submit(e) {
+    e.preventDefault()
+    const endpoint = mode === 'login' ? '/api/login' : '/api/register'
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    })
     const data = await res.json()
-    setMsg(`Created user with ID ${data.id}`)
+    if (res.ok) {
+      setMessage(data.message)
+      if (data.api_key) setApiKey(data.api_key)
+    } else {
+      setMessage(data.error)
+    }
   }
 
   return (
-    <div>
-      <h1>Datacreek</h1>
-      <button onClick={createUser}>Create Test User</button>
-      <p>{msg}</p>
+    <div className="max-w-sm mx-auto mt-10">
+      <h1 className="text-2xl font-bold mb-4 text-center">Datacreek</h1>
+      <form onSubmit={submit} className="space-y-4 bg-white p-4 rounded shadow">
+        <input
+          className="w-full border p-2 rounded"
+          placeholder="Username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+        />
+        <input
+          type="password"
+          className="w-full border p-2 rounded"
+          placeholder="Password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+        />
+        <button className="w-full bg-blue-600 text-white py-2 rounded" type="submit">
+          {mode === 'login' ? 'Login' : 'Register'}
+        </button>
+      </form>
+      <p className="text-center mt-2">
+        <button className="text-blue-600" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+          {mode === 'login' ? 'Create account' : 'Have an account? Login'}
+        </button>
+      </p>
+      {apiKey && (
+        <p className="mt-4 text-center text-sm">API key: <code>{apiKey}</code></p>
+      )}
+      {message && <p className="mt-4 text-center">{message}</p>}
     </div>
   )
 }

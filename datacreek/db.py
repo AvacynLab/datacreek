@@ -1,5 +1,6 @@
 import os
 
+from flask_login import UserMixin
 from sqlalchemy import Column, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -26,11 +27,12 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-class User(Base):
+class User(Base, UserMixin):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     api_key = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False, default="")
 
     sources = relationship("SourceData", back_populates="owner")
     datasets = relationship("Dataset", back_populates="owner")
@@ -61,3 +63,10 @@ class Dataset(Base):
 def init_db() -> None:
     """Create database tables."""
     Base.metadata.create_all(bind=engine)
+
+
+def verify_password(user: User, password: str) -> bool:
+    """Return True if the password matches."""
+    from werkzeug.security import check_password_hash
+
+    return check_password_hash(user.password_hash, password)

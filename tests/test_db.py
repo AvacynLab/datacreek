@@ -18,3 +18,5 @@ def test_init_db_creates_tables(tmp_path, monkeypatch):
     insp = inspect(db.engine)
     tables = set(insp.get_table_names())
     assert {"users", "sources", "datasets"}.issubset(tables)
+    cols = [c["name"] for c in insp.get_columns("users")]
+    assert "password_hash" in cols

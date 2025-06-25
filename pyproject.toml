@@ -29,6 +29,10 @@ dependencies = [
     "scikit-learn>=1.7.0",
     "redis>=5.0.0",
     "neo4j>=5.17.0",
+    "flask>=3.1.0",
+    "flask-login>=0.6.3",
+    "flask-wtf>=1.2.0",
+    "wtforms>=3.0",
 ]
 
 # These fields appear in pip show

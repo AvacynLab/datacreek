@@ -469,6 +469,21 @@ If you encounter issues during the curation step:
   - DOCX: `pip install python-docx`
   - PPTX: `pip install python-pptx`
 
+## Web Interface
+
+A lightweight React application built with Vite lives in the `frontend`
+directory. It uses Tailwind CSS v4 for styling and communicates with the Flask
+API for authentication and dataset operations.
+
+```bash
+cd frontend
+npm install
+npm run dev  # start the Vite dev server
+```
+
+Point your browser to `http://localhost:5173` while the Flask API runs on
+`http://localhost:8000`.
+
 ## License
 
 Read more about the [License](./LICENSE)
