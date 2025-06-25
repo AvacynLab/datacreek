@@ -128,10 +128,16 @@ class LLMClient:
                 or api_endpoint_config.get("model")
             )
             self.max_retries = max_retries or int(
-                os.environ.get("LLM_MAX_RETRIES", profile_cfg.get("max_retries", api_endpoint_config.get("max_retries")))
+                os.environ.get(
+                    "LLM_MAX_RETRIES",
+                    profile_cfg.get("max_retries", api_endpoint_config.get("max_retries")),
+                )
             )
             self.retry_delay = retry_delay or float(
-                os.environ.get("LLM_RETRY_DELAY", profile_cfg.get("retry_delay", api_endpoint_config.get("retry_delay")))
+                os.environ.get(
+                    "LLM_RETRY_DELAY",
+                    profile_cfg.get("retry_delay", api_endpoint_config.get("retry_delay")),
+                )
             )
 
             # Initialize OpenAI client
@@ -154,10 +160,16 @@ class LLMClient:
                 or vllm_config.get("model")
             )
             self.max_retries = max_retries or int(
-                os.environ.get("LLM_MAX_RETRIES", profile_cfg.get("max_retries", vllm_config.get("max_retries")))
+                os.environ.get(
+                    "LLM_MAX_RETRIES",
+                    profile_cfg.get("max_retries", vllm_config.get("max_retries")),
+                )
             )
             self.retry_delay = retry_delay or float(
-                os.environ.get("LLM_RETRY_DELAY", profile_cfg.get("retry_delay", vllm_config.get("retry_delay")))
+                os.environ.get(
+                    "LLM_RETRY_DELAY",
+                    profile_cfg.get("retry_delay", vllm_config.get("retry_delay")),
+                )
             )
 
             # No client to initialize for vLLM as we use requests directly

@@ -151,9 +151,9 @@ async def generate_async(
             "model": params.model,
             "api_base": params.api_base,
             "config_path": x_config_path,
-            "generation": params.generation.model_dump(exclude_none=True)
-            if params.generation
-            else None,
+            "generation": (
+                params.generation.model_dump(exclude_none=True) if params.generation else None
+            ),
             "prompts": params.prompts,
         },
     )

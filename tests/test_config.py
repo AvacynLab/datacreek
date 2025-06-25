@@ -1,8 +1,9 @@
 import os
+
 import pytest
 
-from datacreek.utils.config import load_config, get_generation_config
-from datacreek.config_models import GenerationSettingsModel, GenerationSettings
+from datacreek.config_models import GenerationSettings, GenerationSettingsModel
+from datacreek.utils.config import get_generation_config, load_config
 
 
 def test_env_override(monkeypatch):
