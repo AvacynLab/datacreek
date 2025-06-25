@@ -6,12 +6,15 @@
 # Visual Question Answering Generator
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Optional
 
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_generation_config, load_config
+
+logger = logging.getLogger(__name__)
 
 # Note: The following packages are required for this module:
 # - openai: For API access to vision models
@@ -91,7 +94,7 @@ class VQAGenerator:
             messages_list.append(message_set)
 
         if verbose:
-            print(f"Processing {len(messages_list)} VQA items...")
+            logger.info("Processing %d VQA items...", len(messages_list))
 
         # Use the client's batch_completion method instead of our own async implementation
         results = self.client.batch_completion(
@@ -106,10 +109,12 @@ class VQAGenerator:
             messages["label"][i] = response
 
             if verbose and i < 2:  # Show first two examples in verbose mode
-                print(f"Example {i+1}:")
-                print(f"Query: {messages['query'][i]}")
-                print(f"Response: {response[:100]}..." if len(response) > 100 else response)
-                print()
+                logger.info("Example %d:", i + 1)
+                logger.info("Query: %s", messages["query"][i])
+                logger.info(
+                    "Response: %s",
+                    response[:100] + "..." if len(response) > 100 else response,
+                )
 
         return messages
 
@@ -189,13 +194,13 @@ class VQAGenerator:
                 dataset = dataset.select(range(min(max_examples, len(dataset))))
 
             if verbose:
-                print(f"Processing {len(dataset)} examples from dataset")
+                logger.info("Processing %d examples from dataset", len(dataset))
 
             # Get batch size from config
             batch_size = self.generation_config.batch_size
 
             if verbose:
-                print(f"Using batch size of {batch_size} for dataset processing")
+                logger.info("Using batch size of %d for dataset processing", batch_size)
 
             # Process the dataset
             ds = dataset.map(
@@ -225,10 +230,10 @@ class VQAGenerator:
                 output_path = f"{output_dir}/data.parquet"
 
             if verbose:
-                print(f"Saved processed dataset to {output_path}")
+                logger.info("Saved processed dataset to %s", output_path)
 
             return output_path
 
         except Exception as e:
-            print(f"Error processing dataset: {e}")
+            logger.error("Error processing dataset: %s", e)
             raise

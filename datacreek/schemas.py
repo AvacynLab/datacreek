@@ -33,6 +33,7 @@ class GenerateParams(BaseModel):
     model: str | None = None
     api_base: str | None = None
     generation: dict | None = None
+    prompts: dict | None = None
 
 
 class DatasetOut(BaseModel):

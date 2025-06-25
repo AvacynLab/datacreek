@@ -4,6 +4,7 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Config Utilities
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -27,6 +28,8 @@ PACKAGE_CONFIG_PATH = os.path.abspath(
 # Use internal package path as default
 DEFAULT_CONFIG_PATH = PACKAGE_CONFIG_PATH
 
+logger = logging.getLogger(__name__)
+
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """Load YAML configuration file"""
@@ -43,15 +46,15 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
-    print(f"Loading config from: {config_path}")
+    logger.info("Loading config from: %s", config_path)
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
     # Debug: Print LLM provider if it exists
     if "llm" in config and "provider" in config["llm"]:
-        print(f"Config has LLM provider set to: {config['llm']['provider']}")
+        logger.info("Config has LLM provider set to: %s", config["llm"]["provider"])
     else:
-        print("Config does not have LLM provider set")
+        logger.info("Config does not have LLM provider set")
 
     return config
 
@@ -84,14 +87,14 @@ def get_llm_provider(config: Dict[str, Any]) -> str:
     """
     llm_config = config.get("llm", {})
     provider = llm_config.get("provider", "vllm")
-    print(f"get_llm_provider returning: {provider}")
+    logger.debug("get_llm_provider returning: %s", provider)
     if (
         provider != "api-endpoint"
         and "llm" in config
         and "provider" in config["llm"]
         and config["llm"]["provider"] == "api-endpoint"
     ):
-        print(f"WARNING: Config has 'api-endpoint' but returning '{provider}'")
+        logger.warning("Config has 'api-endpoint' but returning '%s'", provider)
     return provider
 
 
@@ -132,22 +135,16 @@ def _env_override(key: str) -> Optional[str]:
 def get_generation_config(config: Dict[str, Any]) -> GenerationSettings:
     """Return generation configuration as :class:`GenerationSettings`."""
 
-    defaults = config.get(
-        "generation",
-        {
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "chunk_size": 4000,
-            "overlap": 200,
-            "max_tokens": 4096,
-            "batch_size": 32,
-        },
-    )
+    defaults = config.get("generation", {}).copy()
 
-    # Apply environment variable overrides if present
+    # Fill in defaults from dataclass definition
+    for field_name, field_def in GenerationSettings.__dataclass_fields__.items():
+        defaults.setdefault(field_name, getattr(GenerationSettings(), field_name))
+
+    # Apply environment variable overrides if present for all known keys
     env_overrides = {
         k: type(defaults.get(k))(v)  # type: ignore
-        for k in defaults.keys()
+        for k in GenerationSettings.__dataclass_fields__.keys()
         if (v := _env_override(k)) is not None
     }
 

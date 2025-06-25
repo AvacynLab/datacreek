@@ -59,6 +59,8 @@ generation:
   num_cot_examples: 5  # Default number of Chain of Thought examples to generate
   num_cot_enhance_examples: null  # Maximum number of conversations to enhance (null = enhance all)
   batch_size: 32     # Number of requests to batch together (for create)
+  summary_temperature: 0.1  # Temperature used when generating summaries
+  summary_max_tokens: 1024   # Max tokens for summary responses
 
 # Content curation parameters
 curate:
