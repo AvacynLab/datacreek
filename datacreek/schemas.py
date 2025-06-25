@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from datacreek.config_models import GenerationSettingsModel
+
 
 class UserCreate(BaseModel):
     username: str
@@ -30,9 +32,10 @@ class GenerateParams(BaseModel):
     content_type: str = "qa"
     num_pairs: int | None = None
     provider: str | None = None
+    profile: str | None = None
     model: str | None = None
     api_base: str | None = None
-    generation: dict | None = None
+    generation: GenerationSettingsModel | None = None
     prompts: dict | None = None
 
 
