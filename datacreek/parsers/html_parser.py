@@ -6,67 +6,70 @@
 # HTML Parsers
 
 import os
-import requests
-from typing import Dict, Any
+from typing import Any, Dict
 from urllib.parse import urlparse
+
+import requests
 
 from .base import BaseParser
 
+
 class HTMLParser(BaseParser):
     """Parser for HTML files and web pages"""
-    
+
     def parse(self, file_path: str) -> str:
         """Parse an HTML file or URL into plain text
-        
+
         Args:
             file_path: Path to the HTML file or URL
-            
+
         Returns:
             Extracted text from the HTML
         """
         try:
             from bs4 import BeautifulSoup
         except ImportError:
-            raise ImportError("beautifulsoup4 is required for HTML parsing. Install it with: pip install beautifulsoup4")
-        
+            raise ImportError(
+                "beautifulsoup4 is required for HTML parsing. Install it with: pip install beautifulsoup4"
+            )
+
         # Determine if file_path is a URL or a local file
-        if file_path.startswith(('http://', 'https://')):
+        if file_path.startswith(("http://", "https://")):
             # It's a URL, fetch content
             response = requests.get(file_path)
             response.raise_for_status()
             html_content = response.text
         else:
             # It's a local file, read it
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 html_content = f.read()
-        
+
         # Parse HTML and extract text
-        soup = BeautifulSoup(html_content, 'html.parser')
-        
+        soup = BeautifulSoup(html_content, "html.parser")
+
         # Remove script and style elements
-        for script in soup(['script', 'style']):
+        for script in soup(["script", "style"]):
             script.extract()
-        
+
         # Get text
         text = soup.get_text()
-        
+
         # Break into lines and remove leading and trailing space
         lines = (line.strip() for line in text.splitlines())
         # Break multi-headlines into a line each
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         # Drop blank lines
-        text = '\n'.join(chunk for chunk in chunks if chunk)
-        
+        text = "\n".join(chunk for chunk in chunks if chunk)
+
         return text
-    
+
     def save(self, content: str, output_path: str) -> None:
         """Save the extracted text to a file
-        
+
         Args:
             content: Extracted text content
             output_path: Path to save the text
         """
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)
-

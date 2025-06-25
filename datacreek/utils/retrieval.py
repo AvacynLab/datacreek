@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
-import numpy as np
 
 
 class EmbeddingIndex:

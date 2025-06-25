@@ -1,9 +1,11 @@
 """Application context utilities."""
-from pathlib import Path
-from typing import Optional, Dict, Any
+
 import os
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 from datacreek.utils.config import DEFAULT_CONFIG_PATH
+
 
 class AppContext:
     """Context manager for global application state."""
@@ -28,4 +30,3 @@ class AppContext:
         ]
         for d in dirs:
             os.makedirs(d, exist_ok=True)
-

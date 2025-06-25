@@ -1,5 +1,6 @@
-from datacreek.core.knowledge_graph import KnowledgeGraph
 import pytest
+
+from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
 def test_add_document_and_chunk():

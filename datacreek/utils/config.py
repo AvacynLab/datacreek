@@ -8,9 +8,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from datacreek.config_models import GenerationSettings
-
 import yaml
+
+from datacreek.config_models import GenerationSettings
 
 # Default config location relative to the package (original)
 ORIGINAL_CONFIG_PATH = os.path.abspath(

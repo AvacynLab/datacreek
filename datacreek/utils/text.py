@@ -4,11 +4,12 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Text processing utilities
-import re
 import json
-from typing import List, Dict, Any, Optional
+import re
+from typing import Any, Dict, List, Optional
 
-from .chunking import sliding_window_chunks, semantic_chunk_split
+from .chunking import semantic_chunk_split, sliding_window_chunks
+
 
 def split_into_chunks(
     text: str,
@@ -43,33 +44,34 @@ def split_into_chunks(
         chunks.append(current_chunk)
     return chunks
 
+
 def extract_json_from_text(text: str) -> Dict[str, Any]:
     """Extract JSON from text that might contain markdown or other content"""
     text = text.strip()
-    
+
     # Try to parse as complete JSON
-    if text.startswith('{') and text.endswith('}') or text.startswith('[') and text.endswith(']'):
+    if text.startswith("{") and text.endswith("}") or text.startswith("[") and text.endswith("]"):
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
-    
+
     # Look for JSON within Markdown code blocks
-    json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+    json_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
     match = re.search(json_pattern, text)
     if match:
         try:
             return json.loads(match.group(1).strip())
         except json.JSONDecodeError:
             pass
-    
+
     # Try a more aggressive pattern
-    json_pattern = r'\{[\s\S]*\}|\[[\s\S]*\]'
+    json_pattern = r"\{[\s\S]*\}|\[[\s\S]*\]"
     match = re.search(json_pattern, text)
     if match:
         try:
             return json.loads(match.group(0))
         except json.JSONDecodeError:
             pass
-    
+
     raise ValueError("Could not extract valid JSON from the response")

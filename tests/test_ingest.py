@@ -1,5 +1,7 @@
-from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 import pytest
+
+from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
+
 
 def test_ingest_to_kg(tmp_path):
     text_file = tmp_path / "sample.txt"
@@ -33,4 +35,3 @@ def test_determine_parser_errors(tmp_path):
     bad_file.write_text("x")
     with pytest.raises(ValueError):
         ingest_file(str(bad_file))
-

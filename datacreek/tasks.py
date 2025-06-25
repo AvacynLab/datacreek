@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+
 from celery import Celery
 
-from datacreek.db import SessionLocal, Dataset, SourceData
-from datacreek.services import create_source, create_dataset
-from datacreek.core.ingest import process_file as ingest_file
 from datacreek.core.create import process_file as generate_data
 from datacreek.core.curate import curate_qa_pairs
+from datacreek.core.ingest import process_file as ingest_file
 from datacreek.core.save_as import convert_format
-
+from datacreek.db import Dataset, SessionLocal, SourceData
+from datacreek.services import create_dataset, create_source
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -19,7 +19,10 @@ celery_app = Celery("datacreek", broker=CELERY_BROKER_URL, backend=CELERY_BACKEN
 celery_app.conf.accept_content = ["json"]
 celery_app.conf.task_serializer = "json"
 celery_app.conf.result_serializer = "json"
-celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "false").lower() in {"1", "true"}
+celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "false").lower() in {
+    "1",
+    "true",
+}
 celery_app.conf.task_store_eager_result = True
 
 

@@ -1,4 +1,4 @@
-from datacreek.utils.chunking import sliding_window_chunks, semantic_chunk_split
+from datacreek.utils.chunking import semantic_chunk_split, sliding_window_chunks
 
 
 def test_sliding_window_chunks():

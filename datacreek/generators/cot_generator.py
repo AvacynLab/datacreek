@@ -4,14 +4,14 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Logic for generating CoT from scratch and also enhancing CoT (take existing format and add CoT)
-import os
 import json
+import os
 import re
-from typing import Dict, List, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from datacreek.models.llm_client import LLMClient
-from datacreek.utils.config import get_prompt, get_generation_config
+from datacreek.utils.config import get_generation_config, get_prompt
 
 
 class COTGenerator:
