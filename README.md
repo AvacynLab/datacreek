@@ -133,10 +133,13 @@ docker compose build
 
 ### Deployment
 
-Use the `scripts/deploy.sh` helper to update a remote host after pushing a new
-image. Export `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY` and `DEPLOY_PATH`
-before executing the script. Docker Compose automatically loads variables from
-an optional `.env` file located next to `docker-compose.yml`:
+Use the `scripts/deploy.sh` helper to update a remote host. The CI pipeline
+builds container images for the API, worker and front-end and pushes them to
+GitHub Container Registry. On deployment the remote host pulls the latest
+images defined in `.env` and restarts the stack. Export `DEPLOY_HOST`,
+`DEPLOY_USER`, `DEPLOY_KEY` and `DEPLOY_PATH` before executing the script.
+Docker Compose automatically loads variables from an optional `.env` file
+located next to `docker-compose.yml`:
 
 ```bash
 export DEPLOY_HOST=example.com
@@ -151,7 +154,8 @@ Environment variables can be configured via a `.env` file. See
 
 At a minimum, set `NEO4J_URI`, `NEO4J_USER` and `NEO4J_PASSWORD` so the
 API can reach the Neo4j instance. `DATABASE_URL` defaults to storing the
-SQLite file inside the mounted `./data` directory.
+SQLite file inside the mounted `./data` directory. `IMAGE_NAME` and
+`FRONTEND_IMAGE_NAME` define the container images pulled during deployment.
 
 You can override any value by providing a custom YAML file to the server.
 

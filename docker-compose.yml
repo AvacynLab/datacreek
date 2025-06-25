@@ -17,6 +17,7 @@ services:
 
   api:
     build: .
+    image: ${IMAGE_NAME:-datacreek}
     command: uvicorn datacreek.api:app --host 0.0.0.0 --port 8000
     env_file: .env
     volumes:
@@ -29,6 +30,7 @@ services:
 
   worker:
     build: .
+    image: ${IMAGE_NAME:-datacreek}
     command: celery -A datacreek.tasks worker --loglevel=info
     env_file: .env
     volumes:
@@ -39,6 +41,7 @@ services:
   frontend:
     build:
       context: ./frontend
+    image: ${FRONTEND_IMAGE_NAME:-datacreek-frontend}
     ports:
       - "3000:80"
     depends_on:
