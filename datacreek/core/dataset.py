@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import secrets
 from typing import Any, Dict, List, Optional
 
 import redis

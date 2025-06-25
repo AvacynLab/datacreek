@@ -54,13 +54,13 @@ export default function DatasetWizard() {
     } catch {
       // ignore parse errors
     }
-    const res = await fetch(`/api/datasets/${name}/generate`, {
+    const generateRes = await fetch(`/api/datasets/${name}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ params: genParams })
     })
-    if (!res.ok) return
-    const { task_id } = await res.json()
+    if (!generateRes.ok) return
+    const { task_id } = await generateRes.json()
     if (task_id) {
       const poll = setInterval(async () => {
         const r = await fetch(`/api/tasks/${task_id}`)

@@ -4,6 +4,8 @@ Flask application for the Datacreek web interface.
 
 import json
 import os
+import threading
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
@@ -26,9 +28,6 @@ from datacreek.db import SessionLocal, User, init_db
 from datacreek.pipelines import DatasetType
 from datacreek.services import generate_api_key, hash_key
 from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
-
-import threading
-import uuid
 
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
