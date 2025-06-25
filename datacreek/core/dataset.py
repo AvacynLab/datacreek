@@ -4,7 +4,8 @@ import json
 import os
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import redis
 
@@ -19,6 +20,10 @@ class DatasetBuilder:
     dataset_type: DatasetType
     name: Optional[str] = None
     graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    history: List[str] = field(default_factory=list)
+    versions: List[Dict[str, Any]] = field(default_factory=list)
+    stage: int = 0  # 0=created, 1=ingest, 2=generation, 3=curation, 4=exported
 
     def add_document(self, doc_id: str, source: str) -> None:
         """Insert a document node in the dataset graph."""
@@ -42,9 +47,30 @@ class DatasetBuilder:
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
 
+    def remove_chunk(self, chunk_id: str) -> None:
+        """Remove a chunk node from the dataset graph."""
+        if self.graph.graph.has_node(chunk_id):
+            preds = list(self.graph.graph.predecessors(chunk_id))
+            self.graph.graph.remove_node(chunk_id)
+            if preds:
+                self.history.append(f"Removed chunk {chunk_id} from {preds[0]}")
+
+    def remove_document(self, doc_id: str) -> None:
+        """Remove a document and all its chunks."""
+        if not self.graph.graph.has_node(doc_id):
+            return
+        chunks = self.get_chunks_for_document(doc_id)
+        self.graph.graph.remove_nodes_from(chunks)
+        self.graph.graph.remove_node(doc_id)
+        self.history.append(f"Removed document {doc_id}")
+
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
         """Return a deep copy of this dataset with a new optional name."""
-        return DatasetBuilder(self.dataset_type, name, deepcopy(self.graph))
+        clone = DatasetBuilder(self.dataset_type, name, deepcopy(self.graph))
+        clone.history = self.history.copy()
+        clone.versions = deepcopy(self.versions)
+        clone.stage = self.stage
+        return clone
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize this dataset to a Python dictionary."""
@@ -52,13 +78,22 @@ class DatasetBuilder:
         return {
             "dataset_type": self.dataset_type.value,
             "name": self.name,
+            "created_at": self.created_at.isoformat(),
+            "history": self.history,
+            "versions": self.versions,
             "graph": self.graph.to_dict(),
+            "stage": self.stage,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DatasetBuilder":
         ds = cls(DatasetType(data["dataset_type"]), data.get("name"))
+        if ts := data.get("created_at"):
+            ds.created_at = datetime.fromisoformat(ts)
+        ds.history = list(data.get("history", []))
+        ds.versions = list(data.get("versions", []))
         ds.graph = KnowledgeGraph.from_dict(data.get("graph", {}))
+        ds.stage = int(data.get("stage", 0))
         return ds
 
     def to_json(self, path: str) -> str:
