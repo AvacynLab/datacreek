@@ -402,20 +402,9 @@ def api_deduplicate(name: str):
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
-    seen: set[str] = set()
-    removed = 0
-    for node, data in list(ds.graph.graph.nodes(data=True)):
-        if data.get("type") != "chunk":
-            continue
-        text = data.get("text", "")
-        if text in seen:
-            ds.remove_chunk(node)
-            removed += 1
-        else:
-            seen.add(text)
+    removed = ds.deduplicate_chunks()
     if removed:
         ds.stage = max(ds.stage, 3)
-    ds.history.append(f"Removed {removed} duplicate chunks")
     return jsonify({"removed": removed})
 
 
@@ -518,6 +507,36 @@ def api_entity_group_summaries(name: str):
     return jsonify({"message": "entity_group_summaries"})
 
 
+@app.post("/api/datasets/<name>/resolve_entities")
+@login_required
+def api_resolve_entities(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    merged = ds.resolve_entities()
+    return jsonify({"merged": merged})
+
+
+@app.post("/api/datasets/<name>/predict_links")
+@login_required
+def api_predict_links(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.predict_links()
+    return jsonify({"message": "links_predicted"})
+
+
+@app.post("/api/datasets/<name>/enrich_entity/<eid>")
+@login_required
+def api_enrich_entity(name: str, eid: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.enrich_entity(eid)
+    return jsonify({"message": "enriched"})
+
+
 @app.post("/api/datasets/<name>/trust")
 @login_required
 def api_trust(name: str):
@@ -527,6 +546,20 @@ def api_trust(name: str):
     ds.score_trust()
     ds.history.append("Trust scores computed")
     return jsonify({"message": "trust"})
+
+
+@app.post("/api/datasets/<name>/centrality")
+@login_required
+def api_centrality(name: str):
+    """Compute centrality for dataset nodes."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    metric = request.args.get("metric", "degree")
+    node_type = request.args.get("type", "entity")
+    ds.compute_centrality(node_type=node_type, metric=metric)
+    return jsonify({"message": "centrality"})
 
 
 @app.post("/api/datasets/<name>/extract_facts")

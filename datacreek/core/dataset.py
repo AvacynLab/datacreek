@@ -92,6 +92,34 @@ class DatasetBuilder:
 
         self.graph.link_similar_chunks(k)
 
+    def deduplicate_chunks(self) -> int:
+        """Remove duplicate chunk nodes from the graph."""
+
+        removed = self.graph.deduplicate_chunks()
+        if removed:
+            self.history.append(f"Removed {removed} duplicate chunks")
+        return removed
+
+    def resolve_entities(self, threshold: float = 0.8) -> int:
+        """Merge entity nodes that likely refer to the same real world entity."""
+
+        merged = self.graph.resolve_entities(threshold=threshold)
+        if merged:
+            self.history.append(f"Merged {merged} entities")
+        return merged
+
+    def predict_links(self, threshold: float = 0.8) -> None:
+        """Infer missing relations between entities based on similarity."""
+
+        self.graph.predict_links(threshold=threshold)
+        self.history.append("Predicted entity links")
+
+    def enrich_entity(self, entity_id: str) -> None:
+        """Enrich an entity node using external sources like Wikidata."""
+
+        self.graph.enrich_entity_wikidata(entity_id)
+        self.history.append(f"Entity {entity_id} enriched")
+
     def consolidate_schema(self) -> None:
         """Normalize labels in the underlying knowledge graph."""
 
@@ -115,6 +143,11 @@ class DatasetBuilder:
 
     def score_trust(self) -> None:
         self.graph.score_trust()
+
+    def compute_centrality(self, node_type: str = "entity", metric: str = "degree") -> None:
+        """Compute centrality metrics for graph nodes."""
+        self.graph.compute_centrality(node_type=node_type, metric=metric)
+        self.history.append(f"Centrality ({metric}) computed for {node_type} nodes")
 
     def update_embeddings(self, node_type: str = "chunk") -> None:
         """Materialize embeddings for nodes of ``node_type``."""

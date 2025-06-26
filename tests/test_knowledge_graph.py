@@ -1,4 +1,5 @@
 import pytest
+import requests
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
@@ -219,3 +220,72 @@ def test_update_embeddings():
     emb = kg.graph.nodes["c1"].get("embedding")
     assert isinstance(emb, list)
     assert len(emb) > 0
+
+
+def test_deduplicate_and_resolve_entities(monkeypatch):
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "hello")
+    kg.add_entity("e1", "Beethoven")
+    kg.add_entity("e2", "Ludwig van Beethoven")
+    removed = kg.deduplicate_chunks()
+    assert removed == 1
+    merged = kg.resolve_entities(threshold=0.5)
+    assert merged >= 1
+    assert "e2" not in kg.graph.nodes
+
+
+def test_enrich_entity_wikidata(monkeypatch):
+    kg = KnowledgeGraph()
+    kg.add_entity("e1", "Beethoven")
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    def fake_get(url, params=None, timeout=10):
+        return FakeResponse({"search": [{"id": "Q1", "description": "composer"}]})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    kg.enrich_entity_wikidata("e1")
+    node = kg.graph.nodes["e1"]
+    assert node.get("wikidata_id") == "Q1"
+    assert node.get("description") == "composer"
+
+
+def test_compute_centrality():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.add_entity("e1", "A")
+    kg.add_entity("e2", "B")
+    kg.link_entity("c1", "e1")
+    kg.link_entity("c2", "e2")
+    kg.compute_centrality()
+    assert "centrality" in kg.graph.nodes["e1"]
+
+
+def test_predict_links():
+    kg = KnowledgeGraph()
+    kg.add_entity("e1", "Beethoven")
+    kg.add_entity("e2", "Ludwig van Beethoven")
+    kg.predict_links(threshold=0.4)
+    assert kg.graph.has_edge("e1", "e2")
+
+
+def test_consolidate_schema():
+    kg = KnowledgeGraph()
+    kg.add_entity("e1", "A")
+    kg.add_entity("e2", "B")
+    kg.graph.nodes["e1"]["type"] = "ENTITY"
+    kg.graph.add_edge("e1", "e2", relation="RELATED")
+
+    kg.consolidate_schema()
+
+    assert kg.graph.nodes["e1"]["type"] == "entity"
+    assert kg.graph.edges["e1", "e2"]["relation"] == "related"

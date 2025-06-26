@@ -1,4 +1,5 @@
 import fakeredis
+import requests
 
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
@@ -166,3 +167,70 @@ def test_update_embeddings_wrapper():
     emb = ds.graph.graph.nodes["c1"].get("embedding")
     assert isinstance(emb, list)
     assert len(emb) > 0
+
+
+def test_dedup_and_resolve_wrappers(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "hello")
+    ds.add_entity("e1", "Beethoven")
+    ds.add_entity("e2", "Ludwig van Beethoven")
+    removed = ds.deduplicate_chunks()
+    assert removed == 1
+    merged = ds.resolve_entities(threshold=0.5)
+    assert merged >= 1
+
+
+def test_enrich_entity_wrapper(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_entity("e1", "Beethoven")
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    def fake_get(url, params=None, timeout=10):
+        return FakeResponse({"search": [{"id": "Q1", "description": "composer"}]})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    ds.enrich_entity("e1")
+    node = ds.graph.graph.nodes["e1"]
+    assert node.get("wikidata_id") == "Q1"
+
+
+def test_compute_centrality_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_centrality()
+    assert "centrality" in ds.graph.graph.nodes["e1"]
+
+
+def test_predict_links_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_entity("e1", "Beethoven")
+    ds.add_entity("e2", "Ludwig van Beethoven")
+    ds.predict_links(threshold=0.4)
+    assert ds.graph.graph.has_edge("e1", "e2")
+
+
+def test_consolidate_schema_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.graph.graph.nodes["e1"]["type"] = "ENTITY"
+    ds.graph.graph.add_edge("e1", "e2", relation="RELATED")
+
+    ds.consolidate_schema()
+
+    assert ds.graph.graph.nodes["e1"]["type"] == "entity"
+    assert ds.graph.graph.edges["e1", "e2"]["relation"] == "related"
