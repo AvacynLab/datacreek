@@ -54,9 +54,91 @@ def test_dataset_persistence_redis():
     assert loaded.id == ds.id
 
 
+def test_remove_chunk_updates_order():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "t1")
+    ds.add_chunk("d", "c2", "t2")
+    ds.add_chunk("d", "c3", "t3")
+
+    ds.remove_chunk("c2")
+    assert ds.get_chunks_for_document("d") == ["c1", "c3"]
+    assert ("c1", "c3") in ds.graph.graph.edges
+    assert ds.graph.graph.edges["d", "c1"]["sequence"] == 0
+    assert ds.graph.graph.edges["d", "c3"]["sequence"] == 1
+
+
+def test_remove_document_cascades():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "t1")
+    ds.add_chunk("d", "c2", "t2")
+
+    ds.remove_document("d")
+    assert ds.search("t1") == []
+    assert ds.search_documents("d") == []
+
+
 def test_dataset_id_in_serialization():
     ds = DatasetBuilder(DatasetType.QA, name="demo")
     data = ds.to_dict()
     assert "id" in data
     loaded = DatasetBuilder.from_dict(data)
     assert loaded.id == ds.id
+
+
+def test_link_similar_chunks_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "other text")
+
+    ds.graph.index.build()
+    ds.link_similar_chunks(k=1)
+
+    assert ("c1", "c2") in ds.graph.graph.edges
+    edge = ds.graph.graph.edges["c1", "c2"]
+    assert edge["relation"] == "similar_to"
+    assert 0 < edge["similarity"] <= 1
+
+
+def test_search_with_links_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "unrelated text")
+
+    ds.graph.index.build()
+    ds.link_similar_chunks(k=1)
+
+    results = ds.search_with_links("hello", k=1, hops=1)
+    assert "c1" in results
+    assert "c2" in results
+
+
+def test_search_with_links_data_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "unrelated text")
+
+    ds.graph.index.build()
+    ds.link_similar_chunks(k=1)
+
+    results = ds.search_with_links_data("hello", k=1, hops=1)
+    ids = [r["id"] for r in results]
+    assert "c1" in ids
+    assert "c2" in ids
+    for r in results:
+        if r["id"] == "c1":
+            assert r["text"] == "hello world"
+            assert r["document"] == "d"
+            assert r["depth"] == 0
+            assert r["path"] == ["c1"]
+        if r["id"] == "c2":
+            assert r["depth"] == 1
+            assert r["path"] == ["c1", "c2"]
+

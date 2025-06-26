@@ -722,6 +722,9 @@ chunk_ids = ds.get_chunks_for_document("doc1")
 ds.graph.index.build()
 retrieved = ds.graph.search_embeddings("hello", k=1)
 retrieved_hybrid = ds.graph.search_hybrid("hello")
+deep = ds.search_with_links("hello", hops=1)
+deep_data = ds.search_with_links_data("hello", hops=1)
+# each item includes hop depth and the traversal path
 
 # Clone the dataset to try different curation strategies
 ds_copy = ds.clone(name="copy")
