@@ -2,6 +2,7 @@ import importlib
 import os
 import sys
 
+import requests
 from werkzeug.security import generate_password_hash
 
 os.environ["DATABASE_URL"] = "sqlite:///test_server.db"
@@ -225,11 +226,24 @@ def test_api_search_endpoints():
     DATASETS.clear()
 
 
-def test_dataset_ops_endpoints():
+def test_dataset_ops_endpoints(monkeypatch):
     ds = DatasetBuilder(DatasetType.QA, name="demo")
     ds.add_document("d1", source="s")
     ds.add_chunk("d1", "c1", "hello")
+    ds.add_chunk("d1", "c2", "hello")
+    ds.add_entity("e1", "Beethoven")
+    ds.add_entity("e2", "Ludwig van Beethoven")
     DATASETS["demo"] = ds
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    def fake_get(url, params=None, timeout=10):
+        return FakeResponse({"search": [{"id": "Q1", "description": "composer"}]})
 
     with app.test_client() as client:
         _login(client)
@@ -241,7 +255,15 @@ def test_dataset_ops_endpoints():
             "similarity",
             "entity_groups",
             "entity_group_summaries",
+            "deduplicate",
+            "resolve_entities",
+            "predict_links",
+            "centrality",
         ]:
             res = client.post(f"/api/datasets/demo/{op}")
             assert res.status_code == 200
+
+        monkeypatch.setattr(requests, "get", fake_get)
+        res = client.post("/api/datasets/demo/enrich_entity/e1")
+        assert res.status_code == 200
     DATASETS.clear()

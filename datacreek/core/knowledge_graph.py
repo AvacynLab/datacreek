@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import networkx as nx
 import numpy as np
+import requests
 from neo4j import Driver, GraphDatabase
 from sklearn.cluster import KMeans
+from sklearn.metrics.pairwise import cosine_similarity
 
 from ..utils.retrieval import EmbeddingIndex
 
@@ -356,6 +359,115 @@ class KnowledgeGraph:
                     continue
                 self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
 
+    def deduplicate_chunks(self) -> int:
+        """Remove duplicate chunk nodes based on their text."""
+
+        seen: Dict[str, str] = {}
+        removed = 0
+        for node, data in list(self.graph.nodes(data=True)):
+            if data.get("type") != "chunk":
+                continue
+            text = data.get("text", "")
+            if text in seen:
+                self.remove_chunk(node)
+                removed += 1
+            else:
+                seen[text] = node
+        return removed
+
+    def _merge_entity_nodes(self, target: str, source: str) -> None:
+        """Merge ``source`` entity into ``target``."""
+
+        for pred, _, edata in list(self.graph.in_edges(source, data=True)):
+            self.graph.add_edge(pred, target, **edata)
+        for _, succ, edata in list(self.graph.out_edges(source, data=True)):
+            self.graph.add_edge(target, succ, **edata)
+        if "text" not in self.graph.nodes[target]:
+            self.graph.nodes[target]["text"] = self.graph.nodes[source].get("text")
+        self.graph.remove_node(source)
+
+    def resolve_entities(self, threshold: float = 0.8) -> int:
+        """Merge entity nodes that refer to the same concept."""
+
+        entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
+        texts = [self.graph.nodes[e].get("text", "") for e in entities]
+        if len(entities) < 2:
+            return 0
+        embeddings = self.index.transform(texts)
+        merged = 0
+        used: set[int] = set()
+        for i, eid1 in enumerate(entities):
+            if i in used:
+                continue
+            for j in range(i + 1, len(entities)):
+                if j in used:
+                    continue
+                sim = float(
+                    cosine_similarity(embeddings[i].reshape(1, -1), embeddings[j].reshape(1, -1))[
+                        0, 0
+                    ]
+                )
+                t1 = re.sub(r"\W+", "", texts[i]).lower()
+                t2 = re.sub(r"\W+", "", texts[j]).lower()
+                if sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1:
+                    self._merge_entity_nodes(eid1, entities[j])
+                    used.add(j)
+                    merged += 1
+        if merged:
+            self.index = EmbeddingIndex()
+            for n, d in self.graph.nodes(data=True):
+                if d.get("type") in {"chunk", "entity"} and "text" in d:
+                    self.index.add(n, d["text"])
+            self.index.build()
+        return merged
+
+    def enrich_entity_wikidata(self, entity_id: str) -> None:
+        """Fetch description from Wikidata and store it on the entity node."""
+
+        node = self.graph.nodes.get(entity_id)
+        if not node or node.get("type") != "entity":
+            raise ValueError("Unknown entity")
+        label = node.get("text")
+        if not label:
+            return
+        search = requests.get(
+            "https://www.wikidata.org/w/api.php",
+            params={
+                "action": "wbsearchentities",
+                "search": label,
+                "format": "json",
+                "language": "en",
+                "limit": 1,
+            },
+            timeout=10,
+        )
+        data = search.json()
+        if not data.get("search"):
+            return
+        item = data["search"][0]
+        node["wikidata_id"] = item.get("id")
+        if desc := item.get("description"):
+            node["description"] = desc
+
+    def predict_links(self, threshold: float = 0.8) -> None:
+        """Create ``related_to`` edges between similar entities."""
+
+        entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
+        texts = [self.graph.nodes[e].get("text", "") for e in entities]
+        if len(entities) < 2:
+            return
+        embeddings = self.index.transform(texts)
+        for i, eid1 in enumerate(entities):
+            for j in range(i + 1, len(entities)):
+                eid2 = entities[j]
+                sim = float(
+                    cosine_similarity(embeddings[i].reshape(1, -1), embeddings[j].reshape(1, -1))[
+                        0, 0
+                    ]
+                )
+                if sim >= threshold and not self.graph.has_edge(eid1, eid2):
+                    self.graph.add_edge(eid1, eid2, relation="related_to", similarity=sim)
+
     # ------------------------------------------------------------------
     # Advanced operations
     # ------------------------------------------------------------------
@@ -488,6 +600,20 @@ class KnowledgeGraph:
                 continue
             count = src_counts.get(src, 1)
             d["trust"] = min(1.0, count / 3)
+
+    def compute_centrality(self, node_type: str = "entity", metric: str = "degree") -> None:
+        """Compute centrality scores for nodes of ``node_type``."""
+
+        if metric == "degree":
+            values = nx.degree_centrality(self.graph)
+        elif metric == "betweenness":
+            values = nx.betweenness_centrality(self.graph)
+        else:
+            raise ValueError("Unknown metric")
+
+        for node, score in values.items():
+            if self.graph.nodes[node].get("type") == node_type:
+                self.graph.nodes[node]["centrality"] = float(score)
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         """Return all chunk IDs that belong to the given document."""
