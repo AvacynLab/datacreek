@@ -181,3 +181,10 @@ prompts:
     
     Original conversations:
     {conversations}
+
+  # Fact extraction prompt
+  fact_extraction: |
+    Extract standalone facts from the text in JSON format. Each fact must have
+    "subject", "predicate" and "object" fields. Only return the JSON array.
+    Text:
+    {text}

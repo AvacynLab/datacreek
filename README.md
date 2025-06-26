@@ -19,6 +19,7 @@ This toolkit simplifies the journey of:
 - Using a LLM (vLLM or any local/external API endpoint) to generate examples
 - Converting your existing files to fine-tuning friendly formats
 - Creating synthetic datasets
+- Extracting standalone facts into a knowledge graph
 - Supporting various formats of post-training fine-tuning
 
 # How does Datacreek offer it?
@@ -367,6 +368,8 @@ print(ds.search_with_links("hello", hops=1))  # ["c1", "c2", ...]
 print(ds.search_with_links_data("hello", hops=1)[0])  # includes depth and path
 ds.link_similar_chunks()         # connect semantically close chunks
 ds.update_embeddings()           # materialize embeddings on graph nodes
+ds.extract_facts()               # populate fact nodes using an LLM or regex
+print(ds.find_conflicting_facts())  # check for conflicting information
 
 # After ingestion you can further enrich the graph:
 ds.consolidate_schema()        # normalize labels
@@ -392,6 +395,8 @@ You can then enrich and query the graph via the API:
 curl -X POST localhost:8000/api/datasets/example/similarity -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/search_hybrid?q=hello -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/search_links?q=hello\&hops=1 -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/extract_facts -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/conflicts -H "X-API-Key: <key>"
 ```
 
 The `path` is resolved using the configured input directories so relative

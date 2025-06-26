@@ -34,6 +34,40 @@ class KnowledgeGraph:
         if text:
             self.index.add(entity_id, text)
 
+    def add_fact(
+        self,
+        subject: str,
+        predicate: str,
+        obj: str,
+        fact_id: Optional[str] = None,
+        *,
+        source: Optional[str] = None,
+    ) -> str:
+        """Insert a standalone fact and link corresponding entities."""
+
+        fact_id = fact_id or f"fact_{len(self.graph.nodes)}"
+        if self.graph.has_node(fact_id):
+            raise ValueError(f"Fact already exists: {fact_id}")
+
+        # ensure entity nodes exist
+        if not self.graph.has_node(subject):
+            self.add_entity(subject, subject, source)
+        if not self.graph.has_node(obj):
+            self.add_entity(obj, obj, source)
+
+        self.graph.add_node(
+            fact_id,
+            type="fact",
+            subject=subject,
+            predicate=predicate,
+            object=obj,
+            source=source,
+        )
+        self.graph.add_edge(fact_id, subject, relation="subject", provenance=source)
+        self.graph.add_edge(fact_id, obj, relation="object", provenance=source)
+        self.graph.add_edge(subject, obj, relation=predicate, provenance=source)
+        return fact_id
+
     def link_entity(
         self,
         node_id: str,

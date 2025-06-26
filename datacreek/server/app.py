@@ -25,6 +25,7 @@ from datacreek.core.ingest import ingest_into_dataset
 from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.db import SessionLocal, User, init_db
+from datacreek.models.llm_client import LLMClient
 from datacreek.pipelines import DatasetType
 from datacreek.services import generate_api_key, hash_key
 from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
@@ -288,6 +289,7 @@ def api_dataset_detail(name: str):
     nodes = ds.graph.graph
     num_docs = sum(1 for _, d in nodes.nodes(data=True) if d.get("type") == "document")
     num_chunks = sum(1 for _, d in nodes.nodes(data=True) if d.get("type") == "chunk")
+    num_facts = sum(1 for _, d in nodes.nodes(data=True) if d.get("type") == "fact")
     size = sum(
         len(nodes.nodes[n].get("text", ""))
         for n, d in nodes.nodes(data=True)
@@ -308,6 +310,7 @@ def api_dataset_detail(name: str):
         "num_edges": len(nodes.edges),
         "num_documents": num_docs,
         "num_chunks": num_chunks,
+        "num_facts": num_facts,
         "size": size,
         "quality": quality,
         "tips": tips,
@@ -524,6 +527,33 @@ def api_trust(name: str):
     ds.score_trust()
     ds.history.append("Trust scores computed")
     return jsonify({"message": "trust"})
+
+
+@app.post("/api/datasets/<name>/extract_facts")
+@login_required
+def api_extract_facts(name: str):
+    """Extract atomic facts from dataset chunks using an LLM."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    provider = request.json.get("provider") if request.json else None
+    profile = request.json.get("profile") if request.json else None
+    client = None
+    if provider or profile:
+        client = LLMClient(provider=provider, profile=profile)
+    ds.extract_facts(client)
+    ds.history.append("Facts extracted")
+    return jsonify({"message": "facts"})
+
+
+@app.get("/api/datasets/<name>/conflicts")
+@login_required
+def api_conflicts(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    conflicts = ds.find_conflicting_facts()
+    return jsonify(conflicts)
 
 
 @app.get("/api/datasets/<name>/export")

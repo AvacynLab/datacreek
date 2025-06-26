@@ -5,7 +5,7 @@
 # the root directory of this source tree.
 """Datacreek: tools for preparing synthetic data for LLM fine-tuning."""
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 from .config_models import GenerationSettings
 from .core.dataset import DatasetBuilder
@@ -23,6 +23,7 @@ from .pipelines import (
     get_pipelines_for_training,
     get_trainings_for_dataset,
 )
+from .utils.fact_extraction import extract_facts
 
 __all__ = [
     "GenerationPipeline",
@@ -38,5 +39,6 @@ __all__ = [
     "ingest_file",
     "to_kg",
     "ingest_into_dataset",
+    "extract_facts",
     "GenerationSettings",
 ]
