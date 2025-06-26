@@ -141,4 +141,3 @@ def test_search_with_links_data_wrapper():
         if r["id"] == "c2":
             assert r["depth"] == 1
             assert r["path"] == ["c1", "c2"]
-

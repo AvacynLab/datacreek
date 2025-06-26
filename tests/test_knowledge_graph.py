@@ -157,4 +157,3 @@ def test_search_with_links_data():
     second = next(r for r in results if r["id"] == "c2")
     assert second["depth"] == 1
     assert second["path"] == ["c1", "c2"]
-

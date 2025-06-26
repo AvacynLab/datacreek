@@ -61,9 +61,7 @@ class DatasetBuilder:
 
         return self.graph.search_with_links(query, k=k, hops=hops)
 
-    def search_with_links_data(
-        self, query: str, k: int = 5, hops: int = 1
-    ) -> List[Dict[str, Any]]:
+    def search_with_links_data(self, query: str, k: int = 5, hops: int = 1) -> List[Dict[str, Any]]:
         """Wrapper for :meth:`KnowledgeGraph.search_with_links_data`.
 
         Returns detailed chunk information, hop depth and traversal path.

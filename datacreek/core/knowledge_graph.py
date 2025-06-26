@@ -73,7 +73,11 @@ class KnowledgeGraph:
         """Delete ``chunk_id`` from the graph and index."""
         if not self.graph.has_node(chunk_id):
             return
-        preds = [p for p in self.graph.predecessors(chunk_id) if self.graph.edges[p, chunk_id].get("relation") == "has_chunk"]
+        preds = [
+            p
+            for p in self.graph.predecessors(chunk_id)
+            if self.graph.edges[p, chunk_id].get("relation") == "has_chunk"
+        ]
         doc_id = preds[0] if preds else None
         self.graph.remove_node(chunk_id)
         self.index.remove(chunk_id)
@@ -199,7 +203,9 @@ class KnowledgeGraph:
             # traverse both successors and predecessors so that similar chunks
             # are discovered regardless of edge direction
             for neighbor in list(self.graph.successors(node)) + list(self.graph.predecessors(node)):
-                rel = self.graph.edges.get((node, neighbor)) or self.graph.edges.get((neighbor, node))
+                rel = self.graph.edges.get((node, neighbor)) or self.graph.edges.get(
+                    (neighbor, node)
+                )
                 if not rel:
                     continue
                 if rel.get("relation") not in {"next_chunk", "similar_to"}:
@@ -212,9 +218,7 @@ class KnowledgeGraph:
 
         return results
 
-    def search_with_links_data(
-        self, query: str, k: int = 5, hops: int = 1
-    ) -> List[Dict[str, Any]]:
+    def search_with_links_data(self, query: str, k: int = 5, hops: int = 1) -> List[Dict[str, Any]]:
         """Return enriched search results expanding through graph links.
 
         Each item contains the chunk ``id``, its ``text``, owning ``document``
@@ -224,18 +228,14 @@ class KnowledgeGraph:
 
         seeds = self.search_hybrid(query, k)
         seen = set(seeds)
-        queue: List[tuple[str, int, List[str]]] = [
-            (cid, 0, [cid]) for cid in seeds
-        ]
+        queue: List[tuple[str, int, List[str]]] = [(cid, 0, [cid]) for cid in seeds]
         results: List[tuple[str, int, List[str]]] = queue.copy()
 
         while queue:
             node, depth, path = queue.pop(0)
             if depth >= hops:
                 continue
-            for nb in list(self.graph.successors(node)) + list(
-                self.graph.predecessors(node)
-            ):
+            for nb in list(self.graph.successors(node)) + list(self.graph.predecessors(node)):
                 rel = self.graph.edges.get((node, nb)) or self.graph.edges.get((nb, node))
                 if not rel or rel.get("relation") not in {"next_chunk", "similar_to"}:
                     continue
