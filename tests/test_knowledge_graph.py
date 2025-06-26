@@ -157,3 +157,54 @@ def test_search_with_links_data():
     second = next(r for r in results if r["id"] == "c2")
     assert second["depth"] == 1
     assert second["path"] == ["c1", "c2"]
+
+
+def test_community_and_trust():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    for i in range(3):
+        kg.add_chunk("doc", f"c{i}", f"text {i}")
+    kg.index.build()
+    kg.cluster_chunks(n_clusters=1)
+    kg.summarize_communities()
+    kg.score_trust()
+
+    comms = [n for n, d in kg.graph.nodes(data=True) if d.get("type") == "community"]
+    assert len(comms) == 1
+    cid = comms[0]
+    assert "summary" in kg.graph.nodes[cid]
+    for n, d in kg.graph.nodes(data=True):
+        if d.get("type") == "chunk":
+            assert "trust" in d
+
+
+def test_entity_groups():
+    kg = KnowledgeGraph()
+    kg.add_entity("e1", "first entity")
+    kg.add_entity("e2", "second entity")
+    kg.add_entity("e3", "other text")
+    kg.index.build()
+    kg.cluster_entities(n_clusters=1)
+    kg.summarize_entity_groups()
+
+    groups = [n for n, d in kg.graph.nodes(data=True) if d.get("type") == "entity_group"]
+    assert len(groups) == 1
+    gid = groups[0]
+    assert "summary" in kg.graph.nodes[gid]
+    members = [u for u, _ in kg.graph.in_edges(gid)]
+    assert set(members) == {"e1", "e2", "e3"}
+
+
+def test_edge_provenance_and_trust():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="src")
+    kg.add_chunk("d", "c1", "text", source="src")
+    kg.add_entity("e", "ent", source="src")
+    kg.link_entity("c1", "e", provenance="src")
+    kg.index.build()
+    kg.score_trust()
+
+    assert kg.graph.edges["d", "c1"]["provenance"] == "src"
+    assert "trust" in kg.graph.edges["d", "c1"]
+    assert kg.graph.edges["c1", "e"]["provenance"] == "src"
+    assert "trust" in kg.graph.edges["c1", "e"]

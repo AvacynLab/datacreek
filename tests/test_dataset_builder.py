@@ -141,3 +141,17 @@ def test_search_with_links_data_wrapper():
         if r["id"] == "c2":
             assert r["depth"] == 1
             assert r["path"] == ["c1", "c2"]
+
+
+def test_link_entity_source_and_trust():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="src")
+    ds.add_chunk("d", "c1", "hello", source="src")
+    ds.add_entity("e1", "entity", source="src")
+    ds.link_entity("c1", "e1", provenance="src")
+    ds.graph.index.build()
+    ds.score_trust()
+
+    edge = ds.graph.graph.edges["c1", "e1"]
+    assert edge["provenance"] == "src"
+    assert "trust" in edge

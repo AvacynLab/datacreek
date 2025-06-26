@@ -416,6 +416,116 @@ def api_deduplicate(name: str):
     return jsonify({"removed": removed})
 
 
+@app.post("/api/datasets/<name>/similarity")
+@login_required
+def api_similarity(name: str):
+    """Create similarity links between chunks."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    k = int(request.args.get("k", 3))
+    ds.link_similar_chunks(k=k)
+    ds.history.append("Similarity links created")
+    return jsonify({"message": "similarity"})
+
+
+@app.get("/api/datasets/<name>/search_hybrid")
+@login_required
+def api_search_hybrid(name: str):
+    """Hybrid lexical/vector search on chunks."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    query = request.args.get("q")
+    k = int(request.args.get("k", 5))
+    if not query:
+        return jsonify([])
+    ids = ds.search_hybrid(query, k=k)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/search_links")
+@login_required
+def api_search_links(name: str):
+    """Search and expand results through graph links."""
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    query = request.args.get("q")
+    k = int(request.args.get("k", 5))
+    hops = int(request.args.get("hops", 1))
+    if not query:
+        return jsonify([])
+    results = ds.search_with_links_data(query, k=k, hops=hops)
+    return jsonify(results)
+
+
+@app.post("/api/datasets/<name>/consolidate")
+@login_required
+def api_consolidate(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.consolidate_schema()
+    ds.history.append("Schema consolidated")
+    return jsonify({"message": "consolidated"})
+
+
+@app.post("/api/datasets/<name>/communities")
+@login_required
+def api_communities(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.detect_communities()
+    ds.history.append("Communities detected")
+    return jsonify({"message": "communities"})
+
+
+@app.post("/api/datasets/<name>/entity_groups")
+@login_required
+def api_entity_groups(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.detect_entity_groups()
+    ds.history.append("Entity groups detected")
+    return jsonify({"message": "entity_groups"})
+
+
+@app.post("/api/datasets/<name>/summaries")
+@login_required
+def api_summaries(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.summarize_communities()
+    ds.history.append("Communities summarized")
+    return jsonify({"message": "summaries"})
+
+
+@app.post("/api/datasets/<name>/entity_group_summaries")
+@login_required
+def api_entity_group_summaries(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.summarize_entity_groups()
+    ds.history.append("Entity groups summarized")
+    return jsonify({"message": "entity_group_summaries"})
+
+
+@app.post("/api/datasets/<name>/trust")
+@login_required
+def api_trust(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.score_trust()
+    ds.history.append("Trust scores computed")
+    return jsonify({"message": "trust"})
+
+
 @app.get("/api/datasets/<name>/export")
 @login_required
 def api_export_dataset(name: str):
