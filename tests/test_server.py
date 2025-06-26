@@ -211,9 +211,7 @@ def test_api_search_endpoints():
 
     with app.test_client() as client:
         _login(client)
-        res = client.get(
-            "/api/datasets/demo/search_hybrid", query_string={"q": "hello", "k": 1}
-        )
+        res = client.get("/api/datasets/demo/search_hybrid", query_string={"q": "hello", "k": 1})
         assert res.status_code == 200
         assert res.get_json()[0] == "c1"
 

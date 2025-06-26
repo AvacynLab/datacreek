@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import networkx as nx
 import numpy as np
-from sklearn.cluster import KMeans
 from neo4j import Driver, GraphDatabase
+from sklearn.cluster import KMeans
 
 from ..utils.retrieval import EmbeddingIndex
 
