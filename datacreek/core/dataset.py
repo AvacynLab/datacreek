@@ -56,6 +56,24 @@ class DatasetBuilder:
 
         return self.graph.search_hybrid(query, k=k)
 
+    def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
+        """Wrapper for :meth:`KnowledgeGraph.search_with_links`."""
+
+        return self.graph.search_with_links(query, k=k, hops=hops)
+
+    def search_with_links_data(self, query: str, k: int = 5, hops: int = 1) -> List[Dict[str, Any]]:
+        """Wrapper for :meth:`KnowledgeGraph.search_with_links_data`.
+
+        Returns detailed chunk information, hop depth and traversal path.
+        """
+
+        return self.graph.search_with_links_data(query, k=k, hops=hops)
+
+    def link_similar_chunks(self, k: int = 3) -> None:
+        """Create similarity edges between chunks using embeddings."""
+
+        self.graph.link_similar_chunks(k)
+
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
 
@@ -63,7 +81,7 @@ class DatasetBuilder:
         """Remove a chunk node from the dataset graph."""
         if self.graph.graph.has_node(chunk_id):
             preds = list(self.graph.graph.predecessors(chunk_id))
-            self.graph.graph.remove_node(chunk_id)
+            self.graph.remove_chunk(chunk_id)
             if preds:
                 self.history.append(f"Removed chunk {chunk_id} from {preds[0]}")
 
@@ -71,9 +89,7 @@ class DatasetBuilder:
         """Remove a document and all its chunks."""
         if not self.graph.graph.has_node(doc_id):
             return
-        chunks = self.get_chunks_for_document(doc_id)
-        self.graph.graph.remove_nodes_from(chunks)
-        self.graph.graph.remove_node(doc_id)
+        self.graph.remove_document(doc_id)
         self.history.append(f"Removed document {doc_id}")
 
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":

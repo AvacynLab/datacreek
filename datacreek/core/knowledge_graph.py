@@ -30,9 +30,70 @@ class KnowledgeGraph:
             source = self.graph.nodes[doc_id].get("source")
         if self.graph.has_node(chunk_id):
             raise ValueError(f"Chunk already exists: {chunk_id}")
+
+        # Determine the sequence index based on existing chunks
+        existing_chunks = self.get_chunks_for_document(doc_id)
+        sequence = len(existing_chunks)
+
+        # Add the chunk node and relation to the document
         self.graph.add_node(chunk_id, type="chunk", text=text, source=source)
-        self.graph.add_edge(doc_id, chunk_id, relation="has_chunk")
+        self.graph.add_edge(
+            doc_id,
+            chunk_id,
+            relation="has_chunk",
+            sequence=sequence,
+        )
+
+        # Connect to the previous chunk to keep the original order
+        if existing_chunks:
+            prev_chunk = existing_chunks[-1]
+            self.graph.add_edge(prev_chunk, chunk_id, relation="next_chunk")
+
         self.index.add(chunk_id, text)
+
+    def _renumber_chunks(self, doc_id: str) -> None:
+        """Update sequence numbers and next_chunk links for ``doc_id``."""
+        chunks = self.get_chunks_for_document(doc_id)
+        # Update sequence numbers
+        for i, cid in enumerate(chunks):
+            if (doc_id, cid) in self.graph.edges:
+                self.graph.edges[doc_id, cid]["sequence"] = i
+
+        # Remove existing next_chunk edges for this document
+        for cid in chunks:
+            for succ in list(self.graph.successors(cid)):
+                if self.graph.edges[cid, succ].get("relation") == "next_chunk":
+                    self.graph.remove_edge(cid, succ)
+
+        # Recreate next_chunk edges
+        for a, b in zip(chunks, chunks[1:]):
+            self.graph.add_edge(a, b, relation="next_chunk")
+
+    def remove_chunk(self, chunk_id: str) -> None:
+        """Delete ``chunk_id`` from the graph and index."""
+        if not self.graph.has_node(chunk_id):
+            return
+        preds = [
+            p
+            for p in self.graph.predecessors(chunk_id)
+            if self.graph.edges[p, chunk_id].get("relation") == "has_chunk"
+        ]
+        doc_id = preds[0] if preds else None
+        self.graph.remove_node(chunk_id)
+        self.index.remove(chunk_id)
+        if doc_id:
+            self._renumber_chunks(doc_id)
+
+    def remove_document(self, doc_id: str) -> None:
+        """Remove a document and all its chunks."""
+        if not self.graph.has_node(doc_id):
+            return
+        chunks = self.get_chunks_for_document(doc_id)
+        for cid in chunks:
+            self.index.remove(cid)
+        self.graph.remove_nodes_from(chunks)
+        if self.graph.has_node(doc_id):
+            self.graph.remove_node(doc_id)
 
     def search(self, query: str, node_type: str = "chunk") -> list[str]:
         """Return node IDs of the given type matching the query.
@@ -116,14 +177,120 @@ class KnowledgeGraph:
                 break
         return results
 
+    def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
+        """Return chunk IDs related to a query and expand via graph links.
+
+        Parameters
+        ----------
+        query:
+            Text to search for.
+        k:
+            Number of initial matches to retrieve via :meth:`search_hybrid`.
+        hops:
+            How many hops to traverse through ``next_chunk`` or ``similar_to``
+            relations starting from the initial results.
+        """
+
+        seeds = self.search_hybrid(query, k)
+        seen = set(seeds)
+        results = list(seeds)
+        queue = [(cid, 0) for cid in seeds]
+
+        while queue:
+            node, depth = queue.pop(0)
+            if depth >= hops:
+                continue
+            # traverse both successors and predecessors so that similar chunks
+            # are discovered regardless of edge direction
+            for neighbor in list(self.graph.successors(node)) + list(self.graph.predecessors(node)):
+                rel = self.graph.edges.get((node, neighbor)) or self.graph.edges.get(
+                    (neighbor, node)
+                )
+                if not rel:
+                    continue
+                if rel.get("relation") not in {"next_chunk", "similar_to"}:
+                    continue
+                if neighbor in seen:
+                    continue
+                seen.add(neighbor)
+                results.append(neighbor)
+                queue.append((neighbor, depth + 1))
+
+        return results
+
+    def search_with_links_data(self, query: str, k: int = 5, hops: int = 1) -> List[Dict[str, Any]]:
+        """Return enriched search results expanding through graph links.
+
+        Each item contains the chunk ``id``, its ``text``, owning ``document``
+        and ``source`` plus the hop ``depth`` and the ``path`` from the initial
+        result used to reach it.
+        """
+
+        seeds = self.search_hybrid(query, k)
+        seen = set(seeds)
+        queue: List[tuple[str, int, List[str]]] = [(cid, 0, [cid]) for cid in seeds]
+        results: List[tuple[str, int, List[str]]] = queue.copy()
+
+        while queue:
+            node, depth, path = queue.pop(0)
+            if depth >= hops:
+                continue
+            for nb in list(self.graph.successors(node)) + list(self.graph.predecessors(node)):
+                rel = self.graph.edges.get((node, nb)) or self.graph.edges.get((nb, node))
+                if not rel or rel.get("relation") not in {"next_chunk", "similar_to"}:
+                    continue
+                if nb in seen:
+                    continue
+                seen.add(nb)
+                new_path = path + [nb]
+                results.append((nb, depth + 1, new_path))
+                queue.append((nb, depth + 1, new_path))
+
+        out: List[Dict[str, Any]] = []
+        for cid, depth, path in results:
+            node = self.graph.nodes[cid]
+            doc_id = None
+            for pred in self.graph.predecessors(cid):
+                if self.graph.edges[pred, cid].get("relation") == "has_chunk":
+                    doc_id = pred
+                    break
+            out.append(
+                {
+                    "id": cid,
+                    "text": node.get("text"),
+                    "document": doc_id,
+                    "source": node.get("source"),
+                    "depth": depth,
+                    "path": path,
+                }
+            )
+        return out
+
+    def link_similar_chunks(self, k: int = 3) -> None:
+        """Add ``similar_to`` edges between semantically close chunks."""
+
+        neighbors = self.index.nearest_neighbors(k, return_distances=True)
+        for src, nb_list in neighbors.items():
+            for tgt, score in nb_list:
+                if src == tgt:
+                    continue
+                if (
+                    self.graph.has_edge(src, tgt)
+                    and self.graph.edges[src, tgt].get("relation") == "similar_to"
+                ):
+                    continue
+                self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
+
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         """Return all chunk IDs that belong to the given document."""
 
-        return [
-            tgt
-            for src, tgt, data in self.graph.edges(doc_id, data=True)
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
             if data.get("relation") == "has_chunk"
         ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the graph to a dictionary."""
@@ -214,9 +381,17 @@ class KnowledgeGraph:
                 kg.graph.add_node(node_id, type=node_type, **props)
                 if node_type == "chunk" and "text" in props:
                     kg.index.add(node_id, props["text"])
-            edges = tx.run("MATCH (a)-[r]->(b) RETURN a.id AS src, type(r) AS rel, b.id AS tgt")
+            edges = tx.run(
+                "MATCH (a)-[r]->(b) RETURN a.id AS src, type(r) AS rel, b.id AS tgt, r as rel_props"
+            )
             for record in edges:
-                kg.graph.add_edge(record["src"], record["tgt"], relation=record["rel"].lower())
+                props = dict(record["rel_props"])
+                kg.graph.add_edge(
+                    record["src"],
+                    record["tgt"],
+                    relation=record["rel"].lower(),
+                    **props,
+                )
 
         with driver.session() as session:
             session.execute_read(_read)

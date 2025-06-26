@@ -72,3 +72,88 @@ def test_hybrid_search():
     results = kg.search_hybrid("hello", k=2)
     assert results[0] == "c1"
     assert len(results) == 2
+
+
+def test_chunk_order_and_next_relations():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "t1")
+    kg.add_chunk("doc", "c2", "t2")
+    kg.add_chunk("doc", "c3", "t3")
+
+    # edges should have sequence numbers
+    assert kg.graph.edges["doc", "c1"]["sequence"] == 0
+    assert kg.graph.edges["doc", "c2"]["sequence"] == 1
+    assert kg.graph.edges["doc", "c3"]["sequence"] == 2
+
+    # next_chunk relations preserve order
+    assert ("c1", "c2") in kg.graph.edges
+    assert kg.graph.edges["c1", "c2"]["relation"] == "next_chunk"
+    assert kg.get_chunks_for_document("doc") == ["c1", "c2", "c3"]
+
+
+def test_serialization_preserves_order():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "first")
+    kg.add_chunk("d", "c2", "second")
+
+    data = kg.to_dict()
+    loaded = KnowledgeGraph.from_dict(data)
+    assert loaded.get_chunks_for_document("d") == ["c1", "c2"]
+
+
+def test_link_similar_chunks():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_chunk("doc", "c3", "unrelated text")
+
+    kg.index.build()
+    kg.link_similar_chunks(k=1)
+
+    assert ("c1", "c2") in kg.graph.edges
+    edge = kg.graph.edges["c1", "c2"]
+    assert edge["relation"] == "similar_to"
+    assert 0 < edge["similarity"] <= 1
+
+
+def test_search_with_links():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_chunk("doc", "c3", "different text")
+
+    kg.index.build()
+    kg.link_similar_chunks(k=1)
+
+    # search should return c1 and also c2 via the similarity edge
+    results = kg.search_with_links("hello", k=1, hops=1)
+    assert "c1" in results
+    assert "c2" in results
+
+
+def test_search_with_links_data():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_chunk("doc", "c3", "different text")
+
+    kg.index.build()
+    kg.link_similar_chunks(k=1)
+
+    results = kg.search_with_links_data("hello", k=1, hops=1)
+    ids = [r["id"] for r in results]
+    assert "c1" in ids
+    assert "c2" in ids
+    first = next(r for r in results if r["id"] == "c1")
+    assert first["text"] == "hello world"
+    assert first["document"] == "doc"
+    assert first["depth"] == 0
+    assert first["path"] == ["c1"]
+    second = next(r for r in results if r["id"] == "c2")
+    assert second["depth"] == 1
+    assert second["path"] == ["c1", "c2"]
