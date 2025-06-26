@@ -94,6 +94,28 @@ class KnowledgeGraph:
                 result.append(c)
         return result
 
+    def search_hybrid(self, query: str, k: int = 5) -> list[str]:
+        """Return chunk IDs by combining lexical and embedding search.
+
+        Results from plain text search are returned first followed by
+        semantic matches from the embedding index. Duplicate IDs are
+        removed while preserving order. Only the top ``k`` items are
+        returned.
+        """
+
+        lexical_matches = self.search_chunks(query)
+        embedding_ids = [self.index.get_id(i) for i in self.index.search(query, k)]
+
+        seen = set()
+        results: List[str] = []
+        for cid in lexical_matches + embedding_ids:
+            if cid not in seen:
+                seen.add(cid)
+                results.append(cid)
+            if len(results) >= k:
+                break
+        return results
+
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         """Return all chunk IDs that belong to the given document."""
 

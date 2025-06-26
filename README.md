@@ -360,6 +360,9 @@ ds.add_chunk("doc1", "c1", "hello world")
 print(ds.search("hello"))  # ["c1"]
 print(ds.search_documents("paper"))  # ["doc1"]
 print(ds.get_chunks_for_document("doc1"))  # ["c1"]
+ds.graph.index.build()
+print(ds.graph.search_embeddings("hello", k=1))  # ["c1"]
+print(ds.graph.search_hybrid("hello"))  # ["c1"]
 
 Files can also be ingested directly via the REST API:
 

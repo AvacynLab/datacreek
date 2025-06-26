@@ -22,6 +22,9 @@ def test_dataset_search_wrappers():
     assert ds.search_chunks("text") == ["c"]
     assert ds.search_documents("d") == ["d"]
     assert ds.get_chunks_for_document("d") == ["c"]
+    ds.graph.index.build()
+    assert ds.search_embeddings("text", k=1) == ["c"]
+    assert ds.search_hybrid("text", k=1) == ["c"]
 
 
 def test_dataset_clone():
