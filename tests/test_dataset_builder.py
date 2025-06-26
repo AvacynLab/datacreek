@@ -155,3 +155,14 @@ def test_link_entity_source_and_trust():
     edge = ds.graph.graph.edges["c1", "e1"]
     assert edge["provenance"] == "src"
     assert "trust" in edge
+
+
+def test_update_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.graph.index.build()
+    ds.update_embeddings()
+    emb = ds.graph.graph.nodes["c1"].get("embedding")
+    assert isinstance(emb, list)
+    assert len(emb) > 0

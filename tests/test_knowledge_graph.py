@@ -208,3 +208,14 @@ def test_edge_provenance_and_trust():
     assert "trust" in kg.graph.edges["d", "c1"]
     assert kg.graph.edges["c1", "e"]["provenance"] == "src"
     assert "trust" in kg.graph.edges["c1", "e"]
+
+
+def test_update_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello world")
+    kg.index.build()
+    kg.update_embeddings()
+    emb = kg.graph.nodes["c1"].get("embedding")
+    assert isinstance(emb, list)
+    assert len(emb) > 0

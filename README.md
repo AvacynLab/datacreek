@@ -366,6 +366,7 @@ print(ds.graph.search_hybrid("hello"))  # ["c1"]
 print(ds.search_with_links("hello", hops=1))  # ["c1", "c2", ...]
 print(ds.search_with_links_data("hello", hops=1)[0])  # includes depth and path
 ds.link_similar_chunks()         # connect semantically close chunks
+ds.update_embeddings()           # materialize embeddings on graph nodes
 
 # After ingestion you can further enrich the graph:
 ds.consolidate_schema()        # normalize labels
