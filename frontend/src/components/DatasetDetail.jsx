@@ -16,6 +16,7 @@ export default function DatasetDetail() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [curQuery, setCurQuery] = useState("");
+  const [conflicts, setConflicts] = useState([]);
   const graphRef = useRef();
 
   useEffect(() => {
@@ -84,6 +85,19 @@ export default function DatasetDetail() {
     fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
   }
 
+  async function extractFacts() {
+    const res = await fetch(`/api/datasets/${name}/extract_facts`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+  }
+
+  async function checkConflicts() {
+    const res = await fetch(`/api/datasets/${name}/conflicts`)
+    if (!res.ok) return
+    setConflicts(await res.json())
+  }
+
   async function graphSearch() {
     const params = new URLSearchParams({ q: searchQuery, hops: 1 })
     const res = await fetch(`/api/datasets/${name}/search_links?${params}`)
@@ -136,6 +150,12 @@ export default function DatasetDetail() {
                 <dd>{info.num_documents}</dd>
                 <dt className="font-medium">Chunks</dt>
                 <dd>{info.num_chunks}</dd>
+                {info.num_facts !== undefined && (
+                  <>
+                    <dt className="font-medium">Facts</dt>
+                    <dd>{info.num_facts}</dd>
+                  </>
+                )}
                 <dt className="font-medium">Size</dt>
                 <dd>{info.size}</dd>
               </dl>
@@ -265,6 +285,13 @@ export default function DatasetDetail() {
                     ))}
                   </ul>
                 )}
+                {conflicts.length > 0 && (
+                  <ul className="text-xs max-h-32 overflow-auto list-disc list-inside mt-2">
+                    {conflicts.map((c, i) => (
+                      <li key={i}>{c[0]} {c[1]} -> {Object.keys(c[2]).join(', ')}</li>
+                    ))}
+                  </ul>
+                )}
                 <div className="h-96">
                   <ForceGraph3D
                     ref={graphRef}
@@ -281,6 +308,8 @@ export default function DatasetDetail() {
                   <Button type="button" onClick={() => runOp('entity_group_summaries')}>Summarize Entities</Button>
                   <Button type="button" onClick={() => runOp('trust')}>Score Trust</Button>
                   <Button type="button" onClick={() => runOp('similarity')}>Link Similar</Button>
+                  <Button type="button" onClick={extractFacts}>Extract Facts</Button>
+                  <Button type="button" onClick={checkConflicts}>View Conflicts</Button>
                 </div>
               </div>
             )

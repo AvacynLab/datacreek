@@ -121,6 +121,56 @@ class DatasetBuilder:
 
         self.graph.update_embeddings(node_type=node_type)
 
+    def extract_facts(self, client: Optional["LLMClient"] = None) -> None:
+        """Run fact extraction on all chunk nodes."""
+
+        from datacreek.utils.fact_extraction import extract_facts
+
+        for cid, data in list(self.graph.graph.nodes(data=True)):
+            if data.get("type") != "chunk":
+                continue
+            facts = extract_facts(data.get("text", ""), client)
+            for i, fact in enumerate(facts):
+                fid = f"{cid}_fact_{i}"
+                self.graph.add_fact(
+                    fact["subject"],
+                    fact["predicate"],
+                    fact["object"],
+                    fact_id=fid,
+                    source=data.get("source"),
+                )
+                self.graph.graph.add_edge(
+                    cid, fid, relation="has_fact", provenance=data.get("source")
+                )
+
+    def find_conflicting_facts(self) -> List[tuple[str, str, Dict[str, List[str]]]]:
+        """Return edges with the same subject/predicate but different objects."""
+
+        conflicts: Dict[tuple[str, str], Dict[str, List[str]]] = {}
+        for u, v, edata in self.graph.graph.edges(data=True):
+            rel = edata.get("relation")
+            if not rel or rel in {
+                "has_chunk",
+                "next_chunk",
+                "subject",
+                "object",
+                "has_fact",
+                "mentions",
+            }:
+                continue
+            prov = edata.get("provenance")
+            key = (u, rel)
+            conflicts.setdefault(key, {})
+            conflicts[key].setdefault(v, [])
+            if prov:
+                conflicts[key][v].append(prov)
+
+        result = []
+        for key, obj_map in conflicts.items():
+            if len(obj_map) > 1:
+                result.append((key[0], key[1], obj_map))
+        return result
+
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
 
