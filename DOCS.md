@@ -721,6 +721,7 @@ chunk_ids = ds.get_chunks_for_document("doc1")
 # Embedding-based retrieval
 ds.graph.index.build()
 retrieved = ds.graph.search_embeddings("hello", k=1)
+retrieved_hybrid = ds.graph.search_hybrid("hello")
 
 # Clone the dataset to try different curation strategies
 ds_copy = ds.clone(name="copy")

@@ -59,3 +59,16 @@ def test_duplicate_checks():
     kg.add_chunk("d", "c1", "text")
     with pytest.raises(ValueError):
         kg.add_chunk("d", "c1", "text")
+
+
+def test_hybrid_search():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "bonjour le monde")
+    kg.add_chunk("doc", "c3", "greetings planet")
+    kg.index.build()
+
+    results = kg.search_hybrid("hello", k=2)
+    assert results[0] == "c1"
+    assert len(results) == 2

@@ -46,6 +46,16 @@ class DatasetBuilder:
     def search_documents(self, query: str) -> list[str]:
         return self.graph.search_documents(query)
 
+    def search_embeddings(self, query: str, k: int = 3, fetch_neighbors: bool = True) -> list[str]:
+        """Wrapper for :meth:`KnowledgeGraph.search_embeddings`."""
+
+        return self.graph.search_embeddings(query, k=k, fetch_neighbors=fetch_neighbors)
+
+    def search_hybrid(self, query: str, k: int = 5) -> list[str]:
+        """Wrapper for :meth:`KnowledgeGraph.search_hybrid`."""
+
+        return self.graph.search_hybrid(query, k=k)
+
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
 
