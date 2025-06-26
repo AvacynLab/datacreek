@@ -41,11 +41,15 @@ export default function DatasetWizard() {
     if (!res.ok) return
     if (!graphName) {
       for (const path of docs.filter(Boolean)) {
-        await fetch(`/api/datasets/${name}/ingest`, {
+        const resp = await fetch(`/api/datasets/${name}/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path })
         })
+        if (!resp.ok) {
+          // eslint-disable-next-line no-alert
+          alert(`Failed to ingest ${path}`)
+        }
       }
     }
     let genParams = {}

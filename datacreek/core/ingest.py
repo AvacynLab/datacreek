@@ -18,6 +18,28 @@ from datacreek.utils.text import split_into_chunks
 logger = logging.getLogger(__name__)
 
 
+def _resolve_input_path(file_path: str, config: Dict[str, Any]) -> str:
+    """Resolve ``file_path`` using configured input directories."""
+
+    if file_path.startswith(("http://", "https://")):
+        return file_path
+
+    if os.path.exists(file_path):
+        return file_path
+
+    ext = os.path.splitext(file_path)[1].lstrip(".").lower()
+    candidates = []
+    if ext:
+        candidates.append(os.path.join(get_path_config(config, "input", ext), file_path))
+    candidates.append(os.path.join(get_path_config(config, "input", "default"), file_path))
+
+    for cand in candidates:
+        if os.path.exists(cand):
+            return cand
+
+    return file_path
+
+
 def determine_parser(file_path: str, config: Dict[str, Any]):
     """Return a parser instance for the given resource."""
     # Check if it's a URL
@@ -29,16 +51,16 @@ def determine_parser(file_path: str, config: Dict[str, Any]):
         else:
             return HTMLParser()
 
-    if os.path.exists(file_path):
-        ext = os.path.splitext(file_path)[1].lower()
-        parser = get_parser_for_extension(ext)
-        if parser:
-            return parser
-        logger.error("Unsupported file extension: %s", ext)
-        raise ValueError(f"Unsupported file extension: {ext}")
+    if not os.path.exists(file_path):
+        logger.error("File not found: %s", file_path)
+        raise FileNotFoundError(f"File not found: {file_path}")
 
-    logger.error("File not found: %s", file_path)
-    raise FileNotFoundError(f"File not found: {file_path}")
+    ext = os.path.splitext(file_path)[1].lower()
+    parser = get_parser_for_extension(ext)
+    if parser:
+        return parser
+    logger.error("Unsupported file extension: %s", ext)
+    raise ValueError(f"Unsupported file extension: {ext}")
 
 
 def process_file(
@@ -51,13 +73,14 @@ def process_file(
 
     cfg = config or load_config()
 
-    parser = determine_parser(file_path, cfg)
-    content = parser.parse(file_path)
+    resolved = _resolve_input_path(file_path, cfg)
+    parser = determine_parser(resolved, cfg)
+    content = parser.parse(resolved)
 
     out_dir = Path(output_dir or get_path_config(cfg, "output", "parsed"))
     out_dir.mkdir(parents=True, exist_ok=True)
     if output_name is None:
-        stem = Path(file_path).stem
+        stem = Path(resolved).stem
         output_name = f"{stem}.txt"
     out_path = out_dir / output_name
     try:
