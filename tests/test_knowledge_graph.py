@@ -91,6 +91,8 @@ def test_chunk_order_and_next_relations():
     assert ("c1", "c2") in kg.graph.edges
     assert kg.graph.edges["c1", "c2"]["relation"] == "next_chunk"
     assert kg.get_chunks_for_document("doc") == ["c1", "c2", "c3"]
+    assert kg.get_next_chunk("c1") == "c2"
+    assert kg.get_previous_chunk("c3") == "c2"
 
 
 def test_serialization_preserves_order():
@@ -102,6 +104,21 @@ def test_serialization_preserves_order():
     data = kg.to_dict()
     loaded = KnowledgeGraph.from_dict(data)
     assert loaded.get_chunks_for_document("d") == ["c1", "c2"]
+
+
+def test_section_helpers():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "s1", title="Intro")
+    kg.add_section("doc", "s2", title="Body")
+    kg.add_chunk("doc", "c1", "t1", section_id="s1")
+    kg.add_chunk("doc", "c2", "t2", section_id="s2")
+
+    assert kg.get_sections_for_document("doc") == ["s1", "s2"]
+    assert kg.get_chunks_for_section("s1") == ["c1"]
+    assert kg.get_section_for_chunk("c2") == "s2"
+    assert kg.get_next_section("s1") == "s2"
+    assert kg.get_previous_section("s2") == "s1"
 
 
 def test_link_similar_chunks():
@@ -118,6 +135,60 @@ def test_link_similar_chunks():
     edge = kg.graph.edges["c1", "c2"]
     assert edge["relation"] == "similar_to"
     assert 0 < edge["similarity"] <= 1
+
+
+def test_embeddings_filter_by_type():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_entity("e1", "hello world")
+    kg.index.build()
+
+    # Should return only chunk IDs when searching embeddings
+    results = kg.search_embeddings("hello", k=1, node_type="chunk")
+    assert results == ["c1"]
+
+
+def test_hybrid_filter_by_type():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_entity("e1", "hello world")
+    kg.index.build()
+
+    # Should not return entity nodes when filtering for chunks
+    results = kg.search_hybrid("hello", k=2, node_type="chunk")
+    assert results == ["c1"]
+
+    # Should return the entity when requested
+    results = kg.search_hybrid("hello", k=1, node_type="entity")
+    assert results == ["e1"]
+
+
+def test_link_similar_chunks_ignores_entities():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_entity("e1", "hello universe")
+    kg.index.build()
+    kg.link_similar_chunks(k=1)
+
+    # no similar_to edge should involve entity nodes
+    for u, v, d in kg.graph.edges(data=True):
+        if d.get("relation") == "similar_to":
+            assert kg.graph.nodes[u]["type"] == "chunk"
+            assert kg.graph.nodes[v]["type"] == "chunk"
+
+
+def test_fact_search():
+    kg = KnowledgeGraph()
+    fid = kg.add_fact("Paris", "capital_of", "France")
+    kg.index.build()
+
+    assert kg.search("capital_of", node_type="fact") == [fid]
+    assert kg.search_embeddings("capital_of", k=1, node_type="fact") == [fid]
+    assert kg.search_hybrid("capital_of", k=1, node_type="fact") == [fid]
 
 
 def test_search_with_links():
@@ -289,3 +360,54 @@ def test_consolidate_schema():
 
     assert kg.graph.nodes["e1"]["type"] == "entity"
     assert kg.graph.edges["e1", "e2"]["relation"] == "related"
+
+
+def test_entity_helpers():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "Paris is nice")
+    kg.add_chunk("d", "c2", "France is big")
+    kg.add_entity("Paris", "Paris")
+    kg.add_entity("France", "France")
+    kg.link_entity("c1", "Paris")
+    kg.link_entity("c2", "France")
+    fid = kg.add_fact("Paris", "capital_of", "France")
+
+    assert kg.get_chunks_for_entity("Paris") == ["c1"]
+    assert kg.get_facts_for_entity("France") == [fid]
+
+
+def test_fact_helpers():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "text")
+    fid = kg.add_fact("A", "related", "B")
+    kg.graph.add_edge("c1", fid, relation="has_fact")
+
+    assert kg.get_facts_for_chunk("c1") == [fid]
+    assert kg.get_facts_for_document("d") == [fid]
+    assert kg.get_chunks_for_fact(fid) == ["c1"]
+    assert set(kg.get_entities_for_fact(fid)) == {"A", "B"}
+
+
+def test_find_facts():
+    kg = KnowledgeGraph()
+    kg.add_fact("A", "likes", "B", fact_id="f1")
+    kg.add_fact("A", "likes", "C", fact_id="f2")
+
+    assert set(kg.find_facts(subject="A", predicate="likes")) == {"f1", "f2"}
+
+
+def test_entity_lookup_helpers():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "Paris is nice")
+    kg.add_chunk("doc", "c2", "Berlin is big")
+    kg.add_entity("Paris", "Paris")
+    kg.add_entity("Berlin", "Berlin")
+    kg.link_entity("c1", "Paris")
+    kg.link_entity("c2", "Berlin")
+
+    assert kg.get_entities_for_chunk("c1") == ["Paris"]
+    assert set(kg.get_entities_for_document("doc")) == {"Paris", "Berlin"}
+    assert kg.get_documents_for_entity("Berlin") == ["doc"]

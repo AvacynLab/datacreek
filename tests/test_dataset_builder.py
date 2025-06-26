@@ -27,6 +27,15 @@ def test_dataset_search_wrappers():
     assert ds.search_embeddings("text", k=1) == ["c"]
     assert ds.search_hybrid("text", k=1) == ["c"]
 
+    ds.add_entity("e", "text")
+    ds.graph.index.build()
+    assert ds.search_hybrid("text", k=1, node_type="entity") == ["e"]
+
+    fid = ds.graph.add_fact("A", "related", "B")
+    ds.graph.index.build()
+    assert ds.search_facts("related") == [fid]
+    assert ds.search_hybrid("related", k=1, node_type="fact") == [fid]
+
 
 def test_dataset_clone():
     ds = DatasetBuilder(DatasetType.QA, name="orig")
@@ -139,9 +148,30 @@ def test_search_with_links_data_wrapper():
             assert r["document"] == "d"
             assert r["depth"] == 0
             assert r["path"] == ["c1"]
-        if r["id"] == "c2":
+        else:
             assert r["depth"] == 1
-            assert r["path"] == ["c1", "c2"]
+            assert r["path"][0] == "c1"
+            assert r["path"][1] == r["id"]
+
+
+def test_section_helpers_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "s1", title="Intro")
+    ds.add_section("doc", "s2", title="Body")
+    ds.add_chunk("doc", "c1", "t1", section_id="s1")
+    ds.add_chunk("doc", "c2", "t2", section_id="s2")
+
+    assert ds.get_sections_for_document("doc") == ["s1", "s2"]
+    assert ds.get_chunks_for_section("s1") == ["c1"]
+    assert ds.get_section_for_chunk("c2") == "s2"
+    assert ds.get_next_chunk("c1") == "c2"
+    assert ds.get_previous_chunk("c2") == "c1"
+    assert ds.get_next_section("s1") == "s2"
+    assert ds.get_previous_section("s2") == "s1"
+
+    assert ds.search_entities("intro") == []
+    assert ds.search_sections("intro") == ["s1"]
 
 
 def test_link_entity_source_and_trust():
@@ -234,3 +264,58 @@ def test_consolidate_schema_wrapper():
 
     assert ds.graph.graph.nodes["e1"]["type"] == "entity"
     assert ds.graph.graph.edges["e1", "e2"]["relation"] == "related"
+
+
+def test_entity_helpers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_chunk("doc", "c1", "Paris is nice")
+    ds.add_chunk("doc", "c2", "France is big")
+    ds.add_entity("Paris", "Paris")
+    ds.add_entity("France", "France")
+    ds.link_entity("c1", "Paris")
+    ds.link_entity("c2", "France")
+    fid = ds.graph.add_fact("Paris", "capital_of", "France")
+
+    assert ds.get_chunks_for_entity("Paris") == ["c1"]
+    assert ds.get_facts_for_entity("France") == [fid]
+
+
+def test_fact_helpers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_chunk("doc", "c1", "text")
+    fid = ds.graph.add_fact("A", "related", "B")
+    ds.graph.graph.add_edge("c1", fid, relation="has_fact")
+
+    assert ds.get_facts_for_chunk("c1") == [fid]
+    assert ds.get_facts_for_document("doc") == [fid]
+    assert ds.get_chunks_for_fact(fid) == ["c1"]
+    assert set(ds.get_entities_for_fact(fid)) == {"A", "B"}
+
+
+def test_find_facts_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "text")
+    f1 = ds.graph.add_fact("A", "likes", "B")
+    f2 = ds.graph.add_fact("A", "likes", "C")
+    ds.graph.graph.add_edge("c1", f1, relation="has_fact")
+    ds.graph.graph.add_edge("c1", f2, relation="has_fact")
+
+    assert set(ds.find_facts(subject="A", predicate="likes")) == {f1, f2}
+
+
+def test_entity_lookup_helpers_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_chunk("doc", "c1", "Paris is nice")
+    ds.add_chunk("doc", "c2", "Berlin is big")
+    ds.add_entity("Paris", "Paris")
+    ds.add_entity("Berlin", "Berlin")
+    ds.link_entity("c1", "Paris")
+    ds.link_entity("c2", "Berlin")
+
+    assert ds.get_entities_for_chunk("c1") == ["Paris"]
+    assert set(ds.get_entities_for_document("doc")) == {"Paris", "Berlin"}
+    assert ds.get_documents_for_entity("Berlin") == ["doc"]

@@ -31,12 +31,25 @@ class DatasetBuilder:
         """Insert a document node in the dataset graph."""
         self.graph.add_document(doc_id, source)
 
+    def add_section(
+        self, doc_id: str, section_id: str, title: str | None = None, source: Optional[str] = None
+    ) -> None:
+        """Insert a section node for ``doc_id``."""
+
+        self.graph.add_section(doc_id, section_id, title=title, source=source)
+
     def add_chunk(
-        self, doc_id: str, chunk_id: str, text: str, source: Optional[str] = None
+        self,
+        doc_id: str,
+        chunk_id: str,
+        text: str,
+        source: Optional[str] = None,
+        *,
+        section_id: str | None = None,
     ) -> None:
         """Insert a chunk node in the dataset graph."""
 
-        self.graph.add_chunk(doc_id, chunk_id, text, source)
+        self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id)
 
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
@@ -64,15 +77,42 @@ class DatasetBuilder:
     def search_documents(self, query: str) -> list[str]:
         return self.graph.search_documents(query)
 
-    def search_embeddings(self, query: str, k: int = 3, fetch_neighbors: bool = True) -> list[str]:
+    def search_entities(self, query: str) -> list[str]:
+        """Return entity IDs matching ``query``."""
+
+        return self.graph.search(query, node_type="entity")
+
+    def search_sections(self, query: str) -> list[str]:
+        """Return section IDs whose title or ID matches ``query``."""
+
+        return self.graph.search(query, node_type="section")
+
+    def search_facts(self, query: str) -> list[str]:
+        """Return fact IDs whose subject, predicate or object matches the query."""
+
+        return self.graph.search(query, node_type="fact")
+
+    def search_embeddings(
+        self,
+        query: str,
+        k: int = 3,
+        fetch_neighbors: bool = True,
+        *,
+        node_type: str = "chunk",
+    ) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_embeddings`."""
 
-        return self.graph.search_embeddings(query, k=k, fetch_neighbors=fetch_neighbors)
+        return self.graph.search_embeddings(
+            query,
+            k=k,
+            fetch_neighbors=fetch_neighbors,
+            node_type=node_type,
+        )
 
-    def search_hybrid(self, query: str, k: int = 5) -> list[str]:
+    def search_hybrid(self, query: str, k: int = 5, *, node_type: str = "chunk") -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_hybrid`."""
 
-        return self.graph.search_hybrid(query, k=k)
+        return self.graph.search_hybrid(query, k=k, node_type=node_type)
 
     def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_with_links`."""
@@ -206,6 +246,91 @@ class DatasetBuilder:
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
+
+    def get_sections_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_sections_for_document(doc_id)
+
+    def get_chunks_for_section(self, section_id: str) -> list[str]:
+        return self.graph.get_chunks_for_section(section_id)
+
+    def get_section_for_chunk(self, chunk_id: str) -> str | None:
+        return self.graph.get_section_for_chunk(chunk_id)
+
+    def get_next_chunk(self, chunk_id: str) -> str | None:
+        """Return the chunk following ``chunk_id`` if any."""
+
+        return self.graph.get_next_chunk(chunk_id)
+
+    def get_previous_chunk(self, chunk_id: str) -> str | None:
+        """Return the chunk preceding ``chunk_id`` if any."""
+
+        return self.graph.get_previous_chunk(chunk_id)
+
+    def get_next_section(self, section_id: str) -> str | None:
+        """Return the section following ``section_id`` if any."""
+
+        return self.graph.get_next_section(section_id)
+
+    def get_previous_section(self, section_id: str) -> str | None:
+        """Return the section preceding ``section_id`` if any."""
+
+        return self.graph.get_previous_section(section_id)
+
+    def get_facts_for_chunk(self, chunk_id: str) -> list[str]:
+        """Return fact IDs attached to ``chunk_id``."""
+
+        return self.graph.get_facts_for_chunk(chunk_id)
+
+    def get_facts_for_document(self, doc_id: str) -> list[str]:
+        """Return fact IDs related to any chunk of ``doc_id``."""
+
+        return self.graph.get_facts_for_document(doc_id)
+
+    def get_chunks_for_fact(self, fact_id: str) -> list[str]:
+        """Return chunk IDs referencing ``fact_id``."""
+
+        return self.graph.get_chunks_for_fact(fact_id)
+
+    def get_entities_for_fact(self, fact_id: str) -> list[str]:
+        """Return entity IDs linked as subject or object of ``fact_id``."""
+
+        return self.graph.get_entities_for_fact(fact_id)
+
+    def get_facts_for_entity(self, entity_id: str) -> list[str]:
+        """Return fact IDs connected to ``entity_id``."""
+
+        return self.graph.get_facts_for_entity(entity_id)
+
+    def get_chunks_for_entity(self, entity_id: str) -> list[str]:
+        """Return chunk IDs mentioning ``entity_id``."""
+
+        return self.graph.get_chunks_for_entity(entity_id)
+
+    def get_entities_for_chunk(self, chunk_id: str) -> list[str]:
+        """Return entity IDs mentioned in ``chunk_id``."""
+
+        return self.graph.get_entities_for_chunk(chunk_id)
+
+    def get_entities_for_document(self, doc_id: str) -> list[str]:
+        """Return entity IDs mentioned anywhere in ``doc_id``."""
+
+        return self.graph.get_entities_for_document(doc_id)
+
+    def find_facts(
+        self,
+        *,
+        subject: str | None = None,
+        predicate: str | None = None,
+        object: str | None = None,
+    ) -> list[str]:
+        """Wrapper for :meth:`KnowledgeGraph.find_facts`."""
+
+        return self.graph.find_facts(subject=subject, predicate=predicate, object=object)
+
+    def get_documents_for_entity(self, entity_id: str) -> list[str]:
+        """Return document IDs where ``entity_id`` is mentioned."""
+
+        return self.graph.get_documents_for_entity(entity_id)
 
     def remove_chunk(self, chunk_id: str) -> None:
         """Remove a chunk node from the dataset graph."""
