@@ -361,6 +361,18 @@ print(ds.search("hello"))  # ["c1"]
 print(ds.search_documents("paper"))  # ["doc1"]
 print(ds.get_chunks_for_document("doc1"))  # ["c1"]
 
+Files can also be ingested directly via the REST API:
+
+```bash
+curl -X POST localhost:8000/api/datasets/example/ingest \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: <key>" \
+     -d '{"path": "paper.pdf"}'
+```
+
+The `path` is resolved using the configured input directories so relative
+filenames work out of the box.
+
 # Clone a dataset to experiment with different cleaning steps
 ds_copy = ds.clone(name="copy")
 
@@ -388,6 +400,8 @@ from datacreek import ingest_file, to_kg
 text = ingest_file("paper.pdf")
 to_kg(text, ds, "paper")
 ```
+`ingest_file` will also search the input directories configured in
+`config.yaml` when the provided path does not exist.
 
 ### Mental Model:
 

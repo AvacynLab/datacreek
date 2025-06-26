@@ -35,3 +35,12 @@ def test_determine_parser_errors(tmp_path):
     bad_file.write_text("x")
     with pytest.raises(ValueError):
         ingest_file(str(bad_file))
+
+
+def test_ingest_resolves_input_path(tmp_path):
+    f = tmp_path / "doc.txt"
+    f.write_text("hi")
+
+    cfg = {"paths": {"input": {"txt": str(tmp_path), "default": str(tmp_path)}}}
+    text = ingest_file("doc.txt", config=cfg)
+    assert text == "hi"

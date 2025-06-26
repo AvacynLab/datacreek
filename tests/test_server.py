@@ -106,7 +106,32 @@ def test_dataset_ingest_route(tmp_path):
             follow_redirects=True,
         )
         assert res.status_code == 200
-        assert ds.search_chunks("hello") == ["doc1_chunk_0"]
+    assert ds.search_chunks("hello") == ["doc1_chunk_0"]
+    DATASETS.clear()
+
+
+def test_api_dataset_ingest_resolves_path(tmp_path):
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    DATASETS["demo"] = ds
+
+    f = tmp_path / "doc.txt"
+    f.write_text("hello world")
+
+    cfg = {"paths": {"input": {"txt": str(tmp_path), "default": str(tmp_path)}}}
+    orig = app_module.config
+    app_module.config = cfg
+    try:
+        with app.test_client() as client:
+            _login(client)
+            res = client.post(
+                "/api/datasets/demo/ingest",
+                json={"path": "doc.txt"},
+            )
+            assert res.status_code == 200
+    finally:
+        app_module.config = orig
+
+    assert ds.search_chunks("hello") == ["doc_chunk_0"]
     DATASETS.clear()
 
 
