@@ -19,4 +19,3 @@ def test_dataset_extract_facts():
     assert len(fact_nodes) == 1
     edges = ds.graph.graph.edges(fact_nodes[0])
     assert any(ds.graph.graph.edges[e]["relation"] == "subject" for e in edges)
-
