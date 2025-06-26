@@ -12,11 +12,7 @@ from typing import Any, Dict, Optional
 
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.parsers import HTMLParser, YouTubeParser, get_parser_for_extension
-from datacreek.utils.config import (
-    get_generation_config,
-    get_path_config,
-    load_config,
-)
+from datacreek.utils.config import get_generation_config, get_path_config, load_config
 from datacreek.utils.text import split_into_chunks
 
 logger = logging.getLogger(__name__)
