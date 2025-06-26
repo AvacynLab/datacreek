@@ -338,13 +338,30 @@ class KnowledgeGraph:
 
     def _node_embedding(self, node: str) -> Optional[np.ndarray]:
         data = self.graph.nodes[node]
+        if "embedding" in data:
+            emb = np.array(data["embedding"], dtype=float)
+            return emb
         text = data.get("text")
         if not text:
             return None
         vec = self.index.embed(text)
         if vec.size == 0:
             return None
+        data["embedding"] = vec.tolist()
         return vec
+
+    def update_embeddings(self, node_type: str = "chunk") -> None:
+        """Materialize embeddings for nodes of ``node_type``."""
+
+        for n, d in self.graph.nodes(data=True):
+            if d.get("type") != node_type:
+                continue
+            text = d.get("text")
+            if not text:
+                continue
+            vec = self.index.embed(text)
+            if vec.size:
+                self.graph.nodes[n]["embedding"] = vec.tolist()
 
     def cluster_chunks(self, n_clusters: int = 3) -> None:
         """Cluster chunk nodes and attach ``community`` nodes."""

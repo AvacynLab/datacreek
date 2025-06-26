@@ -116,6 +116,11 @@ class DatasetBuilder:
     def score_trust(self) -> None:
         self.graph.score_trust()
 
+    def update_embeddings(self, node_type: str = "chunk") -> None:
+        """Materialize embeddings for nodes of ``node_type``."""
+
+        self.graph.update_embeddings(node_type=node_type)
+
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
 
