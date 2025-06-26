@@ -198,3 +198,52 @@ def test_load_dataset_neo4j(monkeypatch):
         assert res.status_code == 302
     assert ds.graph is new_graph
     DATASETS.clear()
+
+
+def test_api_search_endpoints():
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.graph.index.build()
+    ds.link_similar_chunks(k=1)
+    DATASETS["demo"] = ds
+
+    with app.test_client() as client:
+        _login(client)
+        res = client.get(
+            "/api/datasets/demo/search_hybrid", query_string={"q": "hello", "k": 1}
+        )
+        assert res.status_code == 200
+        assert res.get_json()[0] == "c1"
+
+        res = client.get(
+            "/api/datasets/demo/search_links",
+            query_string={"q": "hello", "k": 1, "hops": 1},
+        )
+        assert res.status_code == 200
+        ids = [r["id"] for r in res.get_json()]
+        assert "c1" in ids and "c2" in ids
+    DATASETS.clear()
+
+
+def test_dataset_ops_endpoints():
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "hello")
+    DATASETS["demo"] = ds
+
+    with app.test_client() as client:
+        _login(client)
+        for op in [
+            "consolidate",
+            "communities",
+            "summaries",
+            "trust",
+            "similarity",
+            "entity_groups",
+            "entity_group_summaries",
+        ]:
+            res = client.post(f"/api/datasets/demo/{op}")
+            assert res.status_code == 200
+    DATASETS.clear()

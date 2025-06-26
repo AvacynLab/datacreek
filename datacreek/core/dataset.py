@@ -35,7 +35,25 @@ class DatasetBuilder:
         self, doc_id: str, chunk_id: str, text: str, source: Optional[str] = None
     ) -> None:
         """Insert a chunk node in the dataset graph."""
+
         self.graph.add_chunk(doc_id, chunk_id, text, source)
+
+    def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
+        """Insert an entity node."""
+
+        self.graph.add_entity(entity_id, text, source)
+
+    def link_entity(
+        self,
+        node_id: str,
+        entity_id: str,
+        relation: str = "mentions",
+        *,
+        provenance: Optional[str] = None,
+    ) -> None:
+        """Link an entity to another node."""
+
+        self.graph.link_entity(node_id, entity_id, relation, provenance=provenance)
 
     def search_chunks(self, query: str) -> list[str]:
         return self.graph.search_chunks(query)
@@ -73,6 +91,30 @@ class DatasetBuilder:
         """Create similarity edges between chunks using embeddings."""
 
         self.graph.link_similar_chunks(k)
+
+    def consolidate_schema(self) -> None:
+        """Normalize labels in the underlying knowledge graph."""
+
+        self.graph.consolidate_schema()
+
+    def detect_communities(self, n_clusters: int = 3) -> None:
+        """Cluster chunks into communities."""
+
+        self.graph.cluster_chunks(n_clusters=n_clusters)
+
+    def detect_entity_groups(self, n_clusters: int = 3) -> None:
+        """Cluster entity nodes into groups."""
+
+        self.graph.cluster_entities(n_clusters=n_clusters)
+
+    def summarize_entity_groups(self) -> None:
+        self.graph.summarize_entity_groups()
+
+    def summarize_communities(self) -> None:
+        self.graph.summarize_communities()
+
+    def score_trust(self) -> None:
+        self.graph.score_trust()
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)

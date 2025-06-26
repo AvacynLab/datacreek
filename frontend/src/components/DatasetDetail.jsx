@@ -13,6 +13,8 @@ export default function DatasetDetail() {
   const [content, setContent] = useState([]);
   const [filters, setFilters] = useState({ document: true, chunk: true });
   const [sourceFilter, setSourceFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
   const [curQuery, setCurQuery] = useState("");
   const graphRef = useRef();
 
@@ -73,6 +75,20 @@ export default function DatasetDetail() {
     if (!res.ok) return
     fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
     fetch(`/api/datasets/${name}/content`).then(r => r.json()).then(setContent)
+  }
+
+  async function runOp(op) {
+    const res = await fetch(`/api/datasets/${name}/${op}`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+  }
+
+  async function graphSearch() {
+    const params = new URLSearchParams({ q: searchQuery, hops: 1 })
+    const res = await fetch(`/api/datasets/${name}/search_links?${params}`)
+    if (!res.ok) return
+    setSearchResults(await res.json())
   }
 
   async function exportDataset() {
@@ -231,6 +247,24 @@ export default function DatasetDetail() {
                   value={sourceFilter}
                   onChange={(e) => setSourceFilter(e.target.value)}
                 />
+                <div className="flex gap-2 mt-2">
+                  <input
+                    className="border rounded p-2 text-sm flex-1"
+                    placeholder="Search graph"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <Button type="button" onClick={graphSearch}>
+                    Search
+                  </Button>
+                </div>
+                {searchResults.length > 0 && (
+                  <ul className="text-xs max-h-32 overflow-auto list-disc list-inside mt-2">
+                    {searchResults.map((r) => (
+                      <li key={r.id}>{r.text.slice(0, 80)}</li>
+                    ))}
+                  </ul>
+                )}
                 <div className="h-96">
                   <ForceGraph3D
                     ref={graphRef}
@@ -238,6 +272,15 @@ export default function DatasetDetail() {
                     nodeLabel={(n) => `${n.id} (${n.type})`}
                     nodeAutoColorBy="type"
                   />
+                </div>
+                <div className="flex gap-2 text-sm">
+                  <Button type="button" onClick={() => runOp('consolidate')}>Consolidate Schema</Button>
+                  <Button type="button" onClick={() => runOp('communities')}>Detect Communities</Button>
+                  <Button type="button" onClick={() => runOp('summaries')}>Summarize</Button>
+                  <Button type="button" onClick={() => runOp('entity_groups')}>Cluster Entities</Button>
+                  <Button type="button" onClick={() => runOp('entity_group_summaries')}>Summarize Entities</Button>
+                  <Button type="button" onClick={() => runOp('trust')}>Score Trust</Button>
+                  <Button type="button" onClick={() => runOp('similarity')}>Link Similar</Button>
                 </div>
               </div>
             )

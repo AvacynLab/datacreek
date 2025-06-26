@@ -365,6 +365,16 @@ print(ds.graph.search_embeddings("hello", k=1))  # ["c1"]
 print(ds.graph.search_hybrid("hello"))  # ["c1"]
 print(ds.search_with_links("hello", hops=1))  # ["c1", "c2", ...]
 print(ds.search_with_links_data("hello", hops=1)[0])  # includes depth and path
+ds.link_similar_chunks()         # connect semantically close chunks
+
+# After ingestion you can further enrich the graph:
+ds.consolidate_schema()        # normalize labels
+ds.detect_communities()        # cluster chunks
+ds.summarize_communities()     # generate simple summaries
+ds.detect_entity_groups()      # cluster entities
+ds.summarize_entity_groups()   # summarize entity groups
+ds.score_trust()               # compute naive trust scores
+# provenance is stored on edges so you can track sources
 
 Files can also be ingested directly via the REST API:
 
@@ -373,6 +383,14 @@ curl -X POST localhost:8000/api/datasets/example/ingest \
      -H "Content-Type: application/json" \
      -H "X-API-Key: <key>" \
      -d '{"path": "paper.pdf"}'
+```
+
+You can then enrich and query the graph via the API:
+
+```bash
+curl -X POST localhost:8000/api/datasets/example/similarity -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/search_hybrid?q=hello -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/search_links?q=hello\&hops=1 -H "X-API-Key: <key>"
 ```
 
 The `path` is resolved using the configured input directories so relative

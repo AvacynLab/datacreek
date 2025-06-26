@@ -97,3 +97,22 @@ class EmbeddingIndex:
 
     def get_id(self, idx: int) -> str:
         return self.ids[idx]
+
+    # ------------------------------------------------------------------
+    # New helpers
+    # ------------------------------------------------------------------
+
+    def transform(self, texts: List[str]) -> np.ndarray:
+        """Return embeddings for ``texts`` using the internal vectorizer."""
+
+        if self._vectorizer is None:
+            self.build()
+        if self._vectorizer is None:  # no texts indexed
+            return np.empty((0, 0))
+        return self._vectorizer.transform(texts).toarray()
+
+    def embed(self, text: str) -> np.ndarray:
+        """Return the embedding vector for ``text``."""
+
+        mat = self.transform([text])
+        return mat[0] if len(mat) else np.zeros(0)

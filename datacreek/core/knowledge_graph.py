@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import networkx as nx
+import numpy as np
+from sklearn.cluster import KMeans
 from neo4j import Driver, GraphDatabase
 
 from ..utils.retrieval import EmbeddingIndex
@@ -22,6 +24,44 @@ class KnowledgeGraph:
         if self.graph.has_node(doc_id):
             raise ValueError(f"Document already exists: {doc_id}")
         self.graph.add_node(doc_id, type="document", source=source)
+
+    def add_entity(self, entity_id: str, text: str, source: str | None = None) -> None:
+        """Insert an entity node."""
+
+        if self.graph.has_node(entity_id):
+            raise ValueError(f"Entity already exists: {entity_id}")
+        self.graph.add_node(entity_id, type="entity", text=text, source=source)
+        if text:
+            self.index.add(entity_id, text)
+
+    def link_entity(
+        self,
+        node_id: str,
+        entity_id: str,
+        relation: str = "mentions",
+        *,
+        provenance: str | None = None,
+    ) -> None:
+        """Create a relation between ``node_id`` and ``entity_id``.
+
+        Parameters
+        ----------
+        node_id: str
+            ID of the source node (chunk or document).
+        entity_id: str
+            ID of the entity node.
+        relation: str, optional
+            Label for the relation. Defaults to ``"mentions"``.
+        provenance: str, optional
+            Provenance for the relation. If omitted, ``node_id``'s ``source`` is
+            used when available.
+        """
+
+        if not self.graph.has_node(node_id) or not self.graph.has_node(entity_id):
+            raise ValueError("Unknown node")
+        if provenance is None:
+            provenance = self.graph.nodes[node_id].get("source")
+        self.graph.add_edge(node_id, entity_id, relation=relation, provenance=provenance)
 
     def add_chunk(
         self, doc_id: str, chunk_id: str, text: str, source: Optional[str] = None
@@ -42,6 +82,7 @@ class KnowledgeGraph:
             chunk_id,
             relation="has_chunk",
             sequence=sequence,
+            provenance=source,
         )
 
         # Connect to the previous chunk to keep the original order
@@ -280,6 +321,122 @@ class KnowledgeGraph:
                 ):
                     continue
                 self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
+
+    # ------------------------------------------------------------------
+    # Advanced operations
+    # ------------------------------------------------------------------
+
+    def consolidate_schema(self) -> None:
+        """Normalize node types and relation labels to lowercase."""
+
+        for n, data in list(self.graph.nodes(data=True)):
+            if "type" in data:
+                data["type"] = str(data["type"]).lower()
+        for u, v, data in list(self.graph.edges(data=True)):
+            if "relation" in data:
+                data["relation"] = str(data["relation"]).lower()
+
+    def _node_embedding(self, node: str) -> Optional[np.ndarray]:
+        data = self.graph.nodes[node]
+        text = data.get("text")
+        if not text:
+            return None
+        vec = self.index.embed(text)
+        if vec.size == 0:
+            return None
+        return vec
+
+    def cluster_chunks(self, n_clusters: int = 3) -> None:
+        """Cluster chunk nodes and attach ``community`` nodes."""
+
+        chunks = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "chunk"]
+        embeddings = [self._node_embedding(n) for n in chunks]
+        embeddings = [e for e in embeddings if e is not None]
+        if not embeddings:
+            return
+        X = np.vstack(embeddings)
+        n_clusters = min(n_clusters, len(X))
+        km = KMeans(n_clusters=n_clusters, n_init=10)
+        labels = km.fit_predict(X)
+        for cid in {f"community_{i}" for i in labels}:
+            if not self.graph.has_node(cid):
+                self.graph.add_node(cid, type="community")
+        for node, label in zip(chunks, labels):
+            cid = f"community_{label}"
+            self.graph.add_edge(node, cid, relation="in_community")
+
+    def cluster_entities(self, n_clusters: int = 3) -> None:
+        """Cluster entity nodes into groups using embeddings."""
+
+        entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
+        embeddings = [self._node_embedding(n) for n in entities]
+        embeddings = [e for e in embeddings if e is not None]
+        if not embeddings:
+            return
+        X = np.vstack(embeddings)
+        n_clusters = min(n_clusters, len(X))
+        km = KMeans(n_clusters=n_clusters, n_init=10)
+        labels = km.fit_predict(X)
+        for gid in {f"entity_group_{i}" for i in labels}:
+            if not self.graph.has_node(gid):
+                self.graph.add_node(gid, type="entity_group")
+        for node, label in zip(entities, labels):
+            gid = f"entity_group_{label}"
+            self.graph.add_edge(node, gid, relation="in_group")
+
+    def summarize_communities(self) -> None:
+        """Create a simple summary text for each community node."""
+
+        for c in [n for n, d in self.graph.nodes(data=True) if d.get("type") == "community"]:
+            members = [
+                u
+                for u, v in self.graph.in_edges(c)
+                if self.graph.edges[u, c].get("relation") == "in_community"
+            ]
+            texts = [self.graph.nodes[m].get("text", "") for m in members]
+            joined = " ".join(texts)
+            words = joined.split()
+            summary = " ".join(words[:20])
+            self.graph.nodes[c]["summary"] = summary
+
+    def summarize_entity_groups(self) -> None:
+        """Assign a naive summary to each entity group."""
+
+        for g in [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity_group"]:
+            members = [
+                u
+                for u, v in self.graph.in_edges(g)
+                if self.graph.edges[u, g].get("relation") == "in_group"
+            ]
+            texts = [self.graph.nodes[m].get("text", "") for m in members]
+            joined = " ".join(texts)
+            words = joined.split()
+            self.graph.nodes[g]["summary"] = " ".join(words[:20])
+
+    def score_trust(self) -> None:
+        """Assign a naive trust score based on source frequency."""
+
+        src_counts: Dict[str, int] = {}
+        for n, d in self.graph.nodes(data=True):
+            src = d.get("source")
+            if src:
+                src_counts[src] = src_counts.get(src, 0) + 1
+        for u, v, d in self.graph.edges(data=True):
+            src = d.get("provenance")
+            if src:
+                src_counts[src] = src_counts.get(src, 0) + 1
+        for n, d in self.graph.nodes(data=True):
+            src = d.get("source")
+            if not src:
+                continue
+            count = src_counts.get(src, 1)
+            d["trust"] = min(1.0, count / 3)
+        for u, v, d in self.graph.edges(data=True):
+            src = d.get("provenance")
+            if not src:
+                continue
+            count = src_counts.get(src, 1)
+            d["trust"] = min(1.0, count / 3)
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         """Return all chunk IDs that belong to the given document."""
