@@ -54,3 +54,30 @@ def semantic_chunk_split(text: str, max_tokens: int, similarity_drop: float = 0.
     if current:
         chunks.append(current.strip())
     return chunks
+
+
+def contextual_chunk_split(text: str, max_tokens: int, context_size: int = 20) -> List[str]:
+    """Split ``text`` and prepend minimal context to each chunk."""
+
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), max_tokens):
+        chunk_tokens = words[i : i + max_tokens]
+        prefix_tokens = words[max(0, i - context_size) : i]
+        prefix = " ".join(prefix_tokens)
+        chunk = (prefix + " " if prefix else "") + " ".join(chunk_tokens)
+        chunks.append(chunk.strip())
+    return chunks
+
+
+def summarized_chunk_split(text: str, max_tokens: int, summary_len: int = 20) -> List[str]:
+    """Split text and prefix each chunk with a short summary of the previous one."""
+
+    base_chunks = semantic_chunk_split(text, max_tokens=max_tokens)
+    out: List[str] = []
+    prev = ""
+    for chunk in base_chunks:
+        summary = " ".join(prev.split()[-summary_len:])
+        out.append((summary + " " if summary else "") + chunk)
+        prev = chunk
+    return out

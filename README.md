@@ -18,6 +18,10 @@ This toolkit simplifies the journey of:
 
 - Using a LLM (vLLM or any local/external API endpoint) to generate examples
 - Converting your existing files to fine-tuning friendly formats
+- Parsing additional formats like images (via [unstructured](https://github.com/Unstructured-IO/unstructured)) and audio files (transcribed with SpeechRecognition + pocketsphinx). Extracted text from these sources is inserted in the knowledge graph while preserving the original file path
+- `unstructured` is now the default parser for PDF, DOCX, PPTX, HTML and image files, with a fallback to the previous libraries when unavailable
+- Optionally extracting named entities and standalone facts during ingestion
+- Advanced chunking options including semantic, contextual and summarized splitting
 - Creating synthetic datasets
 - Extracting standalone facts into a knowledge graph
 - Supporting various formats of post-training fine-tuning
@@ -174,7 +178,7 @@ vllm:
 generation:
   temperature: 0.7
   chunk_size: 4000
-  chunk_method: sliding  # basic|sliding|semantic
+  chunk_method: sliding  # basic|sliding|semantic|contextual|summary
   retrieval_top_k: 3
   num_pairs: 25
 
@@ -203,8 +207,8 @@ Create a custom configuration file and pass it via the `X-Config-Path` header:
 The `generation` section now exposes advanced chunking and retrieval options:
 
 ```
-generation:
-  chunk_method: semantic  # or "sliding" for fixed windows
+  generation:
+    chunk_method: semantic  # or "sliding" for fixed windows, "contextual" or "summary" for prefixed chunks
   similarity_drop: 0.25   # threshold when using semantic splitting
     retrieval_top_k: 5      # number of chunks fetched using embeddings
 ```
@@ -218,7 +222,7 @@ Most options can also be overridden with environment variables. For example set
 | `GEN_TOP_P` | Default top-p value |
 | `GEN_CHUNK_SIZE` | Override chunk size |
 | `GEN_OVERLAP` | Override overlap between chunks |
-| `GEN_CHUNK_METHOD` | Chunking method (`basic`, `sliding`, `semantic`) |
+| `GEN_CHUNK_METHOD` | Chunking method (`basic`, `sliding`, `semantic, contextual, summary`) |
 | `GEN_SIMILARITY_DROP` | Similarity threshold for semantic splits |
 | `GEN_RETRIEVAL_TOP_K` | Top-k chunks retrieved |
 | `GEN_NUM_PAIRS` | Default number of QA pairs |
@@ -275,8 +279,11 @@ curl -X POST localhost:8000/tasks/ingest \
 ### Processing a PDF Document
 
 ```bash
-# Ingest PDF
-curl -X POST localhost:8000/tasks/ingest -d "path=research_paper.pdf" -H "X-API-Key: <key>"
+# Ingest PDF with entity extraction
+curl -X POST localhost:8000/tasks/ingest \
+     -H "Content-Type: application/json" \
+     -H "X-API-Key: <key>" \
+     -d '{"path": "research_paper.pdf", "extract_entities": true}'  # unstructured parsing enabled by default
 
 # Generate QA pairs (assuming source ID 1)
 curl -X POST localhost:8000/tasks/generate -d "src_id=1&num_pairs=30" -H "X-API-Key: <key>"
@@ -391,7 +398,7 @@ curl -X POST localhost:8000/api/datasets/example/ingest \
      -H "Content-Type: application/json" \
      -H "X-API-Key: <key>" \
      -d '{"path": "paper.pdf", "high_res": true, "ocr": true,
-           "extract_entities": true, "extract_facts": true}'
+          "extract_entities": true, "extract_facts": true}'  # unstructured is default
 ```
 
 You can then enrich and query the graph via the API:

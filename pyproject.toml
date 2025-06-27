@@ -33,6 +33,9 @@ dependencies = [
     "flask-login>=0.6.3",
     "flask-wtf>=1.2.0",
     "wtforms>=3.0",
+    "unstructured>=0.18.1",
+    "SpeechRecognition>=3.14.0",
+    "pocketsphinx>=5.0",
 ]
 
 # These fields appear in pip show

@@ -11,6 +11,8 @@ from datacreek.core.ingest import process_file as ingest_file
 from datacreek.core.save_as import convert_format
 from datacreek.db import Dataset, SessionLocal, SourceData
 from datacreek.services import create_dataset, create_source
+from datacreek.utils import extract_entities as extract_entities_func
+from datacreek.utils import extract_facts as extract_facts_func
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -27,10 +29,28 @@ celery_app.conf.task_store_eager_result = True
 
 
 @celery_app.task
-def ingest_task(user_id: int, path: str) -> dict:
+def ingest_task(
+    user_id: int,
+    path: str,
+    *,
+    high_res: bool = False,
+    ocr: bool = False,
+    use_unstructured: bool | None = None,
+    extract_entities: bool = False,
+    extract_facts: bool = False,
+) -> dict:
     with SessionLocal() as db:
-        content = ingest_file(path)
-        src = create_source(db, user_id, path, content)
+        content = ingest_file(path, high_res=high_res, ocr=ocr, use_unstructured=use_unstructured)
+        ents = extract_entities_func(content) if extract_entities else None
+        facts = extract_facts_func(content) if extract_facts else None
+        src = create_source(
+            db,
+            user_id,
+            path,
+            content,
+            entities=ents,
+            facts=facts,
+        )
         return {"id": src.id}
 
 

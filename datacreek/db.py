@@ -44,6 +44,9 @@ class SourceData(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     path = Column(String, nullable=False)
     content = Column(Text, nullable=False)
+    # optional serialized lists of entities and facts extracted during ingest
+    entities = Column(Text, nullable=True)
+    facts = Column(Text, nullable=True)
 
     owner = relationship("User", back_populates="sources")
     datasets = relationship("Dataset", back_populates="source")

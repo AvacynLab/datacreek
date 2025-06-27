@@ -14,7 +14,7 @@ from .base import BaseParser
 class PPTParser(BaseParser):
     """Parser for PowerPoint presentations"""
 
-    def parse(self, file_path: str) -> str:
+    def parse(self, file_path: str, *, use_unstructured: bool = True) -> str:
         """Parse a PPTX file into plain text
 
         Args:
@@ -23,6 +23,18 @@ class PPTParser(BaseParser):
         Returns:
             Extracted text from the presentation
         """
+        if use_unstructured:
+            try:
+                from unstructured.partition.pptx import partition_pptx
+
+                elements = partition_pptx(filename=file_path)
+                texts = [
+                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+                ]
+                return "\n".join(texts)
+            except Exception:
+                pass
+
         try:
             from pptx import Presentation
         except ImportError:

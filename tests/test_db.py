@@ -20,3 +20,6 @@ def test_init_db_creates_tables(tmp_path, monkeypatch):
     assert {"users", "sources", "datasets"}.issubset(tables)
     cols = [c["name"] for c in insp.get_columns("users")]
     assert "password_hash" in cols
+    src_cols = [c["name"] for c in insp.get_columns("sources")]
+    assert "entities" in src_cols
+    assert "facts" in src_cols

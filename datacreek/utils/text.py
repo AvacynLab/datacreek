@@ -8,7 +8,12 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-from .chunking import semantic_chunk_split, sliding_window_chunks
+from .chunking import (
+    contextual_chunk_split,
+    semantic_chunk_split,
+    sliding_window_chunks,
+    summarized_chunk_split,
+)
 
 
 def split_into_chunks(
@@ -23,6 +28,10 @@ def split_into_chunks(
         return sliding_window_chunks(text, chunk_size, overlap)
     if method == "semantic":
         return semantic_chunk_split(text, max_tokens=chunk_size, similarity_drop=similarity_drop)
+    if method == "contextual":
+        return contextual_chunk_split(text, max_tokens=chunk_size)
+    if method == "summary":
+        return summarized_chunk_split(text, max_tokens=chunk_size)
 
     paragraphs = text.split("\n\n")
     chunks = []

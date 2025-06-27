@@ -133,7 +133,16 @@ async def ingest_async(
     payload: SourceCreate,
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    celery_task = ingest_task.apply_async(args=[current_user.id, payload.path])
+    celery_task = ingest_task.apply_async(
+        args=[current_user.id, payload.path],
+        kwargs={
+            "high_res": payload.high_res or False,
+            "ocr": payload.ocr or False,
+            "use_unstructured": payload.use_unstructured,
+            "extract_entities": payload.extract_entities or False,
+            "extract_facts": payload.extract_facts or False,
+        },
+    )
     return {"task_id": celery_task.id}
 
 

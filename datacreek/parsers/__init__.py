@@ -4,9 +4,11 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Document parsers for different file formats
+from .audio_parser import AudioParser
 from .base import BaseParser
 from .docx_parser import DOCXParser
 from .html_parser import HTMLParser
+from .image_parser import ImageParser
 from .pdf_parser import PDFParser
 from .ppt_parser import PPTParser
 from .txt_parser import TXTParser
@@ -20,6 +22,14 @@ _PARSER_REGISTRY = {
     ".docx": DOCXParser,
     ".pptx": PPTParser,
     ".txt": TXTParser,
+    ".png": ImageParser,
+    ".jpg": ImageParser,
+    ".jpeg": ImageParser,
+    ".gif": ImageParser,
+    ".bmp": ImageParser,
+    ".wav": AudioParser,
+    ".mp3": AudioParser,
+    ".ogg": AudioParser,
 }
 
 
@@ -41,6 +51,8 @@ __all__ = [
     "DOCXParser",
     "PPTParser",
     "TXTParser",
+    "ImageParser",
+    "AudioParser",
     "register_parser",
     "get_parser_for_extension",
 ]

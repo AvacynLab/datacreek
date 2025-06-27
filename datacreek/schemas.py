@@ -18,6 +18,11 @@ class UserOut(BaseModel):
 class SourceCreate(BaseModel):
     path: str
     name: str | None = None
+    high_res: bool | None = False
+    ocr: bool | None = False
+    use_unstructured: bool | None = None
+    extract_entities: bool | None = False
+    extract_facts: bool | None = False
 
 
 class SourceOut(BaseModel):

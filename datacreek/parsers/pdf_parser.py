@@ -20,6 +20,7 @@ class PDFParser(BaseParser):
         high_res: bool = False,
         ocr: bool = False,
         return_pages: bool = False,
+        use_unstructured: bool = True,
     ) -> str | tuple[str, list[str]]:
         """Parse ``file_path`` and return extracted text.
 
@@ -47,14 +48,25 @@ class PDFParser(BaseParser):
                     "llamaparse is required for high resolution parsing. Install it with: pip install llamaparse"
                 ) from exc
         else:
-            try:
-                from pdfminer.high_level import extract_text
+            if use_unstructured:
+                try:
+                    from unstructured.partition.pdf import partition_pdf
 
-                text = extract_text(file_path)
-            except ImportError as exc:
-                raise ImportError(
-                    "pdfminer.six is required for PDF parsing. Install it with: pip install pdfminer.six"
-                ) from exc
+                    elements = partition_pdf(filename=file_path)
+                    text = "\n".join(
+                        getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+                    )
+                except Exception:
+                    text = ""
+            if not text:
+                try:
+                    from pdfminer.high_level import extract_text
+
+                    text = extract_text(file_path)
+                except ImportError as exc:
+                    raise ImportError(
+                        "pdfminer.six is required for PDF parsing. Install it with: pip install pdfminer.six"
+                    ) from exc
 
         if ocr:
             try:

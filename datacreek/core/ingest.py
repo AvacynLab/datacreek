@@ -47,12 +47,16 @@ def determine_parser(file_path: str, config: Dict[str, Any]):
     """Return a parser instance for the given resource."""
     # Check if it's a URL
     if file_path.startswith(("http://", "https://")):
-        # YouTube URL
         if "youtube.com" in file_path or "youtu.be" in file_path:
             return YouTubeParser()
-        # HTML URL
-        else:
-            return HTMLParser()
+        from urllib.parse import urlparse
+
+        path = urlparse(file_path).path
+        ext = os.path.splitext(path)[1].lower()
+        parser = get_parser_for_extension(ext)
+        if parser:
+            return parser
+        return HTMLParser()
 
     if not os.path.exists(file_path):
         logger.error("File not found: %s", file_path)
@@ -75,17 +79,23 @@ def process_file(
     high_res: bool = False,
     ocr: bool = False,
     return_pages: bool = False,
+    use_unstructured: bool | None = None,
 ) -> str:
     """Parse ``file_path`` and optionally save the result."""
 
     cfg = config or load_config()
+    if use_unstructured is None:
+        use_unstructured = cfg.get("ingest", {}).get("use_unstructured", True)
 
     resolved = _resolve_input_path(file_path, cfg)
     parser = determine_parser(resolved, cfg)
+    parse_kwargs = {}
     if isinstance(parser, PDFParser):
-        content = parser.parse(resolved, high_res=high_res, ocr=ocr, return_pages=return_pages)
-    else:
-        content = parser.parse(resolved)
+        parse_kwargs = {"high_res": high_res, "ocr": ocr, "return_pages": return_pages}
+    if hasattr(parser.parse, "__call__"):
+        if "use_unstructured" in parser.parse.__code__.co_varnames:
+            parse_kwargs["use_unstructured"] = use_unstructured
+    content = parser.parse(resolved, **parse_kwargs)
 
     if return_pages and isinstance(content, tuple):
         text, pages = content
@@ -118,6 +128,7 @@ def to_kg(
     *,
     build_index: bool = True,
     pages: list[str] | None = None,
+    source: str | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
 
@@ -132,7 +143,7 @@ def to_kg(
     cfg = config or load_config()
     gen_cfg = get_generation_config(cfg)
 
-    dataset.add_document(doc_id, source=doc_id, text=text)
+    dataset.add_document(doc_id, source=source or doc_id, text=text)
 
     if pages:
         chunk_idx = 0
@@ -172,6 +183,7 @@ def ingest_into_dataset(
     *,
     high_res: bool = False,
     ocr: bool = False,
+    use_unstructured: bool | None = None,
     extract_entities: bool = False,
     extract_facts: bool = False,
     client: "LLMClient" | None = None,
@@ -193,6 +205,7 @@ def ingest_into_dataset(
         config=config,
         high_res=high_res,
         ocr=ocr,
+        use_unstructured=use_unstructured,
         return_pages=True,
     )
     if isinstance(result, tuple):
@@ -201,7 +214,7 @@ def ingest_into_dataset(
         text = result
         pages = None
     doc_id = doc_id or Path(file_path).stem
-    to_kg(text, dataset, doc_id, config, build_index=True, pages=pages)
+    to_kg(text, dataset, doc_id, config, build_index=True, pages=pages, source=file_path)
 
     if extract_entities:
         dataset.extract_entities()
