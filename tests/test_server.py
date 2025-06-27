@@ -204,8 +204,12 @@ def test_load_dataset_neo4j(monkeypatch):
 def test_api_search_endpoints():
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.add_document("d", source="s")
+    ds.add_section("d", "s1", title="Intro")
+    ds.add_section("d", "s2", title="Introduction")
+    ds.add_section("d", "s3", title="Other")
     ds.add_chunk("d", "c1", "hello world")
     ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "other text")
     ds.graph.index.build()
     ds.link_similar_chunks(k=1)
     DATASETS["demo"] = ds
@@ -223,6 +227,76 @@ def test_api_search_endpoints():
         assert res.status_code == 200
         ids = [r["id"] for r in res.get_json()]
         assert "c1" in ids and "c2" in ids
+
+        res = client.get(
+            "/api/datasets/demo/similar_chunks",
+            query_string={"cid": "c1", "k": 2},
+        )
+        assert res.status_code == 200
+        sims = res.get_json()
+        assert "c1" not in sims
+        assert "c2" in sims
+
+        res = client.get(
+            "/api/datasets/demo/similar_chunks_data",
+            query_string={"cid": "c1", "k": 2},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        ids = [d["id"] for d in data]
+        assert "c1" not in ids
+        assert "c2" in ids
+
+        res = client.get(
+            "/api/datasets/demo/chunk_neighbors",
+            query_string={"k": 1},
+        )
+        assert res.status_code == 200
+        neighbors = res.get_json()
+        assert neighbors["c1"][0] == "c2"
+
+        res = client.get(
+            "/api/datasets/demo/chunk_neighbors_data",
+            query_string={"k": 1},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["c1"][0]["id"] in {"c2", "c3"}
+
+        res = client.get(
+            "/api/datasets/demo/chunk_context",
+            query_string={"cid": "c2", "before": 1, "after": 1},
+        )
+        assert res.status_code == 200
+        assert res.get_json() == ["c1", "c2", "c3"]
+
+        res = client.get(
+            "/api/datasets/demo/similar_sections",
+            query_string={"sid": "s1", "k": 2},
+        )
+        assert res.status_code == 200
+        sims = res.get_json()
+        assert "s1" not in sims
+        assert "s2" in sims
+
+        res = client.get(
+            "/api/datasets/demo/similar_documents",
+            query_string={"did": "d", "k": 1},
+        )
+        assert res.status_code == 200
+        assert res.get_json() == []
+
+        res = client.post(
+            "/api/datasets/demo/section_similarity",
+            query_string={"k": 1},
+        )
+        assert res.status_code == 200
+        res = client.post(
+            "/api/datasets/demo/document_similarity",
+            query_string={"k": 1},
+        )
+        assert res.status_code == 200
+        assert ("s1", "s2") in ds.graph.graph.edges
     DATASETS.clear()
 
 
@@ -266,4 +340,69 @@ def test_dataset_ops_endpoints(monkeypatch):
         monkeypatch.setattr(requests, "get", fake_get)
         res = client.post("/api/datasets/demo/enrich_entity/e1")
         assert res.status_code == 200
+        res = client.post("/api/datasets/demo/extract_entities", json={"model": None})
+        assert res.status_code == 200
+    DATASETS.clear()
+
+
+def test_lookup_endpoints():
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "sec1")
+    ds.add_chunk("doc", "c1", "A is B", section_id="sec1")
+    ds.add_entity("A", "A")
+    ds.add_entity("B", "B")
+    ds.link_entity("c1", "A")
+    ds.link_entity("c1", "B")
+    fid = ds.graph.add_fact("A", "is", "B")
+    ds.graph.graph.add_edge("c1", fid, relation="has_fact")
+    DATASETS["demo"] = ds
+
+    with app.test_client() as client:
+        _login(client)
+        res = client.get("/api/datasets/demo/chunk_document", query_string={"cid": "c1"})
+        assert res.status_code == 200
+        assert res.get_json() == "doc"
+
+        res = client.get("/api/datasets/demo/chunk_page", query_string={"cid": "c1"})
+        assert res.status_code == 200
+        assert res.get_json() == 1
+
+        res = client.get(
+            "/api/datasets/demo/section_page",
+            query_string={"sid": "sec1"},
+        )
+        assert res.status_code == 200
+        assert res.get_json() == 1
+
+        res = client.get("/api/datasets/demo/section_document", query_string={"sid": "sec1"})
+        assert res.status_code == 200
+        assert res.get_json() == "doc"
+
+        res = client.get("/api/datasets/demo/chunk_entities", query_string={"cid": "c1"})
+        assert set(res.get_json()) == {"A", "B"}
+
+        res = client.get("/api/datasets/demo/chunk_facts", query_string={"cid": "c1"})
+        assert res.get_json() == [fid]
+
+        res = client.get("/api/datasets/demo/fact_sections", query_string={"fid": fid})
+        assert res.get_json() == ["sec1"]
+
+        res = client.get("/api/datasets/demo/fact_documents", query_string={"fid": fid})
+        assert res.get_json() == ["doc"]
+
+        res = client.get("/api/datasets/demo/fact_pages", query_string={"fid": fid})
+        assert res.get_json() == [1]
+
+        res = client.get("/api/datasets/demo/entity_documents", query_string={"eid": "A"})
+        assert res.get_json() == ["doc"]
+
+        res = client.get("/api/datasets/demo/entity_chunks", query_string={"eid": "A"})
+        assert res.get_json() == ["c1"]
+
+        res = client.get("/api/datasets/demo/entity_facts", query_string={"eid": "A"})
+        assert res.get_json() == [fid]
+
+        res = client.get("/api/datasets/demo/entity_pages", query_string={"eid": "A"})
+        assert res.get_json() == [1]
     DATASETS.clear()

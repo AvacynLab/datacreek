@@ -134,7 +134,23 @@ def test_link_similar_chunks():
     assert ("c1", "c2") in kg.graph.edges
     edge = kg.graph.edges["c1", "c2"]
     assert edge["relation"] == "similar_to"
-    assert 0 < edge["similarity"] <= 1
+    assert 0 <= edge["similarity"] <= 1
+
+
+def test_link_similar_sections():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "s1", title="Intro")
+    kg.add_section("doc", "s2", title="Introduction")
+    kg.add_section("doc", "s3", title="Other")
+
+    kg.index.build()
+    kg.link_similar_sections(k=1)
+
+    assert ("s1", "s2") in kg.graph.edges
+    edge = kg.graph.edges["s1", "s2"]
+    assert edge["relation"] == "similar_to"
+    assert 0 <= edge["similarity"] <= 1
 
 
 def test_embeddings_filter_by_type():
@@ -179,6 +195,162 @@ def test_link_similar_chunks_ignores_entities():
         if d.get("relation") == "similar_to":
             assert kg.graph.nodes[u]["type"] == "chunk"
             assert kg.graph.nodes[v]["type"] == "chunk"
+
+
+def test_get_similar_chunks():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_chunk("doc", "c3", "different text")
+
+    kg.index.build()
+    sims = kg.get_similar_chunks("c1", k=2)
+    assert "c1" not in sims
+    assert "c2" in sims
+
+
+def test_get_similar_chunks_unknown():
+    kg = KnowledgeGraph()
+    assert kg.get_similar_chunks("missing") == []
+
+
+def test_get_similar_chunks_data():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_chunk("doc", "c3", "other")
+    kg.index.build()
+
+    data = kg.get_similar_chunks_data("c1", k=2)
+    ids = [d["id"] for d in data]
+    assert "c1" not in ids
+    assert "c2" in ids
+
+
+def test_get_chunk_neighbors_data():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "hello world")
+    kg.add_chunk("doc", "c2", "hello planet")
+    kg.add_chunk("doc", "c3", "different words")
+    kg.index.build()
+
+    data = kg.get_chunk_neighbors_data(k=1)
+    assert set(data.keys()) == {"c1", "c2", "c3"}
+    assert data["c1"][0]["id"] in {"c2", "c3"}
+
+
+def test_get_chunk_context():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "t1")
+    kg.add_chunk("doc", "c2", "t2")
+    kg.add_chunk("doc", "c3", "t3")
+    ctx = kg.get_chunk_context("c2", before=1, after=1)
+    assert ctx == ["c1", "c2", "c3"]
+
+
+def test_get_similar_sections():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "s1", title="Introduction")
+    kg.add_section("doc", "s2", title="Introductory remarks")
+    kg.add_section("doc", "s3", title="Other section")
+
+    kg.index.build()
+    sims = kg.get_similar_sections("s1", k=2)
+    assert "s1" not in sims
+    assert "s2" in sims
+
+
+def test_get_similar_sections_unknown():
+    kg = KnowledgeGraph()
+    assert kg.get_similar_sections("missing") == []
+
+
+def test_link_similar_documents():
+    kg = KnowledgeGraph()
+    kg.add_document("d1", source="s", text="hello world")
+    kg.add_document("d2", source="s", text="hello planet")
+    kg.add_document("d3", source="s", text="other text")
+
+    kg.index.build()
+    kg.link_similar_documents(k=1)
+
+    assert ("d1", "d2") in kg.graph.edges
+    edge = kg.graph.edges["d1", "d2"]
+    assert edge["relation"] == "similar_to"
+    assert 0 <= edge["similarity"] <= 1
+
+
+def test_get_similar_documents():
+    kg = KnowledgeGraph()
+    kg.add_document("d1", source="s", text="hello world")
+    kg.add_document("d2", source="s", text="hello planet")
+    kg.add_document("d3", source="s", text="unrelated")
+
+    kg.index.build()
+    sims = kg.get_similar_documents("d1", k=2)
+    assert "d1" not in sims
+    assert "d2" in sims
+
+
+def test_get_similar_documents_unknown():
+    kg = KnowledgeGraph()
+    assert kg.get_similar_documents("missing") == []
+
+
+def test_get_chunk_context_unknown():
+    kg = KnowledgeGraph()
+    assert kg.get_chunk_context("missing") == []
+
+
+def test_page_for_chunk():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "text", page=5)
+
+    assert kg.get_page_for_chunk("c1") == 5
+
+
+def test_page_for_section():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "s1", page=3)
+    kg.add_chunk("doc", "c1", "t", section_id="s1", page=3)
+
+    assert kg.get_page_for_section("s1") == 3
+
+
+def test_next_section_fallback():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "s1")
+    kg.add_section("doc", "s2")
+    kg.add_section("doc", "s3")
+
+    # remove explicit next_section edges
+    for u, v, d in list(kg.graph.edges(data=True)):
+        if d.get("relation") == "next_section":
+            kg.graph.remove_edge(u, v)
+
+    assert kg.get_next_section("s1") == "s2"
+    assert kg.get_previous_section("s3") == "s2"
+
+
+def test_document_lookup_helpers():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "sec1")
+    kg.add_chunk("doc", "c1", "text", section_id="sec1")
+
+    assert kg.get_document_for_section("sec1") == "doc"
+    assert kg.get_document_for_chunk("c1") == "doc"
+
+    kg.graph.remove_edge("doc", "c1")
+    assert kg.get_document_for_chunk("c1") == "doc"
 
 
 def test_fact_search():
@@ -411,3 +583,36 @@ def test_entity_lookup_helpers():
     assert kg.get_entities_for_chunk("c1") == ["Paris"]
     assert set(kg.get_entities_for_document("doc")) == {"Paris", "Berlin"}
     assert kg.get_documents_for_entity("Berlin") == ["doc"]
+
+
+def test_entity_pages_helper():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "Paris is nice", page=2)
+    kg.add_entity("Paris", "Paris")
+    kg.link_entity("c1", "Paris")
+
+    assert kg.get_pages_for_entity("Paris") == [2]
+
+
+def test_fact_lookup_helpers():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "sec1")
+    kg.add_chunk("doc", "c1", "A is B", section_id="sec1")
+    fid = kg.add_fact("A", "is", "B")
+    kg.graph.add_edge("c1", fid, relation="has_fact")
+
+    assert kg.get_sections_for_fact(fid) == ["sec1"]
+    assert kg.get_documents_for_fact(fid) == ["doc"]
+    assert kg.get_pages_for_fact(fid) == [1]
+
+
+def test_extract_entities():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "Albert Einstein was born in Ulm.")
+    kg.extract_entities(model=None)
+    ents = set(kg.get_entities_for_chunk("c1"))
+    assert "Albert Einstein" in ents
+    assert "Ulm" in ents

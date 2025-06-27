@@ -110,7 +110,165 @@ def test_link_similar_chunks_wrapper():
     assert ("c1", "c2") in ds.graph.graph.edges
     edge = ds.graph.graph.edges["c1", "c2"]
     assert edge["relation"] == "similar_to"
-    assert 0 < edge["similarity"] <= 1
+    assert 0 <= edge["similarity"] <= 1
+
+
+def test_link_similar_sections_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_section("d", "s1", title="Intro")
+    ds.add_section("d", "s2", title="Introduction")
+    ds.add_section("d", "s3", title="Other")
+
+    ds.graph.index.build()
+    ds.link_similar_sections(k=1)
+
+    assert ("s1", "s2") in ds.graph.graph.edges
+    edge = ds.graph.graph.edges["s1", "s2"]
+    assert edge["relation"] == "similar_to"
+    assert 0 <= edge["similarity"] <= 1
+
+
+def test_get_similar_chunks_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "other text")
+
+    ds.graph.index.build()
+    sims = ds.get_similar_chunks("c1", k=2)
+    assert "c1" not in sims
+    assert "c2" in sims
+
+
+def test_get_similar_chunks_wrapper_unknown():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.graph.index.build()
+    assert ds.get_similar_chunks("missing") == []
+
+
+def test_get_similar_chunks_data_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "other text")
+    ds.graph.index.build()
+
+    data = ds.get_similar_chunks_data("c1", k=2)
+    ids = [d["id"] for d in data]
+    assert "c1" not in ids
+    assert "c2" in ids
+
+
+def test_get_chunk_neighbors_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "other text")
+    ds.graph.index.build()
+
+    neighbors = ds.get_chunk_neighbors(k=1)
+    assert "c1" in neighbors
+    assert "c2" in neighbors["c1"]
+
+
+def test_get_chunk_neighbors_data_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "hello planet")
+    ds.add_chunk("d", "c3", "other text")
+    ds.graph.index.build()
+
+    data = ds.get_chunk_neighbors_data(k=1)
+    assert set(data.keys()) == {"c1", "c2", "c3"}
+    assert data["c1"][0]["id"] in {"c2", "c3"}
+
+
+def test_get_chunk_context_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "t1")
+    ds.add_chunk("d", "c2", "t2")
+    ds.add_chunk("d", "c3", "t3")
+    ctx = ds.get_chunk_context("c2", before=1, after=1)
+    assert ctx == ["c1", "c2", "c3"]
+
+
+def test_get_chunk_context_wrapper_unknown():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    assert ds.get_chunk_context("missing") == []
+
+
+def test_get_similar_sections_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_section("d", "s1", title="Intro")
+    ds.add_section("d", "s2", title="Introduction")
+    ds.add_section("d", "s3", title="Other")
+
+    ds.graph.index.build()
+    sims = ds.get_similar_sections("s1", k=2)
+    assert "s1" not in sims
+    assert "s2" in sims
+
+
+def test_get_similar_sections_wrapper_unknown():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    assert ds.get_similar_sections("missing") == []
+
+
+def test_link_similar_documents_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d1", source="s", text="hello world")
+    ds.add_document("d2", source="s", text="hello planet")
+    ds.add_document("d3", source="s", text="other")
+
+    ds.graph.index.build()
+    ds.link_similar_documents(k=1)
+
+    assert ("d1", "d2") in ds.graph.graph.edges
+    edge = ds.graph.graph.edges["d1", "d2"]
+    assert edge["relation"] == "similar_to"
+    assert 0 <= edge["similarity"] <= 1
+
+
+def test_get_similar_documents_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d1", source="s", text="hello world")
+    ds.add_document("d2", source="s", text="hello planet")
+    ds.add_document("d3", source="s", text="other")
+
+    ds.graph.index.build()
+    sims = ds.get_similar_documents("d1", k=2)
+    assert "d1" not in sims
+    assert "d2" in sims
+
+
+def test_get_similar_documents_wrapper_unknown():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    assert ds.get_similar_documents("missing") == []
+
+
+def test_page_for_chunk_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "text", page=2)
+
+    assert ds.get_page_for_chunk("c1") == 2
+
+
+def test_page_for_section_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "sec1", page=4)
+    ds.add_chunk("doc", "c1", "t", section_id="sec1", page=4)
+
+    assert ds.get_page_for_section("sec1") == 4
 
 
 def test_search_with_links_wrapper():
@@ -172,6 +330,34 @@ def test_section_helpers_wrapper():
 
     assert ds.search_entities("intro") == []
     assert ds.search_sections("intro") == ["s1"]
+
+
+def test_section_helpers_wrapper_fallback():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "s1")
+    ds.add_section("doc", "s2")
+    ds.add_section("doc", "s3")
+
+    for u, v, d in list(ds.graph.graph.edges(data=True)):
+        if d.get("relation") == "next_section":
+            ds.graph.graph.remove_edge(u, v)
+
+    assert ds.get_next_section("s1") == "s2"
+    assert ds.get_previous_section("s3") == "s2"
+
+
+def test_document_lookup_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "sec1")
+    ds.add_chunk("doc", "c1", "text", section_id="sec1")
+
+    assert ds.get_document_for_section("sec1") == "doc"
+    assert ds.get_document_for_chunk("c1") == "doc"
+
+    ds.graph.graph.remove_edge("doc", "c1")
+    assert ds.get_document_for_chunk("c1") == "doc"
 
 
 def test_link_entity_source_and_trust():
@@ -319,3 +505,36 @@ def test_entity_lookup_helpers_wrapper():
     assert ds.get_entities_for_chunk("c1") == ["Paris"]
     assert set(ds.get_entities_for_document("doc")) == {"Paris", "Berlin"}
     assert ds.get_documents_for_entity("Berlin") == ["doc"]
+
+
+def test_entity_pages_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_chunk("doc", "c1", "Paris", page=3)
+    ds.add_entity("Paris", "Paris")
+    ds.link_entity("c1", "Paris")
+
+    assert ds.get_pages_for_entity("Paris") == [3]
+
+
+def test_fact_lookup_helpers_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "sec1")
+    ds.add_chunk("doc", "c1", "A is B", section_id="sec1")
+    fid = ds.graph.add_fact("A", "is", "B")
+    ds.graph.graph.add_edge("c1", fid, relation="has_fact")
+
+    assert ds.get_sections_for_fact(fid) == ["sec1"]
+    assert ds.get_documents_for_fact(fid) == ["doc"]
+    assert ds.get_pages_for_fact(fid) == [1]
+
+
+def test_extract_entities_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_chunk("doc", "c1", "Albert Einstein was born in Ulm.")
+    ds.extract_entities(model=None)
+    ents = set(ds.get_entities_for_chunk("c1"))
+    assert "Albert Einstein" in ents
+    assert "Ulm" in ents

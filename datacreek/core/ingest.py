@@ -5,13 +5,16 @@
 # the root directory of this source tree.
 # Ingest different file formats
 
+from __future__ import annotations
+
 import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from datacreek.core.dataset import DatasetBuilder
-from datacreek.parsers import HTMLParser, YouTubeParser, get_parser_for_extension
+from datacreek.models.llm_client import LLMClient
+from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
 from datacreek.utils.config import get_generation_config, get_path_config, load_config
 from datacreek.utils.text import split_into_chunks
 
@@ -68,6 +71,10 @@ def process_file(
     output_dir: Optional[str] = None,
     output_name: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
+    *,
+    high_res: bool = False,
+    ocr: bool = False,
+    return_pages: bool = False,
 ) -> str:
     """Parse ``file_path`` and optionally save the result."""
 
@@ -75,7 +82,16 @@ def process_file(
 
     resolved = _resolve_input_path(file_path, cfg)
     parser = determine_parser(resolved, cfg)
-    content = parser.parse(resolved)
+    if isinstance(parser, PDFParser):
+        content = parser.parse(resolved, high_res=high_res, ocr=ocr, return_pages=return_pages)
+    else:
+        content = parser.parse(resolved)
+
+    if return_pages and isinstance(content, tuple):
+        text, pages = content
+    else:
+        text = content
+        pages = None
 
     out_dir = Path(output_dir or get_path_config(cfg, "output", "parsed"))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -84,12 +100,14 @@ def process_file(
         output_name = f"{stem}.txt"
     out_path = out_dir / output_name
     try:
-        parser.save(content, str(out_path))
+        parser.save(text, str(out_path))
     except Exception:
         # saving should not block ingestion but should be logged
         logger.exception("Failed to save parsed content to %s", out_path)
 
-    return content
+    if return_pages:
+        return text, pages or []
+    return text
 
 
 def to_kg(
@@ -99,6 +117,7 @@ def to_kg(
     config: Optional[Dict[str, Any]] = None,
     *,
     build_index: bool = True,
+    pages: list[str] | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
 
@@ -113,18 +132,33 @@ def to_kg(
     cfg = config or load_config()
     gen_cfg = get_generation_config(cfg)
 
-    chunks = split_into_chunks(
-        text,
-        chunk_size=gen_cfg.chunk_size,
-        overlap=gen_cfg.overlap,
-        method=gen_cfg.chunk_method,
-        similarity_drop=gen_cfg.similarity_drop,
-    )
+    dataset.add_document(doc_id, source=doc_id, text=text)
 
-    dataset.add_document(doc_id, source=doc_id)
-    for i, chunk in enumerate(chunks):
-        cid = f"{doc_id}_chunk_{i}"
-        dataset.add_chunk(doc_id, cid, chunk)
+    if pages:
+        chunk_idx = 0
+        for page_num, page_text in enumerate(pages, start=1):
+            page_chunks = split_into_chunks(
+                page_text,
+                chunk_size=gen_cfg.chunk_size,
+                overlap=gen_cfg.overlap,
+                method=gen_cfg.chunk_method,
+                similarity_drop=gen_cfg.similarity_drop,
+            )
+            for chunk in page_chunks:
+                cid = f"{doc_id}_chunk_{chunk_idx}"
+                dataset.add_chunk(doc_id, cid, chunk, page=page_num)
+                chunk_idx += 1
+    else:
+        chunks = split_into_chunks(
+            text,
+            chunk_size=gen_cfg.chunk_size,
+            overlap=gen_cfg.overlap,
+            method=gen_cfg.chunk_method,
+            similarity_drop=gen_cfg.similarity_drop,
+        )
+        for i, chunk in enumerate(chunks):
+            cid = f"{doc_id}_chunk_{i}"
+            dataset.add_chunk(doc_id, cid, chunk)
 
     if build_index:
         dataset.graph.index.build()
@@ -135,10 +169,43 @@ def ingest_into_dataset(
     dataset: DatasetBuilder,
     doc_id: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
+    *,
+    high_res: bool = False,
+    ocr: bool = False,
+    extract_entities: bool = False,
+    extract_facts: bool = False,
+    client: "LLMClient" | None = None,
 ) -> str:
-    """Convenience helper to parse ``file_path`` and load it into ``dataset``."""
+    """Parse ``file_path`` and populate ``dataset`` with its content.
 
-    text = process_file(file_path, config=config)
+    Parameters
+    ----------
+    extract_entities:
+        Run NER over inserted chunks if ``True``.
+    extract_facts:
+        Extract simple subject/predicate/object facts from chunks if ``True``.
+        When enabled, ``client`` may supply an :class:`~datacreek.models.llm_client.LLMClient`
+        instance to use for extraction.
+    """
+
+    result = process_file(
+        file_path,
+        config=config,
+        high_res=high_res,
+        ocr=ocr,
+        return_pages=True,
+    )
+    if isinstance(result, tuple):
+        text, pages = result
+    else:
+        text = result
+        pages = None
     doc_id = doc_id or Path(file_path).stem
-    to_kg(text, dataset, doc_id, config, build_index=True)
+    to_kg(text, dataset, doc_id, config, build_index=True, pages=pages)
+
+    if extract_entities:
+        dataset.extract_entities()
+    if extract_facts:
+        dataset.extract_facts(client)
+        dataset.history.append("Facts extracted on ingest")
     return doc_id

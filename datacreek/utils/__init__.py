@@ -10,6 +10,7 @@ from .config import (
     load_config,
     merge_configs,
 )
+from .entity_extraction import extract_entities
 from .fact_extraction import extract_facts
 from .llm_processing import convert_to_conversation_format, parse_qa_pairs, parse_ratings
 from .text import extract_json_from_text, split_into_chunks
@@ -29,4 +30,5 @@ __all__ = [
     "parse_ratings",
     "convert_to_conversation_format",
     "extract_facts",
+    "extract_entities",
 ]
