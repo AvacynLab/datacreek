@@ -353,9 +353,28 @@ def api_dataset_ingest(name: str):
     data = request.get_json() or {}
     path = data.get("path")
     doc_id = data.get("doc_id")
+    high_res = bool(data.get("high_res", False))
+    ocr = bool(data.get("ocr", False))
+    extract_entities = bool(data.get("extract_entities", False))
+    extract_facts = bool(data.get("extract_facts", False))
+    provider = data.get("provider")
+    profile = data.get("profile")
+    client = None
+    if provider or profile:
+        client = LLMClient(provider=provider, profile=profile)
     if not path:
         abort(400)
-    ingest_into_dataset(path, ds, doc_id=doc_id, config=config)
+    ingest_into_dataset(
+        path,
+        ds,
+        doc_id=doc_id,
+        config=config,
+        high_res=high_res,
+        ocr=ocr,
+        extract_entities=extract_entities,
+        extract_facts=extract_facts,
+        client=client,
+    )
     ds.history.append(f"Ingested {os.path.basename(path)}")
     ds.stage = max(ds.stage, 1)
     return jsonify({"message": "ingested"})
@@ -421,18 +440,335 @@ def api_similarity(name: str):
     return jsonify({"message": "similarity"})
 
 
+@app.post("/api/datasets/<name>/section_similarity")
+@login_required
+def api_section_similarity(name: str):
+    """Create similarity links between section titles."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    k = int(request.args.get("k", 3))
+    ds.link_similar_sections(k=k)
+    ds.history.append("Section similarity links created")
+    return jsonify({"message": "section_similarity"})
+
+
+@app.post("/api/datasets/<name>/document_similarity")
+@login_required
+def api_document_similarity(name: str):
+    """Create similarity links between documents."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    k = int(request.args.get("k", 3))
+    ds.link_similar_documents(k=k)
+    ds.history.append("Document similarity links created")
+    return jsonify({"message": "document_similarity"})
+
+
+@app.get("/api/datasets/<name>/similar_chunks")
+@login_required
+def api_similar_chunks(name: str):
+    """Return chunk IDs similar to ``cid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    k = int(request.args.get("k", 3))
+    if not cid:
+        return jsonify([])
+    ids = ds.get_similar_chunks(cid, k=k)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/similar_chunks_data")
+@login_required
+def api_similar_chunks_data(name: str):
+    """Return similar chunk info for ``cid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    k = int(request.args.get("k", 3))
+    if not cid:
+        return jsonify([])
+    data = ds.get_similar_chunks_data(cid, k=k)
+    return jsonify(data)
+
+
+@app.get("/api/datasets/<name>/chunk_neighbors")
+@login_required
+def api_chunk_neighbors(name: str):
+    """Return nearest neighbors for every chunk in the dataset."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    k = int(request.args.get("k", 3))
+    neighbors = ds.get_chunk_neighbors(k=k)
+    return jsonify(neighbors)
+
+
+@app.get("/api/datasets/<name>/chunk_neighbors_data")
+@login_required
+def api_chunk_neighbors_data(name: str):
+    """Return neighbor data for every chunk."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    k = int(request.args.get("k", 3))
+    data = ds.get_chunk_neighbors_data(k=k)
+    return jsonify(data)
+
+
+@app.get("/api/datasets/<name>/similar_sections")
+@login_required
+def api_similar_sections(name: str):
+    """Return section IDs similar to ``sid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    sid = request.args.get("sid")
+    k = int(request.args.get("k", 3))
+    if not sid:
+        return jsonify([])
+    ids = ds.get_similar_sections(sid, k=k)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/similar_documents")
+@login_required
+def api_similar_documents(name: str):
+    """Return document IDs similar to ``did``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    did = request.args.get("did")
+    k = int(request.args.get("k", 3))
+    if not did:
+        return jsonify([])
+    ids = ds.get_similar_documents(did, k=k)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/chunk_context")
+@login_required
+def api_chunk_context(name: str):
+    """Return IDs of chunks surrounding ``cid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    before = int(request.args.get("before", 1))
+    after = int(request.args.get("after", 1))
+    if not cid:
+        return jsonify([])
+    ids = ds.get_chunk_context(cid, before=before, after=after)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/chunk_document")
+@login_required
+def api_chunk_document(name: str):
+    """Return the document ID owning ``cid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    if not cid:
+        return jsonify(None)
+    doc = ds.get_document_for_chunk(cid)
+    return jsonify(doc)
+
+
+@app.get("/api/datasets/<name>/chunk_page")
+@login_required
+def api_chunk_page(name: str):
+    """Return the page number for ``cid`` if available."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    if not cid:
+        return jsonify(None)
+    page = ds.get_page_for_chunk(cid)
+    return jsonify(page)
+
+
+@app.get("/api/datasets/<name>/section_document")
+@login_required
+def api_section_document(name: str):
+    """Return the document ID owning ``sid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    sid = request.args.get("sid")
+    if not sid:
+        return jsonify(None)
+    doc = ds.get_document_for_section(sid)
+    return jsonify(doc)
+
+
+@app.get("/api/datasets/<name>/section_page")
+@login_required
+def api_section_page(name: str):
+    """Return the page number recorded for ``sid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    sid = request.args.get("sid")
+    if not sid:
+        return jsonify(None)
+    page = ds.get_page_for_section(sid)
+    return jsonify(page)
+
+
+@app.get("/api/datasets/<name>/chunk_entities")
+@login_required
+def api_chunk_entities(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    if not cid:
+        return jsonify([])
+    ids = ds.get_entities_for_chunk(cid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/chunk_facts")
+@login_required
+def api_chunk_facts(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cid = request.args.get("cid")
+    if not cid:
+        return jsonify([])
+    ids = ds.get_facts_for_chunk(cid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/fact_sections")
+@login_required
+def api_fact_sections(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    fid = request.args.get("fid")
+    if not fid:
+        return jsonify([])
+    ids = ds.get_sections_for_fact(fid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/fact_documents")
+@login_required
+def api_fact_documents(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    fid = request.args.get("fid")
+    if not fid:
+        return jsonify([])
+    ids = ds.get_documents_for_fact(fid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/fact_pages")
+@login_required
+def api_fact_pages(name: str):
+    """Return page numbers referencing ``fid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    fid = request.args.get("fid")
+    if not fid:
+        return jsonify([])
+    pages = ds.get_pages_for_fact(fid)
+    return jsonify(pages)
+
+
+@app.get("/api/datasets/<name>/entity_documents")
+@login_required
+def api_entity_documents(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    eid = request.args.get("eid")
+    if not eid:
+        return jsonify([])
+    ids = ds.get_documents_for_entity(eid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/entity_chunks")
+@login_required
+def api_entity_chunks(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    eid = request.args.get("eid")
+    if not eid:
+        return jsonify([])
+    ids = ds.get_chunks_for_entity(eid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/entity_facts")
+@login_required
+def api_entity_facts(name: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    eid = request.args.get("eid")
+    if not eid:
+        return jsonify([])
+    ids = ds.get_facts_for_entity(eid)
+    return jsonify(ids)
+
+
+@app.get("/api/datasets/<name>/entity_pages")
+@login_required
+def api_entity_pages(name: str):
+    """Return page numbers mentioning ``eid``."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    eid = request.args.get("eid")
+    if not eid:
+        return jsonify([])
+    pages = ds.get_pages_for_entity(eid)
+    return jsonify(pages)
+
+
 @app.get("/api/datasets/<name>/search_hybrid")
 @login_required
 def api_search_hybrid(name: str):
-    """Hybrid lexical/vector search on chunks."""
+    """Hybrid lexical/vector search on nodes."""
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
     query = request.args.get("q")
     k = int(request.args.get("k", 5))
+    node_type = request.args.get("type", "chunk")
     if not query:
         return jsonify([])
-    ids = ds.search_hybrid(query, k=k)
+    ids = ds.search_hybrid(query, k=k, node_type=node_type)
     return jsonify(ids)
 
 
@@ -579,6 +915,19 @@ def api_extract_facts(name: str):
     return jsonify({"message": "facts"})
 
 
+@app.post("/api/datasets/<name>/extract_entities")
+@login_required
+def api_extract_entities(name: str):
+    """Run named entity recognition on dataset chunks."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    model = request.json.get("model") if request.json else "en_core_web_sm"
+    ds.extract_entities(model=model)
+    return jsonify({"message": "entities"})
+
+
 @app.get("/api/datasets/<name>/conflicts")
 @login_required
 def api_conflicts(name: str):
@@ -723,12 +1072,21 @@ def dataset_ingest(name: str):
 
     input_path = request.form.get("input_path")
     doc_id = request.form.get("doc_id") or None
+    high_res = bool(request.form.get("high_res"))
+    ocr = bool(request.form.get("ocr"))
     if not input_path:
         flash("Input path is required", "warning")
         return redirect(url_for("dataset_detail", name=name))
 
     try:
-        ingest_into_dataset(input_path, ds, doc_id=doc_id, config=config)
+        ingest_into_dataset(
+            input_path,
+            ds,
+            doc_id=doc_id,
+            config=config,
+            high_res=high_res,
+            ocr=ocr,
+        )
         ds.history.append(f"Ingested {os.path.basename(input_path)}")
         ds.stage = max(ds.stage, 1)
         flash("Document ingested", "success")

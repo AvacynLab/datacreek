@@ -27,6 +27,8 @@ export default function DatasetWizard() {
   const [name, setName] = useState('')
   const [type, setType] = useState('qa')
   const [docs, setDocs] = useState([''])
+  const [highRes, setHighRes] = useState(false)
+  const [ocr, setOcr] = useState(false)
   const [graphs, setGraphs] = useState([])
   const [graphName, setGraphName] = useState('')
   const [params, setParams] = useState('')
@@ -44,7 +46,7 @@ export default function DatasetWizard() {
         const resp = await fetch(`/api/datasets/${name}/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path })
+          body: JSON.stringify({ path, high_res: highRes, ocr })
         })
         if (!resp.ok) {
           // eslint-disable-next-line no-alert
@@ -156,6 +158,24 @@ export default function DatasetWizard() {
                     />
                   ))}
                   <Button type="button" onClick={addDocField}>Add document</Button>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={highRes}
+                        onChange={e => setHighRes(e.target.checked)}
+                      />
+                      High-res PDF
+                    </label>
+                    <label className="flex items-center gap-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={ocr}
+                        onChange={e => setOcr(e.target.checked)}
+                      />
+                      OCR
+                    </label>
+                  </div>
                 </div>
               )}
               <div className="flex justify-between gap-2">

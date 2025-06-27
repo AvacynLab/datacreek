@@ -27,16 +27,22 @@ class DatasetBuilder:
     versions: List[Dict[str, Any]] = field(default_factory=list)
     stage: int = 0  # 0=created, 1=ingest, 2=generation, 3=curation, 4=exported
 
-    def add_document(self, doc_id: str, source: str) -> None:
+    def add_document(self, doc_id: str, source: str, *, text: str | None = None) -> None:
         """Insert a document node in the dataset graph."""
-        self.graph.add_document(doc_id, source)
+        self.graph.add_document(doc_id, source, text=text)
 
     def add_section(
-        self, doc_id: str, section_id: str, title: str | None = None, source: Optional[str] = None
+        self,
+        doc_id: str,
+        section_id: str,
+        title: str | None = None,
+        source: Optional[str] = None,
+        *,
+        page: int | None = None,
     ) -> None:
         """Insert a section node for ``doc_id``."""
 
-        self.graph.add_section(doc_id, section_id, title=title, source=source)
+        self.graph.add_section(doc_id, section_id, title=title, source=source, page=page)
 
     def add_chunk(
         self,
@@ -46,10 +52,11 @@ class DatasetBuilder:
         source: Optional[str] = None,
         *,
         section_id: str | None = None,
+        page: int | None = None,
     ) -> None:
         """Insert a chunk node in the dataset graph."""
 
-        self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id)
+        self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id, page=page)
 
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
@@ -131,6 +138,51 @@ class DatasetBuilder:
         """Create similarity edges between chunks using embeddings."""
 
         self.graph.link_similar_chunks(k)
+
+    def link_similar_sections(self, k: int = 3) -> None:
+        """Create similarity edges between section titles."""
+
+        self.graph.link_similar_sections(k)
+
+    def link_similar_documents(self, k: int = 3) -> None:
+        """Create similarity edges between document texts."""
+
+        self.graph.link_similar_documents(k)
+
+    def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:
+        """Return up to ``k`` chunk IDs most similar to ``chunk_id``."""
+
+        return self.graph.get_similar_chunks(chunk_id, k=k)
+
+    def get_similar_chunks_data(self, chunk_id: str, k: int = 3) -> List[Dict[str, Any]]:
+        """Return up to ``k`` similar chunk infos for ``chunk_id``."""
+
+        return self.graph.get_similar_chunks_data(chunk_id, k=k)
+
+    def get_chunk_neighbors(self, k: int = 3) -> Dict[str, List[str]]:
+        """Return the ``k`` nearest neighbors for each chunk."""
+
+        return self.graph.get_chunk_neighbors(k=k)
+
+    def get_chunk_neighbors_data(self, k: int = 3) -> Dict[str, List[Dict[str, Any]]]:
+        """Return neighbor information for every chunk."""
+
+        return self.graph.get_chunk_neighbors_data(k=k)
+
+    def get_similar_sections(self, section_id: str, k: int = 3) -> list[str]:
+        """Return up to ``k`` section IDs most similar to ``section_id``."""
+
+        return self.graph.get_similar_sections(section_id, k=k)
+
+    def get_similar_documents(self, doc_id: str, k: int = 3) -> list[str]:
+        """Return up to ``k`` document IDs most similar to ``doc_id``."""
+
+        return self.graph.get_similar_documents(doc_id, k=k)
+
+    def get_chunk_context(self, chunk_id: str, before: int = 1, after: int = 1) -> list[str]:
+        """Return chunk IDs surrounding ``chunk_id`` including itself."""
+
+        return self.graph.get_chunk_context(chunk_id, before=before, after=after)
 
     def deduplicate_chunks(self) -> int:
         """Remove duplicate chunk nodes from the graph."""
@@ -216,6 +268,12 @@ class DatasetBuilder:
                     cid, fid, relation="has_fact", provenance=data.get("source")
                 )
 
+    def extract_entities(self, model: str | None = "en_core_web_sm") -> None:
+        """Run named entity recognition on all chunks."""
+
+        self.graph.extract_entities(model=model)
+        self.history.append("Entities extracted")
+
     def find_conflicting_facts(self) -> List[tuple[str, str, Dict[str, List[str]]]]:
         """Return edges with the same subject/predicate but different objects."""
 
@@ -250,6 +308,12 @@ class DatasetBuilder:
     def get_sections_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_sections_for_document(doc_id)
 
+    def get_document_for_section(self, section_id: str) -> str | None:
+        return self.graph.get_document_for_section(section_id)
+
+    def get_document_for_chunk(self, chunk_id: str) -> str | None:
+        return self.graph.get_document_for_chunk(chunk_id)
+
     def get_chunks_for_section(self, section_id: str) -> list[str]:
         return self.graph.get_chunks_for_section(section_id)
 
@@ -265,6 +329,16 @@ class DatasetBuilder:
         """Return the chunk preceding ``chunk_id`` if any."""
 
         return self.graph.get_previous_chunk(chunk_id)
+
+    def get_page_for_chunk(self, chunk_id: str) -> int | None:
+        """Return the page number stored on ``chunk_id``."""
+
+        return self.graph.get_page_for_chunk(chunk_id)
+
+    def get_page_for_section(self, section_id: str) -> int | None:
+        """Return the page number recorded for ``section_id``."""
+
+        return self.graph.get_page_for_section(section_id)
 
     def get_next_section(self, section_id: str) -> str | None:
         """Return the section following ``section_id`` if any."""
@@ -295,6 +369,21 @@ class DatasetBuilder:
         """Return entity IDs linked as subject or object of ``fact_id``."""
 
         return self.graph.get_entities_for_fact(fact_id)
+
+    def get_sections_for_fact(self, fact_id: str) -> list[str]:
+        """Return section IDs referencing ``fact_id`` via a chunk."""
+
+        return self.graph.get_sections_for_fact(fact_id)
+
+    def get_documents_for_fact(self, fact_id: str) -> list[str]:
+        """Return document IDs referencing ``fact_id`` via a chunk."""
+
+        return self.graph.get_documents_for_fact(fact_id)
+
+    def get_pages_for_fact(self, fact_id: str) -> list[int]:
+        """Return page numbers referencing ``fact_id`` via chunks."""
+
+        return self.graph.get_pages_for_fact(fact_id)
 
     def get_facts_for_entity(self, entity_id: str) -> list[str]:
         """Return fact IDs connected to ``entity_id``."""
@@ -331,6 +420,11 @@ class DatasetBuilder:
         """Return document IDs where ``entity_id`` is mentioned."""
 
         return self.graph.get_documents_for_entity(entity_id)
+
+    def get_pages_for_entity(self, entity_id: str) -> list[int]:
+        """Return page numbers where ``entity_id`` is mentioned."""
+
+        return self.graph.get_pages_for_entity(entity_id)
 
     def remove_chunk(self, chunk_id: str) -> None:
         """Remove a chunk node from the dataset graph."""

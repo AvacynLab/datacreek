@@ -23,10 +23,13 @@ class KnowledgeGraph:
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
     index: EmbeddingIndex = field(default_factory=EmbeddingIndex)
 
-    def add_document(self, doc_id: str, source: str) -> None:
+    def add_document(self, doc_id: str, source: str, *, text: str | None = None) -> None:
         if self.graph.has_node(doc_id):
             raise ValueError(f"Document already exists: {doc_id}")
         self.graph.add_node(doc_id, type="document", source=source)
+        if text:
+            self.graph.nodes[doc_id]["text"] = text
+            self.index.add(doc_id, text)
 
     def add_entity(self, entity_id: str, text: str, source: str | None = None) -> None:
         """Insert an entity node."""
@@ -107,6 +110,8 @@ class KnowledgeGraph:
         section_id: str,
         title: str | None = None,
         source: Optional[str] = None,
+        *,
+        page: int | None = None,
     ) -> None:
         """Insert a section node and attach it to ``doc_id``."""
 
@@ -118,7 +123,15 @@ class KnowledgeGraph:
         existing = self.get_sections_for_document(doc_id)
         sequence = len(existing)
 
-        self.graph.add_node(section_id, type="section", title=title, source=source)
+        self.graph.add_node(
+            section_id,
+            type="section",
+            title=title,
+            source=source,
+            page=page,
+        )
+        if title:
+            self.index.add(section_id, title)
         self.graph.add_edge(
             doc_id,
             section_id,
@@ -139,6 +152,7 @@ class KnowledgeGraph:
         source: Optional[str] = None,
         *,
         section_id: str | None = None,
+        page: int | None = None,
     ) -> None:
         if source is None:
             source = self.graph.nodes[doc_id].get("source")
@@ -156,7 +170,10 @@ class KnowledgeGraph:
             section_sequence = None
 
         # Add the chunk node and relation to the document
-        self.graph.add_node(chunk_id, type="chunk", text=text, source=source)
+        if page is None:
+            page = 1
+
+        self.graph.add_node(chunk_id, type="chunk", text=text, source=source, page=page)
         self.graph.add_edge(
             doc_id,
             chunk_id,
@@ -172,6 +189,8 @@ class KnowledgeGraph:
                 sequence=section_sequence,
                 provenance=source,
             )
+            if self.graph.nodes[section_id].get("page") is None and page is not None:
+                self.graph.nodes[section_id]["page"] = page
 
         # Connect to the previous chunk to keep the original order
         if doc_chunks:
@@ -439,6 +458,40 @@ class KnowledgeGraph:
                     continue
                 self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
 
+    def link_similar_sections(self, k: int = 3) -> None:
+        """Add ``similar_to`` edges between section titles."""
+
+        neighbors = self.index.nearest_neighbors(k, return_distances=True)
+        for src, nb_list in neighbors.items():
+            if self.graph.nodes[src].get("type") != "section":
+                continue
+            for tgt, score in nb_list:
+                if src == tgt or self.graph.nodes[tgt].get("type") != "section":
+                    continue
+                if (
+                    self.graph.has_edge(src, tgt)
+                    and self.graph.edges[src, tgt].get("relation") == "similar_to"
+                ):
+                    continue
+                self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
+
+    def link_similar_documents(self, k: int = 3) -> None:
+        """Add ``similar_to`` edges between document texts."""
+
+        neighbors = self.index.nearest_neighbors(k, return_distances=True)
+        for src, nb_list in neighbors.items():
+            if self.graph.nodes[src].get("type") != "document":
+                continue
+            for tgt, score in nb_list:
+                if src == tgt or self.graph.nodes[tgt].get("type") != "document":
+                    continue
+                if (
+                    self.graph.has_edge(src, tgt)
+                    and self.graph.edges[src, tgt].get("relation") == "similar_to"
+                ):
+                    continue
+                self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
+
     def deduplicate_chunks(self) -> int:
         """Remove duplicate chunk nodes based on their text."""
 
@@ -500,6 +553,21 @@ class KnowledgeGraph:
                     self.index.add(n, d["text"])
             self.index.build()
         return merged
+
+    def extract_entities(self, model: str | None = "en_core_web_sm") -> None:
+        """Run named entity recognition on all chunks and link entities."""
+
+        from datacreek.utils.entity_extraction import extract_entities
+
+        for cid, data in list(self.graph.nodes(data=True)):
+            if data.get("type") != "chunk":
+                continue
+            ents = extract_entities(data.get("text", ""), model=model)
+            for ent in ents:
+                if not self.graph.has_node(ent):
+                    self.add_entity(ent, ent, data.get("source"))
+                if not self.graph.has_edge(cid, ent):
+                    self.link_entity(cid, ent, provenance=data.get("source"))
 
     def enrich_entity_wikidata(self, entity_id: str) -> None:
         """Fetch description from Wikidata and store it on the entity node."""
@@ -735,6 +803,15 @@ class KnowledgeGraph:
         for _, succ, data in self.graph.out_edges(section_id, data=True):
             if data.get("relation") == "next_section":
                 return succ
+        # fallback using sequence metadata
+        for doc_id, _, data in self.graph.in_edges(section_id, data=True):
+            if data.get("relation") == "has_section":
+                seq = data.get("sequence")
+                if seq is None:
+                    return None
+                sections = self.get_sections_for_document(doc_id)
+                if seq + 1 < len(sections):
+                    return sections[seq + 1]
         return None
 
     def get_previous_section(self, section_id: str) -> str | None:
@@ -743,6 +820,15 @@ class KnowledgeGraph:
         for pred, _, data in self.graph.in_edges(section_id, data=True):
             if data.get("relation") == "next_section":
                 return pred
+        # fallback using sequence metadata
+        for doc_id, _, data in self.graph.in_edges(section_id, data=True):
+            if data.get("relation") == "has_section":
+                seq = data.get("sequence")
+                if seq is None:
+                    return None
+                sections = self.get_sections_for_document(doc_id)
+                if seq > 0:
+                    return sections[seq - 1]
         return None
 
     def get_next_chunk(self, chunk_id: str) -> str | None:
@@ -751,6 +837,15 @@ class KnowledgeGraph:
         for _, succ, data in self.graph.out_edges(chunk_id, data=True):
             if data.get("relation") == "next_chunk":
                 return succ
+        # fallback using sequence metadata
+        for doc_id, _, data in self.graph.in_edges(chunk_id, data=True):
+            if data.get("relation") == "has_chunk":
+                seq = data.get("sequence")
+                if seq is None:
+                    return None
+                chunks = self.get_chunks_for_document(doc_id)
+                if seq + 1 < len(chunks):
+                    return chunks[seq + 1]
         return None
 
     def get_previous_chunk(self, chunk_id: str) -> str | None:
@@ -759,6 +854,31 @@ class KnowledgeGraph:
         for pred, _, data in self.graph.in_edges(chunk_id, data=True):
             if data.get("relation") == "next_chunk":
                 return pred
+        # fallback using sequence metadata
+        for doc_id, _, data in self.graph.in_edges(chunk_id, data=True):
+            if data.get("relation") == "has_chunk":
+                seq = data.get("sequence")
+                if seq is None:
+                    return None
+                chunks = self.get_chunks_for_document(doc_id)
+                if seq > 0:
+                    return chunks[seq - 1]
+        return None
+
+    def get_page_for_chunk(self, chunk_id: str) -> int | None:
+        """Return the page number associated with ``chunk_id``."""
+
+        node = self.graph.nodes.get(chunk_id)
+        if node and node.get("type") == "chunk":
+            return node.get("page")
+        return None
+
+    def get_page_for_section(self, section_id: str) -> int | None:
+        """Return the starting page recorded for ``section_id``."""
+
+        node = self.graph.nodes.get(section_id)
+        if node and node.get("type") == "section":
+            return node.get("page")
         return None
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
@@ -823,6 +943,36 @@ class KnowledgeGraph:
         ]
         return chunks
 
+    def get_sections_for_fact(self, fact_id: str) -> list[str]:
+        """Return section IDs referencing ``fact_id`` via a chunk."""
+
+        sections: list[str] = []
+        for cid in self.get_chunks_for_fact(fact_id):
+            sec = self.get_section_for_chunk(cid)
+            if sec and sec not in sections:
+                sections.append(sec)
+        return sections
+
+    def get_documents_for_fact(self, fact_id: str) -> list[str]:
+        """Return document IDs referencing ``fact_id`` via a chunk."""
+
+        docs: list[str] = []
+        for cid in self.get_chunks_for_fact(fact_id):
+            doc = self.get_document_for_chunk(cid)
+            if doc and doc not in docs:
+                docs.append(doc)
+        return docs
+
+    def get_pages_for_fact(self, fact_id: str) -> list[int]:
+        """Return page numbers referencing ``fact_id`` via chunks."""
+
+        pages: list[int] = []
+        for cid in self.get_chunks_for_fact(fact_id):
+            page = self.get_page_for_chunk(cid)
+            if page is not None and page not in pages:
+                pages.append(page)
+        return pages
+
     def get_entities_for_fact(self, fact_id: str) -> list[str]:
         """Return entity IDs linked as subject or object of ``fact_id``."""
 
@@ -863,6 +1013,179 @@ class KnowledgeGraph:
                 out.append(e)
         return out
 
+    def get_document_for_section(self, section_id: str) -> str | None:
+        """Return the document containing ``section_id`` if any."""
+
+        for pred in self.graph.predecessors(section_id):
+            if self.graph.edges[pred, section_id].get("relation") == "has_section":
+                return pred
+        return None
+
+    def get_document_for_chunk(self, chunk_id: str) -> str | None:
+        """Return the document containing ``chunk_id`` if any."""
+
+        for pred in self.graph.predecessors(chunk_id):
+            if self.graph.edges[pred, chunk_id].get("relation") == "has_chunk":
+                return pred
+        section_id = self.get_section_for_chunk(chunk_id)
+        if section_id is not None:
+            return self.get_document_for_section(section_id)
+        return None
+
+    def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:
+        """Return up to ``k`` chunk IDs most similar to ``chunk_id``."""
+
+        if chunk_id not in self.graph.nodes or self.graph.nodes[chunk_id].get("type") != "chunk":
+            return []
+
+        text = self.graph.nodes[chunk_id].get("text")
+        if not text:
+            return []
+
+        indices = self.index.search(text, k=k + 1)
+        neighbors: list[str] = []
+        for idx in indices:
+            nid = self.index.get_id(idx)
+            if nid == chunk_id:
+                continue
+            if self.graph.nodes[nid].get("type") != "chunk":
+                continue
+            neighbors.append(nid)
+            if len(neighbors) >= k:
+                break
+        return neighbors
+
+    def get_similar_chunks_data(self, chunk_id: str, k: int = 3) -> list[dict[str, Any]]:
+        """Return up to ``k`` similar chunk infos for ``chunk_id``."""
+
+        if chunk_id not in self.graph.nodes or self.graph.nodes[chunk_id].get("type") != "chunk":
+            return []
+
+        data = []
+        neighbors = self.index.nearest_neighbors(k=k, return_distances=True).get(chunk_id, [])
+        for nid, score in neighbors:
+            if self.graph.nodes[nid].get("type") != "chunk":
+                continue
+            data.append(
+                {
+                    "id": nid,
+                    "similarity": score,
+                    "text": self.graph.nodes[nid].get("text"),
+                    "document": self.get_document_for_chunk(nid),
+                }
+            )
+        return data
+
+    def get_chunk_neighbors(self, k: int = 3) -> dict[str, list[str]]:
+        """Return the ``k`` nearest chunk neighbors for each chunk."""
+
+        raw = self.index.nearest_neighbors(k)
+        neighbors: dict[str, list[str]] = {}
+        for cid, neigh in raw.items():
+            if self.graph.nodes.get(cid, {}).get("type") != "chunk":
+                continue
+            filtered = [n for n in neigh if self.graph.nodes.get(n, {}).get("type") == "chunk"]
+            neighbors[cid] = filtered
+        return neighbors
+
+    def get_chunk_neighbors_data(self, k: int = 3) -> dict[str, list[dict[str, Any]]]:
+        """Return neighbor information for each chunk."""
+
+        raw = self.index.nearest_neighbors(k, return_distances=True)
+        out: dict[str, list[dict[str, Any]]] = {}
+        for cid, neigh in raw.items():
+            if self.graph.nodes.get(cid, {}).get("type") != "chunk":
+                continue
+            data: list[dict[str, Any]] = []
+            for nid, score in neigh:
+                if self.graph.nodes.get(nid, {}).get("type") != "chunk":
+                    continue
+                data.append(
+                    {
+                        "id": nid,
+                        "similarity": score,
+                        "text": self.graph.nodes[nid].get("text"),
+                        "document": self.get_document_for_chunk(nid),
+                    }
+                )
+            out[cid] = data
+        return out
+
+    def get_similar_sections(self, section_id: str, k: int = 3) -> list[str]:
+        """Return up to ``k`` section IDs similar to ``section_id``."""
+
+        if (
+            section_id not in self.graph.nodes
+            or self.graph.nodes[section_id].get("type") != "section"
+        ):
+            return []
+
+        title = self.graph.nodes[section_id].get("title")
+        if not title:
+            return []
+
+        indices = self.index.search(title, k=k + 1)
+        neighbors: list[str] = []
+        for idx in indices:
+            sid = self.index.get_id(idx)
+            if sid == section_id:
+                continue
+            if self.graph.nodes[sid].get("type") != "section":
+                continue
+            neighbors.append(sid)
+            if len(neighbors) >= k:
+                break
+        return neighbors
+
+    def get_similar_documents(self, doc_id: str, k: int = 3) -> list[str]:
+        """Return up to ``k`` document IDs similar to ``doc_id``."""
+
+        if doc_id not in self.graph.nodes or self.graph.nodes[doc_id].get("type") != "document":
+            return []
+
+        text = self.graph.nodes[doc_id].get("text")
+        if not text:
+            return []
+
+        indices = self.index.search(text, k=k + 1)
+        neighbors: list[str] = []
+        for idx in indices:
+            did = self.index.get_id(idx)
+            if did == doc_id:
+                continue
+            if self.graph.nodes[did].get("type") != "document":
+                continue
+            neighbors.append(did)
+            if len(neighbors) >= k:
+                break
+        return neighbors
+
+    def get_chunk_context(self, chunk_id: str, before: int = 1, after: int = 1) -> list[str]:
+        """Return chunk IDs surrounding ``chunk_id`` including itself."""
+
+        if chunk_id not in self.graph.nodes or self.graph.nodes[chunk_id].get("type") != "chunk":
+            return []
+
+        context: list[str] = [chunk_id]
+
+        current = chunk_id
+        for _ in range(before):
+            prev = self.get_previous_chunk(current)
+            if prev is None:
+                break
+            context.insert(0, prev)
+            current = prev
+
+        current = chunk_id
+        for _ in range(after):
+            nxt = self.get_next_chunk(current)
+            if nxt is None:
+                break
+            context.append(nxt)
+            current = nxt
+
+        return context
+
     def get_documents_for_entity(self, entity_id: str) -> list[str]:
         """Return document IDs where ``entity_id`` is mentioned."""
 
@@ -880,6 +1203,16 @@ class KnowledgeGraph:
                 if self.graph.edges[pred, chunk_id].get("relation") == "has_chunk":
                     docs.add(pred)
         return list(docs)
+
+    def get_pages_for_entity(self, entity_id: str) -> list[int]:
+        """Return page numbers mentioning ``entity_id`` via chunks."""
+
+        pages: list[int] = []
+        for cid in self.get_chunks_for_entity(entity_id):
+            page = self.get_page_for_chunk(cid)
+            if page is not None and page not in pages:
+                pages.append(page)
+        return pages
 
     # ------------------------------------------------------------------
     # Fact helpers

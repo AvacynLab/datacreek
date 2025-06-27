@@ -361,14 +361,18 @@ ds.add_chunk("doc1", "c1", "hello world")
 print(ds.search("hello"))  # ["c1"]
 print(ds.search_documents("paper"))  # ["doc1"]
 print(ds.get_chunks_for_document("doc1"))  # ["c1"]
+print(ds.get_document_for_chunk("c1"))  # "doc1"
 ds.graph.index.build()
 print(ds.graph.search_embeddings("hello", k=1))  # ["c1"]
 print(ds.graph.search_hybrid("hello"))  # ["c1"]
+print(ds.search_hybrid("paper", node_type="document"))  # ["doc1"]
 print(ds.search_with_links("hello", hops=1))  # ["c1", "c2", ...]
 print(ds.search_with_links_data("hello", hops=1)[0])  # includes depth and path
 ds.link_similar_chunks()         # connect semantically close chunks
 ds.update_embeddings()           # materialize embeddings on graph nodes
 ds.extract_facts()               # populate fact nodes using an LLM or regex
+fact_id = ds.get_facts_for_chunk("c1")[0]
+print(ds.get_documents_for_fact(fact_id))  # ["doc1"]
 print(ds.find_conflicting_facts())  # check for conflicting information
 
 # After ingestion you can further enrich the graph:
@@ -386,7 +390,8 @@ Files can also be ingested directly via the REST API:
 curl -X POST localhost:8000/api/datasets/example/ingest \
      -H "Content-Type: application/json" \
      -H "X-API-Key: <key>" \
-     -d '{"path": "paper.pdf"}'
+     -d '{"path": "paper.pdf", "high_res": true, "ocr": true,
+           "extract_entities": true, "extract_facts": true}'
 ```
 
 You can then enrich and query the graph via the API:
@@ -394,9 +399,27 @@ You can then enrich and query the graph via the API:
 ```bash
 curl -X POST localhost:8000/api/datasets/example/similarity -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/search_hybrid?q=hello -H "X-API-Key: <key>"
+curl -X GET  "localhost:8000/api/datasets/example/search_hybrid?q=paper&type=document" -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/search_links?q=hello\&hops=1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/similar_chunks?cid=c1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/similar_chunks_data?cid=c1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/chunk_neighbors -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/chunk_neighbors_data -H "X-API-Key: <key>"
+The chunk_neighbors_data endpoint returns similarity scores, neighbor text, and the owning document for each chunk.
+curl -X POST localhost:8000/api/datasets/example/section_similarity -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/document_similarity -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/chunk_context?cid=c1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/similar_sections?sid=s1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/similar_documents?did=doc1 -H "X-API-Key: <key>"
 curl -X POST localhost:8000/api/datasets/example/extract_facts -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/extract_entities -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/conflicts -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/chunk_document?cid=c1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/chunk_page?cid=c1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/section_page?sid=s1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/fact_documents?fid=f1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/fact_pages?fid=f1 -H "X-API-Key: <key>"
+curl -X GET  localhost:8000/api/datasets/example/entity_pages?eid=A -H "X-API-Key: <key>"
 ```
 
 The `path` is resolved using the configured input directories so relative

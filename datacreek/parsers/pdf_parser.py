@@ -13,7 +13,14 @@ from .base import BaseParser
 class PDFParser(BaseParser):
     """Parser for PDF documents."""
 
-    def parse(self, file_path: str, *, high_res: bool = False, ocr: bool = False) -> str:
+    def parse(
+        self,
+        file_path: str,
+        *,
+        high_res: bool = False,
+        ocr: bool = False,
+        return_pages: bool = False,
+    ) -> str | tuple[str, list[str]]:
         """Parse ``file_path`` and return extracted text.
 
         Parameters
@@ -28,6 +35,7 @@ class PDFParser(BaseParser):
             :mod:`pytesseract`.
         """
         text = ""
+        pages: list[str] | None = None
         if high_res:
             try:
                 from llamaparse import LlamaParse
@@ -60,6 +68,10 @@ class PDFParser(BaseParser):
                 raise ImportError(
                     "pdf2image and pytesseract are required for OCR mode. Install them with: pip install pdf2image pytesseract"
                 ) from exc
+
+        if return_pages:
+            pages = text.split("\f")
+            return text, pages
 
         return text
 

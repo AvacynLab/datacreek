@@ -1,6 +1,7 @@
 import pytest
 
 from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
+from datacreek.core.ingest import ingest_into_dataset
 
 
 def test_ingest_to_kg(tmp_path):
@@ -28,6 +29,17 @@ def test_to_kg_no_index_build(tmp_path):
     assert ds.search_chunks("Hello") == ["doc1_chunk_0"]
 
 
+def test_to_kg_with_pages(tmp_path):
+    text_file = tmp_path / "sample.txt"
+    text_file.write_text("Page1\fPage2")
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    to_kg("Page1\fPage2", ds, "doc1", pages=["Page1", "Page2"])
+
+    assert ds.get_page_for_chunk("doc1_chunk_0") == 1
+    assert ds.get_page_for_chunk("doc1_chunk_1") == 2
+
+
 def test_determine_parser_errors(tmp_path):
     with pytest.raises(FileNotFoundError):
         ingest_file(str(tmp_path / "missing.txt"))
@@ -44,3 +56,12 @@ def test_ingest_resolves_input_path(tmp_path):
     cfg = {"paths": {"input": {"txt": str(tmp_path), "default": str(tmp_path)}}}
     text = ingest_file("doc.txt", config=cfg)
     assert text == "hi"
+
+
+def test_ingest_into_dataset_with_facts(tmp_path):
+    text_file = tmp_path / "doc.txt"
+    text_file.write_text("Paris is the capital of France.")
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ingest_into_dataset(str(text_file), ds, extract_facts=True)
+    facts = ds.search_facts("Paris")
+    assert facts
