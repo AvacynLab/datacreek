@@ -1,3 +1,4 @@
+import json
 import secrets
 from hashlib import sha256
 
@@ -42,8 +43,22 @@ def create_user_with_generated_key(
     return user, api_key
 
 
-def create_source(db: Session, owner_id: int | None, path: str, content: str) -> SourceData:
-    src = SourceData(owner_id=owner_id, path=path, content=content)
+def create_source(
+    db: Session,
+    owner_id: int | None,
+    path: str,
+    content: str,
+    *,
+    entities: list[str] | None = None,
+    facts: list[dict[str, str]] | None = None,
+) -> SourceData:
+    src = SourceData(
+        owner_id=owner_id,
+        path=path,
+        content=content,
+        entities=json.dumps(entities) if entities else None,
+        facts=json.dumps(facts) if facts else None,
+    )
     db.add(src)
     db.commit()
     db.refresh(src)

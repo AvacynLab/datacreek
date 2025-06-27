@@ -29,6 +29,9 @@ export default function DatasetWizard() {
   const [docs, setDocs] = useState([''])
   const [highRes, setHighRes] = useState(false)
   const [ocr, setOcr] = useState(false)
+  const [extractEntities, setExtractEntities] = useState(false)
+  const [extractFacts, setExtractFacts] = useState(false)
+  const [useUnstructured, setUseUnstructured] = useState(true)
   const [graphs, setGraphs] = useState([])
   const [graphName, setGraphName] = useState('')
   const [params, setParams] = useState('')
@@ -46,7 +49,14 @@ export default function DatasetWizard() {
         const resp = await fetch(`/api/datasets/${name}/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path, high_res: highRes, ocr })
+            body: JSON.stringify({
+              path,
+              high_res: highRes,
+              ocr,
+              use_unstructured: useUnstructured,
+              extract_entities: extractEntities,
+              extract_facts: extractFacts
+            })
         })
         if (!resp.ok) {
           // eslint-disable-next-line no-alert
@@ -174,6 +184,30 @@ export default function DatasetWizard() {
                         onChange={e => setOcr(e.target.checked)}
                       />
                       OCR
+                    </label>
+                    <label className="flex items-center gap-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={extractEntities}
+                        onChange={e => setExtractEntities(e.target.checked)}
+                      />
+                      Entities
+                    </label>
+                    <label className="flex items-center gap-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={extractFacts}
+                        onChange={e => setExtractFacts(e.target.checked)}
+                      />
+                      Facts
+                    </label>
+                    <label className="flex items-center gap-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={useUnstructured}
+                        onChange={e => setUseUnstructured(e.target.checked)}
+                      />
+                      Unstructured
                     </label>
                   </div>
                 </div>

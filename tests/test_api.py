@@ -9,7 +9,7 @@ os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
 
 os.environ["DATABASE_URL"] = "sqlite:///test.db"
 from datacreek.api import app
-from datacreek.db import Dataset, SessionLocal, User
+from datacreek.db import Dataset, SessionLocal, SourceData, User
 from datacreek.services import hash_key
 
 client = TestClient(app)
@@ -77,12 +77,19 @@ def test_async_pipeline(monkeypatch, tmp_path):
     headers = {"X-API-Key": key}
 
     src_file = tmp_path / "src.txt"
-    src_file.write_text("hi")
+    src_file.write_text("Paris is the capital of France.")
 
-    res = client.post("/tasks/ingest", json={"path": str(src_file)}, headers=headers)
+    res = client.post(
+        "/tasks/ingest",
+        json={"path": str(src_file), "extract_entities": True, "extract_facts": True},
+        headers=headers,
+    )
     task_id = res.json()["task_id"]
     result = _wait_task(task_id)
     src_id = result["id"]
+    with SessionLocal() as db:
+        src = db.get(SourceData, src_id)
+        assert src.entities and src.facts
 
     res = client.post(
         "/tasks/generate",

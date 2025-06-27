@@ -17,7 +17,7 @@ from .base import BaseParser
 class HTMLParser(BaseParser):
     """Parser for HTML files and web pages"""
 
-    def parse(self, file_path: str) -> str:
+    def parse(self, file_path: str, *, use_unstructured: bool = True) -> str:
         """Parse an HTML file or URL into plain text
 
         Args:
@@ -26,6 +26,22 @@ class HTMLParser(BaseParser):
         Returns:
             Extracted text from the HTML
         """
+        if use_unstructured:
+            try:
+                from unstructured.partition.html import partition_html
+
+                elements = partition_html(
+                    url=file_path if file_path.startswith(("http://", "https://")) else None,
+                    filename=None if file_path.startswith(("http://", "https://")) else file_path,
+                )
+                texts = [
+                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+                ]
+                if texts:
+                    return "\n".join(texts)
+            except Exception:
+                pass
+
         try:
             from bs4 import BeautifulSoup
         except ImportError:

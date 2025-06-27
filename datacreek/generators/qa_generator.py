@@ -102,7 +102,7 @@ class QAGenerator:
             similarity_drop=similarity_drop,
         )
 
-        if self.kg and chunk_method in {"sliding", "semantic"}:
+        if self.kg and chunk_method in {"sliding", "semantic", "contextual"}:
             # index chunks in knowledge graph if provided
             for i, chunk in enumerate(chunks):
                 cid = f"chunk-{i}"

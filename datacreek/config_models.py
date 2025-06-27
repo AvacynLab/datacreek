@@ -12,6 +12,7 @@ class GenerationSettings:
     top_p: float = 0.95
     chunk_size: int = 4000
     overlap: int = 200
+    # basic|sliding|semantic|contextual|summary
     chunk_method: str = "sliding"
     similarity_drop: float = 0.3
     retrieval_top_k: int = 3
@@ -46,6 +47,7 @@ class GenerationSettingsModel(BaseModel):
     top_p: float = 0.95
     chunk_size: int = 4000
     overlap: int = 200
+    # basic|sliding|semantic|contextual|summary
     chunk_method: str = "sliding"
     similarity_drop: float = 0.3
     retrieval_top_k: int = 3

@@ -13,7 +13,7 @@ from .base import BaseParser
 class DOCXParser(BaseParser):
     """Parser for Microsoft Word documents"""
 
-    def parse(self, file_path: str) -> str:
+    def parse(self, file_path: str, *, use_unstructured: bool = True) -> str:
         """Parse a DOCX file into plain text
 
         Args:
@@ -22,6 +22,18 @@ class DOCXParser(BaseParser):
         Returns:
             Extracted text from the document
         """
+        if use_unstructured:
+            try:
+                from unstructured.partition.docx import partition_docx
+
+                elements = partition_docx(filename=file_path)
+                texts = [
+                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+                ]
+                return "\n".join(texts)
+            except Exception:
+                pass
+
         try:
             import docx
         except ImportError:
@@ -31,10 +43,8 @@ class DOCXParser(BaseParser):
 
         doc = docx.Document(file_path)
 
-        # Extract text from paragraphs
         paragraphs = [p.text for p in doc.paragraphs]
 
-        # Extract text from tables
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:

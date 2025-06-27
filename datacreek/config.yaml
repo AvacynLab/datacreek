@@ -54,6 +54,8 @@ api-endpoint:
 ingest:
   default_format: "txt"  # Default output format for parsed files
   youtube_captions: "auto"  # Options: "auto", "manual" - caption preference
+  # Use unstructured as the default parser for supported formats
+  use_unstructured: true
 
 # LLM generation parameters
 generation:
@@ -64,7 +66,7 @@ generation:
   stop: null              # Optional stop sequences
   chunk_size: 4000   # Size of text chunks for processing
   overlap: 200       # Overlap between chunks to maintain context
-  chunk_method: sliding  # Options: basic|sliding|semantic
+  chunk_method: sliding  # Options: basic|sliding|semantic|contextual|summary
   similarity_drop: 0.3   # Threshold for semantic splitting
   retrieval_top_k: 3     # Number of chunks to retrieve for QA generation
   max_tokens: 4096   # Maximum tokens in LLM responses
