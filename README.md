@@ -421,6 +421,17 @@ curl -X GET  localhost:8000/api/datasets/example/similar_documents?did=doc1 -H "
 curl -X POST localhost:8000/api/datasets/example/extract_facts -H "X-API-Key: <key>"
 curl -X POST localhost:8000/api/datasets/example/extract_entities -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/conflicts -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/mark_conflicts -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/prune -H "X-API-Key: <key>" \
+     -d '{"sources": ["bad_source"]}'
+curl -X POST localhost:8000/api/datasets/example/deduplicate -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/clean_chunks -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/normalize_dates -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/co_mentions -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/doc_co_mentions -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/section_co_mentions -H "X-API-Key: <key>"
+curl -X POST localhost:8000/api/datasets/example/graph_embeddings -H "X-API-Key: <key>" \
+     -d '{"dimensions": 32, "walk_length": 5, "num_walks": 20, "seed": 42}'
 curl -X GET  localhost:8000/api/datasets/example/chunk_document?cid=c1 -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/chunk_page?cid=c1 -H "X-API-Key: <key>"
 curl -X GET  localhost:8000/api/datasets/example/section_page?sid=s1 -H "X-API-Key: <key>"
@@ -509,6 +520,29 @@ You can query pipelines programmatically:
 from datacreek import get_pipelines_for_training, TrainingGoal
 print(get_pipelines_for_training(TrainingGoal.SFT))
 ```
+
+## Post-Ingestion Operations
+
+After parsing documents into the knowledge graph you can refine the data quality
+with a few helper methods:
+
+- `deduplicate_chunks()` removes chunks with identical text
+- `resolve_entities(aliases={...})` merges entity nodes referring to the same concept and accepts a case-insensitive alias mapping
+- `prune_sources(['src'])` deletes nodes originating from unwanted sources
+- `link_chunks_by_entity()` connects chunks that mention the same entity
+- `link_sections_by_entity()` connects sections that mention the same entity
+- `link_documents_by_entity()` connects documents that mention the same entity
+- `link_authors_organizations()` links document authors to their organizations
+- `clean_chunk_texts()` removes HTML tags and excess whitespace from chunks
+- `normalize_date_fields()` standardizes date attributes to ISO format
+- `compute_graph_embeddings(dimensions=64, walk_length=10, num_walks=50, seed=0, workers=2)` generates Node2Vec embeddings for all nodes. Adjust these parameters to tune vector size and random walks
+- `predict_links(use_graph_embeddings=True)` infers relations using graph embeddings
+- `mark_conflicting_facts()` flags edges when multiple objects disagree
+- `validate_coherence()` marks logically impossible relations like a parent born after a child
+- `enrich_entity_wikidata(id)` fetches label and description from Wikidata
+- `enrich_entity_dbpedia(id)` fetches additional info from DBpedia
+
+These utilities are exposed through both the REST API and the web interface.
 
 ## Troubleshooting FAQs:
 

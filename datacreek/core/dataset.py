@@ -27,9 +27,24 @@ class DatasetBuilder:
     versions: List[Dict[str, Any]] = field(default_factory=list)
     stage: int = 0  # 0=created, 1=ingest, 2=generation, 3=curation, 4=exported
 
-    def add_document(self, doc_id: str, source: str, *, text: str | None = None) -> None:
+    def add_document(
+        self,
+        doc_id: str,
+        source: str,
+        *,
+        text: str | None = None,
+        author: str | None = None,
+        organization: str | None = None,
+    ) -> None:
         """Insert a document node in the dataset graph."""
-        self.graph.add_document(doc_id, source, text=text)
+
+        self.graph.add_document(
+            doc_id,
+            source,
+            text=text,
+            author=author,
+            organization=organization,
+        )
 
     def add_section(
         self,
@@ -149,6 +164,38 @@ class DatasetBuilder:
 
         self.graph.link_similar_documents(k)
 
+    def link_chunks_by_entity(self) -> int:
+        """Connect chunks that mention the same entity."""
+
+        added = self.graph.link_chunks_by_entity()
+        if added:
+            self.history.append(f"Added {added} co-mention links")
+        return added
+
+    def link_documents_by_entity(self) -> int:
+        """Connect documents that mention the same entity."""
+
+        added = self.graph.link_documents_by_entity()
+        if added:
+            self.history.append(f"Linked {added} co-mentioned documents")
+        return added
+
+    def link_sections_by_entity(self) -> int:
+        """Connect sections that mention the same entity."""
+
+        added = self.graph.link_sections_by_entity()
+        if added:
+            self.history.append(f"Linked {added} co-mentioned sections")
+        return added
+
+    def link_authors_organizations(self) -> int:
+        """Create affiliation links between authors and organizations."""
+
+        added = self.graph.link_authors_organizations()
+        if added:
+            self.history.append(f"Linked {added} authors to organizations")
+        return added
+
     def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:
         """Return up to ``k`` chunk IDs most similar to ``chunk_id``."""
 
@@ -192,18 +239,47 @@ class DatasetBuilder:
             self.history.append(f"Removed {removed} duplicate chunks")
         return removed
 
-    def resolve_entities(self, threshold: float = 0.8) -> int:
+    def clean_chunks(self) -> int:
+        """Normalize chunk text to remove markup and extra whitespace."""
+
+        cleaned = self.graph.clean_chunk_texts()
+        if cleaned:
+            self.history.append(f"Cleaned {cleaned} chunks")
+        return cleaned
+
+    def normalize_dates(self) -> int:
+        """Standardize date attributes on nodes to ISO format."""
+
+        changed = self.graph.normalize_date_fields()
+        if changed:
+            self.history.append(f"Normalized {changed} date fields")
+        return changed
+
+    def prune_sources(self, sources: List[str]) -> int:
+        """Remove nodes and edges associated with ``sources`` from the graph."""
+
+        removed = self.graph.prune_sources(sources)
+        if removed:
+            joined = ", ".join(sources)
+            self.history.append(f"Pruned {removed} nodes from {joined}")
+        return removed
+
+    def resolve_entities(
+        self,
+        threshold: float = 0.8,
+        aliases: dict[str, list[str]] | None = None,
+    ) -> int:
         """Merge entity nodes that likely refer to the same real world entity."""
 
-        merged = self.graph.resolve_entities(threshold=threshold)
+        merged = self.graph.resolve_entities(threshold=threshold, aliases=aliases)
         if merged:
             self.history.append(f"Merged {merged} entities")
         return merged
 
-    def predict_links(self, threshold: float = 0.8) -> None:
+    def predict_links(self, threshold: float = 0.8, *, use_graph_embeddings: bool = False) -> None:
         """Infer missing relations between entities based on similarity."""
 
-        self.graph.predict_links(threshold=threshold)
+        self.graph.predict_links(threshold=threshold, use_graph_embeddings=use_graph_embeddings)
         self.history.append("Predicted entity links")
 
     def enrich_entity(self, entity_id: str) -> None:
@@ -211,6 +287,12 @@ class DatasetBuilder:
 
         self.graph.enrich_entity_wikidata(entity_id)
         self.history.append(f"Entity {entity_id} enriched")
+
+    def enrich_entity_dbpedia(self, entity_id: str) -> None:
+        """Enrich an entity node using DBpedia."""
+
+        self.graph.enrich_entity_dbpedia(entity_id)
+        self.history.append(f"Entity {entity_id} enriched from DBpedia")
 
     def consolidate_schema(self) -> None:
         """Normalize labels in the underlying knowledge graph."""
@@ -240,6 +322,25 @@ class DatasetBuilder:
         """Compute centrality metrics for graph nodes."""
         self.graph.compute_centrality(node_type=node_type, metric=metric)
         self.history.append(f"Centrality ({metric}) computed for {node_type} nodes")
+
+    def compute_graph_embeddings(
+        self,
+        dimensions: int = 64,
+        walk_length: int = 10,
+        num_walks: int = 50,
+        seed: int = 0,
+        workers: int = 1,
+    ) -> None:
+        """Generate Node2Vec embeddings for all nodes."""
+
+        self.graph.compute_node2vec_embeddings(
+            dimensions=dimensions,
+            walk_length=walk_length,
+            num_walks=num_walks,
+            workers=workers,
+            seed=seed,
+        )
+        self.history.append("Graph embeddings computed")
 
     def update_embeddings(self, node_type: str = "chunk") -> None:
         """Materialize embeddings for nodes of ``node_type``."""
@@ -301,6 +402,22 @@ class DatasetBuilder:
             if len(obj_map) > 1:
                 result.append((key[0], key[1], obj_map))
         return result
+
+    def mark_conflicting_facts(self) -> int:
+        """Annotate edges that belong to conflicting fact groups."""
+
+        marked = self.graph.mark_conflicting_facts()
+        if marked:
+            self.history.append(f"Marked {marked} conflicting facts")
+        return marked
+
+    def validate_coherence(self) -> int:
+        """Flag logically inconsistent edges in the underlying graph."""
+
+        marked = self.graph.validate_coherence()
+        if marked:
+            self.history.append(f"Marked {marked} inconsistent relations")
+        return marked
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)

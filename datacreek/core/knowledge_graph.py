@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import networkx as nx
 import numpy as np
 import requests
+from dateutil import parser
 from neo4j import Driver, GraphDatabase
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
@@ -23,10 +24,24 @@ class KnowledgeGraph:
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
     index: EmbeddingIndex = field(default_factory=EmbeddingIndex)
 
-    def add_document(self, doc_id: str, source: str, *, text: str | None = None) -> None:
+    def add_document(
+        self,
+        doc_id: str,
+        source: str,
+        *,
+        text: str | None = None,
+        author: str | None = None,
+        organization: str | None = None,
+    ) -> None:
         if self.graph.has_node(doc_id):
             raise ValueError(f"Document already exists: {doc_id}")
-        self.graph.add_node(doc_id, type="document", source=source)
+        self.graph.add_node(
+            doc_id,
+            type="document",
+            source=source,
+            author=author,
+            organization=organization,
+        )
         if text:
             self.graph.nodes[doc_id]["text"] = text
             self.index.add(doc_id, text)
@@ -242,6 +257,8 @@ class KnowledgeGraph:
         self.graph.remove_nodes_from(chunks)
         if self.graph.has_node(doc_id):
             self.graph.remove_node(doc_id)
+        if chunks:
+            self.index.build()
 
     def search(self, query: str, node_type: str = "chunk") -> list[str]:
         """Return node IDs of the given type matching the query.
@@ -506,7 +523,301 @@ class KnowledgeGraph:
                 removed += 1
             else:
                 seen[text] = node
+        if removed:
+            self.index.build()
         return removed
+
+    def prune_sources(self, sources: list[str]) -> int:
+        """Remove nodes and edges originating from the given sources.
+
+        Parameters
+        ----------
+        sources:
+            List of source identifiers to remove from the graph. Nodes with a
+            ``source`` attribute matching any of these values are deleted along
+            with their associated edges. Edges whose ``provenance`` attribute
+            matches are removed as well.
+
+        Returns
+        -------
+        int
+            Number of nodes removed from the graph.
+        """
+
+        removed = 0
+
+        for node, data in list(self.graph.nodes(data=True)):
+            if data.get("source") in sources:
+                self.graph.remove_node(node)
+                self.index.remove(node)
+                removed += 1
+
+        for u, v, edata in list(self.graph.edges(data=True)):
+            if edata.get("provenance") in sources:
+                if self.graph.has_edge(u, v):
+                    self.graph.remove_edge(u, v)
+
+        if removed:
+            self.index.build()
+
+        return removed
+
+    def mark_conflicting_facts(self) -> int:
+        """Flag edges that express conflicting facts.
+
+        A conflict occurs when the same subject and predicate are linked to
+        multiple distinct objects. All edges in such groups receive a
+        ``conflict`` attribute set to ``True``.
+
+        Returns
+        -------
+        int
+            Number of edges marked as conflicting.
+        """
+
+        groups: Dict[tuple[str, str], set[str]] = {}
+        for u, v, data in self.graph.edges(data=True):
+            rel = data.get("relation")
+            if not rel or rel in {
+                "has_chunk",
+                "next_chunk",
+                "subject",
+                "object",
+                "has_fact",
+                "mentions",
+            }:
+                continue
+            groups.setdefault((u, rel), set()).add(v)
+
+        marked = 0
+        for (subj, rel), objs in groups.items():
+            if len(objs) <= 1:
+                continue
+            for obj in objs:
+                edge = self.graph.edges[subj, obj]
+                if not edge.get("conflict"):
+                    edge["conflict"] = True
+                    marked += 1
+        return marked
+
+    def clean_chunk_texts(self) -> int:
+        """Normalize text of chunk nodes by stripping HTML and collapsing whitespace.
+
+        Returns
+        -------
+        int
+            Number of chunks modified.
+        """
+
+        changed = 0
+        for cid, data in list(self.graph.nodes(data=True)):
+            if data.get("type") != "chunk":
+                continue
+            text = data.get("text", "")
+            cleaned = re.sub(r"<[^>]+>", " ", text)
+            cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            if cleaned != text:
+                data["text"] = cleaned
+                self.index.remove(cid)
+                self.index.add(cid, cleaned)
+                changed += 1
+        if changed:
+            self.index.build()
+        return changed
+
+    def normalize_date_fields(self) -> int:
+        """Normalize date-like attributes on nodes to ISO format.
+
+        Fields with names containing ``date`` or ``time`` are parsed using
+        :func:`dateutil.parser.parse` and converted to ``YYYY-MM-DD`` strings.
+
+        Returns
+        -------
+        int
+            Number of fields updated.
+        """
+
+        changed = 0
+        for _, data in list(self.graph.nodes(data=True)):
+            for key, value in list(data.items()):
+                if not isinstance(value, str):
+                    continue
+                if "date" not in key and "time" not in key:
+                    continue
+                try:
+                    dt = parser.parse(value)
+                except Exception:  # pragma: no cover - parse failure
+                    continue
+                iso = dt.date().isoformat()
+                if iso != value:
+                    data[key] = iso
+                    changed += 1
+        return changed
+
+    def validate_coherence(self) -> int:
+        """Flag logically inconsistent edges such as impossible birth dates.
+
+        The current implementation checks ``parent_of`` relations. If both the
+        parent node and child node have a ``birth_date`` attribute and the
+        parent's date is later than the child's, the edge receives an
+        ``inconsistent`` attribute.
+
+        Returns
+        -------
+        int
+            Number of edges marked as inconsistent.
+        """
+
+        marked = 0
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("relation") != "parent_of":
+                continue
+            p_date = self.graph.nodes[u].get("birth_date")
+            c_date = self.graph.nodes[v].get("birth_date")
+            if not p_date or not c_date:
+                continue
+            try:
+                p_dt = parser.parse(p_date)
+                c_dt = parser.parse(c_date)
+            except Exception:  # pragma: no cover - parse failure
+                continue
+            if p_dt > c_dt and not data.get("inconsistent"):
+                data["inconsistent"] = True
+                marked += 1
+        return marked
+
+    def link_chunks_by_entity(self) -> int:
+        """Connect chunks mentioning the same entity with ``co_mentions`` edges.
+
+        Returns
+        -------
+        int
+            Number of edges added.
+        """
+
+        ent_to_chunks: Dict[str, list[str]] = {}
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("relation") != "mentions":
+                continue
+            if self.graph.nodes[u].get("type") != "chunk":
+                continue
+            ent_to_chunks.setdefault(v, []).append(u)
+
+        added = 0
+        for chunks in ent_to_chunks.values():
+            for i, c1 in enumerate(chunks):
+                for c2 in chunks[i + 1 :]:
+                    if (
+                        self.graph.has_edge(c1, c2)
+                        and self.graph.edges[c1, c2].get("relation") == "co_mentions"
+                    ):
+                        continue
+                    self.graph.add_edge(c1, c2, relation="co_mentions")
+                    added += 1
+        return added
+
+    def link_documents_by_entity(self) -> int:
+        """Connect documents that mention the same entity with ``co_mentions`` edges.
+
+        Returns
+        -------
+        int
+            Number of edges added.
+        """
+
+        ent_to_docs: Dict[str, list[str]] = {}
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("relation") != "mentions":
+                continue
+            src_type = self.graph.nodes[u].get("type")
+            doc_id: str | None = None
+            if src_type == "chunk":
+                doc_id = self.get_document_for_chunk(u)
+            elif src_type == "document":
+                doc_id = u
+            if not doc_id:
+                continue
+            ent_to_docs.setdefault(v, []).append(doc_id)
+
+        added = 0
+        for docs in ent_to_docs.values():
+            uniq_docs = list(dict.fromkeys(docs))
+            for i, d1 in enumerate(uniq_docs):
+                for d2 in uniq_docs[i + 1 :]:
+                    if (
+                        self.graph.has_edge(d1, d2)
+                        and self.graph.edges[d1, d2].get("relation") == "co_mentions"
+                    ):
+                        continue
+                    self.graph.add_edge(d1, d2, relation="co_mentions")
+                    added += 1
+        return added
+
+    def link_sections_by_entity(self) -> int:
+        """Connect sections that mention the same entity with ``co_mentions`` edges.
+
+        Returns
+        -------
+        int
+            Number of edges added.
+        """
+
+        ent_to_sections: Dict[str, list[str]] = {}
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("relation") != "mentions":
+                continue
+            src_type = self.graph.nodes[u].get("type")
+            sec_id: str | None = None
+            if src_type == "chunk":
+                sec_id = self.get_section_for_chunk(u)
+            elif src_type == "section":
+                sec_id = u
+            if not sec_id:
+                continue
+            ent_to_sections.setdefault(v, []).append(sec_id)
+
+        added = 0
+        for secs in ent_to_sections.values():
+            uniq_secs = list(dict.fromkeys(secs))
+            for i, s1 in enumerate(uniq_secs):
+                for s2 in uniq_secs[i + 1 :]:
+                    if (
+                        self.graph.has_edge(s1, s2)
+                        and self.graph.edges[s1, s2].get("relation") == "co_mentions"
+                    ):
+                        continue
+                    self.graph.add_edge(s1, s2, relation="co_mentions")
+                    added += 1
+        return added
+
+    def link_authors_organizations(self) -> int:
+        """Connect author nodes to their organizations using ``affiliated_with``.
+
+        Documents may store ``author`` and ``organization`` attributes. This
+        helper ensures corresponding entity nodes exist and links them.
+
+        Returns
+        -------
+        int
+            Number of edges created.
+        """
+
+        added = 0
+        for doc_id, data in list(self.graph.nodes(data=True)):
+            if data.get("type") != "document":
+                continue
+            author = data.get("author")
+            org = data.get("organization")
+            if not author or not org:
+                continue
+            if not self.graph.has_node(author):
+                self.add_entity(author, author, data.get("source"))
+            if not self.graph.has_node(org):
+                self.add_entity(org, org, data.get("source"))
+            if not self.graph.has_edge(author, org):
+                self.graph.add_edge(author, org, relation="affiliated_with")
+                added += 1
+        return added
 
     def _merge_entity_nodes(self, target: str, source: str) -> None:
         """Merge ``source`` entity into ``target``."""
@@ -519,21 +830,59 @@ class KnowledgeGraph:
             self.graph.nodes[target]["text"] = self.graph.nodes[source].get("text")
         self.graph.remove_node(source)
 
-    def resolve_entities(self, threshold: float = 0.8) -> int:
-        """Merge entity nodes that refer to the same concept."""
+    def resolve_entities(
+        self,
+        threshold: float = 0.8,
+        aliases: dict[str, list[str]] | None = None,
+    ) -> int:
+        """Merge entity nodes that refer to the same concept.
+
+        Parameters
+        ----------
+        threshold:
+            Minimum cosine similarity for merging using text embeddings.
+        aliases:
+            Optional mapping of canonical labels to lists of aliases. Nodes whose
+            ``text`` matches an alias will be merged into the node matching the
+            canonical label before similarity-based merging occurs.
+        """
 
         entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
         texts = [self.graph.nodes[e].get("text", "") for e in entities]
         if len(entities) < 2:
             return 0
-        embeddings = self.index.transform(texts)
+
         merged = 0
+
+        used_alias_indices: set[int] = set()
+        if aliases:
+
+            def _norm(t: str) -> str:
+                return re.sub(r"\W+", "", t).lower()
+
+            label_to_id = {_norm(self.graph.nodes[e].get("text", "")): e for e in entities}
+            for canon, alist in aliases.items():
+                target = label_to_id.get(_norm(canon))
+                if not target:
+                    continue
+                for alias in alist:
+                    source = label_to_id.get(_norm(alias))
+                    if source and source != target:
+                        self._merge_entity_nodes(target, source)
+                        merged += 1
+                        idx = entities.index(source)
+                        texts[idx] = canon
+                        used_alias_indices.add(idx)
+                        label_to_id[_norm(canon)] = target
+                        label_to_id.pop(_norm(alias), None)
+
+        embeddings = self.index.transform(texts)
         used: set[int] = set()
         for i, eid1 in enumerate(entities):
-            if i in used:
+            if i in used or i in used_alias_indices:
                 continue
             for j in range(i + 1, len(entities)):
-                if j in used:
+                if j in used or j in used_alias_indices:
                     continue
                 sim = float(
                     cosine_similarity(embeddings[i].reshape(1, -1), embeddings[j].reshape(1, -1))[
@@ -597,19 +946,63 @@ class KnowledgeGraph:
         if desc := item.get("description"):
             node["description"] = desc
 
-    def predict_links(self, threshold: float = 0.8) -> None:
-        """Create ``related_to`` edges between similar entities."""
+    def enrich_entity_dbpedia(self, entity_id: str) -> None:
+        """Fetch description from DBpedia and store it on the entity node."""
+
+        node = self.graph.nodes.get(entity_id)
+        if not node or node.get("type") != "entity":
+            raise ValueError("Unknown entity")
+        label = node.get("text")
+        if not label:
+            return
+        search = requests.get(
+            "https://lookup.dbpedia.org/api/search",
+            params={"query": label, "maxResults": 1},
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        data = search.json()
+        results = data.get("docs") or data.get("results")
+        if not results:
+            return
+        item = results[0]
+        uri = item.get("uri") or item.get("id")
+        if uri:
+            node["dbpedia_uri"] = uri
+        desc = item.get("description") or item.get("overview")
+        if desc:
+            node["description_dbpedia"] = desc
+
+    def predict_links(self, threshold: float = 0.8, *, use_graph_embeddings: bool = False) -> None:
+        """Create ``related_to`` edges between similar entities.
+
+        Parameters
+        ----------
+        threshold:
+            Minimum cosine similarity for creating a link.
+        use_graph_embeddings:
+            If ``True`` use Node2Vec embeddings stored on the nodes instead of
+            text embeddings for similarity computation. If embeddings are not
+            present they will be generated automatically.
+        """
 
         entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
-        texts = [self.graph.nodes[e].get("text", "") for e in entities]
         if len(entities) < 2:
             return
-        embeddings = self.index.transform(texts)
+
+        if use_graph_embeddings:
+            if not all("embedding" in self.graph.nodes[e] for e in entities):
+                self.compute_node2vec_embeddings()
+            emb_matrix = np.array([self.graph.nodes[e]["embedding"] for e in entities])
+        else:
+            texts = [self.graph.nodes[e].get("text", "") for e in entities]
+            emb_matrix = self.index.transform(texts)
+
         for i, eid1 in enumerate(entities):
             for j in range(i + 1, len(entities)):
                 eid2 = entities[j]
                 sim = float(
-                    cosine_similarity(embeddings[i].reshape(1, -1), embeddings[j].reshape(1, -1))[
+                    cosine_similarity(emb_matrix[i].reshape(1, -1), emb_matrix[j].reshape(1, -1))[
                         0, 0
                     ]
                 )
@@ -762,6 +1155,34 @@ class KnowledgeGraph:
         for node, score in values.items():
             if self.graph.nodes[node].get("type") == node_type:
                 self.graph.nodes[node]["centrality"] = float(score)
+
+    def compute_node2vec_embeddings(
+        self,
+        dimensions: int = 64,
+        walk_length: int = 10,
+        num_walks: int = 50,
+        workers: int = 1,
+        seed: int = 0,
+    ) -> None:
+        """Compute Node2Vec embeddings for all nodes and store them on the nodes."""
+
+        try:
+            from node2vec import Node2Vec
+        except Exception as e:  # pragma: no cover - dependency missing
+            raise RuntimeError("node2vec package is required") from e
+
+        n2v = Node2Vec(
+            self.graph,
+            dimensions=dimensions,
+            walk_length=walk_length,
+            num_walks=num_walks,
+            workers=workers,
+            seed=seed,
+        )
+        model = n2v.fit()
+        for node in self.graph.nodes:
+            vec = model.wv[str(node)]
+            self.graph.nodes[node]["embedding"] = vec.tolist()
 
     # ------------------------------------------------------------------
     # Structure helpers
