@@ -479,6 +479,19 @@ def test_deduplicate_and_resolve_entities(monkeypatch):
     assert "e2" not in kg.graph.nodes
 
 
+def test_resolve_entities_with_aliases():
+    kg = KnowledgeGraph()
+    kg.add_entity("e1", "IBM")
+    kg.add_entity("e2", "International Business Machines")
+
+    merged = kg.resolve_entities(
+        threshold=1.0, aliases={"IBM": ["international business machines"]}
+    )
+
+    assert merged == 1
+    assert "e2" not in kg.graph.nodes
+
+
 def test_enrich_entity_wikidata(monkeypatch):
     kg = KnowledgeGraph()
     kg.add_entity("e1", "Beethoven")
@@ -500,6 +513,29 @@ def test_enrich_entity_wikidata(monkeypatch):
     assert node.get("description") == "composer"
 
 
+def test_enrich_entity_dbpedia(monkeypatch):
+    kg = KnowledgeGraph()
+    kg.add_entity("e1", "Beethoven")
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    def fake_get(url, params=None, headers=None, timeout=10):
+        return FakeResponse(
+            {"results": [{"id": "http://dbpedia.org/resource/Beethoven", "description": "desc"}]}
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    kg.enrich_entity_dbpedia("e1")
+    node = kg.graph.nodes["e1"]
+    assert node.get("dbpedia_uri") == "http://dbpedia.org/resource/Beethoven"
+    assert node.get("description_dbpedia") == "desc"
+
+
 def test_compute_centrality():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -513,12 +549,50 @@ def test_compute_centrality():
     assert "centrality" in kg.graph.nodes["e1"]
 
 
+def test_compute_node2vec_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.add_entity("e1", "A")
+    kg.add_entity("e2", "B")
+    kg.link_entity("c1", "e1")
+    kg.link_entity("c2", "e2")
+    kg.compute_node2vec_embeddings(dimensions=8, walk_length=4, num_walks=5, seed=42)
+    assert isinstance(kg.graph.nodes["e1"].get("embedding"), list)
+    assert len(kg.graph.nodes["e1"]["embedding"]) == 8
+
+
 def test_predict_links():
     kg = KnowledgeGraph()
     kg.add_entity("e1", "Beethoven")
     kg.add_entity("e2", "Ludwig van Beethoven")
     kg.predict_links(threshold=0.4)
     assert kg.graph.has_edge("e1", "e2")
+    # Node2Vec based prediction
+    kg2 = KnowledgeGraph()
+    kg2.add_entity("a1", "X")
+    kg2.add_entity("a2", "X")
+    kg2.add_document("d", source="s")
+    kg2.add_chunk("d", "c1", "x")
+    kg2.link_entity("c1", "a1")
+    kg2.link_entity("c1", "a2")
+    kg2.compute_node2vec_embeddings(dimensions=8, walk_length=4, num_walks=5, seed=42)
+    kg2.predict_links(threshold=0.1, use_graph_embeddings=True)
+    assert "embedding" in kg2.graph.nodes["a1"]
+
+
+def test_mark_conflicts():
+    kg = KnowledgeGraph()
+    kg.add_entity("A", "A")
+    kg.add_entity("B", "B")
+    kg.add_entity("C", "C")
+    kg.graph.add_edge("A", "B", relation="related")
+    kg.graph.add_edge("A", "C", relation="related")
+    marked = kg.mark_conflicting_facts()
+    assert marked == 2
+    assert kg.graph.edges["A", "B"].get("conflict") is True
+    assert kg.graph.edges["A", "C"].get("conflict") is True
 
 
 def test_consolidate_schema():
@@ -616,3 +690,105 @@ def test_extract_entities():
     ents = set(kg.get_entities_for_chunk("c1"))
     assert "Albert Einstein" in ents
     assert "Ulm" in ents
+
+
+def test_link_chunks_by_entity():
+    kg = KnowledgeGraph()
+    kg.add_document("doc1", source="s")
+    kg.add_document("doc2", source="s")
+    kg.add_chunk("doc1", "c1", "Paris is big")
+    kg.add_chunk("doc2", "c2", "I love Paris")
+    kg.add_entity("Paris", "Paris")
+    kg.link_entity("c1", "Paris")
+    kg.link_entity("c2", "Paris")
+
+    added = kg.link_chunks_by_entity()
+    assert added == 1
+    assert kg.graph.has_edge("c1", "c2")
+    assert kg.graph.edges["c1", "c2"]["relation"] == "co_mentions"
+
+
+def test_link_documents_by_entity():
+    kg = KnowledgeGraph()
+    kg.add_document("doc1", source="s")
+    kg.add_document("doc2", source="s")
+    kg.add_chunk("doc1", "c1", "Paris is big")
+    kg.add_chunk("doc2", "c2", "I love Paris")
+    kg.add_entity("Paris", "Paris")
+    kg.link_entity("c1", "Paris")
+    kg.link_entity("c2", "Paris")
+
+    added = kg.link_documents_by_entity()
+    assert added == 1
+    assert kg.graph.has_edge("doc1", "doc2")
+    assert kg.graph.edges["doc1", "doc2"]["relation"] == "co_mentions"
+
+
+def test_link_sections_by_entity():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_section("doc", "s1")
+    kg.add_section("doc", "s2")
+    kg.add_chunk("doc", "c1", "Paris", section_id="s1")
+    kg.add_chunk("doc", "c2", "Paris", section_id="s2")
+    kg.add_entity("Paris", "Paris")
+    kg.link_entity("c1", "Paris")
+    kg.link_entity("c2", "Paris")
+
+    added = kg.link_sections_by_entity()
+    assert added == 1
+    assert kg.graph.has_edge("s1", "s2")
+    assert kg.graph.edges["s1", "s2"]["relation"] == "co_mentions"
+
+
+def test_clean_chunk_texts():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s")
+    kg.add_chunk("doc", "c1", "<p>Hello\n world</p>")
+
+    changed = kg.clean_chunk_texts()
+    assert changed == 1
+    assert kg.graph.nodes["c1"]["text"] == "Hello world"
+
+
+def test_normalize_date_fields():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("e1", type="entity", birth_date="Jan 2, 2024")
+
+    changed = kg.normalize_date_fields()
+
+    assert changed == 1
+    assert kg.graph.nodes["e1"]["birth_date"] == "2024-01-02"
+
+
+def test_validate_coherence():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("p", type="entity", birth_date="2024-01-01")
+    kg.graph.add_node("c", type="entity", birth_date="2023-01-01")
+    kg.graph.add_edge("p", "c", relation="parent_of")
+
+    marked = kg.validate_coherence()
+
+    assert marked == 1
+    assert kg.graph.edges["p", "c"].get("inconsistent") is True
+
+
+def test_link_authors_organizations():
+    kg = KnowledgeGraph()
+    kg.add_document("doc", source="s", author="alice", organization="acme")
+
+    added = kg.link_authors_organizations()
+
+    assert added == 1
+    assert kg.graph.has_edge("alice", "acme")
+    assert kg.graph.edges["alice", "acme"]["relation"] == "affiliated_with"
+
+
+def test_remove_document_rebuilds_index():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello world")
+    kg.add_chunk("d", "c2", "more text")
+    assert kg.search_embeddings("hello", k=1, fetch_neighbors=False) == ["c1"]
+    kg.remove_document("d")
+    assert kg.search_embeddings("hello", k=1, fetch_neighbors=False) == []

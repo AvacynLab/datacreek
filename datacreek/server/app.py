@@ -427,6 +427,54 @@ def api_deduplicate(name: str):
     return jsonify({"removed": removed})
 
 
+@app.post("/api/datasets/<name>/clean_chunks")
+@login_required
+def api_clean_chunks(name: str):
+    """Normalize chunk text by stripping markup and whitespace."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    cleaned = ds.clean_chunks()
+    if cleaned:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"cleaned": cleaned})
+
+
+@app.post("/api/datasets/<name>/normalize_dates")
+@login_required
+def api_normalize_dates(name: str):
+    """Normalize date fields on dataset nodes."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    changed = ds.normalize_dates()
+    if changed:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"normalized": changed})
+
+
+@app.post("/api/datasets/<name>/prune")
+@login_required
+def api_prune(name: str):
+    """Remove nodes originating from specific sources."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+
+    data = request.get_json() or {}
+    sources = data.get("sources", [])
+    if not isinstance(sources, list) or not sources:
+        abort(400, description="sources list required")
+
+    removed = ds.prune_sources(sources)
+    if removed:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"removed": removed})
+
+
 @app.post("/api/datasets/<name>/similarity")
 @login_required
 def api_similarity(name: str):
@@ -466,6 +514,62 @@ def api_document_similarity(name: str):
     ds.link_similar_documents(k=k)
     ds.history.append("Document similarity links created")
     return jsonify({"message": "document_similarity"})
+
+
+@app.post("/api/datasets/<name>/co_mentions")
+@login_required
+def api_co_mentions(name: str):
+    """Create links between chunks that mention the same entity."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    added = ds.link_chunks_by_entity()
+    if added:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"added": added})
+
+
+@app.post("/api/datasets/<name>/doc_co_mentions")
+@login_required
+def api_doc_co_mentions(name: str):
+    """Create links between documents that mention the same entity."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    added = ds.link_documents_by_entity()
+    if added:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"added": added})
+
+
+@app.post("/api/datasets/<name>/section_co_mentions")
+@login_required
+def api_section_co_mentions(name: str):
+    """Create links between sections that mention the same entity."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    added = ds.link_sections_by_entity()
+    if added:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"added": added})
+
+
+@app.post("/api/datasets/<name>/author_org_links")
+@login_required
+def api_author_org_links(name: str):
+    """Link document authors to their organizations."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    added = ds.link_authors_organizations()
+    if added:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"added": added})
 
 
 @app.get("/api/datasets/<name>/similar_chunks")
@@ -849,7 +953,10 @@ def api_resolve_entities(name: str):
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
-    merged = ds.resolve_entities()
+    data = request.get_json() or {}
+    threshold = float(data.get("threshold", 0.8))
+    aliases = data.get("aliases") if isinstance(data.get("aliases"), dict) else None
+    merged = ds.resolve_entities(threshold=threshold, aliases=aliases)
     return jsonify({"merged": merged})
 
 
@@ -859,7 +966,8 @@ def api_predict_links(name: str):
     ds = DATASETS.get(name)
     if not ds:
         abort(404)
-    ds.predict_links()
+    use_graph = request.args.get("graph") == "true"
+    ds.predict_links(use_graph_embeddings=use_graph)
     return jsonify({"message": "links_predicted"})
 
 
@@ -870,6 +978,16 @@ def api_enrich_entity(name: str, eid: str):
     if not ds:
         abort(404)
     ds.enrich_entity(eid)
+    return jsonify({"message": "enriched"})
+
+
+@app.post("/api/datasets/<name>/enrich_entity_dbpedia/<eid>")
+@login_required
+def api_enrich_entity_dbpedia(name: str, eid: str):
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    ds.enrich_entity_dbpedia(eid)
     return jsonify({"message": "enriched"})
 
 
@@ -896,6 +1014,33 @@ def api_centrality(name: str):
     node_type = request.args.get("type", "entity")
     ds.compute_centrality(node_type=node_type, metric=metric)
     return jsonify({"message": "centrality"})
+
+
+@app.post("/api/datasets/<name>/graph_embeddings")
+@login_required
+def api_graph_embeddings(name: str):
+    """Generate Node2Vec embeddings for all nodes."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+
+    data = request.get_json() or {}
+    dims = int(data.get("dimensions", 64))
+    walk = int(data.get("walk_length", 10))
+    num = int(data.get("num_walks", 50))
+    seed = int(data.get("seed", 0))
+    workers = int(data.get("workers", 1))
+
+    ds.compute_graph_embeddings(
+        dimensions=dims,
+        walk_length=walk,
+        num_walks=num,
+        workers=workers,
+        seed=seed,
+    )
+
+    return jsonify({"message": "graph_embeddings"})
 
 
 @app.post("/api/datasets/<name>/extract_facts")
@@ -936,6 +1081,34 @@ def api_conflicts(name: str):
         abort(404)
     conflicts = ds.find_conflicting_facts()
     return jsonify(conflicts)
+
+
+@app.post("/api/datasets/<name>/mark_conflicts")
+@login_required
+def api_mark_conflicts(name: str):
+    """Flag conflicting facts on graph edges."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    marked = ds.mark_conflicting_facts()
+    if marked:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"marked": marked})
+
+
+@app.post("/api/datasets/<name>/validate")
+@login_required
+def api_validate(name: str):
+    """Run logical consistency checks on the dataset."""
+
+    ds = DATASETS.get(name)
+    if not ds:
+        abort(404)
+    marked = ds.validate_coherence()
+    if marked:
+        ds.stage = max(ds.stage, 3)
+    return jsonify({"marked": marked})
 
 
 @app.get("/api/datasets/<name>/export")

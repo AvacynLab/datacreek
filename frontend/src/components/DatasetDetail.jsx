@@ -17,6 +17,8 @@ export default function DatasetDetail() {
   const [searchResults, setSearchResults] = useState([]);
   const [curQuery, setCurQuery] = useState("");
   const [conflicts, setConflicts] = useState([]);
+  const [pruneSources, setPruneSources] = useState("");
+  const [entityId, setEntityId] = useState("");
   const graphRef = useRef();
 
   useEffect(() => {
@@ -78,6 +80,53 @@ export default function DatasetDetail() {
     fetch(`/api/datasets/${name}/content`).then(r => r.json()).then(setContent)
   }
 
+  async function prune() {
+    if (!pruneSources.trim()) return
+    const body = { sources: pruneSources.split(',').map(s => s.trim()).filter(Boolean) }
+    const res = await fetch(`/api/datasets/${name}/prune`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (!res.ok) return
+    setPruneSources('')
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+    fetch(`/api/datasets/${name}/content`).then(r => r.json()).then(setContent)
+    fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+  }
+
+  async function cleanChunks() {
+    const res = await fetch(`/api/datasets/${name}/clean_chunks`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+    fetch(`/api/datasets/${name}/content`).then(r => r.json()).then(setContent)
+  }
+
+  async function normalizeDates() {
+    const res = await fetch(`/api/datasets/${name}/normalize_dates`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+    fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+  }
+
+  async function enrichWikidata() {
+    if (!entityId.trim()) return
+    const res = await fetch(`/api/datasets/${name}/enrich_entity/${entityId}`, { method: 'POST' })
+    if (res.ok) {
+      setEntityId('')
+      fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+    }
+  }
+
+  async function enrichDbpedia() {
+    if (!entityId.trim()) return
+    const res = await fetch(`/api/datasets/${name}/enrich_entity_dbpedia/${entityId}`, { method: 'POST' })
+    if (res.ok) {
+      setEntityId('')
+      fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+    }
+  }
+
   async function runOp(op) {
     const res = await fetch(`/api/datasets/${name}/${op}`, { method: 'POST' })
     if (!res.ok) return
@@ -96,6 +145,20 @@ export default function DatasetDetail() {
     const res = await fetch(`/api/datasets/${name}/conflicts`)
     if (!res.ok) return
     setConflicts(await res.json())
+  }
+
+  async function markConflicts() {
+    const res = await fetch(`/api/datasets/${name}/mark_conflicts`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
+  }
+
+  async function validateCoherence() {
+    const res = await fetch(`/api/datasets/${name}/validate`, { method: 'POST' })
+    if (!res.ok) return
+    fetch(`/datasets/${name}/graph`).then(r => r.json()).then(setGraph)
+    fetch(`/api/datasets/${name}`).then(r => r.json()).then(setInfo)
   }
 
   async function graphSearch() {
@@ -308,8 +371,29 @@ export default function DatasetDetail() {
                   <Button type="button" onClick={() => runOp('entity_group_summaries')}>Summarize Entities</Button>
                   <Button type="button" onClick={() => runOp('trust')}>Score Trust</Button>
                   <Button type="button" onClick={() => runOp('similarity')}>Link Similar</Button>
+                  <Button type="button" onClick={() => runOp('co_mentions')}>Link Co-Mentions</Button>
+                  <Button type="button" onClick={() => runOp('doc_co_mentions')}>Link Docs</Button>
+                  <Button type="button" onClick={() => runOp('section_co_mentions')}>Link Sections</Button>
+                  <Button type="button" onClick={() => runOp('author_org_links')}>Author Orgs</Button>
+                  <Button type="button" onClick={() => runOp('resolve_entities')}>Resolve Entities</Button>
+                  <Button type="button" onClick={() => runOp('predict_links')}>Predict Links</Button>
+                  <Button type="button" onClick={() => runOp('predict_links?graph=true')}>Graph Link Prediction</Button>
+                  <Button type="button" onClick={() => runOp('centrality')}>Centrality</Button>
+                  <Button type="button" onClick={() => runOp('graph_embeddings')}>Graph Embeddings</Button>
                   <Button type="button" onClick={extractFacts}>Extract Facts</Button>
                   <Button type="button" onClick={checkConflicts}>View Conflicts</Button>
+                  <Button type="button" onClick={markConflicts}>Mark Conflicts</Button>
+                  <Button type="button" onClick={validateCoherence}>Validate</Button>
+                </div>
+                <div className="flex gap-2 items-center mt-2 text-sm">
+                  <input
+                    className="border rounded p-1 text-sm"
+                    placeholder="entity id"
+                    value={entityId}
+                    onChange={(e) => setEntityId(e.target.value)}
+                  />
+                  <Button type="button" onClick={enrichWikidata}>Enrich Wikidata</Button>
+                  <Button type="button" onClick={enrichDbpedia}>Enrich DBpedia</Button>
                 </div>
               </div>
             )
@@ -324,8 +408,17 @@ export default function DatasetDetail() {
             <Card>
               <CardHeader>Curation</CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex justify-end">
+                <div className="flex items-center gap-2 justify-end">
+                  <input
+                    className="border rounded p-1 text-sm"
+                    placeholder="sources comma-separated"
+                    value={pruneSources}
+                    onChange={(e) => setPruneSources(e.target.value)}
+                  />
+                  <Button type="button" onClick={prune}>Prune</Button>
                   <Button type="button" onClick={deduplicate}>Deduplicate</Button>
+                  <Button type="button" onClick={cleanChunks}>Clean Text</Button>
+                  <Button type="button" onClick={normalizeDates}>Normalize Dates</Button>
                 </div>
                 <input
                   className="border rounded p-2 w-full text-sm"

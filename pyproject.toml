@@ -36,6 +36,8 @@ dependencies = [
     "unstructured>=0.18.1",
     "SpeechRecognition>=3.14.0",
     "pocketsphinx>=5.0",
+    "node2vec>=0.4.6",
+    "fakeredis>=2.30.0",
 ]
 
 # These fields appear in pip show

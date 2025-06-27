@@ -398,6 +398,95 @@ def test_dedup_and_resolve_wrappers(monkeypatch):
     assert merged >= 1
 
 
+def test_resolve_entities_wrapper_with_aliases():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_entity("e1", "IBM")
+    ds.add_entity("e2", "International Business Machines")
+
+    merged = ds.resolve_entities(
+        threshold=1.0, aliases={"IBM": ["international business machines"]}
+    )
+
+    assert merged == 1
+    assert "e2" not in ds.graph.graph.nodes
+
+
+def test_co_mentions_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d1", source="s")
+    ds.add_document("d2", source="s")
+    ds.add_chunk("d1", "c1", "Paris is big")
+    ds.add_chunk("d2", "c2", "I love Paris")
+    ds.add_entity("Paris", "Paris")
+    ds.link_entity("c1", "Paris")
+    ds.link_entity("c2", "Paris")
+
+    added = ds.link_chunks_by_entity()
+    assert added == 1
+    assert ds.graph.graph.has_edge("c1", "c2")
+
+
+def test_link_documents_by_entity_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc1", source="s")
+    ds.add_document("doc2", source="s")
+    ds.add_chunk("doc1", "c1", "Paris is big")
+    ds.add_chunk("doc2", "c2", "I love Paris")
+    ds.add_entity("Paris", "Paris")
+    ds.link_entity("c1", "Paris")
+    ds.link_entity("c2", "Paris")
+
+    added = ds.link_documents_by_entity()
+    assert added == 1
+    assert ds.graph.graph.has_edge("doc1", "doc2")
+
+
+def test_link_sections_by_entity_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s")
+    ds.add_section("doc", "s1")
+    ds.add_section("doc", "s2")
+    ds.add_chunk("doc", "c1", "Paris", section_id="s1")
+    ds.add_chunk("doc", "c2", "Paris", section_id="s2")
+    ds.add_entity("Paris", "Paris")
+    ds.link_entity("c1", "Paris")
+    ds.link_entity("c2", "Paris")
+
+    added = ds.link_sections_by_entity()
+    assert added == 1
+    assert ds.graph.graph.has_edge("s1", "s2")
+
+
+def test_link_authors_organizations_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("doc", source="s", author="alice", organization="acme")
+
+    added = ds.link_authors_organizations()
+
+    assert added == 1
+    assert ds.graph.graph.has_edge("alice", "acme")
+
+
+def test_clean_chunks_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "<b>Hello</b>\n")
+
+    changed = ds.clean_chunks()
+    assert changed == 1
+    assert ds.graph.graph.nodes["c1"]["text"] == "Hello"
+
+
+def test_normalize_dates_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("e1", type="entity", start_date="1 Feb 2023")
+
+    changed = ds.normalize_dates()
+
+    assert changed == 1
+    assert ds.graph.graph.nodes["e1"]["start_date"] == "2023-02-01"
+
+
 def test_enrich_entity_wrapper(monkeypatch):
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_entity("e1", "Beethoven")
@@ -418,6 +507,29 @@ def test_enrich_entity_wrapper(monkeypatch):
     assert node.get("wikidata_id") == "Q1"
 
 
+def test_enrich_entity_dbpedia_wrapper(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_entity("e1", "Beethoven")
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def json(self):
+            return self._data
+
+    def fake_get(url, params=None, headers=None, timeout=10):
+        return FakeResponse(
+            {"results": [{"id": "http://dbpedia.org/resource/Beethoven", "description": "desc"}]}
+        )
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    ds.enrich_entity_dbpedia("e1")
+    node = ds.graph.graph.nodes["e1"]
+    assert node.get("dbpedia_uri") == "http://dbpedia.org/resource/Beethoven"
+    assert node.get("description_dbpedia") == "desc"
+
+
 def test_compute_centrality_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -431,12 +543,35 @@ def test_compute_centrality_wrapper():
     assert "centrality" in ds.graph.graph.nodes["e1"]
 
 
+def test_graph_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_graph_embeddings(dimensions=8, walk_length=4, num_walks=5, seed=42, workers=1)
+    assert len(ds.graph.graph.nodes["e1"]["embedding"]) == 8
+
+
 def test_predict_links_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_entity("e1", "Beethoven")
     ds.add_entity("e2", "Ludwig van Beethoven")
     ds.predict_links(threshold=0.4)
     assert ds.graph.graph.has_edge("e1", "e2")
+    ds2 = DatasetBuilder(DatasetType.TEXT)
+    ds2.add_entity("a1", "X")
+    ds2.add_entity("a2", "X")
+    ds2.add_document("d", source="s")
+    ds2.add_chunk("d", "c1", "x")
+    ds2.link_entity("c1", "a1")
+    ds2.link_entity("c1", "a2")
+    ds2.compute_graph_embeddings(dimensions=8, walk_length=4, num_walks=5, seed=42, workers=1)
+    ds2.predict_links(threshold=0.1, use_graph_embeddings=True)
+    assert "embedding" in ds2.graph.graph.nodes["a1"]
 
 
 def test_consolidate_schema_wrapper():
@@ -538,3 +673,38 @@ def test_extract_entities_wrapper():
     ents = set(ds.get_entities_for_chunk("c1"))
     assert "Albert Einstein" in ents
     assert "Ulm" in ents
+
+
+def test_conflict_detection_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.add_fact("A", "likes", "B", source="s1")
+    ds.graph.add_fact("A", "likes", "C", source="s2")
+    conflicts = ds.find_conflicting_facts()
+    assert conflicts == [
+        (
+            "A",
+            "likes",
+            {"B": ["s1"], "C": ["s2"]},
+        )
+    ]
+
+
+def test_mark_conflicts_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    f1 = ds.graph.add_fact("A", "likes", "B")
+    f2 = ds.graph.add_fact("A", "likes", "C")
+    ds.mark_conflicting_facts()
+    assert ds.graph.graph.edges["A", "B"].get("conflict") is True
+    assert ds.graph.graph.edges["A", "C"].get("conflict") is True
+
+
+def test_validate_coherence_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("p", type="entity", birth_date="2024-01-01")
+    ds.graph.graph.add_node("c", type="entity", birth_date="2023-01-01")
+    ds.graph.graph.add_edge("p", "c", relation="parent_of")
+
+    marked = ds.validate_coherence()
+
+    assert marked == 1
+    assert ds.graph.graph.edges["p", "c"].get("inconsistent") is True

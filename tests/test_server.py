@@ -305,8 +305,13 @@ def test_dataset_ops_endpoints(monkeypatch):
     ds.add_document("d1", source="s")
     ds.add_chunk("d1", "c1", "hello")
     ds.add_chunk("d1", "c2", "hello")
+    ds.add_document("d2", source="bad")
+    ds.add_chunk("d2", "c3", "bad text")
     ds.add_entity("e1", "Beethoven")
     ds.add_entity("e2", "Ludwig van Beethoven")
+    ds.graph.graph.nodes["e1"]["birth_date"] = "2024-01-01"
+    ds.graph.graph.nodes["e2"]["birth_date"] = "2023-01-01"
+    ds.graph.graph.add_edge("e1", "e2", relation="parent_of")
     DATASETS["demo"] = ds
 
     class FakeResponse:
@@ -316,29 +321,76 @@ def test_dataset_ops_endpoints(monkeypatch):
         def json(self):
             return self._data
 
-    def fake_get(url, params=None, timeout=10):
+    def fake_get(url, params=None, headers=None, timeout=10):
+        if "lookup.dbpedia.org" in url:
+            return FakeResponse(
+                {
+                    "results": [
+                        {"id": "http://dbpedia.org/resource/Beethoven", "description": "desc"}
+                    ]
+                }
+            )
         return FakeResponse({"search": [{"id": "Q1", "description": "composer"}]})
 
     with app.test_client() as client:
         _login(client)
-        for op in [
+        ops = [
             "consolidate",
             "communities",
             "summaries",
             "trust",
             "similarity",
+            "co_mentions",
+            "doc_co_mentions",
+            "section_co_mentions",
+            "author_org_links",
             "entity_groups",
             "entity_group_summaries",
             "deduplicate",
+            "clean_chunks",
+            "normalize_dates",
+            "prune",
+            "graph_embeddings",
+            "mark_conflicts",
+            "validate",
             "resolve_entities",
-            "predict_links",
+            "predict_links?graph=true",
             "centrality",
-        ]:
-            res = client.post(f"/api/datasets/demo/{op}")
+        ]
+        for op in ops:
+            if op == "prune":
+                res = client.post(f"/api/datasets/demo/{op}", json={"sources": ["bad"]})
+            elif op == "resolve_entities":
+                res = client.post(
+                    f"/api/datasets/demo/{op}",
+                    json={"aliases": {"Beethoven": ["Ludwig van Beethoven"]}},
+                )
+            elif op == "graph_embeddings":
+                res = client.post(
+                    f"/api/datasets/demo/{op}",
+                    json={
+                        "dimensions": 8,
+                        "walk_length": 4,
+                        "num_walks": 5,
+                        "seed": 42,
+                        "workers": 1,
+                    },
+                )
+            else:
+                res = client.post(f"/api/datasets/demo/{op}")
             assert res.status_code == 200
+            if op == "validate":
+                assert res.get_json()["marked"] == 1
+        # Prune removed the bad document and chunk
+        assert "d2" not in ds.graph.graph.nodes
+        assert "c3" not in ds.graph.graph.nodes
+
+        assert len(ds.graph.graph.nodes["e1"]["embedding"]) == 8
 
         monkeypatch.setattr(requests, "get", fake_get)
         res = client.post("/api/datasets/demo/enrich_entity/e1")
+        assert res.status_code == 200
+        res = client.post("/api/datasets/demo/enrich_entity_dbpedia/e1")
         assert res.status_code == 200
         res = client.post("/api/datasets/demo/extract_entities", json={"model": None})
         assert res.status_code == 200
@@ -405,4 +457,18 @@ def test_lookup_endpoints():
 
         res = client.get("/api/datasets/demo/entity_pages", query_string={"eid": "A"})
         assert res.get_json() == [1]
+    DATASETS.clear()
+
+
+def test_conflicts_endpoint():
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.graph.add_fact("A", "likes", "B", source="s1")
+    ds.graph.add_fact("A", "likes", "C", source="s2")
+    DATASETS["demo"] = ds
+    with app.test_client() as client:
+        _login(client)
+        res = client.get("/api/datasets/demo/conflicts")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data == [["A", "likes", {"B": ["s1"], "C": ["s2"]}]]
     DATASETS.clear()

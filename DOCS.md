@@ -1541,6 +1541,14 @@ curl -X POST localhost:8000/save -d "ds_id=1&fmt=jsonl"
    - Clean document text before ingestion
    - For PDFs, ensure they are text-based, not scanned images
    - Remove irrelevant content (headers, footers, page numbers)
+   - Prune low quality sources from the knowledge graph after ingestion
+   - Link chunks that mention the same entity to enrich traversal
+   - Clean chunk text to strip markup and whitespace
+   - Normalize date fields across nodes to ISO format
+   - Compute Node2Vec embeddings for deeper graph analysis
+   - Predict links between entities using graph embeddings
+   - Mark conflicting facts when multiple sources disagree
+   - Validate logical consistency of relations (e.g., parent before child)
 
 2. **Chunking Strategy**
    - Balance chunk size with context requirements
