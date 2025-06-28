@@ -5,11 +5,11 @@
 # the root directory of this source tree.
 # Create QA Pairs
 
+import asyncio
 import json
 import logging
 import os
 import time
-import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 

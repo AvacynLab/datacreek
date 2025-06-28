@@ -130,8 +130,7 @@ def convert_format(
             return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
         elif format_type == "alpaca":
             formatted = [
-                {"instruction": p["question"], "input": "", "output": p["answer"]}
-                for p in qa_pairs
+                {"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs
             ]
             if output_path:
                 return to_alpaca(qa_pairs, output_path)

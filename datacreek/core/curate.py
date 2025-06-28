@@ -5,10 +5,10 @@
 # the root directory of this source tree.
 # Filter low quality examples
 
+import asyncio
 import json
 import logging
 import os
-import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

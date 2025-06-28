@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
 
 from celery import Celery
@@ -75,7 +75,7 @@ def generate_task(
         src = db.get(SourceData, src_id)
         if not src or src.owner_id != user_id:
             raise RuntimeError("Source not found")
-        from datacreek.utils import load_config, get_path_config
+        from datacreek.utils import get_path_config, load_config
 
         cfg = load_config(str(config_path) if config_path else None)
         output_dir = Path(get_path_config(cfg, "output", "generated"))

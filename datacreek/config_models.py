@@ -139,6 +139,7 @@ class OutputPathsModel(BaseModel):
     def to_settings(self) -> OutputPaths:
         return OutputPaths.from_dict(self.model_dump())
 
+
 @dataclass
 class VLLMSettings:
     """Configuration for vLLM server connection."""
@@ -191,6 +192,7 @@ class OpenAISettingsModel(BaseModel):
 
     def to_settings(self) -> OpenAISettings:
         return OpenAISettings.from_dict(self.model_dump())
+
 
 @dataclass
 class LLMSettings:

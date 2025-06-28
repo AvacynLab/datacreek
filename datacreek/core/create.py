@@ -13,11 +13,7 @@ from typing import Any, Dict, Optional
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.generators.vqa_generator import VQAGenerator
 from datacreek.models.llm_client import LLMClient
-from datacreek.utils.config import (
-    get_generation_config,
-    get_output_paths,
-    load_config,
-)
+from datacreek.utils.config import get_generation_config, get_output_paths, load_config
 
 logger = logging.getLogger(__name__)
 

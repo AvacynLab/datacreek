@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -8,12 +9,7 @@ from typing import Any, Dict, List
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.save_as import convert_format
-import logging
-from datacreek.utils.config import (
-    get_format_settings,
-    load_config,
-    merge_configs,
-)
+from datacreek.utils.config import get_format_settings, load_config, merge_configs
 
 logger = logging.getLogger(__name__)
 

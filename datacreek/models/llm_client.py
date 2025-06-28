@@ -581,8 +581,10 @@ class LLMClient:
                     temperature or self.config.get("generation", {}).get("temperature", 0.1),
                     max_tokens or self.config.get("generation", {}).get("max_tokens", 4096),
                     top_p or self.config.get("generation", {}).get("top_p", 0.95),
-                    frequency_penalty or self.config.get("generation", {}).get("frequency_penalty", 0.0),
-                    presence_penalty or self.config.get("generation", {}).get("presence_penalty", 0.0),
+                    frequency_penalty
+                    or self.config.get("generation", {}).get("frequency_penalty", 0.0),
+                    presence_penalty
+                    or self.config.get("generation", {}).get("presence_penalty", 0.0),
                     stop or self.config.get("generation", {}).get("stop"),
                     verbose,
                     False,
@@ -598,7 +600,8 @@ class LLMClient:
                 max_tokens or self.config.get("generation", {}).get("max_tokens", 4096),
                 top_p or self.config.get("generation", {}).get("top_p", 0.95),
                 batch_size or self.config.get("generation", {}).get("batch_size", 32),
-                frequency_penalty or self.config.get("generation", {}).get("frequency_penalty", 0.0),
+                frequency_penalty
+                or self.config.get("generation", {}).get("frequency_penalty", 0.0),
                 presence_penalty or self.config.get("generation", {}).get("presence_penalty", 0.0),
                 stop or self.config.get("generation", {}).get("stop"),
                 logger.isEnabledFor(logging.DEBUG),

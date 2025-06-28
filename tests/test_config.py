@@ -3,29 +3,29 @@ import os
 import pytest
 
 from datacreek.config_models import (
-    GenerationSettings,
-    GenerationSettingsModel,
     CurateSettings,
     CurateSettingsModel,
     FormatSettings,
     FormatSettingsModel,
+    GenerationSettings,
+    GenerationSettingsModel,
+    LLMSettings,
+    LLMSettingsModel,
+    OpenAISettings,
+    OpenAISettingsModel,
     OutputPaths,
     OutputPathsModel,
     VLLMSettings,
     VLLMSettingsModel,
-    OpenAISettings,
-    OpenAISettingsModel,
-    LLMSettings,
-    LLMSettingsModel,
 )
 from datacreek.utils.config import (
-    get_generation_config,
     get_curate_settings,
     get_format_settings,
+    get_generation_config,
+    get_llm_settings,
+    get_openai_settings,
     get_output_paths,
     get_vllm_settings,
-    get_openai_settings,
-    get_llm_settings,
     load_config,
 )
 

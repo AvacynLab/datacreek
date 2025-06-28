@@ -29,7 +29,9 @@ __all__: list[str] = [
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
-    from .core.ingest import ingest_into_dataset, process_file as ingest_file, to_kg
+    from .core.ingest import ingest_into_dataset
+    from .core.ingest import process_file as ingest_file
+    from .core.ingest import to_kg
     from .core.knowledge_graph import KnowledgeGraph
     from .pipelines import (
         PIPELINES,
@@ -50,11 +52,9 @@ def __getattr__(name: str):
 
         return _DB
     if name in {"ingest_file", "to_kg", "ingest_into_dataset"}:
-        from .core.ingest import (
-            ingest_into_dataset as _ingest_into_dataset,
-            process_file as _ingest_file,
-            to_kg as _to_kg,
-        )
+        from .core.ingest import ingest_into_dataset as _ingest_into_dataset
+        from .core.ingest import process_file as _ingest_file
+        from .core.ingest import to_kg as _to_kg
 
         return {
             "ingest_file": _ingest_file,
@@ -78,15 +78,13 @@ def __getattr__(name: str):
         "get_dataset_types_for_training",
         "get_pipelines_for_training",
     }:
-        from .pipelines import (
-            DatasetType as _DT,
-            GenerationPipeline as _GP,
-            TrainingGoal as _TG,
-            get_pipeline as _gp,
-            get_trainings_for_dataset as _gtfd,
-            get_dataset_types_for_training as _gdtft,
-            get_pipelines_for_training as _gpft,
-        )
+        from .pipelines import DatasetType as _DT
+        from .pipelines import GenerationPipeline as _GP
+        from .pipelines import TrainingGoal as _TG
+        from .pipelines import get_dataset_types_for_training as _gdtft
+        from .pipelines import get_pipeline as _gp
+        from .pipelines import get_pipelines_for_training as _gpft
+        from .pipelines import get_trainings_for_dataset as _gtfd
 
         mapping = {
             "DatasetType": _DT,

@@ -57,4 +57,3 @@ def test_debug_mode_uses_logging(monkeypatch):
     assert called["debug"] is True
 
     logger.setLevel(old_level)
-

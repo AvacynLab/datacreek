@@ -175,7 +175,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                                 break
                         if valid_items and len(parsed) > 0:
                             if verbose:
-                                logger.debug("Successfully parsed %d items from code block", len(parsed))
+                                logger.debug(
+                                    "Successfully parsed %d items from code block", len(parsed)
+                                )
                             return parsed
                 except json.JSONDecodeError:
                     pass
@@ -207,7 +209,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                             return [parsed]
                         elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                             if verbose:
-                                logger.debug("Successfully parsed %d items using regex", len(parsed))
+                                logger.debug(
+                                    "Successfully parsed %d items using regex", len(parsed)
+                                )
                             return parsed
                     except json.JSONDecodeError:
                         pass
@@ -260,7 +264,7 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                             logger.debug(
                                 "Found rating %s for question: %s...",
                                 rating,
-                                item.get('question', '')[:30],
+                                item.get("question", "")[:30],
                             )
                     except:
                         pass

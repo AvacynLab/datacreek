@@ -1,7 +1,6 @@
 import logging
 from typing import Any, Callable, Dict, List
 
-
 from datacreek.models.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)

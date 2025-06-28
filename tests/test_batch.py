@@ -1,5 +1,7 @@
 import asyncio
+
 from datacreek.utils.batch import async_process_batches
+
 
 class DummyClient:
     def __init__(self):
@@ -8,6 +10,7 @@ class DummyClient:
     async def async_batch_completion(self, batches, *, temperature=None, batch_size=None):
         self.calls.append((batches, temperature, batch_size))
         return ["resp:" + batch[0]["content"] for batch in batches]
+
 
 def test_async_process_batches():
     client = DummyClient()
@@ -22,6 +25,7 @@ def test_async_process_batches():
             parse_fn=lambda s: s.upper(),
         )
         assert res == ["RESP:A", "RESP:B"]
+
     asyncio.run(run())
     assert len(client.calls) == 2
 
@@ -31,24 +35,29 @@ def test_curate_async_mode(monkeypatch):
 
     class DummyClient2:
         def __init__(self):
-            self.config = {"prompts": {"qa_rating": "{pairs}"}, "curate": {"batch_size": 1, "temperature": 0.1, "threshold": 0.0}}
+            self.config = {
+                "prompts": {"qa_rating": "{pairs}"},
+                "curate": {"batch_size": 1, "temperature": 0.1, "threshold": 0.0},
+            }
+
         async def async_batch_completion(self, batches, *, temperature=None, batch_size=None):
-            async_called['count'] = len(batches)
+            async_called["count"] = len(batches)
             return ['{"rating": 9}'] * len(batches)
 
-    monkeypatch.setattr('datacreek.core.curate.LLMClient', lambda *a, **k: DummyClient2())
+    monkeypatch.setattr("datacreek.core.curate.LLMClient", lambda *a, **k: DummyClient2())
+
     async def fake_async(client, msgs, *, batch_size, temperature, parse_fn):
-        async_called['count'] = len(msgs)
+        async_called["count"] = len(msgs)
         return [parse_fn('{"rating": 9}') for _ in msgs]
 
-    monkeypatch.setattr('datacreek.utils.batch.async_process_batches', fake_async)
-    monkeypatch.setattr('datacreek.core.curate.parse_ratings', lambda resp, orig: [{'rating': 9}])
-    monkeypatch.setattr('datacreek.core.curate.convert_to_conversation_format', lambda pairs: [])
+    monkeypatch.setattr("datacreek.utils.batch.async_process_batches", fake_async)
+    monkeypatch.setattr("datacreek.core.curate.parse_ratings", lambda resp, orig: [{"rating": 9}])
+    monkeypatch.setattr("datacreek.core.curate.convert_to_conversation_format", lambda pairs: [])
 
     from datacreek.core.curate import curate_qa_pairs
 
     data = {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]}
     result = curate_qa_pairs(data, async_mode=True)
 
-    assert async_called.get('count') == 1
-    assert result['qa_pairs'] == [{'rating': 9}]
+    assert async_called.get("count") == 1
+    assert result["qa_pairs"] == [{"rating": 9}]

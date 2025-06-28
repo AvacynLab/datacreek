@@ -12,13 +12,13 @@ from typing import Any, Dict, Optional
 import yaml
 
 from datacreek.config_models import (
-    GenerationSettings,
     CurateSettings,
     FormatSettings,
+    GenerationSettings,
+    LLMSettings,
+    OpenAISettings,
     OutputPaths,
     VLLMSettings,
-    OpenAISettings,
-    LLMSettings,
 )
 
 # Default config location relative to the package (original)
