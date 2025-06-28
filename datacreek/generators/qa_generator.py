@@ -17,6 +17,7 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, Ti
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
+from datacreek.models.qa import QAPair
 from datacreek.utils.config import (
     get_curate_settings,
     get_generation_config,
@@ -28,7 +29,6 @@ from datacreek.utils.llm_processing import (
     parse_qa_pairs,
     parse_ratings,
 )
-from datacreek.models.qa import QAPair
 from datacreek.utils.text import split_into_chunks
 
 logger = logging.getLogger(__name__)

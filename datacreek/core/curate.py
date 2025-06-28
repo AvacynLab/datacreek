@@ -17,9 +17,9 @@ from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_curate_settings, get_prompt
 
 logger = logging.getLogger(__name__)
-from datacreek.utils.llm_processing import convert_to_conversation_format, parse_ratings
-from datacreek.models.results import CurationMetrics, CurationResult
 from datacreek.models.qa import QAPair
+from datacreek.models.results import CurationMetrics, CurationResult
+from datacreek.utils.llm_processing import convert_to_conversation_format, parse_ratings
 
 
 def curate_qa_pairs(
@@ -216,7 +216,10 @@ def curate_qa_pairs(
 
     result = CurationResult(
         summary=summary,
-        qa_pairs=[QAPair(question=p["question"], answer=p["answer"], rating=p.get("rating")) for p in filtered_pairs],
+        qa_pairs=[
+            QAPair(question=p["question"], answer=p["answer"], rating=p.get("rating"))
+            for p in filtered_pairs
+        ],
         conversations=conversations,
         metrics=metrics,
     )

@@ -27,10 +27,7 @@ def _format_pairs(qa_pairs: List[Dict[str, str]], fmt: str) -> Any:
         return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
     if fmt == "alpaca":
         return json.dumps(
-            [
-                {"instruction": p["question"], "input": "", "output": p["answer"]}
-                for p in qa_pairs
-            ],
+            [{"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs],
             indent=2,
         )
     if fmt in {"ft", "chatml"}:

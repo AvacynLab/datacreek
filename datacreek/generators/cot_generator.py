@@ -12,9 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from datacreek.models.cot import COTExample
-from datacreek.models.results import COTGenerationResult
-
 from datacreek.models.llm_client import LLMClient
+from datacreek.models.results import COTGenerationResult
 from datacreek.utils.config import get_generation_config, get_prompt, load_config
 
 logger = logging.getLogger(__name__)

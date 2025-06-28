@@ -129,11 +129,13 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                 if isinstance(parsed, dict) and "rating" in parsed:
                     if verbose:
                         logger.debug("Successfully parsed single JSON object")
-                    return [QAPair(
-                        question=parsed.get("question", ""),
-                        answer=parsed.get("answer", ""),
-                        rating=float(parsed["rating"]),
-                    )]
+                    return [
+                        QAPair(
+                            question=parsed.get("question", ""),
+                            answer=parsed.get("answer", ""),
+                            rating=float(parsed["rating"]),
+                        )
+                    ]
             except json.JSONDecodeError as e:
                 if verbose:
                     logger.debug("JSON parse error for object: %s", e)
@@ -186,7 +188,13 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     if isinstance(parsed, dict) and "rating" in parsed:
                         if verbose:
                             logger.debug("Successfully parsed from code block (single object)")
-                        return [QAPair(question=parsed.get("question", ""), answer=parsed.get("answer", ""), rating=float(parsed["rating"]))]
+                        return [
+                            QAPair(
+                                question=parsed.get("question", ""),
+                                answer=parsed.get("answer", ""),
+                                rating=float(parsed["rating"]),
+                            )
+                        ]
                     elif isinstance(parsed, list):
                         valid_items = True
                         for item in parsed:
@@ -233,7 +241,13 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                         if isinstance(parsed, dict) and "rating" in parsed:
                             if verbose:
                                 logger.debug("Successfully parsed using regex (single object)")
-                            return [QAPair(question=parsed.get("question", ""), answer=parsed.get("answer", ""), rating=float(parsed["rating"]))]
+                            return [
+                                QAPair(
+                                    question=parsed.get("question", ""),
+                                    answer=parsed.get("answer", ""),
+                                    rating=float(parsed["rating"]),
+                                )
+                            ]
                         elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                             if verbose:
                                 logger.debug(
@@ -262,7 +276,13 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
             if isinstance(parsed, dict) and "rating" in parsed:
                 if verbose:
                     logger.debug("Successfully parsed using json5 (single object)")
-                return [QAPair(question=parsed.get("question", ""), answer=parsed.get("answer", ""), rating=float(parsed["rating"]))]
+                return [
+                    QAPair(
+                        question=parsed.get("question", ""),
+                        answer=parsed.get("answer", ""),
+                        rating=float(parsed["rating"]),
+                    )
+                ]
             elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                 if verbose:
                     logger.debug("Successfully parsed %d items using json5", len(parsed))

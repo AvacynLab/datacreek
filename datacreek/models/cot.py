@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict
 
+
 @dataclass
 class COTExample:
     """Representation of a chain-of-thought example."""

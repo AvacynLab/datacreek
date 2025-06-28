@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
+
 @dataclass
 class QAPair:
     """Representation of a question-answer pair."""
