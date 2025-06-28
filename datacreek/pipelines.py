@@ -322,6 +322,11 @@ def run_generation_pipeline(
     except KeyError as exc:
         raise ValueError(str(exc)) from exc
 
+    if dataset_type not in {DatasetType.QA, DatasetType.COT, DatasetType.VQA}:
+        raise ValueError(
+            f"run_generation_pipeline only supports QA, COT and VQA datasets (got {dataset_type})"
+        )
+
     options = ProcessOptions(
         config_path=config_path,
         provider=provider,

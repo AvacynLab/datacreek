@@ -158,3 +158,10 @@ def test_run_generation_pipeline_overrides(monkeypatch):
     run_generation_pipeline(DatasetType.QA, "text", overrides={"foo": 1})
 
     assert received["overrides"] == {"foo": 1}
+
+
+def test_run_generation_pipeline_unsupported(monkeypatch):
+    """Ensure unsupported dataset types raise errors."""
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.TEXT, "text")
