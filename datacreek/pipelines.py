@@ -313,8 +313,13 @@ def run_generation_pipeline(
     Only steps after the knowledge graph construction are executed. In practice
     this means generation, curation and formatting steps. The function returns
     the final in-memory representation of the dataset without writing files.
-    When ``async_mode`` is True, generation steps use asynchronous LLM
-    requests when supported by the client.
+    When ``async_mode`` is True, generation steps use asynchronous LLM requests
+    when supported by the client.
+
+    At the moment only the QA, COT and VQA pipelines are implemented here. They
+    share a common post-knowledge-graph flow consisting of generation, optional
+    curation and output formatting. Other dataset types require additional
+    specialised steps which are not yet supported.
     """
 
     try:
@@ -322,6 +327,8 @@ def run_generation_pipeline(
     except KeyError as exc:
         raise ValueError(str(exc)) from exc
 
+    # Currently only pipelines with generation after the knowledge graph are
+    # supported. Other dataset types will require bespoke processing logic.
     if dataset_type not in {DatasetType.QA, DatasetType.COT, DatasetType.VQA}:
         raise ValueError(
             f"run_generation_pipeline only supports QA, COT and VQA datasets (got {dataset_type})"
