@@ -10,8 +10,9 @@ from datacreek.parsers.pdf_parser import PDFParser
 def test_pdf_parser_basic(monkeypatch, tmp_path):
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(b"%PDF-1.4 test")
-    dummy = types.SimpleNamespace(extract_text=lambda p: "hello")
-    monkeypatch.setitem(sys.modules, "pdfminer.high_level", dummy)
+    module = types.ModuleType("unstructured.partition.pdf")
+    module.partition_pdf = lambda filename: [types.SimpleNamespace(text="hello")]
+    monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
     parser = PDFParser()
     assert parser.parse(str(pdf)) == "hello"
 
@@ -35,8 +36,9 @@ def test_pdf_parser_high_res_missing(monkeypatch, tmp_path):
 def test_pdf_parser_ocr(monkeypatch, tmp_path):
     pdf = tmp_path / "sample.pdf"
     pdf.write_bytes(b"%PDF-1.4 test")
-    dummy_pdfminer = types.SimpleNamespace(extract_text=lambda p: "")
-    monkeypatch.setitem(sys.modules, "pdfminer.high_level", dummy_pdfminer)
+    module = types.ModuleType("unstructured.partition.pdf")
+    module.partition_pdf = lambda filename: [types.SimpleNamespace(text="base")]
+    monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
     mod_pdf2image = types.ModuleType("pdf2image")
     mod_pytesseract = types.ModuleType("pytesseract")
     mod_pdf2image.convert_from_path = lambda p: ["img"]

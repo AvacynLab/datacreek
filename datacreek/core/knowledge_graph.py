@@ -214,6 +214,36 @@ class KnowledgeGraph:
 
         self.index.add(chunk_id, text)
 
+    def add_image(
+        self,
+        doc_id: str,
+        image_id: str,
+        path: str,
+        source: Optional[str] = None,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an image node linked to ``doc_id``."""
+
+        if source is None:
+            source = self.graph.nodes[doc_id].get("source")
+        if self.graph.has_node(image_id):
+            raise ValueError(f"Image already exists: {image_id}")
+
+        doc_images = self.get_images_for_document(doc_id)
+        sequence = len(doc_images)
+        if page is None:
+            page = 1
+
+        self.graph.add_node(image_id, type="image", path=path, source=source, page=page)
+        self.graph.add_edge(
+            doc_id,
+            image_id,
+            relation="has_image",
+            sequence=sequence,
+            provenance=source,
+        )
+
     def _renumber_chunks(self, doc_id: str) -> None:
         """Update sequence numbers and next_chunk links for ``doc_id``."""
         chunks = self.get_chunks_for_document(doc_id)
@@ -1309,6 +1339,17 @@ class KnowledgeGraph:
             (data.get("sequence", i), tgt)
             for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
             if data.get("relation") == "has_chunk"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
+    def get_images_for_document(self, doc_id: str) -> list[str]:
+        """Return image IDs associated with ``doc_id`` ordered by sequence."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
+            if data.get("relation") == "has_image"
         ]
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]

@@ -22,9 +22,6 @@ def test_pdf_parser_unstructured(monkeypatch, tmp_path):
     module = types.ModuleType("unstructured.partition.pdf")
     module.partition_pdf = lambda filename: [types.SimpleNamespace(text="hi")]
     monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
-    dummy_pdfminer = types.ModuleType("pdfminer.high_level")
-    dummy_pdfminer.extract_text = lambda p: "fallback"
-    monkeypatch.setitem(sys.modules, "pdfminer.high_level", dummy_pdfminer)
     parser = PDFParser()
     assert parser.parse(str(f), use_unstructured=True) == "hi"
 

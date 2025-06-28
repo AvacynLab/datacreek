@@ -19,7 +19,9 @@ This toolkit simplifies the journey of:
 - Using a LLM (vLLM or any local/external API endpoint) to generate examples
 - Converting your existing files to fine-tuning friendly formats
 - Parsing additional formats like images (via [unstructured](https://github.com/Unstructured-IO/unstructured)) and audio files (transcribed with SpeechRecognition + pocketsphinx). Extracted text from these sources is inserted in the knowledge graph while preserving the original file path
-- `unstructured` is now the default parser for PDF, DOCX, PPTX, HTML and image files, with a fallback to the previous libraries when unavailable
+- `unstructured` is used to parse PDF, DOCX, PPTX, HTML and image files, ensuring consistent handling across formats
+- Files are partitioned with `unstructured` so text and images become individual elements linked in the graph
+- Text is cleaned with `unstructured` before being inserted into the knowledge graph
 - Optionally extracting named entities and standalone facts during ingestion
 - Advanced chunking options including semantic, contextual and summarized splitting
 - Creating synthetic datasets
@@ -365,9 +367,11 @@ from datacreek import DatasetBuilder, DatasetType, KnowledgeGraph
 ds = DatasetBuilder(DatasetType.QA, name="example")
 ds.add_document("doc1", source="paper.pdf")
 ds.add_chunk("doc1", "c1", "hello world")
+ds.add_image("doc1", "img0", "pages/img0.png", page=1)
 print(ds.search("hello"))  # ["c1"]
 print(ds.search_documents("paper"))  # ["doc1"]
 print(ds.get_chunks_for_document("doc1"))  # ["c1"]
+print(ds.get_images_for_document("doc1"))  # ["img0"]
 print(ds.get_document_for_chunk("c1"))  # "doc1"
 ds.graph.index.build()
 print(ds.graph.search_embeddings("hello", k=1))  # ["c1"]
@@ -570,11 +574,8 @@ If you encounter issues during the curation step:
 ### Parser Errors
 
 - Ensure required dependencies are installed for specific parsers:
-  - PDF: `pip install pdfminer.six`
-  - HTML: `pip install beautifulsoup4`
   - YouTube: `pip install pytubefix youtube-transcript-api`
-  - DOCX: `pip install python-docx`
-  - PPTX: `pip install python-pptx`
+  - Office/PDF/HTML: `pip install "unstructured[all-docs]"`
 
 ## Web Interface
 

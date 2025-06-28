@@ -8,6 +8,8 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from unstructured.cleaners.core import clean as _clean
+
 from .chunking import (
     contextual_chunk_split,
     semantic_chunk_split,
@@ -84,3 +86,9 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
             pass
 
     raise ValueError("Could not extract valid JSON from the response")
+
+
+def clean_text(text: str) -> str:
+    """Return ``text`` normalized using ``unstructured`` cleaners."""
+
+    return _clean(text, extra_whitespace=True, dashes=True, bullets=True)

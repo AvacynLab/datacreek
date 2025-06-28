@@ -16,7 +16,7 @@ from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
 from datacreek.utils.config import get_generation_config, get_path_config, load_config
-from datacreek.utils.text import split_into_chunks
+from datacreek.utils.text import clean_text, split_into_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +74,15 @@ def process_file(
     file_path: str,
     output_dir: Optional[str] = None,
     output_name: Optional[str] = None,
+    save: bool = False,
     config: Optional[Dict[str, Any]] = None,
     *,
     high_res: bool = False,
     ocr: bool = False,
     return_pages: bool = False,
     use_unstructured: bool | None = None,
-) -> str:
+    return_elements: bool = False,
+) -> str | list[Any] | tuple[str, list[str]]:
     """Parse ``file_path`` and optionally save the result."""
 
     cfg = config or load_config()
@@ -95,6 +97,8 @@ def process_file(
     if hasattr(parser.parse, "__call__"):
         if "use_unstructured" in parser.parse.__code__.co_varnames:
             parse_kwargs["use_unstructured"] = use_unstructured
+        if return_elements and "return_elements" in parser.parse.__code__.co_varnames:
+            parse_kwargs["return_elements"] = True
     content = parser.parse(resolved, **parse_kwargs)
 
     if return_pages and isinstance(content, tuple):
@@ -103,17 +107,18 @@ def process_file(
         text = content
         pages = None
 
-    out_dir = Path(output_dir or get_path_config(cfg, "output", "parsed"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    if output_name is None:
-        stem = Path(resolved).stem
-        output_name = f"{stem}.txt"
-    out_path = out_dir / output_name
-    try:
-        parser.save(text, str(out_path))
-    except Exception:
-        # saving should not block ingestion but should be logged
-        logger.exception("Failed to save parsed content to %s", out_path)
+    if save:
+        out_dir = Path(output_dir or get_path_config(cfg, "output", "parsed"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        if output_name is None:
+            stem = Path(resolved).stem
+            output_name = f"{stem}.txt"
+        out_path = out_dir / output_name
+        try:
+            parser.save(text, str(out_path))
+        except Exception:
+            # saving should not block ingestion but should be logged
+            logger.exception("Failed to save parsed content to %s", out_path)
 
     if return_pages:
         return text, pages or []
@@ -128,6 +133,7 @@ def to_kg(
     *,
     build_index: bool = True,
     pages: list[str] | None = None,
+    elements: list[Any] | None = None,
     source: str | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
@@ -143,11 +149,44 @@ def to_kg(
     cfg = config or load_config()
     gen_cfg = get_generation_config(cfg)
 
-    dataset.add_document(doc_id, source=source or doc_id, text=text)
+    cleaned_text = clean_text(text)
+    cleaned_pages = [clean_text(p) for p in pages] if pages else None
 
-    if pages:
+    dataset.add_document(doc_id, source=source or doc_id, text=cleaned_text)
+
+    if elements:
         chunk_idx = 0
-        for page_num, page_text in enumerate(pages, start=1):
+        img_idx = 0
+        current_page = 1
+        for el in elements:
+            page = getattr(getattr(el, "metadata", None), "page_number", None) or current_page
+            current_page = page
+            path = getattr(el, "image_path", None) or getattr(
+                getattr(el, "metadata", None), "image_path", None
+            )
+            if path:
+                img_id = f"{doc_id}_image_{img_idx}"
+                dataset.add_image(doc_id, img_id, path, page=page)
+                img_idx += 1
+                continue
+            text_el = getattr(el, "text", None)
+            if not text_el:
+                continue
+            cleaned_el = clean_text(text_el)
+            chunks = split_into_chunks(
+                cleaned_el,
+                chunk_size=gen_cfg.chunk_size,
+                overlap=gen_cfg.overlap,
+                method=gen_cfg.chunk_method,
+                similarity_drop=gen_cfg.similarity_drop,
+            )
+            for chunk in chunks:
+                cid = f"{doc_id}_chunk_{chunk_idx}"
+                dataset.add_chunk(doc_id, cid, chunk, page=page)
+                chunk_idx += 1
+    elif cleaned_pages:
+        chunk_idx = 0
+        for page_num, page_text in enumerate(cleaned_pages, start=1):
             page_chunks = split_into_chunks(
                 page_text,
                 chunk_size=gen_cfg.chunk_size,
@@ -161,7 +200,7 @@ def to_kg(
                 chunk_idx += 1
     else:
         chunks = split_into_chunks(
-            text,
+            cleaned_text,
             chunk_size=gen_cfg.chunk_size,
             overlap=gen_cfg.overlap,
             method=gen_cfg.chunk_method,
@@ -207,14 +246,31 @@ def ingest_into_dataset(
         ocr=ocr,
         use_unstructured=use_unstructured,
         return_pages=True,
+        return_elements=True,
     )
-    if isinstance(result, tuple):
+    elements = None
+    if isinstance(result, list):
+        elements = result
+        text = "\n".join(
+            getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+        )
+        pages = None
+    elif isinstance(result, tuple):
         text, pages = result
     else:
         text = result
         pages = None
     doc_id = doc_id or Path(file_path).stem
-    to_kg(text, dataset, doc_id, config, build_index=True, pages=pages, source=file_path)
+    to_kg(
+        text,
+        dataset,
+        doc_id,
+        config,
+        build_index=True,
+        pages=pages,
+        elements=elements,
+        source=file_path,
+    )
 
     if extract_entities:
         dataset.extract_entities()

@@ -1,3 +1,5 @@
+import types
+
 import pytest
 
 import datacreek.parsers
@@ -41,6 +43,26 @@ def test_to_kg_with_pages(tmp_path):
 
     assert ds.get_page_for_chunk("doc1_chunk_0") == 1
     assert ds.get_page_for_chunk("doc1_chunk_1") == 2
+
+
+def test_to_kg_with_elements(tmp_path):
+    class El:
+        def __init__(self, text=None, image_path=None, page_number=1):
+            self.text = text
+            self.image_path = image_path
+            self.metadata = types.SimpleNamespace(page_number=page_number, image_path=image_path)
+
+    elements = [
+        El("Hello", page_number=1),
+        El(image_path="img.png", page_number=1),
+        El("World", page_number=1),
+    ]
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    to_kg("Hello\nWorld", ds, "doc1", elements=elements)
+
+    assert ds.get_images_for_document("doc1") == ["doc1_image_0"]
+    assert len(ds.get_chunks_for_document("doc1")) == 2
 
 
 def test_determine_parser_errors(tmp_path):
@@ -147,6 +169,7 @@ def test_determine_parser_remote_audio(monkeypatch):
 def test_process_file_unstructured(monkeypatch, tmp_path):
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"x")
+    called = {}
 
     class Dummy(PDFParser):
         def parse(
@@ -157,13 +180,15 @@ def test_process_file_unstructured(monkeypatch, tmp_path):
             ocr=False,
             return_pages=False,
             use_unstructured=False,
+            return_elements=False,
         ):
             assert use_unstructured is True
             return "ok"
 
         def save(self, content, output_path):
-            pass
+            called["saved"] = True
 
     monkeypatch.setattr(datacreek.core.ingest, "determine_parser", lambda f, c: Dummy())
     text = process_file(str(pdf), use_unstructured=True)
     assert text == "ok"
+    assert "saved" not in called

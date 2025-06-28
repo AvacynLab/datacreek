@@ -14,7 +14,9 @@ from .base import BaseParser
 class PPTParser(BaseParser):
     """Parser for PowerPoint presentations"""
 
-    def parse(self, file_path: str, *, use_unstructured: bool = True) -> str:
+    def parse(
+        self, file_path: str, *, use_unstructured: bool = True, return_elements: bool = False
+    ) -> str | list[Any]:
         """Parse a PPTX file into plain text
 
         Args:
@@ -23,46 +25,16 @@ class PPTParser(BaseParser):
         Returns:
             Extracted text from the presentation
         """
-        if use_unstructured:
-            try:
-                from unstructured.partition.pptx import partition_pptx
-
-                elements = partition_pptx(filename=file_path)
-                texts = [
-                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
-                ]
-                return "\n".join(texts)
-            except Exception:
-                pass
-
         try:
-            from pptx import Presentation
-        except ImportError:
-            raise ImportError(
-                "python-pptx is required for PPTX parsing. Install it with: pip install python-pptx"
-            )
+            from unstructured.partition.pptx import partition_pptx
 
-        prs = Presentation(file_path)
-
-        # Extract text from slides
-        all_text = []
-
-        for i, slide in enumerate(prs.slides):
-            slide_text = []
-            slide_text.append(f"--- Slide {i+1} ---")
-
-            # Get slide title
-            if slide.shapes.title and slide.shapes.title.text:
-                slide_text.append(f"Title: {slide.shapes.title.text}")
-
-            # Get text from shapes
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text:
-                    slide_text.append(shape.text)
-
-            all_text.append("\n".join(slide_text))
-
-        return "\n\n".join(all_text)
+            elements = partition_pptx(filename=file_path)
+            if return_elements:
+                return elements
+            texts = [getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)]
+            return "\n".join(texts)
+        except Exception as exc:  # pragma: no cover - unexpected failures
+            raise RuntimeError("Failed to parse PPTX with unstructured") from exc
 
     def save(self, content: str, output_path: str) -> None:
         """Save the extracted text to a file

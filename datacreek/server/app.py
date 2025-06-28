@@ -1567,7 +1567,11 @@ def ingest():
 
             # Process the file or URL
             output_path = ingest_process_file(
-                file_path=input_path, output_dir=output_dir, output_name=output_name, config=config
+                file_path=input_path,
+                output_dir=output_dir,
+                output_name=output_name,
+                save=True,
+                config=config,
             )
 
             # Clean up temporary file if it was an upload

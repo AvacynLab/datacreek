@@ -13,7 +13,7 @@ from .config import (
 from .entity_extraction import extract_entities
 from .fact_extraction import extract_facts
 from .llm_processing import convert_to_conversation_format, parse_qa_pairs, parse_ratings
-from .text import extract_json_from_text, split_into_chunks
+from .text import clean_text, extract_json_from_text, split_into_chunks
 
 __all__ = [
     "load_config",
@@ -26,6 +26,7 @@ __all__ = [
     "merge_configs",
     "split_into_chunks",
     "extract_json_from_text",
+    "clean_text",
     "parse_qa_pairs",
     "parse_ratings",
     "convert_to_conversation_format",
