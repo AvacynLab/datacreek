@@ -1,7 +1,5 @@
 """Utility helpers for datacreek."""
 
-from datacreek.pipelines import run_generation_pipeline
-
 from .config import (
     get_curate_config,
     get_curate_settings,
@@ -48,5 +46,4 @@ __all__ = [
     "convert_to_conversation_format",
     "extract_facts",
     "extract_entities",
-    "run_generation_pipeline",
 ]

@@ -17,6 +17,7 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, Ti
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
+from datacreek.models.qa import QAPair
 from datacreek.utils.config import (
     get_curate_settings,
     get_generation_config,
@@ -45,12 +46,19 @@ class QAGenerator:
         self.client = client
         self.kg = kg
 
-        # Load config and merge overrides if provided
-        self.config = load_config(config_path)
+        # Load base configuration from file or use the client's config
+        if config_path:
+            base_cfg = load_config(config_path)
+        else:
+            base_cfg = client.config
+
+        # Merge overrides if provided
         if config_overrides:
             from datacreek.utils.config import merge_configs
 
-            self.config = merge_configs(self.config, config_overrides)
+            base_cfg = merge_configs(base_cfg, config_overrides)
+
+        self.config = base_cfg
 
         # Get specific configurations
         self.generation_config = get_generation_config(self.config)
@@ -88,7 +96,7 @@ class QAGenerator:
         query: Optional[str] = None,
         *,
         async_mode: bool = False,
-    ) -> List[Dict[str, str]]:
+    ) -> List[QAPair]:
         """Generate QA pairs from the document using batched processing"""
         verbose = logger.isEnabledFor(logging.DEBUG)
 
@@ -126,7 +134,7 @@ class QAGenerator:
             logger.info("Document split into %d chunks", len(chunks))
             logger.info("Using batch size of %d", batch_size)
 
-        all_qa_pairs = []
+        all_qa_pairs: List[QAPair] = []
         pairs_per_chunk = max(1, round(num_pairs / len(chunks)))
 
         # Get QA generation prompt template
@@ -213,12 +221,12 @@ class QAGenerator:
 
     def rate_qa_pairs(
         self,
-        qa_pairs: List[Dict[str, str]],
+        qa_pairs: List[QAPair],
         summary: str,
         threshold: Optional[float] = None,
         *,
         async_mode: bool = False,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> Tuple[List[QAPair], Dict[str, Any]]:
         """Rate and filter QA pairs by quality.
 
         When ``async_mode`` is ``True`` the LLM calls are executed concurrently
@@ -246,7 +254,7 @@ class QAGenerator:
         # Process in batches
         batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
 
-        rated_pairs: List[Dict[str, Any]] = []
+        rated_pairs: List[QAPair] = []
         total_score = 0.0
 
         # Create progress bar
@@ -292,9 +300,9 @@ class QAGenerator:
                 try:
                     rated_batch = parse_ratings(response, batches[idx])
                     for pair in rated_batch:
-                        if "rating" in pair:
-                            total_score += pair["rating"]
-                            if pair["rating"] >= threshold:
+                        if pair.rating is not None:
+                            total_score += pair.rating
+                            if pair.rating >= threshold:
                                 rated_pairs.append(pair)
                 except Exception as e:
                     logger.error("Error processing batch %d: %s", idx + 1, e)
@@ -317,7 +325,7 @@ class QAGenerator:
             threshold,
         )
         logger.info("Average score: %s", metrics["avg_score"])
-        return rated_pairs, metrics
+        return [p.to_dict() for p in rated_pairs], metrics
 
     def process_document(
         self,
@@ -326,7 +334,7 @@ class QAGenerator:
         verbose: bool = False,
         *,
         async_mode: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> "QAGenerationResult":
         """Process a document to generate QA pairs without rating."""
         # Set the verbose environment variable
         # Verbose mode is controlled by logging level
@@ -343,6 +351,6 @@ class QAGenerator:
         )
 
         # Prepare result - no rating at this stage
-        result = {"summary": summary, "qa_pairs": qa_pairs}
+        from datacreek.models.results import QAGenerationResult
 
-        return result
+        return QAGenerationResult(summary=summary, qa_pairs=qa_pairs)

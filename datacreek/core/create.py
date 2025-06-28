@@ -117,7 +117,7 @@ def process_file(
             num_pairs = generation_config.num_pairs
 
         # Process document
-        result = generator.process_document(
+        gen_result = generator.process_document(
             document_text,
             num_pairs=num_pairs,
             verbose=verbose,
@@ -129,13 +129,13 @@ def process_file(
             logger.info("Saving result to %s", output_path)
             try:
                 with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(result, f, indent=2)
+                    json.dump(gen_result.to_dict(), f, indent=2)
                 logger.info("Successfully wrote result to %s", output_path)
             except Exception as e:
                 logger.error("Error writing result file: %s", e)
             return output_path
 
-        return result
+        return gen_result.to_dict()
 
     elif content_type == "summary":
         generator = QAGenerator(client, config_path, config_overrides=config_overrides)
@@ -173,7 +173,7 @@ def process_file(
             num_pairs = generation_config.num_cot_examples
 
         # Process document to generate CoT examples
-        result = generator.process_document(
+        cot_result = generator.process_document(
             document_text,
             num_examples=num_pairs,
             include_simple_steps=verbose,  # More detailed if verbose is enabled
@@ -182,18 +182,18 @@ def process_file(
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_cot_examples.json")
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
-            if verbose and result.get("cot_examples"):
-                first_example = result["cot_examples"][0]
+                json.dump(cot_result.to_dict(), f, indent=2)
+            if verbose and cot_result.cot_examples:
+                first_example = cot_result.cot_examples[0]
                 logger.debug(
                     "First CoT Example:\nQuestion: %s\nReasoning: %s...\nAnswer: %s",
-                    first_example.get("question", ""),
-                    first_example.get("reasoning", "")[:100],
-                    first_example.get("answer", ""),
+                    first_example.question,
+                    first_example.reasoning[:100],
+                    first_example.answer,
                 )
             return output_path
 
-        return result
+        return cot_result.to_dict()
 
     elif content_type == "cot-enhance":
         from tqdm import tqdm
@@ -326,7 +326,7 @@ def process_file(
         return enhanced_conversations
     elif content_type == "vqa_add_reasoning":
         # Initialize the VQA generator
-        generator = VQAGenerator(client, config_path)
+        generator = VQAGenerator(client, config_path, config_overrides=config_overrides)
 
         result = generator.process_dataset(
             dataset_source=file_path,

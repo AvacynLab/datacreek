@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from datacreek.utils.batch import async_process_batches
 
 
@@ -51,7 +53,12 @@ def test_curate_async_mode(monkeypatch):
         return [parse_fn('{"rating": 9}') for _ in msgs]
 
     monkeypatch.setattr("datacreek.utils.batch.async_process_batches", fake_async)
-    monkeypatch.setattr("datacreek.core.curate.parse_ratings", lambda resp, orig: [{"rating": 9}])
+    from datacreek.models.qa import QAPair
+
+    monkeypatch.setattr(
+        "datacreek.core.curate.parse_ratings",
+        lambda resp, orig: [QAPair(question="q", answer="a", rating=9)],
+    )
     monkeypatch.setattr("datacreek.core.curate.convert_to_conversation_format", lambda pairs: [])
 
     from datacreek.core.curate import curate_qa_pairs
@@ -60,4 +67,13 @@ def test_curate_async_mode(monkeypatch):
     result = curate_qa_pairs(data, async_mode=True)
 
     assert async_called.get("count") == 1
-    assert result["qa_pairs"] == [{"rating": 9}]
+    assert result["qa_pairs"] == [{"question": "q", "answer": "a", "rating": 9}]
+
+
+def test_curate_threshold_validation():
+    from datacreek.core.curate import curate_qa_pairs
+
+    with pytest.raises(ValueError):
+        curate_qa_pairs(
+            {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]}, threshold=11
+        )

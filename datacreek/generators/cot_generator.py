@@ -11,8 +11,10 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from datacreek.models.cot import COTExample
 from datacreek.models.llm_client import LLMClient
-from datacreek.utils.config import get_generation_config, get_prompt
+from datacreek.models.results import COTGenerationResult
+from datacreek.utils.config import get_generation_config, get_prompt, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -101,12 +103,26 @@ class COTGenerator:
         )
 
         # Parse response
-        examples = self.parse_json_output(response)
+        parsed = self.parse_json_output(response)
 
-        if examples is None:
+        examples: List[COTExample] = []
+        if parsed is None:
             if verbose:
                 logger.warning("Failed to parse CoT examples, returning empty list")
             return []
+
+        for item in parsed:
+            if not isinstance(item, dict):
+                if verbose:
+                    logger.debug("Skipping malformed item: %r", item)
+                continue
+            examples.append(
+                COTExample(
+                    question=item.get("question", ""),
+                    reasoning=item.get("reasoning", ""),
+                    answer=item.get("answer", ""),
+                )
+            )
 
         if verbose:
             logger.info("Successfully generated %d CoT examples", len(examples))
@@ -162,7 +178,7 @@ class COTGenerator:
 
     def process_document(
         self, document_text: str, num_examples: int = None, include_simple_steps: bool = False
-    ) -> Dict[str, Any]:
+    ) -> COTGenerationResult:
         """Process a document to generate CoT examples"""
         verbose = logger.isEnabledFor(logging.DEBUG)
 
@@ -181,22 +197,27 @@ class COTGenerator:
         # Format into simple conversation format as well
         conversations = []
         for example in examples:
-            if "question" in example and "reasoning" in example and "answer" in example:
-                conv = [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that provides detailed explanations.",
-                    },
-                    {"role": "user", "content": example["question"]},
-                    {
-                        "role": "assistant",
-                        "content": f"Let me think through this step by step:\n\n{example['reasoning']}\n\nSo the answer is: {example['answer']}",
-                    },
-                ]
-                conversations.append(conv)
+            conv = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that provides detailed explanations.",
+                },
+                {"role": "user", "content": example.question},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Let me think through this step by step:\n\n"
+                        f"{example.reasoning}\n\nSo the answer is: {example.answer}"
+                    ),
+                },
+            ]
+            conversations.append(conv)
 
-        # Prepare result
-        result = {"summary": summary, "cot_examples": examples, "conversations": conversations}
+        result = COTGenerationResult(
+            summary=summary,
+            cot_examples=examples,
+            conversations=conversations,
+        )
 
         logger.info("Generated %d chain-of-thought examples", len(examples))
 
