@@ -206,13 +206,14 @@ This will watch for file changes and serve the interface on
 Use the provided `docker-compose.yml` to launch the API, Celery worker,
 Redis, Neo4j and the front-end:
 
-The stack consists of five main services:
+The stack consists of six main services:
 
 - **api** – FastAPI server exposing ingestion, generation, curation and export
   endpoints.
 - **worker** – Celery background worker executing long-running tasks.
 - **redis** – message broker and task result backend.
 - **neo4j** – knowledge graph database.
+- **backend** – Flask web interface.
 - **frontend** – React web application built with Vite.
 
 ```bash
@@ -224,9 +225,9 @@ need to adjust values for production. The default configuration stores
 the SQLite database and generated datasets in `./data` which is mounted
 inside the containers.
 
-The API will be available on `http://localhost:8000` while the front-end is
-served on `http://localhost:3000`. Redis listens on `6379` and Neo4j exposes
-`7474` and `7687`.
+The API will be available on `http://localhost:8000` and the Flask backend on
+`http://localhost:5000` while the front-end is served on `http://localhost:3000`.
+Redis listens on `6379` and Neo4j exposes `7474` and `7687`.
 
 To rebuild the images after modifying the code simply run:
 

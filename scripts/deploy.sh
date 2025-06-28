@@ -13,7 +13,11 @@ fi
 
 "${ssh_cmd[@]}" "$DEPLOY_USER@$DEPLOY_HOST" <<'REMOTE'
 cd "$DEPLOY_PATH"
-docker compose pull
+if [ "${LOCAL_BUILD:-false}" = "true" ]; then
+  docker compose build
+else
+  docker compose pull
+fi
 docker compose up -d
 REMOTE
 
