@@ -1,9 +1,11 @@
 from datacreek.pipelines import (
     DatasetType,
     TrainingGoal,
+    PipelineStep,
     get_dataset_types_for_training,
     get_pipelines_for_training,
     get_trainings_for_dataset,
+    run_generation_pipeline,
 )
 
 
@@ -50,4 +52,34 @@ def test_reverse_mapping():
 def test_pipelines_include_kg_step():
     for pipeline in get_pipelines_for_training(TrainingGoal.SFT):
         if pipeline.dataset_type != DatasetType.TEXT:
-            assert pipeline.steps[1] == "to_kg"
+            assert pipeline.steps[1] == PipelineStep.TO_KG
+
+
+def test_run_generation_pipeline(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        # content_type is passed positionally
+        assert args[5] == "qa"
+        assert kwargs.get("async_mode") is True
+        calls.append("gen")
+        return {"qa_pairs": [{"question": "q", "answer": "a"}]}
+
+    def fake_curate(data, *args, **kwargs):
+        assert kwargs.get("async_mode") is True
+        calls.append("curate")
+        return {"qa_pairs": data["qa_pairs"], "summary": ""}
+
+    def fake_save(data, output_path, fmt, cfg, storage_format="json"):
+        calls.append("save")
+        assert fmt == "jsonl"
+        return "done"
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", fake_save)
+
+    result = run_generation_pipeline(DatasetType.QA, "text", verbose=True, async_mode=True)
+
+    assert result == "done"
+    assert calls == ["gen", "curate", "save"]

@@ -65,8 +65,15 @@ def create_source(
     return src
 
 
-def create_dataset(db: Session, owner_id: int | None, source_id: int, path: str) -> Dataset:
-    ds = Dataset(owner_id=owner_id, source_id=source_id, path=path)
+def create_dataset(
+    db: Session,
+    owner_id: int | None,
+    source_id: int,
+    *,
+    path: str | None = None,
+    content: str | None = None,
+) -> Dataset:
+    ds = Dataset(owner_id=owner_id, source_id=source_id, path=path or "", content=content)
     db.add(ds)
     db.commit()
     db.refresh(ds)

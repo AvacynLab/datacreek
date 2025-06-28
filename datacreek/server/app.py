@@ -1422,6 +1422,7 @@ def curate():
                 model=model,
                 config_path=None,  # Use default config
                 verbose=True,
+                async_mode=False,
             )
 
             flash(f"Successfully curated QA pairs! Output saved to: {result_path}", "success")

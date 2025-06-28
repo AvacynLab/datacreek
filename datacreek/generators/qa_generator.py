@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -16,7 +17,12 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, Ti
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
-from datacreek.utils.config import get_curate_config, get_generation_config, get_prompt, load_config
+from datacreek.utils.config import (
+    get_curate_settings,
+    get_generation_config,
+    get_prompt,
+    load_config,
+)
 from datacreek.utils.llm_processing import (
     convert_to_conversation_format,
     parse_qa_pairs,
@@ -48,11 +54,11 @@ class QAGenerator:
 
         # Get specific configurations
         self.generation_config = get_generation_config(self.config)
-        self.curate_config = get_curate_config(self.config)
+        self.curate_config = get_curate_settings(self.config)
 
     def generate_summary(self, document_text: str) -> str:
         """Generate a summary of the document"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
         if verbose:
             logger.info("Generating document summary...")
 
@@ -80,9 +86,11 @@ class QAGenerator:
         summary: str,
         num_pairs: int = 25,
         query: Optional[str] = None,
+        *,
+        async_mode: bool = False,
     ) -> List[Dict[str, str]]:
         """Generate QA pairs from the document using batched processing"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         # Get generation config
         chunk_size = self.generation_config.chunk_size
@@ -162,62 +170,35 @@ class QAGenerator:
             progress_ctx = None
             generate_task = None
 
-        # Process in batches
-        for batch_start in range(0, len(chunks), batch_size):
-            batch_end = min(batch_start + batch_size, len(chunks))
-            batch_messages = all_messages[batch_start:batch_end]
-            current_batch_size = len(batch_messages)
+        # Process in batches using helper
+        from datacreek.utils.batch import async_process_batches, process_batches
 
-            batch_num = batch_start // batch_size + 1
-            total_batches = (len(chunks) + batch_size - 1) // batch_size
-
-            # Simple progress indicator for non-verbose mode
-            if not verbose:
-                logger.info(
-                    "Processing batch %d/%d...",
-                    batch_num,
-                    total_batches,
-                )
-            else:
-                logger.info(
-                    "Processing batch %d/%d with %d chunks",
-                    batch_num,
-                    total_batches,
-                    current_batch_size,
-                )
-
-            try:
-                # Process the batch
-                batch_responses = self.client.batch_completion(
-                    batch_messages,
-                    temperature=temperature,
+        if async_mode:
+            batch_results = asyncio.run(
+                async_process_batches(
+                    self.client,
+                    all_messages,
                     batch_size=batch_size,
+                    temperature=temperature,
+                    parse_fn=parse_qa_pairs,
                 )
+            )
+        else:
+            batch_results = process_batches(
+                self.client,
+                all_messages,
+                batch_size=batch_size,
+                temperature=temperature,
+                parse_fn=parse_qa_pairs,
+            )
 
-                # Process each response in the batch
-                for j, response in enumerate(batch_responses):
-                    chunk_index = batch_start + j
-                    chunk_pairs = parse_qa_pairs(response)
-                    all_qa_pairs.extend(chunk_pairs)
+        for i, pairs in enumerate(batch_results):
+            all_qa_pairs.extend(pairs)
+            if verbose:
+                logger.info("  Generated %d pairs from chunk %d", len(pairs), i + 1)
 
-                    if verbose:
-                        logger.info(
-                            "  Generated %d pairs from chunk %d",
-                            len(chunk_pairs),
-                            chunk_index + 1,
-                        )
-
-                # Update progress bar if in verbose mode
-                if progress_ctx and generate_task:
-                    progress_ctx.update(generate_task, advance=current_batch_size)
-
-            except Exception as e:
-                if verbose:
-                    logger.error("  Error processing batch %d: %s", batch_num, str(e))
-
-                # Update progress bar if in verbose mode
-                if progress_ctx and generate_task:
-                    progress_ctx.update(generate_task, advance=current_batch_size)
+            if progress_ctx and generate_task:
+                progress_ctx.update(generate_task, advance=1)
 
         # Stop progress bar if in verbose mode
         if progress_ctx:
@@ -231,24 +212,33 @@ class QAGenerator:
         return all_qa_pairs
 
     def rate_qa_pairs(
-        self, qa_pairs: List[Dict[str, str]], summary: str, threshold: Optional[float] = None
+        self,
+        qa_pairs: List[Dict[str, str]],
+        summary: str,
+        threshold: Optional[float] = None,
+        *,
+        async_mode: bool = False,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Rate and filter QA pairs by quality"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        """Rate and filter QA pairs by quality.
+
+        When ``async_mode`` is ``True`` the LLM calls are executed concurrently
+        using :func:`async_process_batches`.
+        """
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         if not qa_pairs:
             return [], {"total": 0, "filtered": 0, "retention_rate": 0, "avg_score": 0}
 
         # Get threshold from args, then config, then default
         if threshold is None:
-            threshold = self.curate_config.get("threshold", 7.0)
+            threshold = self.curate_config.threshold
 
         if verbose:
             logger.info("Evaluating %d pairs...", len(qa_pairs))
 
         # Get rating config
-        batch_size = self.curate_config.get("batch_size", 8)
-        temperature = self.curate_config.get("temperature", 0.1)
+        batch_size = self.curate_config.batch_size
+        temperature = self.curate_config.temperature
 
         # Get rating prompt template
         rating_prompt_template = get_prompt(self.config, "qa_rating")
@@ -256,8 +246,8 @@ class QAGenerator:
         # Process in batches
         batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
 
-        rated_pairs = []
-        total_score = 0
+        rated_pairs: List[Dict[str, Any]] = []
+        total_score = 0.0
 
         # Create progress bar
         progress_columns = [
@@ -268,35 +258,47 @@ class QAGenerator:
             TimeRemainingColumn(),
         ]
 
+        from datacreek.utils.batch import async_process_batches, process_batches
+
         with Progress(*progress_columns) as progress:
-            rating_task = progress.add_task(f"Rating QA pairs", total=len(batches))
+            rating_task = progress.add_task("Rating QA pairs", total=len(batches))
 
-            for i, batch in enumerate(batches):
-                if verbose:
-                    logger.info("Rating batch %d/%d...", i + 1, len(batches))
+            message_batches = []
+            for batch in batches:
                 batch_json = json.dumps(batch, indent=2)
-
-                # Format the rating prompt with pairs
                 rating_prompt = rating_prompt_template.format(pairs=batch_json)
+                message_batches.append([{"role": "system", "content": rating_prompt}])
 
-                messages = [{"role": "system", "content": rating_prompt}]
+            if async_mode:
+                responses = asyncio.run(
+                    async_process_batches(
+                        self.client,
+                        message_batches,
+                        batch_size=batch_size,
+                        temperature=temperature,
+                        parse_fn=lambda s: s,
+                    )
+                )
+            else:
+                responses = process_batches(
+                    self.client,
+                    message_batches,
+                    batch_size=batch_size,
+                    temperature=temperature,
+                    parse_fn=lambda s: s,
+                )
 
+            for idx, response in enumerate(responses):
                 try:
-                    response = self.client.chat_completion(messages, temperature=temperature)
-
-                    rated_batch = parse_ratings(response)
-
+                    rated_batch = parse_ratings(response, batches[idx])
                     for pair in rated_batch:
                         if "rating" in pair:
                             total_score += pair["rating"]
                             if pair["rating"] >= threshold:
                                 rated_pairs.append(pair)
-
                 except Exception as e:
-                    if verbose:
-                        logger.error("Error rating batch %d: %s", i + 1, str(e))
+                    logger.error("Error processing batch %d: %s", idx + 1, e)
 
-                time.sleep(0.5)  # Avoid rate limits
                 progress.update(rating_task, advance=1)
 
         # Calculate metrics
@@ -318,20 +320,27 @@ class QAGenerator:
         return rated_pairs, metrics
 
     def process_document(
-        self, document_text: str, num_pairs: int = 25, verbose: bool = False
+        self,
+        document_text: str,
+        num_pairs: int = 25,
+        verbose: bool = False,
+        *,
+        async_mode: bool = False,
     ) -> Dict[str, Any]:
-        """Process a document to generate QA pairs without rating"""
+        """Process a document to generate QA pairs without rating."""
         # Set the verbose environment variable
-        if verbose:
-            os.environ["SDK_VERBOSE"] = "true"
-        else:
-            os.environ["SDK_VERBOSE"] = "false"
+        # Verbose mode is controlled by logging level
 
         # Generate summary
         summary = self.generate_summary(document_text)
 
         # Generate QA pairs
-        qa_pairs = self.generate_qa_pairs(document_text, summary, num_pairs=num_pairs)
+        qa_pairs = self.generate_qa_pairs(
+            document_text,
+            summary,
+            num_pairs=num_pairs,
+            async_mode=async_mode,
+        )
 
         # Prepare result - no rating at this stage
         result = {"summary": summary, "qa_pairs": qa_pairs}

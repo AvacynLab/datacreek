@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List
+from pathlib import Path
+from typing import Any, Dict, List
+
+from datacreek.core.create import process_file
+from datacreek.core.curate import curate_qa_pairs
+from datacreek.core.save_as import convert_format
+import logging
+from datacreek.utils.config import (
+    get_format_settings,
+    load_config,
+    merge_configs,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class TrainingGoal(str, Enum):
@@ -34,12 +47,31 @@ class DatasetType(str, Enum):
     MULTI_TOOL = "multi_tool"
 
 
+class PipelineStep(str, Enum):
+    """Valid generation pipeline steps."""
+
+    INGEST = "ingest"
+    TO_KG = "to_kg"
+    GENERATE_QA = "generate_qa"
+    GENERATE_COT = "generate_cot"
+    GENERATE_VQA = "generate_vqa"
+    GENERATE_FROM_KG = "generate_from_kg"
+    GENERATE_CANDIDATES = "generate_candidates"
+    LABEL_PAIRS = "label_pairs"
+    RANK_RESPONSES = "rank_responses"
+    GENERATE_TOOL_CALL = "generate_tool_call"
+    GENERATE_CONVERSATION = "generate_conversation"
+    GENERATE_MULTI_TOOL = "generate_multi_tool"
+    CURATE = "curate"
+    SAVE = "save"
+
+
 @dataclass
 class GenerationPipeline:
     """Definition of a generation pipeline."""
 
     dataset_type: DatasetType
-    steps: List[str]
+    steps: List[PipelineStep]
     compatible_trainings: List[TrainingGoal]
     description: str
 
@@ -47,7 +79,13 @@ class GenerationPipeline:
 PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     DatasetType.QA: GenerationPipeline(
         dataset_type=DatasetType.QA,
-        steps=["ingest", "to_kg", "generate_qa", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_QA,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.SFT,
             TrainingGoal.DPO,
@@ -62,7 +100,13 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
     DatasetType.COT: GenerationPipeline(
         dataset_type=DatasetType.COT,
-        steps=["ingest", "to_kg", "generate_cot", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_COT,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.SFT,
             TrainingGoal.DPO,
@@ -74,19 +118,31 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
     DatasetType.VQA: GenerationPipeline(
         dataset_type=DatasetType.VQA,
-        steps=["ingest", "to_kg", "generate_vqa", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_VQA,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[TrainingGoal.SFT],
         description="Visual question answering pairs.",
     ),
     DatasetType.TEXT: GenerationPipeline(
         dataset_type=DatasetType.TEXT,
-        steps=["ingest", "to_kg", "save"],
+        steps=[PipelineStep.INGEST, PipelineStep.TO_KG, PipelineStep.SAVE],
         compatible_trainings=[TrainingGoal.CPT],
         description="Raw text corpus for continual pre-training.",
     ),
     DatasetType.KG: GenerationPipeline(
         dataset_type=DatasetType.KG,
-        steps=["ingest", "to_kg", "generate_from_kg", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_FROM_KG,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.SFT,
             TrainingGoal.DPO,
@@ -101,7 +157,13 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
     DatasetType.PREF_PAIR: GenerationPipeline(
         dataset_type=DatasetType.PREF_PAIR,
-        steps=["ingest", "to_kg", "generate_candidates", "label_pairs", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_CANDIDATES,
+            PipelineStep.LABEL_PAIRS,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.PPO,
             TrainingGoal.DPO,
@@ -113,13 +175,25 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
     DatasetType.PREF_LIST: GenerationPipeline(
         dataset_type=DatasetType.PREF_LIST,
-        steps=["ingest", "to_kg", "generate_candidates", "rank_responses", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_CANDIDATES,
+            PipelineStep.RANK_RESPONSES,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[TrainingGoal.GRPO, TrainingGoal.RRHF],
         description="Listwise ranked responses for GRPO or RRHF.",
     ),
     DatasetType.TOOL: GenerationPipeline(
         dataset_type=DatasetType.TOOL,
-        steps=["ingest", "to_kg", "generate_tool_call", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_TOOL_CALL,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.SFT,
             TrainingGoal.DPO,
@@ -134,7 +208,13 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
     DatasetType.CONVERSATION: GenerationPipeline(
         dataset_type=DatasetType.CONVERSATION,
-        steps=["ingest", "to_kg", "generate_conversation", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_CONVERSATION,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.SFT,
             TrainingGoal.DPO,
@@ -149,7 +229,13 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
     DatasetType.MULTI_TOOL: GenerationPipeline(
         dataset_type=DatasetType.MULTI_TOOL,
-        steps=["ingest", "to_kg", "generate_multi_tool", "curate", "save"],
+        steps=[
+            PipelineStep.INGEST,
+            PipelineStep.TO_KG,
+            PipelineStep.GENERATE_MULTI_TOOL,
+            PipelineStep.CURATE,
+            PipelineStep.SAVE,
+        ],
         compatible_trainings=[
             TrainingGoal.SFT,
             TrainingGoal.DPO,
@@ -193,3 +279,105 @@ def get_pipelines_for_training(goal: TrainingGoal) -> List[GenerationPipeline]:
     """Return generation pipelines compatible with the given training goal."""
 
     return [pipeline for pipeline in PIPELINES.values() if goal in pipeline.compatible_trainings]
+
+
+def run_generation_pipeline(
+    dataset_type: DatasetType,
+    document_text: str,
+    *,
+    config_path: Path | None = None,
+    provider: str | None = None,
+    profile: str | None = None,
+    api_base: str | None = None,
+    model: str | None = None,
+    num_pairs: int | None = None,
+    threshold: float | None = None,
+    fmt: str | None = None,
+    overrides: Dict[str, Any] | None = None,
+    verbose: bool = False,
+    async_mode: bool = False,
+) -> Any:
+    """Execute the generation steps for ``dataset_type`` on ``document_text``.
+
+    Only steps after the knowledge graph construction are executed. In practice
+    this means generation, curation and formatting steps. The function returns
+    the final in-memory representation of the dataset without writing files.
+    When ``async_mode`` is True, generation steps use asynchronous LLM
+    requests when supported by the client.
+    """
+
+    pipeline = get_pipeline(dataset_type)
+    data: Any = document_text
+
+    for step in pipeline.steps:
+        if verbose:
+            logger.info("Running step %s", step.value)
+        if step == PipelineStep.GENERATE_QA:
+            data = process_file(
+                None,
+                None,
+                config_path,
+                api_base,
+                model,
+                "qa",
+                num_pairs,
+                verbose,
+                async_mode=async_mode,
+                provider=provider,
+                profile=profile,
+                document_text=data,
+                config_overrides=overrides,
+            )
+        elif step == PipelineStep.GENERATE_COT:
+            data = process_file(
+                None,
+                None,
+                config_path,
+                api_base,
+                model,
+                "cot",
+                num_pairs,
+                verbose,
+                async_mode=async_mode,
+                provider=provider,
+                profile=profile,
+                document_text=data,
+                config_overrides=overrides,
+            )
+        elif step == PipelineStep.GENERATE_VQA:
+            data = process_file(
+                None,
+                None,
+                config_path,
+                api_base,
+                model,
+                "vqa_add_reasoning",
+                num_pairs,
+                verbose,
+                async_mode=async_mode,
+                provider=provider,
+                profile=profile,
+                document_text=data,
+                config_overrides=overrides,
+            )
+        elif step == PipelineStep.CURATE:
+            data = curate_qa_pairs(
+                data,
+                None,
+                threshold,
+                api_base,
+                model,
+                config_path,
+                verbose,
+                provider,
+                async_mode=async_mode,
+            )
+        elif step == PipelineStep.SAVE:
+            cfg = load_config(str(config_path) if config_path else None)
+            if overrides:
+                cfg = merge_configs(cfg, overrides)
+            fmt_cfg = get_format_settings(cfg)
+            format_type = fmt or fmt_cfg.default
+            data = convert_format(data, None, format_type, cfg)
+
+    return data

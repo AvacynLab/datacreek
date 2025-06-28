@@ -21,12 +21,12 @@ from datacreek.utils.llm_processing import convert_to_conversation_format
 
 
 def convert_format(
-    input_path: str,
-    output_path: str,
+    input_data: Any,
+    output_path: Optional[str],
     format_type: str,
     config: Optional[Dict[str, Any]] = None,
     storage_format: str = "json",
-) -> str:
+) -> Any:
     """Convert data to different formats
 
     Args:
@@ -39,9 +39,14 @@ def convert_format(
     Returns:
         Path to the output file or directory
     """
-    # Load input file
-    with open(input_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    if isinstance(input_data, str):
+        if os.path.exists(input_data):
+            with open(input_data, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = json.loads(input_data)
+    else:
+        data = input_data
 
     # Extract data based on known structures
     # Try to handle the case where we have QA pairs or conversations
@@ -65,8 +70,8 @@ def convert_format(
         else:
             raise ValueError("Unrecognized data format - expected QA pairs or conversations")
 
-    # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # When using HF dataset storage format
     if storage_format == "hf":
@@ -111,18 +116,53 @@ def convert_format(
             raise ValueError(f"Unknown format type: {format_type}")
 
         # Save as HF dataset (Arrow format)
-        return to_hf_dataset(formatted_pairs, output_path)
+        if output_path:
+            return to_hf_dataset(formatted_pairs, output_path)
+        else:
+            raise ValueError("HF dataset export requires output path")
 
     # Standard JSON file storage format
     else:
         # Convert to the requested format using existing functions
         if format_type == "jsonl":
-            return to_jsonl(qa_pairs, output_path)
+            if output_path:
+                return to_jsonl(qa_pairs, output_path)
+            return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
         elif format_type == "alpaca":
-            return to_alpaca(qa_pairs, output_path)
+            formatted = [
+                {"instruction": p["question"], "input": "", "output": p["answer"]}
+                for p in qa_pairs
+            ]
+            if output_path:
+                return to_alpaca(qa_pairs, output_path)
+            return json.dumps(formatted, indent=2)
         elif format_type == "ft":
-            return to_fine_tuning(qa_pairs, output_path)
+            formatted = [
+                {
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": p["question"]},
+                        {"role": "assistant", "content": p["answer"]},
+                    ]
+                }
+                for p in qa_pairs
+            ]
+            if output_path:
+                return to_fine_tuning(qa_pairs, output_path)
+            return json.dumps(formatted, indent=2)
         elif format_type == "chatml":
-            return to_chatml(qa_pairs, output_path)
+            formatted = [
+                {
+                    "messages": [
+                        {"role": "system", "content": "You are a helpful AI assistant."},
+                        {"role": "user", "content": p["question"]},
+                        {"role": "assistant", "content": p["answer"]},
+                    ]
+                }
+                for p in qa_pairs
+            ]
+            if output_path:
+                return to_chatml(qa_pairs, output_path)
+            return json.dumps(formatted, indent=2)
         else:
             raise ValueError(f"Unknown format type: {format_type}")

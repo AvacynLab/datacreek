@@ -7,6 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 import redis
 
@@ -639,3 +640,66 @@ class DatasetBuilder:
         if data is None:
             raise KeyError(key)
         return cls.from_dict(json.loads(data))
+
+    # ------------------------------------------------------------------
+    # Generation helpers
+    # ------------------------------------------------------------------
+
+    def get_raw_text(self) -> str:
+        """Return all chunk texts concatenated in document order."""
+
+        parts: list[str] = []
+        docs = [n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "document"]
+        docs.sort()
+        for doc_id in docs:
+            chunks = self.get_chunks_for_document(doc_id)
+            if chunks:
+                for cid in chunks:
+                    text = self.graph.graph.nodes[cid].get("text")
+                    if text:
+                        parts.append(text)
+            else:
+                text = self.graph.graph.nodes[doc_id].get("text")
+                if text:
+                    parts.append(text)
+        return "\n\n".join(parts)
+
+    def run_post_kg_pipeline(
+        self,
+        *,
+        config_path: Path | None = None,
+        provider: str | None = None,
+        profile: str | None = None,
+        api_base: str | None = None,
+        model: str | None = None,
+        num_pairs: int | None = None,
+        threshold: float | None = None,
+        fmt: str | None = None,
+        overrides: Dict[str, Any] | None = None,
+        verbose: bool = False,
+        async_mode: bool = False,
+    ) -> Any:
+        """Run generation steps after the knowledge graph stage.
+
+        When ``async_mode`` is ``True`` the underlying LLM calls may be
+        executed concurrently.
+        """
+
+        from datacreek.pipelines import run_generation_pipeline
+
+        document_text = self.get_raw_text()
+        return run_generation_pipeline(
+            self.dataset_type,
+            document_text,
+            config_path=config_path,
+            provider=provider,
+            profile=profile,
+            api_base=api_base,
+            model=model,
+            num_pairs=num_pairs,
+            threshold=threshold,
+            fmt=fmt,
+            overrides=overrides,
+            verbose=verbose,
+            async_mode=async_mode,
+        )

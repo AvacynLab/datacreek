@@ -14,7 +14,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 
-from datacreek.utils.config import get_llm_provider, get_openai_config, get_vllm_config, load_config
+from datacreek.utils.config import (
+    get_llm_provider,
+    get_openai_settings,
+    get_vllm_settings,
+    load_config,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -79,7 +84,7 @@ class LLMClient:
                 )
 
             # Load API endpoint configuration and apply profile overrides
-            api_endpoint_config = {**get_openai_config(self.config), **profile_cfg}
+            api_endpoint_config = {**get_openai_settings(self.config).__dict__, **profile_cfg}
 
             # Set parameters, with CLI/ENV overrides taking precedence
             self.api_base = (
@@ -144,7 +149,7 @@ class LLMClient:
             self._init_openai_client()
         else:  # Default to vLLM
             # Load vLLM configuration and apply profile overrides
-            vllm_config = {**get_vllm_config(self.config), **profile_cfg}
+            vllm_config = {**get_vllm_settings(self.config).__dict__, **profile_cfg}
 
             # Set parameters, with CLI overrides taking precedence
             self.api_base = (
@@ -247,7 +252,7 @@ class LLMClient:
         )
         stop = stop if stop is not None else generation_config.get("stop")
 
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         if self.provider == "api-endpoint":
             return self._openai_chat_completion(
@@ -284,7 +289,7 @@ class LLMClient:
         verbose: bool,
     ) -> str:
         """Generate a chat completion using the OpenAI API or compatible APIs"""
-        debug_mode = os.environ.get("SDK_DEBUG", "false").lower() == "true"
+        debug_mode = logger.isEnabledFor(logging.DEBUG)
         if verbose:
             logger.info(f"Sending request to {self.provider} model {self.model}...")
 
@@ -528,7 +533,7 @@ class LLMClient:
         )
         stop = stop if stop is not None else generation_config.get("stop")
 
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         if self.provider == "api-endpoint":
             return self._openai_batch_completion(
@@ -553,6 +558,50 @@ class LLMClient:
                 presence_penalty,
                 stop,
                 verbose,
+            )
+
+    async def async_batch_completion(
+        self,
+        message_batches: List[List[Dict[str, str]]],
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        top_p: float | None = None,
+        batch_size: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        stop: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Asynchronous version of :meth:`batch_completion`."""
+
+        if self.provider == "api-endpoint":
+            verbose = logger.isEnabledFor(logging.DEBUG)
+            tasks = [
+                self._process_message_async(
+                    messages,
+                    temperature or self.config.get("generation", {}).get("temperature", 0.1),
+                    max_tokens or self.config.get("generation", {}).get("max_tokens", 4096),
+                    top_p or self.config.get("generation", {}).get("top_p", 0.95),
+                    frequency_penalty or self.config.get("generation", {}).get("frequency_penalty", 0.0),
+                    presence_penalty or self.config.get("generation", {}).get("presence_penalty", 0.0),
+                    stop or self.config.get("generation", {}).get("stop"),
+                    verbose,
+                    False,
+                )
+                for messages in message_batches
+            ]
+            return await asyncio.gather(*tasks)
+        else:
+            return await asyncio.to_thread(
+                self._vllm_batch_completion,
+                message_batches,
+                temperature or self.config.get("generation", {}).get("temperature", 0.1),
+                max_tokens or self.config.get("generation", {}).get("max_tokens", 4096),
+                top_p or self.config.get("generation", {}).get("top_p", 0.95),
+                batch_size or self.config.get("generation", {}).get("batch_size", 32),
+                frequency_penalty or self.config.get("generation", {}).get("frequency_penalty", 0.0),
+                presence_penalty or self.config.get("generation", {}).get("presence_penalty", 0.0),
+                stop or self.config.get("generation", {}).get("stop"),
+                logger.isEnabledFor(logging.DEBUG),
             )
 
     async def _process_message_async(
@@ -758,7 +807,7 @@ class LLMClient:
         verbose: bool,
     ) -> List[str]:
         """Process multiple message sets using the OpenAI API or compatible APIs asynchronously"""
-        debug_mode = os.environ.get("SDK_DEBUG", "false").lower() == "true"
+        debug_mode = logger.isEnabledFor(logging.DEBUG)
         results = []
 
         # Process message batches in chunks to avoid overloading the API

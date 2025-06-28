@@ -5,17 +5,19 @@
 # the root directory of this source tree.
 # Output utilities
 import json
-import os
+import logging
 import re
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
     """Parse QA pairs from LLM output with enhanced error handling"""
-    verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+    verbose = logger.isEnabledFor(logging.DEBUG)
 
     if verbose:
-        print(f"Parsing response of length {len(text)}")
+        logger.debug("Parsing response of length %d", len(text))
 
     try:
         # Try direct JSON parsing
@@ -34,19 +36,19 @@ def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
             try:
                 pairs = json.loads(cleaned_text)
                 if verbose:
-                    print(f"Successfully parsed {len(pairs)} QA pairs")
+                    logger.debug("Successfully parsed %d QA pairs", len(pairs))
                 return pairs
             except json.JSONDecodeError as e:
                 if verbose:
-                    print(f"Direct JSON parsing failed: {e}")
-                    print(f"Attempted to parse: {cleaned_text[:200]}...")
+                    logger.debug("Direct JSON parsing failed: %s", e)
+                    logger.debug("Attempted to parse: %s...", cleaned_text[:200])
     except Exception as e:
         if verbose:
-            print(f"Error during JSON extraction: {e}")
+            logger.debug("Error during JSON extraction: %s", e)
 
     # Fallback to regex pattern matching
     if verbose:
-        print("Falling back to regex pattern matching")
+        logger.debug("Falling back to regex pattern matching")
     qa_pattern = r'"question":\s*"((?:[^"\\]|\\.)*)"\s*,\s*"answer":\s*"((?:[^"\\]|\\.)*)"\s*'
     pairs = []
 
@@ -57,13 +59,13 @@ def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
             pairs.append({"question": q, "answer": a})
         except Exception as e:
             if verbose:
-                print(f"Error extracting pair: {e}")
+                logger.debug("Error extracting pair: %s", e)
 
     if verbose:
         if pairs:
-            print(f"Extracted {len(pairs)} QA pairs with regex")
+            logger.debug("Extracted %d QA pairs with regex", len(pairs))
         else:
-            print("No QA pairs extracted. Check the model output format.")
+            logger.debug("No QA pairs extracted. Check the model output format.")
 
     return pairs
 
@@ -85,11 +87,11 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
     Raises:
         ValueError: If the response cannot be parsed as valid JSON
     """
-    verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+    verbose = logger.isEnabledFor(logging.DEBUG)
 
     if verbose:
-        print(f"Parsing ratings response of length {len(text)}")
-        print(f"Raw response: {repr(text[:500])}")
+        logger.debug("Parsing ratings response of length %d", len(text))
+        logger.debug("Raw response: %r", text[:500])
 
     # The multiple passes are to for edge cases that emerge when using 8B or smaller models for generating synthetic data. This is to make a comprehensive parser for faster protoyping.
     # With 70B or bigger model, `json.load()` should "just work"
@@ -117,11 +119,11 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                 parsed = json.loads(json_text)
                 if isinstance(parsed, dict) and "rating" in parsed:
                     if verbose:
-                        print("Successfully parsed single JSON object")
+                        logger.debug("Successfully parsed single JSON object")
                     return [parsed]
             except json.JSONDecodeError as e:
                 if verbose:
-                    print(f"JSON parse error for object: {str(e)}")
+                    logger.debug("JSON parse error for object: %s", e)
 
         # Check if we have a JSON array
         if "[" in json_content and "]" in json_content:
@@ -138,18 +140,18 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     for item in parsed:
                         if not isinstance(item, dict) or "rating" not in item:
                             if verbose:
-                                print(f"Array contains invalid item: {item}")
+                                logger.debug("Array contains invalid item: %s", item)
                             return []
                     if verbose:
-                        print(f"Successfully parsed {len(parsed)} items in JSON array")
+                        logger.debug("Successfully parsed %d items in JSON array", len(parsed))
                     return parsed
             except json.JSONDecodeError as e:
                 if verbose:
-                    print(f"JSON parse error for array: {str(e)}")
+                    logger.debug("JSON parse error for array: %s", e)
 
     except Exception as e:
         if verbose:
-            print(f"Error in primary parsing approach: {str(e)}")
+            logger.debug("Error in primary parsing approach: %s", e)
 
     # Fallback to more specific methods
     # Method 1: Code block extraction
@@ -163,7 +165,7 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     parsed = json.loads(clean_block)
                     if isinstance(parsed, dict) and "rating" in parsed:
                         if verbose:
-                            print("Successfully parsed from code block (single object)")
+                            logger.debug("Successfully parsed from code block (single object)")
                         return [parsed]
                     elif isinstance(parsed, list):
                         valid_items = True
@@ -173,13 +175,13 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                                 break
                         if valid_items and len(parsed) > 0:
                             if verbose:
-                                print(f"Successfully parsed {len(parsed)} items from code block")
+                                logger.debug("Successfully parsed %d items from code block", len(parsed))
                             return parsed
                 except json.JSONDecodeError:
                     pass
     except Exception as e:
         if verbose:
-            print(f"Error in code block extraction: {str(e)}")
+            logger.debug("Error in code block extraction: %s", e)
 
     # Method 2: Regex
     try:
@@ -201,17 +203,17 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                         parsed = json.loads(clean_match)
                         if isinstance(parsed, dict) and "rating" in parsed:
                             if verbose:
-                                print("Successfully parsed using regex (single object)")
+                                logger.debug("Successfully parsed using regex (single object)")
                             return [parsed]
                         elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                             if verbose:
-                                print(f"Successfully parsed {len(parsed)} items using regex")
+                                logger.debug("Successfully parsed %d items using regex", len(parsed))
                             return parsed
                     except json.JSONDecodeError:
                         pass
     except Exception as e:
         if verbose:
-            print(f"Error in regex extraction: {str(e)}")
+            logger.debug("Error in regex extraction: %s", e)
 
     # Method 3: Try using json5 if available (more lenient parser)
     try:
@@ -221,17 +223,17 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
             parsed = json5.loads(text)
             if isinstance(parsed, dict) and "rating" in parsed:
                 if verbose:
-                    print("Successfully parsed using json5 (single object)")
+                    logger.debug("Successfully parsed using json5 (single object)")
                 return [parsed]
             elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                 if verbose:
-                    print(f"Successfully parsed {len(parsed)} items using json5")
+                    logger.debug("Successfully parsed %d items using json5", len(parsed))
                 return parsed
         except:
             pass
     except ImportError:
         if verbose:
-            print("json5 not available")
+            logger.debug("json5 not available")
 
     # If we reach here, try one last aggressive approach
     try:
@@ -255,23 +257,25 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                             }
                         )
                         if verbose:
-                            print(
-                                f"Found rating {rating} for question: {item.get('question', '')[:30]}..."
+                            logger.debug(
+                                "Found rating %s for question: %s...",
+                                rating,
+                                item.get('question', '')[:30],
                             )
                     except:
                         pass
 
             if found_items:
                 if verbose:
-                    print(f"Extracted {len(found_items)} ratings using pattern matching")
+                    logger.debug("Extracted %d ratings using pattern matching", len(found_items))
                 return found_items
     except Exception as e:
         if verbose:
-            print(f"Error in final extraction attempt: {str(e)}")
+            logger.debug("Error in final extraction attempt: %s", e)
 
     # If we reach here, we couldn't extract valid JSON
     if verbose:
-        print("All parsing methods failed")
+        logger.debug("All parsing methods failed")
 
     # Instead of a generic error message, include part of the response
     error_snippet = text[:100] if len(text) > 100 else text

@@ -48,7 +48,7 @@ class VQAGenerator:
 
     def transform(self, messages):
         """Transform messages by adding reasoning to VQA data"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         # Get prompt from config
         prompt = self.config.get("prompt", "")
@@ -140,11 +140,7 @@ class VQAGenerator:
         Returns:
             Path to the output dataset
         """
-        # Set the verbose environment variable
-        if verbose:
-            os.environ["SDK_VERBOSE"] = "true"
-        else:
-            os.environ["SDK_VERBOSE"] = "false"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         try:
             # Try to load from file
