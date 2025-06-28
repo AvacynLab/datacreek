@@ -28,6 +28,66 @@ This toolkit simplifies the journey of:
 - Extracting standalone facts into a knowledge graph
 - Supporting various formats of post-training fine-tuning
 
+## Workflow Overview
+
+1. **Ingestion** – parse documents or URLs from multiple sources, clean the text and store everything in a knowledge graph.
+2. **Knowledge graph operations** – deduplicate, resolve entities and link related chunks to improve data quality.
+3. **Dataset generation** – choose a dataset type and training goal. The application selects the appropriate pipeline and formats the output accordingly.
+4. **Initial curation** – a first filter removes low quality results.
+5. **Dataset cleanup** – additional operations can be applied interactively to refine the dataset.
+6. **Export** – download locally or upload to services like Hugging Face in the desired format.
+
+| Stage | Options | Purpose |
+|-------|---------|---------|
+| **Ingestion** | Multiple file formats (PDF, DOCX, PPTX, TXT), web pages and YouTube URLs. Automatic cleaning and optional entity extraction. | Produce clean text chunks stored in the knowledge graph. |
+| **Knowledge graph ops** | Helpers like `deduplicate_chunks`, `resolve_entities` and various linking utilities. | Improve quality and connectivity of the graph. |
+| **Dataset generation** | Choose dataset type, training goal and output format. | The correct pipeline generates samples and formats them as requested. |
+| **Curation** | Configure a quality threshold and batch size. | Drop obviously bad samples directly after generation. |
+| **Dataset cleanup** | Reuse graph helper functions plus formatting utilities. | Finalize the dataset before exporting. |
+| **Export** | Local download or HF upload in JSONL, Alpaca, ChatML or OpenAI FT style. | Deliver the dataset in the desired place and format. |
+
+### Step Reference
+
+Below is a quick overview of the main options and operations exposed at each stage.
+
+**Ingestion**
+
+- `extract_entities`, `extract_facts` – add entity and fact nodes while parsing
+- `high_res`, `ocr` – improved PDF and image handling
+- `chunk_method` – `basic`, `sliding`, `semantic`, `contextual` or `summary`
+
+**Knowledge graph operations**
+
+- `deduplicate_chunks()` – drop identical chunks
+- `resolve_entities()` – merge aliases into canonical entities
+- `link_*()` – connect nodes that mention the same entities
+- `prune_sources([...])` – remove unwanted data from the graph
+- `compute_graph_embeddings()` – build Node2Vec embeddings
+- `mark_conflicting_facts()` – flag contradictory statements
+
+**Dataset generation**
+
+- `dataset_type` – qa, cot, kg, vqa, pref_pair…
+- `training_goal` – SFT, DPO, PPO, etc.
+- `fmt` – jsonl, alpaca, chatml, openai-ft
+
+**Curation**
+
+- `threshold` – minimum quality rating
+- `batch_size` – number of pairs rated together
+- `temperature` – sampling temperature for the rating prompt
+
+**Dataset cleanup**
+
+- `clean_chunks()` – normalize whitespace and remove markup
+- `normalize_date_fields()` – standardize date attributes
+- `deduplicate_pairs()` – remove near-duplicate examples
+
+**Export**
+
+- `fmt` – choose the output format
+- `repo` – optionally push to a Hugging Face repo
+
 # How does Datacreek offer it?
 
 The toolkit exposes a REST API that mirrors the main data preparation steps. All
@@ -116,10 +176,44 @@ startup so the database is ready when the services come online.
 The command line interface is reserved for such maintenance operations (database
 setup, test runs) and is not intended for dataset generation.
 
+### Development build
+
+The stack can be used directly from source when hacking on the project. Install
+the Python package in editable mode and set up pre-commit hooks:
+
+```bash
+git clone https://github.com/meta-llama/datacreek.git
+cd datacreek
+pip install -e .
+pip install pre-commit
+pre-commit install
+```
+
+The front-end lives in `frontend` and can be started separately for a faster
+iteration loop:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+This will watch for file changes and serve the interface on
+`http://localhost:5173` while the API runs on port 8000.
+
 ### Starting the stack with Docker
 
 Use the provided `docker-compose.yml` to launch the API, Celery worker,
 Redis, Neo4j and the front-end:
+
+The stack consists of five main services:
+
+- **api** – FastAPI server exposing ingestion, generation, curation and export
+  endpoints.
+- **worker** – Celery background worker executing long-running tasks.
+- **redis** – message broker and task result backend.
+- **neo4j** – knowledge graph database.
+- **frontend** – React web application built with Vite.
 
 ```bash
 ./scripts/start_services.sh
@@ -165,6 +259,12 @@ At a minimum, set `NEO4J_URI`, `NEO4J_USER` and `NEO4J_PASSWORD` so the
 API can reach the Neo4j instance. `DATABASE_URL` defaults to storing the
 SQLite file inside the mounted `./data` directory. `IMAGE_NAME` and
 `FRONTEND_IMAGE_NAME` define the container images pulled during deployment.
+
+Before running the deployment script ensure your CI pipeline built and pushed
+the container images to the registry referenced by `IMAGE_NAME` and
+`FRONTEND_IMAGE_NAME`. The remote host only pulls and restarts the services;
+all configuration is controlled by the `.env` file copied alongside
+`docker-compose.yml`.
 
 You can override any value by providing a custom YAML file to the server.
 
@@ -517,6 +617,27 @@ pipelines operate on this graph and are specialized for different training goals
 | `tool`       | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
 | `conversation` | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
 | `multi_tool` | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+
+### Training-Specific Pipelines
+
+Depending on the training objective, different dataset types are available.
+
+| Training goal | Supported dataset types |
+|---------------|-----------------------|
+| SFT | qa, cot, vqa, kg, tool, conversation, multi_tool |
+| DPO | qa, cot, kg, pref_pair, tool, conversation, multi_tool |
+| ORPO | qa, cot, kg, pref_pair, tool, conversation, multi_tool |
+| DPO+SFT | qa, cot, kg, pref_pair, tool, conversation, multi_tool |
+| PPO | qa, kg, pref_pair, tool, conversation, multi_tool |
+| RRHF | qa, cot, kg, pref_list, tool, conversation, multi_tool |
+| RLAIF | qa, kg, pref_pair, tool, conversation, multi_tool |
+| GRPO | qa, kg, pref_list, tool, conversation, multi_tool |
+| CPT | text |
+
+```python
+from datacreek import get_dataset_types_for_training, TrainingGoal
+print(get_dataset_types_for_training(TrainingGoal.DPO))
+```
 
 You can query pipelines programmatically:
 
