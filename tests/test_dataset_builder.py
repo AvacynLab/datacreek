@@ -708,3 +708,32 @@ def test_validate_coherence_wrapper():
 
     assert marked == 1
     assert ds.graph.graph.edges["p", "c"].get("inconsistent") is True
+
+
+def test_get_raw_text_and_run_pipeline(monkeypatch):
+    ds = DatasetBuilder(DatasetType.QA)
+    ds.add_document("doc", source="s")
+    ds.add_chunk("doc", "c1", "hello")
+    ds.add_chunk("doc", "c2", "world")
+
+    text = ds.get_raw_text()
+    assert "hello" in text
+    assert "world" in text
+
+    calls = {}
+
+    def fake_run(dtype, doc_text, **kwargs):
+        calls["dtype"] = dtype
+        calls["text"] = doc_text
+        calls["kwargs"] = kwargs
+        return "ok"
+
+    monkeypatch.setattr("datacreek.pipelines.run_generation_pipeline", fake_run)
+
+    result = ds.run_post_kg_pipeline(num_pairs=5, async_mode=True)
+
+    assert result == "ok"
+    assert calls["dtype"] == DatasetType.QA
+    assert "hello" in calls["text"] and "world" in calls["text"]
+    assert calls["kwargs"]["num_pairs"] == 5
+    assert calls["kwargs"]["async_mode"] is True

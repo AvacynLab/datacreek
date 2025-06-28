@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from datacreek.db import Dataset, SessionLocal, SourceData
 from datacreek.services import create_dataset, create_source
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
+from datacreek.utils import get_path_config, load_config
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -73,7 +75,10 @@ def generate_task(
         src = db.get(SourceData, src_id)
         if not src or src.owner_id != user_id:
             raise RuntimeError("Source not found")
-        output_dir = Path("data/generated")
+        from datacreek.utils import get_path_config, load_config
+
+        cfg = load_config(str(config_path) if config_path else None)
+        output_dir = Path(get_path_config(cfg, "output", "generated"))
         output_dir.mkdir(parents=True, exist_ok=True)
         overrides = {}
         if generation is not None:
@@ -82,7 +87,7 @@ def generate_task(
             overrides["prompts"] = prompts
         out = generate_data(
             None,
-            str(output_dir),
+            None,
             Path(config_path) if config_path else None,
             api_base,
             model,
@@ -94,7 +99,7 @@ def generate_task(
             document_text=src.content,
             config_overrides=overrides if overrides else None,
         )
-        ds = create_dataset(db, user_id, src_id, out)
+        ds = create_dataset(db, user_id, src_id, content=json.dumps(out))
         return {"id": ds.id}
 
 
@@ -104,9 +109,9 @@ def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
         ds = db.get(Dataset, ds_id)
         if not ds or ds.owner_id != user_id:
             raise RuntimeError("Dataset not found")
-        output_path = Path(ds.path).with_name(Path(ds.path).stem + "_curated.json")
-        curate_qa_pairs(ds.path, str(output_path), threshold, None, None, None, False)
-        ds.path = str(output_path)
+        data = json.loads(ds.content or "{}")
+        result = curate_qa_pairs(data, None, threshold, None, None, None, False, async_mode=False)
+        ds.content = json.dumps(result)
         db.commit()
         db.refresh(ds)
         return {"id": ds.id}
@@ -118,8 +123,9 @@ def save_task(user_id: int, ds_id: int, fmt: str) -> dict:
         ds = db.get(Dataset, ds_id)
         if not ds or ds.owner_id != user_id:
             raise RuntimeError("Dataset not found")
-        out = convert_format(ds.path, None, fmt, {}, "json")
-        ds.path = out
+        data = json.loads(ds.content or "{}")
+        out = convert_format(data, None, fmt, {}, "json")
+        ds.content = out if isinstance(out, str) else json.dumps(out)
         db.commit()
         db.refresh(ds)
         return {"id": ds.id}

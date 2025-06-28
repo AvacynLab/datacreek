@@ -5,27 +5,32 @@
 # the root directory of this source tree.
 # Filter low quality examples
 
+import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.models.llm_client import LLMClient
-from datacreek.utils.config import get_curate_config, get_prompt
+from datacreek.utils.config import get_curate_settings, get_prompt
+
+logger = logging.getLogger(__name__)
 from datacreek.utils.llm_processing import convert_to_conversation_format, parse_ratings
 
 
 def curate_qa_pairs(
-    input_path: str,
-    output_path: str,
+    input_data: Any,
+    output_path: Optional[str] = None,
     threshold: Optional[float] = None,
     api_base: Optional[str] = None,
     model: Optional[str] = None,
     config_path: Optional[Path] = None,
     verbose: bool = False,
     provider: Optional[str] = None,
-) -> str:
+    async_mode: bool = False,
+) -> Any:
     """Clean and filter QA pairs based on quality ratings
 
     Args:
@@ -36,19 +41,22 @@ def curate_qa_pairs(
         model: Model to use
         config_path: Path to configuration file
         verbose: Show detailed output
+        async_mode: Use asynchronous LLM requests when supported
 
     Returns:
         Path to the cleaned output file
     """
-    # Set verbose either via CLI or via env variable. If its via CLI, set it to env variable
-    if verbose:
-        os.environ["SDK_VERBOSE"] = "true"
-    else:
-        os.environ["SDK_VERBOSE"] = "false"
+    # Verbosity now controlled by logging level
 
-    # Load input file
-    with open(input_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    # Load input
+    if isinstance(input_data, str):
+        if os.path.exists(input_data):
+            with open(input_data, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = json.loads(input_data)
+    else:
+        data = input_data
 
     # Extract QA pairs
     qa_pairs = data.get("qa_pairs", [])
@@ -66,30 +74,22 @@ def curate_qa_pairs(
     # Get threshold from args, then config, then default
     if threshold is None:
         config = client.config
-        cleanup_config = get_curate_config(config)
-        threshold = cleanup_config.get("threshold", 7.0)
+        cleanup_settings = get_curate_settings(config)
+        threshold = cleanup_settings.threshold
 
     # Create QA generator
     generator = QAGenerator(client, config_path)
 
     # Get configuration
-    curate_config = get_curate_config(client.config)
+    curate_config = get_curate_settings(client.config)
 
-    # Allow environment variable to override batch size (for debugging)
-    env_batch_size = os.environ.get("SDK_BATCH_SIZE")
-    if env_batch_size and env_batch_size.isdigit():
-        batch_size = int(env_batch_size)
-        inference_batch = int(env_batch_size)
-        if verbose:
-            print(f"Using environment-specified batch size: {batch_size}")
-    else:
-        batch_size = curate_config.get("batch_size", 32)
-        inference_batch = curate_config.get("inference_batch", 32)
+    batch_size = curate_config.batch_size
+    inference_batch = curate_config.inference_batch
 
-    rating_temperature = curate_config.get("temperature", 0.1)
+    rating_temperature = curate_config.temperature
 
     if threshold is None:
-        threshold = curate_config.get("threshold", 7.0)
+        threshold = curate_config.threshold
 
     # Get rating prompt template
     rating_prompt_template = get_prompt(client.config, "qa_rating")
@@ -116,7 +116,7 @@ def curate_qa_pairs(
 
     # Process batches with simple progress indicator rather than a detailed bar
     # This avoids conflicts with other output messages
-    print(f"Processing {len(batches)} batches of QA pairs...")
+    logger.info("Processing %d batches of QA pairs...", len(batches))
 
     # Only use detailed progress bar in verbose mode
     if verbose:
@@ -143,113 +143,50 @@ def curate_qa_pairs(
         progress_ctx = None
         rate_task = None
 
-    # Process in inference batches
-    for batch_start in range(0, len(all_messages), inference_batch):
-        batch_end = min(batch_start + inference_batch, len(all_messages))
-        current_batch = all_messages[batch_start:batch_end]
-        current_batch_size = len(current_batch)
+    from datacreek.utils.batch import async_process_batches, process_batches
 
-        batch_num = batch_start // inference_batch + 1
-        total_batches = (len(all_messages) + inference_batch - 1) // inference_batch
+    def _parse_and_collect(resp: str, original_batch: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+        rated = parse_ratings(resp, original_batch)
+        collected: List[Dict[str, Any]] = []
+        for pair in rated:
+            if "rating" in pair:
+                rating = pair["rating"]
+                nonlocal total_score, total_evaluated, total_passed
+                total_score += rating
+                total_evaluated += 1
+                if rating >= threshold:
+                    collected.append(pair)
+                    total_passed += 1
+        return collected
 
-        # Simple progress indicator for non-verbose mode
-        if not verbose:
-            print(f"Processing batch {batch_num}/{total_batches}...", end="\r")
-        else:
-            print(f"Processing batch {batch_num}/{total_batches}")
-
-        try:
-            # Get ratings for the batch
-            if verbose:
-                print(f"Sending batch request with {len(current_batch)} items")
-
-            batch_responses = client.batch_completion(
-                current_batch, temperature=rating_temperature, batch_size=inference_batch
+    if async_mode:
+        rated_batches = asyncio.run(
+            async_process_batches(
+                client,
+                all_messages,
+                batch_size=inference_batch,
+                temperature=rating_temperature,
+                parse_fn=lambda resp: resp,
             )
+        )
+    else:
+        rated_batches = process_batches(
+            client,
+            all_messages,
+            batch_size=inference_batch,
+            temperature=rating_temperature,
+            parse_fn=lambda resp: resp,
+        )
 
-            if verbose:
-                print(f"Received {len(batch_responses)} responses")
-                for i, resp in enumerate(batch_responses):
-                    print(f"Response {i+1}: {resp[:100]}...")
-
-            # Process each response
-            for j, response in enumerate(batch_responses):
-                original_batch_index = batch_start + j
-                if original_batch_index < len(batches):
-                    original_batch = batches[original_batch_index]
-
-                    # Parse the ratings with original batch for fallback
-                    try:
-                        if verbose:
-                            print(f"Processing batch {original_batch_index+1}")
-
-                        rated_batch = parse_ratings(response, original_batch)
-
-                        # Process the rated batch
-                        for pair in rated_batch:
-                            if "rating" in pair:
-                                rating = pair["rating"]
-                                total_score += rating
-                                total_evaluated += 1
-
-                                if rating >= threshold:
-                                    filtered_pairs.append(pair)
-                                    total_passed += 1
-                    except Exception as e:
-                        if verbose:
-                            print(f"Error processing batch {original_batch_index+1}: {str(e)}")
-                            print(f"First 100 chars of response: {response[:100]}")
-
-                        # Try processing one pair at a time as a fallback
-                        try:
-                            if verbose:
-                                print("Attempting to process items individually...")
-
-                            for item in original_batch:
-                                item_json = json.dumps(item, indent=2)
-                                rating_prompt = rating_prompt_template.format(pairs=item_json)
-                                item_response = client.chat_completion(
-                                    [{"role": "system", "content": rating_prompt}],
-                                    temperature=rating_temperature,
-                                )
-                                try:
-                                    # This should be a single item
-                                    rated_item = parse_ratings(item_response, [item])
-                                    if rated_item and len(rated_item) > 0:
-                                        pair = rated_item[0]
-                                        if "rating" in pair:
-                                            rating = pair["rating"]
-                                            total_score += rating
-                                            total_evaluated += 1
-
-                                            if rating >= threshold:
-                                                filtered_pairs.append(pair)
-                                                total_passed += 1
-                                                if verbose:
-                                                    print(
-                                                        f"Successfully processed individual item with rating {rating}"
-                                                    )
-                                except Exception as inner_e:
-                                    if verbose:
-                                        print(f"Failed to process individual item: {str(inner_e)}")
-                        except Exception as fallback_e:
-                            if verbose:
-                                print(f"Fallback processing failed: {str(fallback_e)}")
-
-                        # Continue processing other batches rather than failing completely
-                        pass
-
-            # Update progress bar if in verbose mode
-            if progress_ctx and rate_task:
-                progress_ctx.update(rate_task, advance=current_batch_size)
-
+    for idx, response in enumerate(rated_batches):
+        original_batch = batches[idx] if idx < len(batches) else []
+        try:
+            filtered_pairs.extend(_parse_and_collect(response, original_batch))
         except Exception as e:
-            if verbose:
-                print(f"Error processing inference batch {batch_num}: {str(e)}")
+            logger.error("Error processing batch %d: %s", idx + 1, e)
 
-            # Update progress bar if in verbose mode
-            if progress_ctx and rate_task:
-                progress_ctx.update(rate_task, advance=current_batch_size)
+        if progress_ctx and rate_task:
+            progress_ctx.update(rate_task, advance=1)
 
     # Stop progress bar if in verbose mode
     if progress_ctx:
@@ -257,8 +194,7 @@ def curate_qa_pairs(
 
     # Clear the progress line in non-verbose mode
     if not verbose:
-        print(" " * 80, end="\r")
-        print("Batch processing complete.")
+        logger.info("Batch processing complete.")
 
     # Calculate metrics
     metrics = {
@@ -269,9 +205,9 @@ def curate_qa_pairs(
     }
 
     # Always print basic stats, even in non-verbose mode
-    print(f"Rated {total_evaluated} QA pairs")
-    print(f"Retained {total_passed} pairs (threshold: {threshold})")
-    print(f"Average score: {metrics['avg_score']}")
+    logger.info("Rated %d QA pairs", total_evaluated)
+    logger.info("Retained %d pairs (threshold: %s)", total_passed, threshold)
+    logger.info("Average score: %s", metrics["avg_score"])
 
     # Convert to conversation format
     conversations = convert_to_conversation_format(filtered_pairs)
@@ -284,11 +220,10 @@ def curate_qa_pairs(
         "metrics": metrics,
     }
 
-    # Ensure output directory exists
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if output_path:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
+        return output_path
 
-    # Save result
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2)
-
-    return output_path
+    return result

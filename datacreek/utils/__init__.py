@@ -1,12 +1,21 @@
 """Utility helpers for datacreek."""
 
+from datacreek.pipelines import run_generation_pipeline
+
 from .config import (
     get_curate_config,
+    get_curate_settings,
     get_format_config,
+    get_format_settings,
     get_generation_config,
+    get_llm_settings,
+    get_openai_config,
+    get_openai_settings,
+    get_output_paths,
     get_path_config,
     get_prompt,
     get_vllm_config,
+    get_vllm_settings,
     load_config,
     merge_configs,
 )
@@ -19,9 +28,16 @@ __all__ = [
     "load_config",
     "get_path_config",
     "get_vllm_config",
+    "get_vllm_settings",
+    "get_openai_config",
+    "get_openai_settings",
+    "get_llm_settings",
     "get_generation_config",
     "get_curate_config",
+    "get_curate_settings",
     "get_format_config",
+    "get_format_settings",
+    "get_output_paths",
     "get_prompt",
     "merge_configs",
     "split_into_chunks",
@@ -32,4 +48,5 @@ __all__ = [
     "convert_to_conversation_format",
     "extract_facts",
     "extract_entities",
+    "run_generation_pipeline",
 ]

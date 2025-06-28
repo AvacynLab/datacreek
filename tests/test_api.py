@@ -55,19 +55,13 @@ def test_async_pipeline(monkeypatch, tmp_path):
     def dummy_generate(path, output_dir, *args, document_text=None, **kwargs):
         assert kwargs.get("config_overrides") == {"generation": {"temperature": 0.1}}
         assert kwargs.get("provider") == "api-endpoint"
-        out = Path(output_dir) / "gen.json"
-        with open(out, "w") as f:
-            json.dump({"qa_pairs": [{"question": "q", "answer": "a"}]}, f)
-        return str(out)
+        return {"qa_pairs": [{"question": "q", "answer": "a"}]}
 
-    def dummy_curate(input_path, output_path, *args, **kwargs):
-        Path(output_path).write_text(Path(input_path).read_text())
-        return output_path
+    def dummy_curate(data, output_path=None, *args, **kwargs):
+        return data
 
-    def dummy_save(input_path, output_path, fmt, cfg, storage):
-        out = Path(tmp_path) / f"final.{fmt}"
-        Path(out).write_text(Path(input_path).read_text())
-        return str(out)
+    def dummy_save(data, output_path, fmt, cfg, storage):
+        return "converted"
 
     monkeypatch.setattr("datacreek.tasks.generate_data", dummy_generate)
     monkeypatch.setattr("datacreek.tasks.curate_qa_pairs", dummy_curate)

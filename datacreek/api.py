@@ -1,5 +1,5 @@
 from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from datacreek.db import Dataset, SessionLocal, User, init_db
@@ -122,7 +122,7 @@ def download_dataset(
     ds = db.get(Dataset, ds_id)
     if not ds or ds.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return FileResponse(ds.path)
+    return Response(ds.content or "{}", media_type="application/json")
 
 
 # ----- Asynchronous task endpoints -----

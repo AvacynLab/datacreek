@@ -11,7 +11,15 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from datacreek.config_models import GenerationSettings
+from datacreek.config_models import (
+    CurateSettings,
+    FormatSettings,
+    GenerationSettings,
+    LLMSettings,
+    OpenAISettings,
+    OutputPaths,
+    VLLMSettings,
+)
 
 # Default config location relative to the package (original)
 ORIGINAL_CONFIG_PATH = os.path.abspath(
@@ -98,9 +106,19 @@ def get_llm_provider(config: Dict[str, Any]) -> str:
     return provider
 
 
-def get_vllm_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Get VLLM configuration"""
-    return config.get(
+def get_llm_settings(config: Dict[str, Any]) -> LLMSettings:
+    """Return general LLM configuration as :class:`LLMSettings`."""
+
+    llm_cfg = config.get("llm", {})
+    defaults = {"provider": "vllm"}
+    defaults.update(llm_cfg)
+    return LLMSettings.from_dict(defaults)
+
+
+def get_vllm_settings(config: Dict[str, Any]) -> VLLMSettings:
+    """Return VLLM configuration as :class:`VLLMSettings`."""
+
+    defaults = config.get(
         "vllm",
         {
             "api_base": "http://localhost:8000/v1",
@@ -109,21 +127,40 @@ def get_vllm_config(config: Dict[str, Any]) -> Dict[str, Any]:
             "max_retries": 3,
             "retry_delay": 1.0,
         },
-    )
+    ).copy()
+    for field_name in VLLMSettings.__dataclass_fields__:
+        defaults.setdefault(field_name, getattr(VLLMSettings(), field_name))
+    return VLLMSettings.from_dict(defaults)
 
 
-def get_openai_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Get API endpoint configuration"""
-    return config.get(
+def get_vllm_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Backwards compatible wrapper returning a plain dictionary."""
+
+    return get_vllm_settings(config).__dict__
+
+
+def get_openai_settings(config: Dict[str, Any]) -> OpenAISettings:
+    """Return OpenAI/API endpoint configuration as :class:`OpenAISettings`."""
+
+    defaults = config.get(
         "api-endpoint",
         {
-            "api_base": None,  # None means use default API base URL
-            "api_key": None,  # None means use environment variables
+            "api_base": None,
+            "api_key": None,
             "model": "gpt-4o",
             "max_retries": 3,
             "retry_delay": 1.0,
         },
-    )
+    ).copy()
+    for field_name in OpenAISettings.__dataclass_fields__:
+        defaults.setdefault(field_name, getattr(OpenAISettings(), field_name))
+    return OpenAISettings.from_dict(defaults)
+
+
+def get_openai_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Backwards compatible wrapper returning a plain dictionary."""
+
+    return get_openai_settings(config).__dict__
 
 
 def _env_override(key: str) -> Optional[str]:
@@ -155,6 +192,30 @@ def get_generation_config(config: Dict[str, Any]) -> GenerationSettings:
 def get_curate_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Get curation configuration"""
     return config.get("curate", {"threshold": 7.0, "batch_size": 8, "temperature": 0.1})
+
+
+def get_curate_settings(config: Dict[str, Any]) -> CurateSettings:
+    """Return curation configuration as :class:`CurateSettings`."""
+    defaults = config.get("curate", {}).copy()
+    for field_name in CurateSettings.__dataclass_fields__:
+        defaults.setdefault(field_name, getattr(CurateSettings(), field_name))
+    return CurateSettings.from_dict(defaults)
+
+
+def get_format_settings(config: Dict[str, Any]) -> FormatSettings:
+    """Return output formatting configuration as :class:`FormatSettings`."""
+    defaults = config.get("format", {}).copy()
+    for field_name in FormatSettings.__dataclass_fields__:
+        defaults.setdefault(field_name, getattr(FormatSettings(), field_name))
+    return FormatSettings.from_dict(defaults)
+
+
+def get_output_paths(config: Dict[str, Any]) -> OutputPaths:
+    """Return output path settings as :class:`OutputPaths`."""
+    defaults = config.get("paths", {}).get("output", {}).copy()
+    for field_name in OutputPaths.__dataclass_fields__:
+        defaults.setdefault(field_name, getattr(OutputPaths(), field_name))
+    return OutputPaths.from_dict(defaults)
 
 
 def get_format_config(config: Dict[str, Any]) -> Dict[str, Any]:

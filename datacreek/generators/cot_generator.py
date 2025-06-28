@@ -44,7 +44,7 @@ class COTGenerator:
 
     def parse_json_output(self, output_text: str) -> Optional[List[Dict]]:
         """Parse JSON from LLM output text"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
         output_text = output_text.strip()
 
         # Try to extract JSON array
@@ -76,7 +76,7 @@ class COTGenerator:
         self, document_text: str, num_examples: int = None
     ) -> List[Dict[str, Any]]:
         """Generate chain-of-thought reasoning examples"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         # Get default num_examples from config if not provided
         if num_examples is None:
@@ -117,7 +117,7 @@ class COTGenerator:
         self, conversations: List[Dict], include_simple_steps: bool = False
     ) -> List[Dict]:
         """Enhance existing conversations with CoT reasoning"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         # Get the prompt template
         prompt_template = get_prompt(self.config, "cot_enhancement")
@@ -164,13 +164,7 @@ class COTGenerator:
         self, document_text: str, num_examples: int = None, include_simple_steps: bool = False
     ) -> Dict[str, Any]:
         """Process a document to generate CoT examples"""
-        verbose = os.environ.get("SDK_VERBOSE", "false").lower() == "true"
-
-        # Set the verbose environment variable
-        if verbose:
-            os.environ["SDK_VERBOSE"] = "true"
-        else:
-            os.environ["SDK_VERBOSE"] = "false"
+        verbose = logger.isEnabledFor(logging.DEBUG)
 
         # Generate summary first (helpful context)
         summary = self.client.chat_completion(

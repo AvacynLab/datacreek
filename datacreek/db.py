@@ -58,6 +58,7 @@ class Dataset(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     source_id = Column(Integer, ForeignKey("sources.id"), nullable=False)
     path = Column(String, nullable=False)
+    content = Column(Text, nullable=True)
 
     owner = relationship("User", back_populates="datasets")
     source = relationship("SourceData", back_populates="datasets")
