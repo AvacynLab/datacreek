@@ -73,6 +73,18 @@ class DatasetBuilder:
 
         self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id, page=page)
 
+    def add_image(
+        self,
+        doc_id: str,
+        image_id: str,
+        path: str,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an image node in the dataset graph."""
+
+        self.graph.add_image(doc_id, image_id, path, page=page)
+
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
 
@@ -421,6 +433,9 @@ class DatasetBuilder:
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_chunks_for_document(doc_id)
+
+    def get_images_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_images_for_document(doc_id)
 
     def get_sections_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_sections_for_document(doc_id)

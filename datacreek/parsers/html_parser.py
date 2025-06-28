@@ -9,15 +9,15 @@ import os
 from typing import Any, Dict
 from urllib.parse import urlparse
 
-import requests
-
 from .base import BaseParser
 
 
 class HTMLParser(BaseParser):
     """Parser for HTML files and web pages"""
 
-    def parse(self, file_path: str, *, use_unstructured: bool = True) -> str:
+    def parse(
+        self, file_path: str, *, use_unstructured: bool = True, return_elements: bool = False
+    ) -> str | list[Any]:
         """Parse an HTML file or URL into plain text
 
         Args:
@@ -26,58 +26,19 @@ class HTMLParser(BaseParser):
         Returns:
             Extracted text from the HTML
         """
-        if use_unstructured:
-            try:
-                from unstructured.partition.html import partition_html
-
-                elements = partition_html(
-                    url=file_path if file_path.startswith(("http://", "https://")) else None,
-                    filename=None if file_path.startswith(("http://", "https://")) else file_path,
-                )
-                texts = [
-                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
-                ]
-                if texts:
-                    return "\n".join(texts)
-            except Exception:
-                pass
-
         try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            raise ImportError(
-                "beautifulsoup4 is required for HTML parsing. Install it with: pip install beautifulsoup4"
+            from unstructured.partition.html import partition_html
+
+            elements = partition_html(
+                url=file_path if file_path.startswith(("http://", "https://")) else None,
+                filename=None if file_path.startswith(("http://", "https://")) else file_path,
             )
-
-        # Determine if file_path is a URL or a local file
-        if file_path.startswith(("http://", "https://")):
-            # It's a URL, fetch content
-            response = requests.get(file_path)
-            response.raise_for_status()
-            html_content = response.text
-        else:
-            # It's a local file, read it
-            with open(file_path, "r", encoding="utf-8") as f:
-                html_content = f.read()
-
-        # Parse HTML and extract text
-        soup = BeautifulSoup(html_content, "html.parser")
-
-        # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.extract()
-
-        # Get text
-        text = soup.get_text()
-
-        # Break into lines and remove leading and trailing space
-        lines = (line.strip() for line in text.splitlines())
-        # Break multi-headlines into a line each
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        # Drop blank lines
-        text = "\n".join(chunk for chunk in chunks if chunk)
-
-        return text
+            if return_elements:
+                return elements
+            texts = [getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)]
+            return "\n".join(texts)
+        except Exception as exc:  # pragma: no cover - unexpected failures
+            raise RuntimeError("Failed to parse HTML with unstructured") from exc
 
     def save(self, content: str, output_path: str) -> None:
         """Save the extracted text to a file

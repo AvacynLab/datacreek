@@ -210,7 +210,7 @@ sequenceDiagram
     Parsers-->>API: PDFParser
     API->>Parsers: parse(file.pdf)
     Parsers-->>API: Extracted text
-    API-->>User: Text saved to data/output/file.txt
+    API-->>User: Text inserted into graph
 
     User->>API: POST /generate file.txt
     API->>LLMClient: Initialize with config
@@ -306,7 +306,7 @@ paths:
     ppt: "data/ppt"
     txt: "data/txt"
   output:
-    parsed: "data/output"
+    parsed: "data/output"  # (unused)
     generated: "data/generated"
     cleaned: "data/cleaned"
     final: "data/final"
@@ -453,7 +453,7 @@ graph TD
     TXTParser --> TextExtraction
     
     TextExtraction --> CleanText[Clean Text]
-    CleanText --> SaveText[Save Text File]
+    CleanText --> InsertGraph[Insert into Graph]
 ```
 
 #### Parser Selection Logic
@@ -488,7 +488,7 @@ def determine_parser(file_path, config):
 
 ### Stage 2: Content Generation (Create)
 
-The `create` stage generates content from the parsed text.
+The `create` stage generates content from the parsed content stored in the knowledge graph.
 
 ```mermaid
 graph TD
@@ -714,9 +714,11 @@ from datacreek import DatasetBuilder, DatasetType
 ds = DatasetBuilder(DatasetType.QA)
 ds.add_document("doc1", source="paper.pdf")
 ds.add_chunk("doc1", "c1", "hello world")
+ds.add_image("doc1", "img0", "pages/img0.png", page=1)
 matches = ds.search("world")
 doc_matches = ds.search_documents("paper")
 chunk_ids = ds.get_chunks_for_document("doc1")
+image_ids = ds.get_images_for_document("doc1")
 
 # Embedding-based retrieval
 ds.graph.index.build()
@@ -824,11 +826,12 @@ class Parser:
 
 Each parser implements this interface:
 
-- `PDFParser`: Uses pdfminer.six to extract text from PDF files
-- `HTMLParser`: Uses BeautifulSoup4 to extract text from HTML/web pages
+- `PDFParser`: Uses `unstructured` to extract text from PDF files
+- `HTMLParser`: Uses `unstructured` to extract text from HTML/web pages
 - `YouTubeParser`: Uses pytube and youtube-transcript-api to extract transcripts
-- `DOCXParser`: Uses python-docx to extract text from Word documents
-- `PPTParser`: Uses python-pptx to extract text from PowerPoint presentations
+- `DOCXParser`: Uses `unstructured` to extract text from Word documents
+- `PPTParser`: Uses `unstructured` to extract text from PowerPoint presentations
+- All parsers rely on `unstructured` partitions so text and images become separate elements
 - `TXTParser`: Reads plain text files
 
 ### Utility Functions
@@ -838,6 +841,8 @@ Each parser implements this interface:
 def split_into_chunks(text: str, chunk_size: int = 4000, overlap: int = 200) -> List[str]:
     """Split text into chunks with optional overlap"""
 
+def clean_text(text: str) -> str:
+    """Normalize text using ``unstructured`` cleaners"""
 # LLM Output Processing
 def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
     """Parse QA pairs from LLM output"""
@@ -1029,7 +1034,7 @@ curl http://localhost:8000/v1/models
 # 1. Parse a PDF document
 curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf"
 
-# 2. Generate QA pairs from the parsed text
+# 2. Generate QA pairs from the parsed content
 curl -X POST localhost:8000/generate -d "src_id=1"
 
 # 3. Clean and filter the generated content
@@ -1488,9 +1493,6 @@ curl -X GET http://localhost:8000/v1/models
 #### Inspecting Generated Files
 
 ```bash
-# View parsed text file
-cat data/output/document.txt
-
 # View generated QA pairs
 jq . data/generated/document_qa_pairs.json
 
@@ -1770,7 +1772,7 @@ sequenceDiagram
     Parsers-->>API: PDFParser
     API->>Parsers: parse(file.pdf)
     Parsers-->>API: Extracted text
-    API-->>User: Text saved to data/output/file.txt
+    API-->>User: Text inserted into graph
 
     User->>API: POST /generate file.txt
     API->>LLMClient: Initialize with config
@@ -1866,7 +1868,7 @@ paths:
     ppt: "data/ppt"
     txt: "data/txt"
   output:
-    parsed: "data/output"
+    parsed: "data/output"  # (unused)
     generated: "data/generated"
     cleaned: "data/cleaned"
     final: "data/final"
@@ -2012,7 +2014,7 @@ graph TD
     TXTParser --> TextExtraction
     
     TextExtraction --> CleanText[Clean Text]
-    CleanText --> SaveText[Save Text File]
+    CleanText --> InsertGraph[Insert into Graph]
 ```
 
 #### Parser Selection Logic
@@ -2047,7 +2049,7 @@ def determine_parser(file_path, config):
 
 ### Stage 2: Content Generation (Create)
 
-The `create` stage generates content from the parsed text.
+The `create` stage generates content from the parsed content stored in the knowledge graph.
 
 ```mermaid
 graph TD
@@ -2338,11 +2340,12 @@ class Parser:
 
 Each parser implements this interface:
 
-- `PDFParser`: Uses pdfminer.six to extract text from PDF files
-- `HTMLParser`: Uses BeautifulSoup4 to extract text from HTML/web pages
+- `PDFParser`: Uses `unstructured` to extract text from PDF files
+- `HTMLParser`: Uses `unstructured` to extract text from HTML/web pages
 - `YouTubeParser`: Uses pytube and youtube-transcript-api to extract transcripts
-- `DOCXParser`: Uses python-docx to extract text from Word documents
-- `PPTParser`: Uses python-pptx to extract text from PowerPoint presentations
+- `DOCXParser`: Uses `unstructured` to extract text from Word documents
+- `PPTParser`: Uses `unstructured` to extract text from PowerPoint presentations
+- All parsers rely on `unstructured` partitions so text and images become separate elements
 - `TXTParser`: Reads plain text files
 
 ### Utility Functions
@@ -2351,6 +2354,9 @@ Each parser implements this interface:
 # Text Processing
 def split_into_chunks(text: str, chunk_size: int = 4000, overlap: int = 200) -> List[str]:
     """Split text into chunks with optional overlap"""
+
+def clean_text(text: str) -> str:
+    """Normalize text using ``unstructured`` cleaners"""
 
 # LLM Output Processing
 def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
@@ -2543,7 +2549,7 @@ curl http://localhost:8000/v1/models
 # 1. Parse a PDF document
 curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf"
 
-# 2. Generate QA pairs from the parsed text
+# 2. Generate QA pairs from the parsed content
 curl -X POST localhost:8000/generate -d "src_id=1"
 
 # 3. Clean and filter the generated content
@@ -3002,9 +3008,6 @@ curl -X GET http://localhost:8000/v1/models
 #### Inspecting Generated Files
 
 ```bash
-# View parsed text file
-cat data/output/document.txt
-
 # View generated QA pairs
 jq . data/generated/document_qa_pairs.json
 
