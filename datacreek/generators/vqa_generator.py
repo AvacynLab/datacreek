@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_generation_config, load_config
@@ -25,14 +25,29 @@ logger = logging.getLogger(__name__)
 class VQAGenerator:
     """Generates Visual Question Answering data with reasoning"""
 
-    def __init__(self, client: LLMClient, config_path: Optional[Path] = None):
+    def __init__(
+        self,
+        client: LLMClient,
+        config_path: Optional[Path] = None,
+        config_overrides: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize the VQA Generator with an LLM client and optional config"""
+
         self.client = client
 
-        # Load config
-        self.config = (
-            load_config(str(config_path) if config_path else None) if config_path else client.config
-        )
+        # Load base config from file or client
+        if config_path:
+            base_cfg = load_config(config_path)
+        else:
+            base_cfg = client.config
+
+        # Merge overrides if provided
+        if config_overrides:
+            from datacreek.utils.config import merge_configs
+
+            base_cfg = merge_configs(base_cfg, config_overrides)
+
+        self.config = base_cfg
 
         # Get specific configurations
         self.generation_config = get_generation_config(self.config)

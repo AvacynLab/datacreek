@@ -20,6 +20,35 @@ from datacreek.utils.format_converter import (
 from datacreek.utils.llm_processing import convert_to_conversation_format
 
 
+def _format_pairs(qa_pairs: List[Dict[str, str]], fmt: str) -> Any:
+    """Return formatted data for in-memory conversion."""
+
+    if fmt == "jsonl":
+        return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
+    if fmt == "alpaca":
+        return json.dumps(
+            [
+                {"instruction": p["question"], "input": "", "output": p["answer"]}
+                for p in qa_pairs
+            ],
+            indent=2,
+        )
+    if fmt in {"ft", "chatml"}:
+        messages_key = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": p["question"]},
+                {"role": "assistant", "content": p["answer"]},
+            ]
+            for p in qa_pairs
+        ]
+        if fmt == "ft":
+            return json.dumps([{"messages": m} for m in messages_key], indent=2)
+        return json.dumps([{"messages": m} for m in messages_key], indent=2)
+
+    raise ValueError(f"Unknown format type: {fmt}")
+
+
 def convert_format(
     input_data: Any,
     output_path: Optional[str],
@@ -39,6 +68,10 @@ def convert_format(
     Returns:
         Path to the output file or directory
     """
+    supported = {"jsonl", "alpaca", "ft", "chatml"}
+    if format_type not in supported:
+        raise ValueError(f"Unknown format type: {format_type}")
+
     if isinstance(input_data, str):
         if os.path.exists(input_data):
             with open(input_data, "r", encoding="utf-8") as f:
@@ -75,45 +108,11 @@ def convert_format(
 
     # When using HF dataset storage format
     if storage_format == "hf":
-        # For HF datasets, we need to prepare the data in the right structure
+        # Prepare data in list-of-dict structure
         if format_type == "jsonl":
-            # For JSONL, just use the QA pairs directly
             formatted_pairs = qa_pairs
-        elif format_type == "alpaca":
-            # Format as Alpaca structure
-            formatted_pairs = []
-            for pair in qa_pairs:
-                formatted_pairs.append(
-                    {"instruction": pair["question"], "input": "", "output": pair["answer"]}
-                )
-        elif format_type == "ft":
-            # Format as OpenAI fine-tuning structure
-            formatted_pairs = []
-            for pair in qa_pairs:
-                formatted_pairs.append(
-                    {
-                        "messages": [
-                            {"role": "system", "content": "You are a helpful assistant."},
-                            {"role": "user", "content": pair["question"]},
-                            {"role": "assistant", "content": pair["answer"]},
-                        ]
-                    }
-                )
-        elif format_type == "chatml":
-            # Format as ChatML structure
-            formatted_pairs = []
-            for pair in qa_pairs:
-                formatted_pairs.append(
-                    {
-                        "messages": [
-                            {"role": "system", "content": "You are a helpful AI assistant."},
-                            {"role": "user", "content": pair["question"]},
-                            {"role": "assistant", "content": pair["answer"]},
-                        ]
-                    }
-                )
         else:
-            raise ValueError(f"Unknown format type: {format_type}")
+            formatted_pairs = json.loads(_format_pairs(qa_pairs, format_type))
 
         # Save as HF dataset (Arrow format)
         if output_path:
@@ -123,45 +122,13 @@ def convert_format(
 
     # Standard JSON file storage format
     else:
-        # Convert to the requested format using existing functions
-        if format_type == "jsonl":
-            if output_path:
-                return to_jsonl(qa_pairs, output_path)
-            return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
-        elif format_type == "alpaca":
-            formatted = [
-                {"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs
-            ]
-            if output_path:
-                return to_alpaca(qa_pairs, output_path)
-            return json.dumps(formatted, indent=2)
-        elif format_type == "ft":
-            formatted = [
-                {
-                    "messages": [
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": p["question"]},
-                        {"role": "assistant", "content": p["answer"]},
-                    ]
-                }
-                for p in qa_pairs
-            ]
-            if output_path:
-                return to_fine_tuning(qa_pairs, output_path)
-            return json.dumps(formatted, indent=2)
-        elif format_type == "chatml":
-            formatted = [
-                {
-                    "messages": [
-                        {"role": "system", "content": "You are a helpful AI assistant."},
-                        {"role": "user", "content": p["question"]},
-                        {"role": "assistant", "content": p["answer"]},
-                    ]
-                }
-                for p in qa_pairs
-            ]
-            if output_path:
-                return to_chatml(qa_pairs, output_path)
-            return json.dumps(formatted, indent=2)
-        else:
-            raise ValueError(f"Unknown format type: {format_type}")
+        if format_type == "jsonl" and output_path:
+            return to_jsonl(qa_pairs, output_path)
+        if format_type == "alpaca" and output_path:
+            return to_alpaca(qa_pairs, output_path)
+        if format_type == "ft" and output_path:
+            return to_fine_tuning(qa_pairs, output_path)
+        if format_type == "chatml" and output_path:
+            return to_chatml(qa_pairs, output_path)
+
+        return _format_pairs(qa_pairs, format_type)

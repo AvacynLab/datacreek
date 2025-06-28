@@ -72,6 +72,21 @@ class GenerationPipeline:
     description: str
 
 
+@dataclass
+class ProcessOptions:
+    """Grouped parameters for ``process_file`` calls."""
+
+    config_path: Path | None = None
+    provider: str | None = None
+    profile: str | None = None
+    api_base: str | None = None
+    model: str | None = None
+    num_pairs: int | None = None
+    overrides: Dict[str, Any] | None = None
+    verbose: bool = False
+    async_mode: bool = False
+
+
 PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     DatasetType.QA: GenerationPipeline(
         dataset_type=DatasetType.QA,
@@ -302,71 +317,88 @@ def run_generation_pipeline(
     requests when supported by the client.
     """
 
-    pipeline = get_pipeline(dataset_type)
+    try:
+        pipeline = get_pipeline(dataset_type)
+    except KeyError as exc:
+        raise ValueError(str(exc)) from exc
+
+    options = ProcessOptions(
+        config_path=config_path,
+        provider=provider,
+        profile=profile,
+        api_base=api_base,
+        model=model,
+        num_pairs=num_pairs,
+        overrides=overrides,
+        verbose=verbose,
+        async_mode=async_mode,
+    )
     data: Any = document_text
 
     for step in pipeline.steps:
+        if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
+            continue
         if verbose:
             logger.info("Running step %s", step.value)
         if step == PipelineStep.GENERATE_QA:
             data = process_file(
                 None,
                 None,
-                config_path,
-                api_base,
-                model,
+                options.config_path,
+                options.api_base,
+                options.model,
                 "qa",
-                num_pairs,
-                verbose,
-                async_mode=async_mode,
-                provider=provider,
-                profile=profile,
+                options.num_pairs,
+                options.verbose,
+                async_mode=options.async_mode,
+                provider=options.provider,
+                profile=options.profile,
                 document_text=data,
-                config_overrides=overrides,
+                config_overrides=options.overrides,
             )
         elif step == PipelineStep.GENERATE_COT:
             data = process_file(
                 None,
                 None,
-                config_path,
-                api_base,
-                model,
+                options.config_path,
+                options.api_base,
+                options.model,
                 "cot",
-                num_pairs,
-                verbose,
-                async_mode=async_mode,
-                provider=provider,
-                profile=profile,
+                options.num_pairs,
+                options.verbose,
+                async_mode=options.async_mode,
+                provider=options.provider,
+                profile=options.profile,
                 document_text=data,
-                config_overrides=overrides,
+                config_overrides=options.overrides,
             )
         elif step == PipelineStep.GENERATE_VQA:
             data = process_file(
                 None,
                 None,
-                config_path,
-                api_base,
-                model,
+                options.config_path,
+                options.api_base,
+                options.model,
                 "vqa_add_reasoning",
-                num_pairs,
-                verbose,
-                async_mode=async_mode,
-                provider=provider,
-                profile=profile,
+                options.num_pairs,
+                options.verbose,
+                async_mode=options.async_mode,
+                provider=options.provider,
+                profile=options.profile,
                 document_text=data,
-                config_overrides=overrides,
+                config_overrides=options.overrides,
             )
         elif step == PipelineStep.CURATE:
             data = curate_qa_pairs(
                 data,
                 None,
                 threshold,
-                api_base,
-                model,
-                config_path,
-                verbose,
-                provider,
-                async_mode=async_mode,
+                options.api_base,
+                options.model,
+                options.config_path,
+                options.verbose,
+                options.provider,
+                async_mode=options.async_mode,
             )
         elif step == PipelineStep.SAVE:
             cfg = load_config(str(config_path) if config_path else None)

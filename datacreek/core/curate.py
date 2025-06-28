@@ -18,6 +18,8 @@ from datacreek.utils.config import get_curate_settings, get_prompt
 
 logger = logging.getLogger(__name__)
 from datacreek.utils.llm_processing import convert_to_conversation_format, parse_ratings
+from datacreek.models.results import CurationMetrics, CurationResult
+from datacreek.models.qa import QAPair
 
 
 def curate_qa_pairs(
@@ -76,6 +78,8 @@ def curate_qa_pairs(
         config = client.config
         cleanup_settings = get_curate_settings(config)
         threshold = cleanup_settings.threshold
+    elif not 0 <= threshold <= 10:
+        raise ValueError("threshold must be between 0 and 10")
 
     # Create QA generator
     generator = QAGenerator(client, config_path)
@@ -149,13 +153,13 @@ def curate_qa_pairs(
         rated = parse_ratings(resp, original_batch)
         collected: List[Dict[str, Any]] = []
         for pair in rated:
-            if "rating" in pair:
-                rating = pair["rating"]
+            if pair.rating is not None:
+                rating = pair.rating
                 nonlocal total_score, total_evaluated, total_passed
                 total_score += rating
                 total_evaluated += 1
                 if rating >= threshold:
-                    collected.append(pair)
+                    collected.append(pair.to_dict())
                     total_passed += 1
         return collected
 
@@ -196,34 +200,31 @@ def curate_qa_pairs(
     if not verbose:
         logger.info("Batch processing complete.")
 
-    # Calculate metrics
-    metrics = {
-        "total": len(qa_pairs),
-        "filtered": len(filtered_pairs),
-        "retention_rate": round(len(filtered_pairs) / len(qa_pairs), 2) if qa_pairs else 0,
-        "avg_score": round(total_score / total_evaluated, 1) if total_evaluated else 0,
-    }
+    metrics = CurationMetrics(
+        total=len(qa_pairs),
+        filtered=len(filtered_pairs),
+        retention_rate=round(len(filtered_pairs) / len(qa_pairs), 2) if qa_pairs else 0,
+        avg_score=round(total_score / total_evaluated, 1) if total_evaluated else 0,
+    )
 
     # Always print basic stats, even in non-verbose mode
     logger.info("Rated %d QA pairs", total_evaluated)
     logger.info("Retained %d pairs (threshold: %s)", total_passed, threshold)
-    logger.info("Average score: %s", metrics["avg_score"])
+    logger.info("Average score: %s", metrics.avg_score)
 
-    # Convert to conversation format
     conversations = convert_to_conversation_format(filtered_pairs)
 
-    # Create result with filtered pairs
-    result = {
-        "summary": summary,
-        "qa_pairs": filtered_pairs,
-        "conversations": conversations,
-        "metrics": metrics,
-    }
+    result = CurationResult(
+        summary=summary,
+        qa_pairs=[QAPair(question=p["question"], answer=p["answer"], rating=p.get("rating")) for p in filtered_pairs],
+        conversations=conversations,
+        metrics=metrics,
+    )
 
     if output_path:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2)
+            json.dump(result.to_dict(), f, indent=2)
         return output_path
 
-    return result
+    return result.to_dict()

@@ -9,10 +9,12 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
+from datacreek.models.qa import QAPair
+
 logger = logging.getLogger(__name__)
 
 
-def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
+def parse_qa_pairs(text: str) -> List[QAPair]:
     """Parse QA pairs from LLM output with enhanced error handling"""
     verbose = logger.isEnabledFor(logging.DEBUG)
 
@@ -37,7 +39,11 @@ def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
                 pairs = json.loads(cleaned_text)
                 if verbose:
                     logger.debug("Successfully parsed %d QA pairs", len(pairs))
-                return pairs
+                return [
+                    QAPair(question=p.get("question", ""), answer=p.get("answer", ""))
+                    for p in pairs
+                    if isinstance(p, dict) and "question" in p and "answer" in p
+                ]
             except json.JSONDecodeError as e:
                 if verbose:
                     logger.debug("Direct JSON parsing failed: %s", e)
@@ -56,21 +62,24 @@ def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
         try:
             q = match.group(1).replace('\\"', '"')
             a = match.group(2).replace('\\"', '"')
-            pairs.append({"question": q, "answer": a})
+            pairs.append(QAPair(question=q, answer=a))
         except Exception as e:
             if verbose:
                 logger.debug("Error extracting pair: %s", e)
 
-    if verbose:
-        if pairs:
+    if pairs:
+        if verbose:
             logger.debug("Extracted %d QA pairs with regex", len(pairs))
-        else:
+    else:
+        if verbose:
             logger.debug("No QA pairs extracted. Check the model output format.")
+        else:
+            logger.error("Failed to parse QA pairs from response: %s", text[:100])
 
     return pairs
 
 
-def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> List[QAPair]:
     """Parse rated items from LLM output
 
     Attempts to parse JSON from LLM response. Will raise an exception if
@@ -120,7 +129,11 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                 if isinstance(parsed, dict) and "rating" in parsed:
                     if verbose:
                         logger.debug("Successfully parsed single JSON object")
-                    return [parsed]
+                    return [QAPair(
+                        question=parsed.get("question", ""),
+                        answer=parsed.get("answer", ""),
+                        rating=float(parsed["rating"]),
+                    )]
             except json.JSONDecodeError as e:
                 if verbose:
                     logger.debug("JSON parse error for object: %s", e)
@@ -144,7 +157,14 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                             return []
                     if verbose:
                         logger.debug("Successfully parsed %d items in JSON array", len(parsed))
-                    return parsed
+                    return [
+                        QAPair(
+                            question=item.get("question", ""),
+                            answer=item.get("answer", ""),
+                            rating=float(item["rating"]),
+                        )
+                        for item in parsed
+                    ]
             except json.JSONDecodeError as e:
                 if verbose:
                     logger.debug("JSON parse error for array: %s", e)
@@ -166,7 +186,7 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     if isinstance(parsed, dict) and "rating" in parsed:
                         if verbose:
                             logger.debug("Successfully parsed from code block (single object)")
-                        return [parsed]
+                        return [QAPair(question=parsed.get("question", ""), answer=parsed.get("answer", ""), rating=float(parsed["rating"]))]
                     elif isinstance(parsed, list):
                         valid_items = True
                         for item in parsed:
@@ -178,7 +198,14 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                                 logger.debug(
                                     "Successfully parsed %d items from code block", len(parsed)
                                 )
-                            return parsed
+                            return [
+                                QAPair(
+                                    question=item.get("question", ""),
+                                    answer=item.get("answer", ""),
+                                    rating=float(item["rating"]),
+                                )
+                                for item in parsed
+                            ]
                 except json.JSONDecodeError:
                     pass
     except Exception as e:
@@ -206,13 +233,20 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                         if isinstance(parsed, dict) and "rating" in parsed:
                             if verbose:
                                 logger.debug("Successfully parsed using regex (single object)")
-                            return [parsed]
+                            return [QAPair(question=parsed.get("question", ""), answer=parsed.get("answer", ""), rating=float(parsed["rating"]))]
                         elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                             if verbose:
                                 logger.debug(
                                     "Successfully parsed %d items using regex", len(parsed)
                                 )
-                            return parsed
+                            return [
+                                QAPair(
+                                    question=item.get("question", ""),
+                                    answer=item.get("answer", ""),
+                                    rating=float(item["rating"]),
+                                )
+                                for item in parsed
+                            ]
                     except json.JSONDecodeError:
                         pass
     except Exception as e:
@@ -228,11 +262,18 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
             if isinstance(parsed, dict) and "rating" in parsed:
                 if verbose:
                     logger.debug("Successfully parsed using json5 (single object)")
-                return [parsed]
+                return [QAPair(question=parsed.get("question", ""), answer=parsed.get("answer", ""), rating=float(parsed["rating"]))]
             elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                 if verbose:
                     logger.debug("Successfully parsed %d items using json5", len(parsed))
-                return parsed
+                return [
+                    QAPair(
+                        question=item.get("question", ""),
+                        answer=item.get("answer", ""),
+                        rating=float(item["rating"]),
+                    )
+                    for item in parsed
+                ]
         except:
             pass
     except ImportError:
@@ -254,11 +295,11 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     try:
                         rating = float(match.group(1))
                         found_items.append(
-                            {
-                                "question": item.get("question", ""),
-                                "answer": item.get("answer", ""),
-                                "rating": rating,
-                            }
+                            QAPair(
+                                question=item.get("question", ""),
+                                answer=item.get("answer", ""),
+                                rating=rating,
+                            )
                         )
                         if verbose:
                             logger.debug(
@@ -286,19 +327,33 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
     raise ValueError(f"Could not parse JSON with ratings: {error_snippet}")
 
 
+from typing import Any, Union
+
+
 def convert_to_conversation_format(
-    qa_pairs: List[Dict[str, str]], system_prompt: Optional[str] = None
+    qa_pairs: List[Union[Dict[str, str], QAPair]],
+    system_prompt: Optional[str] = None,
 ) -> List[List[Dict[str, str]]]:
-    """Convert QA pairs to conversation format"""
+    """Convert QA pairs to conversation format.
+
+    ``qa_pairs`` can contain either raw dictionaries or :class:`QAPair` objects.
+    """
     if system_prompt is None:
         system_prompt = "You are a helpful AI assistant that provides accurate, detailed responses."
 
     conversations = []
     for pair in qa_pairs:
+        if isinstance(pair, QAPair):
+            q = pair.question
+            a = pair.answer
+        else:
+            q = pair.get("question", "")
+            a = pair.get("answer", "")
+
         conversation = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": pair["question"]},
-            {"role": "assistant", "content": pair["answer"]},
+            {"role": "user", "content": q},
+            {"role": "assistant", "content": a},
         ]
         conversations.append(conversation)
 
