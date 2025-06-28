@@ -1746,4 +1746,7 @@ def run_server(host="127.0.0.1", port=5000, debug=False):
 
 
 if __name__ == "__main__":
-    run_server(debug=True)
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "5000"))
+    debug = os.environ.get("DEBUG", "False").lower() == "true"
+    run_server(host=host, port=port, debug=debug)

@@ -38,6 +38,21 @@ services:
     depends_on:
       - redis
 
+  backend:
+    build: .
+    image: ${IMAGE_NAME:-datacreek}
+    command: python -m datacreek.server.app
+    env_file: .env
+    environment:
+      - PORT=5000
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - redis
+      - neo4j
+    ports:
+      - "5000:5000"
+
   frontend:
     build:
       context: ./frontend

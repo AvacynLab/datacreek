@@ -1675,16 +1675,17 @@ Start all services with Docker Compose for development:
 ./scripts/start_services.sh
 ```
 
-The compose file launches five containers:
+The compose file launches six containers:
 
 - `api` – FastAPI application
 - `worker` – Celery task runner
 - `redis` – broker and result backend
 - `neo4j` – graph database
+- `backend` – Flask interface
 - `frontend` – Vite/React interface
 
-The API is available on `http://localhost:8000` while the UI runs on
-`http://localhost:3000`.
+The API is available on `http://localhost:8000`, the Flask backend on
+`http://localhost:5000` and the UI runs on `http://localhost:3000`.
 
 ### Production deployment
 

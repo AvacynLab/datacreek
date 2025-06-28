@@ -28,6 +28,15 @@ jobs:
       - run: pip install -e . fakeredis flask flask-wtf flask-login wtforms pre-commit pytest
       - run: pre-commit run --all-files --show-diff-on-failure
       - run: pytest -q
+      - name: Build container images
+        run: docker compose build
+      - name: Run tests inside image
+        run: |
+          docker build -t datacreek:test .
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace datacreek:test \
+            sh -c "pip install fakeredis flask flask-wtf flask-login wtforms pytest && pytest -q"
 
   docker-build:
     runs-on: ubuntu-latest
