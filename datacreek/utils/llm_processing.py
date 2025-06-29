@@ -98,6 +98,19 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
     """
     verbose = logger.isEnabledFor(logging.DEBUG)
 
+    def _meta(idx: int) -> Dict[str, Any]:
+        if not original_items:
+            return {"chunk": None, "source": None}
+        try:
+            item = original_items[idx]
+        except Exception:
+            return {"chunk": None, "source": None}
+        if isinstance(item, QAPair):
+            return {"chunk": item.chunk, "source": item.source}
+        if isinstance(item, dict):
+            return {"chunk": item.get("chunk"), "source": item.get("source")}
+        return {"chunk": None, "source": None}
+
     if verbose:
         logger.debug("Parsing ratings response of length %d", len(text))
         logger.debug("Raw response: %r", text[:500])
@@ -129,11 +142,14 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                 if isinstance(parsed, dict) and "rating" in parsed:
                     if verbose:
                         logger.debug("Successfully parsed single JSON object")
+                    meta = _meta(0)
                     return [
                         QAPair(
                             question=parsed.get("question", ""),
                             answer=parsed.get("answer", ""),
                             rating=float(parsed["rating"]),
+                            chunk=meta["chunk"],
+                            source=meta["source"],
                         )
                     ]
             except json.JSONDecodeError as e:
@@ -159,14 +175,19 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                             return []
                     if verbose:
                         logger.debug("Successfully parsed %d items in JSON array", len(parsed))
-                    return [
-                        QAPair(
-                            question=item.get("question", ""),
-                            answer=item.get("answer", ""),
-                            rating=float(item["rating"]),
+                    result = []
+                    for idx, item in enumerate(parsed):
+                        meta = _meta(idx)
+                        result.append(
+                            QAPair(
+                                question=item.get("question", ""),
+                                answer=item.get("answer", ""),
+                                rating=float(item["rating"]),
+                                chunk=meta["chunk"],
+                                source=meta["source"],
+                            )
                         )
-                        for item in parsed
-                    ]
+                    return result
             except json.JSONDecodeError as e:
                 if verbose:
                     logger.debug("JSON parse error for array: %s", e)
@@ -188,11 +209,14 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     if isinstance(parsed, dict) and "rating" in parsed:
                         if verbose:
                             logger.debug("Successfully parsed from code block (single object)")
+                        meta = _meta(0)
                         return [
                             QAPair(
                                 question=parsed.get("question", ""),
                                 answer=parsed.get("answer", ""),
                                 rating=float(parsed["rating"]),
+                                chunk=meta["chunk"],
+                                source=meta["source"],
                             )
                         ]
                     elif isinstance(parsed, list):
@@ -206,14 +230,19 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                                 logger.debug(
                                     "Successfully parsed %d items from code block", len(parsed)
                                 )
-                            return [
-                                QAPair(
-                                    question=item.get("question", ""),
-                                    answer=item.get("answer", ""),
-                                    rating=float(item["rating"]),
+                            result = []
+                            for idx, item in enumerate(parsed):
+                                meta = _meta(idx)
+                                result.append(
+                                    QAPair(
+                                        question=item.get("question", ""),
+                                        answer=item.get("answer", ""),
+                                        rating=float(item["rating"]),
+                                        chunk=meta["chunk"],
+                                        source=meta["source"],
+                                    )
                                 )
-                                for item in parsed
-                            ]
+                            return result
                 except json.JSONDecodeError:
                     pass
     except Exception as e:
@@ -241,11 +270,14 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                         if isinstance(parsed, dict) and "rating" in parsed:
                             if verbose:
                                 logger.debug("Successfully parsed using regex (single object)")
+                            meta = _meta(0)
                             return [
                                 QAPair(
                                     question=parsed.get("question", ""),
                                     answer=parsed.get("answer", ""),
                                     rating=float(parsed["rating"]),
+                                    chunk=meta["chunk"],
+                                    source=meta["source"],
                                 )
                             ]
                         elif isinstance(parsed, list) and all("rating" in item for item in parsed):
@@ -253,14 +285,19 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                                 logger.debug(
                                     "Successfully parsed %d items using regex", len(parsed)
                                 )
-                            return [
-                                QAPair(
-                                    question=item.get("question", ""),
-                                    answer=item.get("answer", ""),
-                                    rating=float(item["rating"]),
+                            result = []
+                            for idx, item in enumerate(parsed):
+                                meta = _meta(idx)
+                                result.append(
+                                    QAPair(
+                                        question=item.get("question", ""),
+                                        answer=item.get("answer", ""),
+                                        rating=float(item["rating"]),
+                                        chunk=meta["chunk"],
+                                        source=meta["source"],
+                                    )
                                 )
-                                for item in parsed
-                            ]
+                            return result
                     except json.JSONDecodeError:
                         pass
     except Exception as e:
@@ -276,24 +313,32 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
             if isinstance(parsed, dict) and "rating" in parsed:
                 if verbose:
                     logger.debug("Successfully parsed using json5 (single object)")
+                meta = _meta(0)
                 return [
                     QAPair(
                         question=parsed.get("question", ""),
                         answer=parsed.get("answer", ""),
                         rating=float(parsed["rating"]),
+                        chunk=meta["chunk"],
+                        source=meta["source"],
                     )
                 ]
             elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                 if verbose:
                     logger.debug("Successfully parsed %d items using json5", len(parsed))
-                return [
-                    QAPair(
-                        question=item.get("question", ""),
-                        answer=item.get("answer", ""),
-                        rating=float(item["rating"]),
+                result = []
+                for idx, item in enumerate(parsed):
+                    meta = _meta(idx)
+                    result.append(
+                        QAPair(
+                            question=item.get("question", ""),
+                            answer=item.get("answer", ""),
+                            rating=float(item["rating"]),
+                            chunk=meta["chunk"],
+                            source=meta["source"],
+                        )
                     )
-                    for item in parsed
-                ]
+                return result
         except:
             pass
     except ImportError:
@@ -314,11 +359,25 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                 if match:
                     try:
                         rating = float(match.group(1))
+                        meta = {
+                            "chunk": (
+                                item.get("chunk")
+                                if isinstance(item, dict)
+                                else getattr(item, "chunk", None)
+                            ),
+                            "source": (
+                                item.get("source")
+                                if isinstance(item, dict)
+                                else getattr(item, "source", None)
+                            ),
+                        }
                         found_items.append(
                             QAPair(
                                 question=item.get("question", ""),
                                 answer=item.get("answer", ""),
                                 rating=rating,
+                                chunk=meta["chunk"],
+                                source=meta["source"],
                             )
                         )
                         if verbose:

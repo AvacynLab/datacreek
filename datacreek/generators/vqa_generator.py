@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 # - huggingface_hub: For accessing HuggingFace repositories
 
 
+def _check_optional_deps() -> None:
+    """Ensure optional dependencies are available."""
+    try:
+        import datasets  # noqa: F401
+        import huggingface_hub  # noqa: F401
+    except Exception as exc:  # pragma: no cover - runtime import
+        raise ImportError(
+            "The 'datasets' and 'huggingface_hub' packages are required for VQA generation."
+        ) from exc
+
+
 class VQAGenerator:
     """Generates Visual Question Answering data with reasoning"""
 
@@ -32,6 +43,8 @@ class VQAGenerator:
         config_overrides: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the VQA Generator with an LLM client and optional config"""
+
+        _check_optional_deps()
 
         self.client = client
 

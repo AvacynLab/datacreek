@@ -15,6 +15,7 @@ from datacreek.models.cot import COTExample
 from datacreek.models.llm_client import LLMClient
 from datacreek.models.results import COTGenerationResult
 from datacreek.utils.config import get_generation_config, get_prompt, load_config
+from datacreek.utils.text import extract_json_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -47,32 +48,18 @@ class COTGenerator:
     def parse_json_output(self, output_text: str) -> Optional[List[Dict]]:
         """Parse JSON from LLM output text"""
         verbose = logger.isEnabledFor(logging.DEBUG)
-        output_text = output_text.strip()
-
-        # Try to extract JSON array
-        json_match = re.search(r"\[.*\]", output_text, re.DOTALL)
-        if json_match:
-            output_text = json_match.group(0)
-
         try:
-            # Handle quoted JSON
-            if output_text.startswith('"') and output_text.endswith('"'):
-                output_text = json.loads(output_text)
-
-            # Load the JSON
-            result = json.loads(output_text)
-
-            # Ensure it's a list
-            if not isinstance(result, list):
-                if verbose:
-                    logger.warning("Expected a list but got another type")
-                return None
-
-            return result
-        except json.JSONDecodeError as e:
+            data = extract_json_from_text(output_text)
+        except Exception as e:  # pragma: no cover - defensive
             if verbose:
                 logger.error("Error parsing output: %s", e)
             return None
+
+        if not isinstance(data, list):
+            if verbose:
+                logger.warning("Expected a list but got %s", type(data))
+            return None
+        return data
 
     def generate_cot_examples(
         self, document_text: str, num_examples: int = None
