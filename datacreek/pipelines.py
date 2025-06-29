@@ -159,6 +159,15 @@ def _validate_step_result(
     return result_dict
 
 
+class PipelineExecutionError(RuntimeError):
+    """Raised when a generation pipeline step fails."""
+
+    def __init__(self, step: PipelineStep, original_exception: Exception):
+        self.step = step
+        self.original_exception = original_exception
+        super().__init__(f"{step.value} failed: {original_exception}")
+
+
 PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     DatasetType.QA: GenerationPipeline(
         dataset_type=DatasetType.QA,
@@ -364,7 +373,7 @@ def get_pipelines_for_training(goal: TrainingGoal) -> List[GenerationPipeline]:
     return [pipeline for pipeline in PIPELINES.values() if goal in pipeline.compatible_trainings]
 
 
-def run_generation_pipeline(
+async def _run_generation_pipeline_impl(
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
     *,
@@ -381,22 +390,9 @@ def run_generation_pipeline(
     async_mode: bool = False,
     document_text: str | None = None,
     multi_answer: bool = False,
+    use_async_handlers: bool = False,
 ) -> Any:
-    """Execute the generation steps for ``dataset_type`` using ``kg``.
-
-    The raw text is derived from the provided knowledge graph. Only steps after
-    the knowledge graph construction are executed. The function returns the
-    final in-memory representation of the dataset without writing files. When
-    ``async_mode`` is True, generation steps use asynchronous LLM requests when
-    supported by the client.
-
-    ``multi_answer`` controls whether multiple answers are generated per fact
-    when using the knowledge graph generator.
-
-    All dataset types except ``TEXT`` share a common post-knowledge-graph flow
-    consisting of generation, optional curation and output formatting. This
-    helper executes those steps in-memory and returns the resulting dataset.
-    """
+    """Shared implementation for sync and async generation pipelines."""
 
     try:
         pipeline = get_pipeline(dataset_type)
@@ -429,12 +425,33 @@ def run_generation_pipeline(
     )
     data: Any = document_text
 
-    def _save(d: Any) -> Any:
-        format_type = fmt or fmt_cfg.default
-        return convert_format(d, None, format_type, cfg)
+    async def _identity(d: Any) -> Any:
+        return d
 
-    def _generate(ct: ContentType, text: str) -> Any:
-        return process_file(
+    async def _save(d: Any) -> Any:
+        format_type = fmt or fmt_cfg.default
+        return await asyncio.to_thread(convert_format, d, None, format_type, cfg)
+
+    async def _generate(ct: ContentType, text: str) -> Any:
+        if use_async_handlers:
+            return await process_file_async(
+                None,
+                None,
+                options.config_path,
+                options.api_base,
+                options.model,
+                ct,
+                options.num_pairs,
+                options.verbose,
+                provider=options.provider,
+                profile=options.profile,
+                document_text=text,
+                kg=options.kg,
+                config_overrides=options.overrides,
+                multi_answer=options.multi_answer if ct is ContentType.FROM_KG else False,
+            )
+        return await asyncio.to_thread(
+            process_file,
             None,
             None,
             options.config_path,
@@ -452,19 +469,33 @@ def run_generation_pipeline(
             multi_answer=options.multi_answer if ct is ContentType.FROM_KG else False,
         )
 
-    def _curate(d: Any) -> Any:
-        result = curate_qa_pairs(
-            d,
-            None,
-            threshold,
-            options.api_base,
-            options.model,
-            options.config_path,
-            options.verbose,
-            options.provider,
-            async_mode=options.async_mode,
-            kg=options.kg,
-        )
+    async def _curate(d: Any) -> Any:
+        if use_async_handlers:
+            result = await curate_qa_pairs_async(
+                d,
+                None,
+                threshold,
+                options.api_base,
+                options.model,
+                options.config_path,
+                options.verbose,
+                options.provider,
+                kg=options.kg,
+            )
+        else:
+            result = await asyncio.to_thread(
+                curate_qa_pairs,
+                d,
+                None,
+                threshold,
+                options.api_base,
+                options.model,
+                options.config_path,
+                options.verbose,
+                options.provider,
+                async_mode=options.async_mode,
+                kg=options.kg,
+            )
         if isinstance(result, dict) and "qa_pairs" in result:
             before = len(result["qa_pairs"])
             result["qa_pairs"] = deduplicate_pairs(result["qa_pairs"])
@@ -488,8 +519,8 @@ def run_generation_pipeline(
             ),
             d,
         ),
-        PipelineStep.LABEL_PAIRS: lambda d: d,
-        PipelineStep.RANK_RESPONSES: lambda d: d,
+        PipelineStep.LABEL_PAIRS: _identity,
+        PipelineStep.RANK_RESPONSES: _identity,
         PipelineStep.CURATE: _curate,
         PipelineStep.SAVE: _save,
     }
@@ -502,7 +533,11 @@ def run_generation_pipeline(
         handler = handlers.get(step)
         if handler:
             start = time.perf_counter()
-            result = handler(data)
+            try:
+                result = await handler(data)
+            except Exception as exc:
+                logger.exception("Step %s failed", step.value)
+                raise PipelineExecutionError(step, exc)
             duration = time.perf_counter() - start
             if step.name.startswith("GENERATE"):
                 data = _validate_step_result(dataset_type, step, result)
@@ -528,130 +563,32 @@ def run_generation_pipeline(
     return data
 
 
+def run_generation_pipeline(
+    dataset_type: DatasetType,
+    kg: KnowledgeGraph,
+    **kwargs: Any,
+) -> Any:
+    """Execute the generation steps synchronously.
+
+    Raises:
+        PipelineExecutionError: if any step fails.
+    """
+
+    return asyncio.run(
+        _run_generation_pipeline_impl(dataset_type, kg, use_async_handlers=False, **kwargs)
+    )
+
+
 async def run_generation_pipeline_async(
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
     **kwargs: Any,
 ) -> Any:
-    """Asynchronous counterpart to :func:`run_generation_pipeline`."""
+    """Asynchronous counterpart to :func:`run_generation_pipeline`.
+
+    Raises:
+        PipelineExecutionError: if any step fails.
+    """
 
     kwargs["async_mode"] = True
-
-    threshold = kwargs.pop("threshold", None)
-    fmt = kwargs.pop("fmt", None)
-
-    try:
-        pipeline = get_pipeline(dataset_type)
-    except KeyError as exc:
-        raise ValueError(str(exc)) from exc
-
-    if dataset_type == DatasetType.TEXT:
-        raise ValueError("run_generation_pipeline does not support the TEXT dataset type")
-
-    document_text = kwargs.pop("document_text", None)
-    if document_text is None:
-        document_text = kg.to_text()
-
-    config_path = kwargs.get("config_path")
-    overrides = kwargs.get("overrides")
-    cfg = load_config_with_overrides(str(config_path) if config_path else None, overrides)
-    fmt_cfg = get_format_settings(cfg)
-
-    options = ProcessOptions(kg=kg, **kwargs)
-    data: Any = document_text
-
-    async def _save(d: Any) -> Any:
-        format_type = fmt or fmt_cfg.default
-        return convert_format(d, None, format_type, cfg)
-
-    async def _generate(ct: ContentType, text: str) -> Any:
-        return await process_file_async(
-            None,
-            None,
-            options.config_path,
-            options.api_base,
-            options.model,
-            ct,
-            options.num_pairs,
-            options.verbose,
-            provider=options.provider,
-            profile=options.profile,
-            document_text=text,
-            kg=options.kg,
-            config_overrides=options.overrides,
-            multi_answer=options.multi_answer if ct is ContentType.FROM_KG else False,
-        )
-
-    async def _curate(d: Any) -> Any:
-        result = await curate_qa_pairs_async(
-            d,
-            None,
-            threshold,
-            options.api_base,
-            options.model,
-            options.config_path,
-            options.verbose,
-            options.provider,
-            kg=options.kg,
-        )
-        if isinstance(result, dict) and "qa_pairs" in result:
-            before = len(result["qa_pairs"])
-            result["qa_pairs"] = deduplicate_pairs(result["qa_pairs"])
-            if options.verbose and before != len(result["qa_pairs"]):
-                logger.info("  Removed %d duplicate pairs", before - len(result["qa_pairs"]))
-        return result
-
-    handlers = {
-        PipelineStep.GENERATE_QA: lambda d: _generate(ContentType.QA, d),
-        PipelineStep.GENERATE_COT: lambda d: _generate(ContentType.COT, d),
-        PipelineStep.GENERATE_VQA: lambda d: _generate(ContentType.VQA_ADD_REASONING, d),
-        PipelineStep.GENERATE_FROM_KG: lambda d: _generate(ContentType.FROM_KG, d),
-        PipelineStep.GENERATE_TOOL_CALL: lambda d: _generate(ContentType.TOOL_CALL, d),
-        PipelineStep.GENERATE_CONVERSATION: lambda d: _generate(ContentType.CONVERSATION, d),
-        PipelineStep.GENERATE_MULTI_TOOL: lambda d: _generate(ContentType.MULTI_TOOL, d),
-        PipelineStep.GENERATE_CANDIDATES: lambda d: _generate(
-            (
-                ContentType.PREF_PAIR
-                if dataset_type == DatasetType.PREF_PAIR
-                else ContentType.PREF_LIST
-            ),
-            d,
-        ),
-        PipelineStep.LABEL_PAIRS: lambda d: d,
-        PipelineStep.RANK_RESPONSES: lambda d: d,
-        PipelineStep.CURATE: _curate,
-        PipelineStep.SAVE: _save,
-    }
-
-    for step in pipeline.steps:
-        if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
-            continue
-        if options.verbose:
-            logger.info("Running step %s", step.value)
-        handler = handlers.get(step)
-        if handler:
-            start = time.perf_counter()
-            result = await handler(data)
-            duration = time.perf_counter() - start
-            if step.name.startswith("GENERATE"):
-                data = _validate_step_result(dataset_type, step, result)
-            else:
-                data = result
-            if options.verbose:
-                logger.info("Finished %s in %.2fs", step.value, duration)
-                if isinstance(data, dict):
-                    if "qa_pairs" in data:
-                        logger.info("  Pairs: %d", len(data["qa_pairs"]))
-                    if "conversations" in data:
-                        logger.info("  Conversations: %d", len(data["conversations"]))
-                    if step is PipelineStep.CURATE and "metrics" in data:
-                        m = data["metrics"]
-                        logger.info(
-                            "  Curation metrics - total:%d filtered:%d retention:%.2f avg:%.1f",
-                            m.get("total", 0),
-                            m.get("filtered", 0),
-                            m.get("retention_rate", 0.0),
-                            m.get("avg_score", 0.0),
-                        )
-
-    return data
+    return await _run_generation_pipeline_impl(dataset_type, kg, use_async_handlers=True, **kwargs)

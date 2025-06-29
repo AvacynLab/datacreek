@@ -7,7 +7,7 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from datacreek.models.qa import QAPair
 
@@ -406,9 +406,6 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
     raise ValueError(f"Could not parse JSON with ratings: {error_snippet}")
 
 
-from typing import Any, Union
-
-
 def convert_to_conversation_format(
     qa_pairs: List[Union[Dict[str, str], QAPair]],
     system_prompt: Optional[str] = None,
@@ -437,3 +434,20 @@ def convert_to_conversation_format(
         conversations.append(conversation)
 
     return conversations
+
+
+def qa_pairs_to_records(
+    qa_pairs: List[QAPair],
+    *,
+    system_prompt: Optional[str] = None,
+    modify: Optional[Callable[[List[Dict[str, str]], QAPair], None]] = None,
+) -> List[Dict[str, Any]]:
+    """Return conversation records with metadata for ``qa_pairs``."""
+
+    convs = convert_to_conversation_format(qa_pairs, system_prompt)
+    records: List[Dict[str, Any]] = []
+    for pair, conv in zip(qa_pairs, convs):
+        if modify:
+            modify(conv, pair)
+        records.append({"conversations": conv, "chunk": pair.chunk, "source": pair.source})
+    return records
