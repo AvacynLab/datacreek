@@ -17,10 +17,23 @@ from .config import (
     load_config,
     merge_configs,
 )
-from .entity_extraction import extract_entities
-from .fact_extraction import extract_facts
 from .llm_processing import convert_to_conversation_format, parse_qa_pairs, parse_ratings
+from .progress import create_progress, progress_context
 from .text import clean_text, extract_json_from_text, split_into_chunks
+
+
+def __getattr__(name: str):
+    """Lazily import heavy utilities to avoid circular imports."""
+    if name == "extract_facts":
+        from .fact_extraction import extract_facts as func
+
+        return func
+    if name == "extract_entities":
+        from .entity_extraction import extract_entities as func
+
+        return func
+    raise AttributeError(name)
+
 
 __all__ = [
     "load_config",
@@ -43,6 +56,8 @@ __all__ = [
     "clean_text",
     "parse_qa_pairs",
     "parse_ratings",
+    "create_progress",
+    "progress_context",
     "convert_to_conversation_format",
     "extract_facts",
     "extract_entities",

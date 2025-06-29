@@ -1,5 +1,6 @@
 import pytest
 
+from datacreek.models.content_type import ContentType
 from datacreek.pipelines import (
     DatasetType,
     PipelineStep,
@@ -62,7 +63,7 @@ def test_run_generation_pipeline(monkeypatch):
 
     def fake_generate(*args, **kwargs):
         # content_type is passed positionally
-        assert args[5] == "qa"
+        assert args[5] == ContentType.QA
         assert kwargs.get("async_mode") is True
         calls.append("gen")
         return {"qa_pairs": [{"question": "q", "answer": "a"}]}
@@ -96,7 +97,7 @@ def test_run_generation_pipeline_cot(monkeypatch):
     calls = []
 
     def fake_generate(*args, **kwargs):
-        assert args[5] == "cot"
+        assert args[5] == ContentType.COT
         calls.append("gen")
         return {"cot_examples": [{"question": "q", "reasoning": "r", "answer": "a"}]}
 
@@ -123,7 +124,7 @@ def test_run_generation_pipeline_vqa(monkeypatch):
 
     def fake_generate(*args, **kwargs):
         # VQA pipeline uses the special content type
-        assert args[5] == "vqa_add_reasoning"
+        assert args[5] == ContentType.VQA_ADD_REASONING
         calls.append("gen")
         return {"qa_pairs": [{"question": "q", "answer": "a"}]}
 
@@ -143,6 +144,42 @@ def test_run_generation_pipeline_vqa(monkeypatch):
 
     assert result == "done"
     assert calls == ["gen", "curate", "save"]
+
+
+def test_run_generation_pipeline_tool(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        assert args[5] == ContentType.TOOL_CALL
+        calls.append("gen")
+        return {"conversations": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    result = run_generation_pipeline(DatasetType.TOOL, "text")
+
+    assert result == "done"
+    assert calls == ["gen"]
+
+
+def test_run_generation_pipeline_from_kg(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        assert args[5] == ContentType.FROM_KG
+        calls.append("gen")
+        return {"qa_pairs": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    result = run_generation_pipeline(DatasetType.KG, "text")
+
+    assert result == "done"
+    assert calls == ["gen"]
 
 
 def test_run_generation_pipeline_overrides(monkeypatch):

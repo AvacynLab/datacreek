@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.save_as import convert_format
+from datacreek.models.content_type import ContentType
 from datacreek.utils.config import get_format_settings, load_config, merge_configs
 
 logger = logging.getLogger(__name__)
@@ -327,12 +328,10 @@ def run_generation_pipeline(
     except KeyError as exc:
         raise ValueError(str(exc)) from exc
 
-    # Currently only pipelines with generation after the knowledge graph are
-    # supported. Other dataset types will require bespoke processing logic.
-    if dataset_type not in {DatasetType.QA, DatasetType.COT, DatasetType.VQA}:
-        raise ValueError(
-            f"run_generation_pipeline only supports QA, COT and VQA datasets (got {dataset_type})"
-        )
+    # The TEXT dataset does not include generation after the knowledge graph,
+    # so it remains unsupported by this helper.
+    if dataset_type == DatasetType.TEXT:
+        raise ValueError("run_generation_pipeline does not support the TEXT dataset type")
 
     options = ProcessOptions(
         config_path=config_path,
@@ -347,77 +346,162 @@ def run_generation_pipeline(
     )
     data: Any = document_text
 
+    def _save(d: Any) -> Any:
+        cfg = load_config(str(config_path) if config_path else None)
+        if overrides:
+            cfg = merge_configs(cfg, overrides)
+        fmt_cfg = get_format_settings(cfg)
+        format_type = fmt or fmt_cfg.default
+        return convert_format(d, None, format_type, cfg)
+
+    handlers = {
+        PipelineStep.GENERATE_QA: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.QA,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_COT: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.COT,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_VQA: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.VQA_ADD_REASONING,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_FROM_KG: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.FROM_KG,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_TOOL_CALL: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.TOOL_CALL,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_CONVERSATION: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.CONVERSATION,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_MULTI_TOOL: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            ContentType.MULTI_TOOL,
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.GENERATE_CANDIDATES: lambda d: process_file(
+            None,
+            None,
+            options.config_path,
+            options.api_base,
+            options.model,
+            (
+                ContentType.PREF_PAIR
+                if dataset_type == DatasetType.PREF_PAIR
+                else ContentType.PREF_LIST
+            ),
+            options.num_pairs,
+            options.verbose,
+            async_mode=options.async_mode,
+            provider=options.provider,
+            profile=options.profile,
+            document_text=d,
+            config_overrides=options.overrides,
+        ),
+        PipelineStep.LABEL_PAIRS: lambda d: d,
+        PipelineStep.RANK_RESPONSES: lambda d: d,
+        PipelineStep.CURATE: lambda d: curate_qa_pairs(
+            d,
+            None,
+            threshold,
+            options.api_base,
+            options.model,
+            options.config_path,
+            options.verbose,
+            options.provider,
+            async_mode=options.async_mode,
+        ),
+        PipelineStep.SAVE: lambda d: _save(d),
+    }
+
     for step in pipeline.steps:
         if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
             continue
         if verbose:
             logger.info("Running step %s", step.value)
-        if step == PipelineStep.GENERATE_QA:
-            data = process_file(
-                None,
-                None,
-                options.config_path,
-                options.api_base,
-                options.model,
-                "qa",
-                options.num_pairs,
-                options.verbose,
-                async_mode=options.async_mode,
-                provider=options.provider,
-                profile=options.profile,
-                document_text=data,
-                config_overrides=options.overrides,
-            )
-        elif step == PipelineStep.GENERATE_COT:
-            data = process_file(
-                None,
-                None,
-                options.config_path,
-                options.api_base,
-                options.model,
-                "cot",
-                options.num_pairs,
-                options.verbose,
-                async_mode=options.async_mode,
-                provider=options.provider,
-                profile=options.profile,
-                document_text=data,
-                config_overrides=options.overrides,
-            )
-        elif step == PipelineStep.GENERATE_VQA:
-            data = process_file(
-                None,
-                None,
-                options.config_path,
-                options.api_base,
-                options.model,
-                "vqa_add_reasoning",
-                options.num_pairs,
-                options.verbose,
-                async_mode=options.async_mode,
-                provider=options.provider,
-                profile=options.profile,
-                document_text=data,
-                config_overrides=options.overrides,
-            )
-        elif step == PipelineStep.CURATE:
-            data = curate_qa_pairs(
-                data,
-                None,
-                threshold,
-                options.api_base,
-                options.model,
-                options.config_path,
-                options.verbose,
-                options.provider,
-                async_mode=options.async_mode,
-            )
-        elif step == PipelineStep.SAVE:
-            cfg = load_config(str(config_path) if config_path else None)
-            if overrides:
-                cfg = merge_configs(cfg, overrides)
-            fmt_cfg = get_format_settings(cfg)
-            format_type = fmt or fmt_cfg.default
-            data = convert_format(data, None, format_type, cfg)
+        handler = handlers.get(step)
+        if handler:
+            data = handler(data)
 
     return data

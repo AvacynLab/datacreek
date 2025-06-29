@@ -4,6 +4,7 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Generate the content: CoT/QA/Summary Datasets
+import asyncio
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ from typing import Any, Dict, Optional
 
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.generators.vqa_generator import VQAGenerator
+from datacreek.models.content_type import ContentType
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_generation_config, get_output_paths, load_config
 
@@ -59,7 +61,7 @@ def process_file(
     config_path: Optional[Path] = None,
     api_base: Optional[str] = None,
     model: Optional[str] = None,
-    content_type: str = "qa",
+    content_type: ContentType | str = ContentType.QA,
     num_pairs: Optional[int] = None,
     verbose: bool = False,
     *,
@@ -77,7 +79,9 @@ def process_file(
         config_path: Path to configuration file
         api_base: VLLM API base URL
         model: Model to use
-        content_type: Type of content to generate (qa, summary, cot)
+        content_type: Type of content to generate. Can be a
+            :class:`~datacreek.models.content_type.ContentType` value or string
+            ("qa", "summary", "cot", "cot-enhance", "vqa_add_reasoning").
         num_pairs: Target number of QA pairs to generate
         async_mode: Use asynchronous LLM requests when supported
 
@@ -103,26 +107,36 @@ def process_file(
     # Generate base filename for output
     base_name = _base_name(file_path)
 
-    # Generate content based on type
-    if content_type == "qa":
+    ct = ContentType(content_type)
+
+    def _generate_qa() -> Any:
         generator = QAGenerator(client, config_path, config_overrides=config_overrides)
 
+        nonlocal document_text
         if document_text is None and file_path:
             document_text = load_document_text(file_path)
 
-        # Get num_pairs from args or config
         if num_pairs is None:
             config = client.config
             generation_config = get_generation_config(config)
-            num_pairs = generation_config.num_pairs
+            num_pairs_local = generation_config.num_pairs
+        else:
+            num_pairs_local = num_pairs
 
-        # Process document
-        gen_result = generator.process_document(
-            document_text,
-            num_pairs=num_pairs,
-            verbose=verbose,
-            async_mode=async_mode,
-        )
+        if async_mode:
+            gen_result = asyncio.run(
+                generator.process_document_async(
+                    document_text,
+                    num_pairs=num_pairs_local,
+                    verbose=verbose,
+                )
+            )
+        else:
+            gen_result = generator.process_document(
+                document_text,
+                num_pairs=num_pairs_local,
+                verbose=verbose,
+            )
 
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_qa_pairs.json")
@@ -134,17 +148,16 @@ def process_file(
             except Exception as e:
                 logger.error("Error writing result file: %s", e)
             return output_path
-
         return gen_result.to_dict()
 
-    elif content_type == "summary":
+    def _generate_summary() -> Any:
         generator = QAGenerator(client, config_path, config_overrides=config_overrides)
 
+        nonlocal document_text
         if document_text is None and file_path:
             document_text = load_document_text(file_path)
 
-        # Generate just the summary
-        summary = generator.generate_summary(document_text)
+        summary = generator.generate_summary(document_text, verbose=verbose)
 
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_summary.json")
@@ -153,30 +166,26 @@ def process_file(
             return output_path
         return {"summary": summary}
 
-    # So there are two separate categories of CoT
-    # Simply CoT maps to "Hey I want CoT being generated"
-    # CoT-enhance maps to "Please enhance my dataset with CoT"
-
-    elif content_type == "cot":
+    def _generate_cot() -> Any:
         from datacreek.generators.cot_generator import COTGenerator
 
-        # Initialize the CoT generator
         generator = COTGenerator(client, config_path, config_overrides=config_overrides)
 
+        nonlocal document_text
         if document_text is None and file_path:
             document_text = load_document_text(file_path)
 
-        # Get num_examples from args or config
         if num_pairs is None:
             config = client.config
             generation_config = get_generation_config(config)
-            num_pairs = generation_config.num_cot_examples
+            num_examples = generation_config.num_cot_examples
+        else:
+            num_examples = num_pairs
 
-        # Process document to generate CoT examples
         cot_result = generator.process_document(
             document_text,
-            num_examples=num_pairs,
-            include_simple_steps=verbose,  # More detailed if verbose is enabled
+            num_examples=num_examples,
+            include_simple_steps=verbose,
         )
 
         if save_to_file:
@@ -192,10 +201,9 @@ def process_file(
                     first_example.answer,
                 )
             return output_path
-
         return cot_result.to_dict()
 
-    elif content_type == "cot-enhance":
+    def _cot_enhance() -> Any:
         from tqdm import tqdm
 
         from datacreek.generators.cot_generator import COTGenerator
@@ -324,17 +332,138 @@ def process_file(
         if is_single_conversation and len(enhanced_conversations) == 1:
             return enhanced_conversations[0]
         return enhanced_conversations
-    elif content_type == "vqa_add_reasoning":
-        # Initialize the VQA generator
+
+    def _vqa_reasoning() -> Any:
         generator = VQAGenerator(client, config_path, config_overrides=config_overrides)
 
-        result = generator.process_dataset(
+        return generator.process_dataset(
             dataset_source=file_path,
             output_dir=output_dir if save_to_file else None,
             num_examples=num_pairs,
             verbose=verbose,
         )
+
+    def _generate_from_kg() -> Any:
+        from datacreek.core.knowledge_graph import KnowledgeGraph
+        from datacreek.generators.kg_generator import KGGenerator
+
+        nonlocal document_text
+        if document_text is None and file_path:
+            document_text = load_document_text(file_path)
+
+        kg = KnowledgeGraph()
+        kg.add_document("doc", source=file_path or "inline", text=document_text)
+
+        generator = KGGenerator(client, config_path, config_overrides=config_overrides)
+
+        result = generator.process_graph(
+            kg,
+            num_pairs=num_pairs or get_generation_config(client.config).num_pairs,
+            verbose=verbose,
+        )
+
+        if save_to_file:
+            output_path = os.path.join(output_dir, f"{base_name}_kg_pairs.json")
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            return output_path
         return result
 
-    else:
+    def _tool_call() -> Any:
+        from datacreek.generators.tool_generator import ToolCallGenerator
+
+        nonlocal document_text
+        if document_text is None and file_path:
+            document_text = load_document_text(file_path)
+
+        generator = ToolCallGenerator(client, config_path, config_overrides=config_overrides)
+        result = generator.process_document(document_text, verbose=verbose)
+        if save_to_file:
+            output_path = os.path.join(output_dir, f"{base_name}_tool.json")
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            return output_path
+        return result
+
+    def _conversation() -> Any:
+        from datacreek.generators.conversation_generator import ConversationGenerator
+
+        nonlocal document_text
+        if document_text is None and file_path:
+            document_text = load_document_text(file_path)
+
+        generator = ConversationGenerator(client, config_path, config_overrides=config_overrides)
+        result = generator.process_document(document_text, verbose=verbose)
+        if save_to_file:
+            output_path = os.path.join(output_dir, f"{base_name}_conversation.json")
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            return output_path
+        return result
+
+    def _multi_tool() -> Any:
+        from datacreek.generators.multi_tool_generator import MultiToolGenerator
+
+        nonlocal document_text
+        if document_text is None and file_path:
+            document_text = load_document_text(file_path)
+
+        generator = MultiToolGenerator(client, config_path, config_overrides=config_overrides)
+        result = generator.process_document(document_text, verbose=verbose)
+        if save_to_file:
+            output_path = os.path.join(output_dir, f"{base_name}_multi_tool.json")
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            return output_path
+        return result
+
+    def _pref_pair() -> Any:
+        from datacreek.generators.pref_generator import PrefPairGenerator
+
+        nonlocal document_text
+        if document_text is None and file_path:
+            document_text = load_document_text(file_path)
+
+        generator = PrefPairGenerator(client, config_path, config_overrides=config_overrides)
+        result = generator.process_document(document_text, verbose=verbose)
+        if save_to_file:
+            output_path = os.path.join(output_dir, f"{base_name}_pref_pair.json")
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            return output_path
+        return result
+
+    def _pref_list() -> Any:
+        from datacreek.generators.pref_generator import PrefListGenerator
+
+        nonlocal document_text
+        if document_text is None and file_path:
+            document_text = load_document_text(file_path)
+
+        generator = PrefListGenerator(client, config_path, config_overrides=config_overrides)
+        result = generator.process_document(document_text, verbose=verbose)
+        if save_to_file:
+            output_path = os.path.join(output_dir, f"{base_name}_pref_list.json")
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2)
+            return output_path
+        return result
+
+    handlers = {
+        ContentType.QA: _generate_qa,
+        ContentType.SUMMARY: _generate_summary,
+        ContentType.COT: _generate_cot,
+        ContentType.COT_ENHANCE: _cot_enhance,
+        ContentType.VQA_ADD_REASONING: _vqa_reasoning,
+        ContentType.FROM_KG: _generate_from_kg,
+        ContentType.TOOL_CALL: _tool_call,
+        ContentType.CONVERSATION: _conversation,
+        ContentType.MULTI_TOOL: _multi_tool,
+        ContentType.PREF_PAIR: _pref_pair,
+        ContentType.PREF_LIST: _pref_list,
+    }
+
+    if ct not in handlers:
         raise ValueError(f"Unknown content type: {content_type}")
+
+    return handlers[ct]()
