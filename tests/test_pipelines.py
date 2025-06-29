@@ -6,6 +6,7 @@ from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
 from datacreek.pipelines import (
     DatasetType,
+    PipelineExecutionError,
     PipelineStep,
     TrainingGoal,
     get_dataset_types_for_training,
@@ -13,7 +14,6 @@ from datacreek.pipelines import (
     get_trainings_for_dataset,
     run_generation_pipeline,
     run_generation_pipeline_async,
-    PipelineExecutionError,
 )
 
 
@@ -451,11 +451,12 @@ def test_run_generation_pipeline_async(monkeypatch):
     assert called.get("async") is True
 
 
-
 def test_generation_pipeline_error(monkeypatch):
     """Failing step should raise PipelineExecutionError."""
+
     def bad_generate(*a, **k):
         raise RuntimeError("boom")
+
     monkeypatch.setattr("datacreek.pipelines.process_file", bad_generate)
     kg = KnowledgeGraph()
     kg.add_document("d", source="s", text="t")
@@ -467,9 +468,9 @@ def test_generation_pipeline_error(monkeypatch):
 def test_generation_pipeline_async_error(monkeypatch):
     async def bad_generate(*a, **k):
         raise RuntimeError("boom")
+
     monkeypatch.setattr("datacreek.pipelines.process_file_async", bad_generate)
     kg = KnowledgeGraph()
     kg.add_document("d", source="s", text="t")
     with pytest.raises(PipelineExecutionError):
         asyncio.run(run_generation_pipeline_async(DatasetType.QA, kg))
-

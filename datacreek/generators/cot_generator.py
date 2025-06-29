@@ -174,7 +174,10 @@ class COTGenerator(BaseGenerator):
         return enhanced_conversations
 
     def process_document(
-        self, document_text: str, num_examples: int | None = None, include_simple_steps: bool = False
+        self,
+        document_text: str,
+        num_examples: int | None = None,
+        include_simple_steps: bool = False,
     ) -> COTGenerationResult:
         """Process a document to generate CoT examples."""
 
@@ -188,7 +191,10 @@ class COTGenerator(BaseGenerator):
         )
 
     async def process_document_async(
-        self, document_text: str, num_examples: int | None = None, include_simple_steps: bool = False
+        self,
+        document_text: str,
+        num_examples: int | None = None,
+        include_simple_steps: bool = False,
     ) -> COTGenerationResult:
         """Asynchronous version of :meth:`process_document`."""
 

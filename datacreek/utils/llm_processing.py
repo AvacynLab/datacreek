@@ -7,7 +7,7 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from datacreek.models.qa import QAPair
 

@@ -15,7 +15,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
 from datacreek.models.qa import QAPair
-from .base import BaseGenerator
 from datacreek.utils.config import (
     get_curate_settings,
     get_generation_config,
@@ -29,6 +28,8 @@ from datacreek.utils.llm_processing import (
 )
 from datacreek.utils.progress import create_progress, progress_context
 from datacreek.utils.text import split_into_chunks
+
+from .base import BaseGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +254,6 @@ class QAGenerator(BaseGenerator):
 
         logger.info("Generated %d QA pairs total", len(all_qa_pairs))
         return all_qa_pairs
-
 
     def rate_qa_pairs(
         self,

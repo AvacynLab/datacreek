@@ -158,13 +158,14 @@ def _validate_step_result(
 
     return result_dict
 
+
 class PipelineExecutionError(RuntimeError):
     """Raised when a generation pipeline step fails."""
+
     def __init__(self, step: PipelineStep, original_exception: Exception):
         self.step = step
         self.original_exception = original_exception
         super().__init__(f"{step.value} failed: {original_exception}")
-
 
 
 PIPELINES: Dict[DatasetType, GenerationPipeline] = {
@@ -511,7 +512,11 @@ async def _run_generation_pipeline_impl(
         PipelineStep.GENERATE_CONVERSATION: lambda d: _generate(ContentType.CONVERSATION, d),
         PipelineStep.GENERATE_MULTI_TOOL: lambda d: _generate(ContentType.MULTI_TOOL, d),
         PipelineStep.GENERATE_CANDIDATES: lambda d: _generate(
-            ContentType.PREF_PAIR if dataset_type == DatasetType.PREF_PAIR else ContentType.PREF_LIST,
+            (
+                ContentType.PREF_PAIR
+                if dataset_type == DatasetType.PREF_PAIR
+                else ContentType.PREF_LIST
+            ),
             d,
         ),
         PipelineStep.LABEL_PAIRS: _identity,
@@ -565,9 +570,9 @@ def run_generation_pipeline(
 ) -> Any:
     """Execute the generation steps synchronously.
 
-Raises:
-    PipelineExecutionError: if any step fails.
-"""
+    Raises:
+        PipelineExecutionError: if any step fails.
+    """
 
     return asyncio.run(
         _run_generation_pipeline_impl(dataset_type, kg, use_async_handlers=False, **kwargs)
@@ -581,9 +586,9 @@ async def run_generation_pipeline_async(
 ) -> Any:
     """Asynchronous counterpart to :func:`run_generation_pipeline`.
 
-Raises:
-    PipelineExecutionError: if any step fails.
-"""
+    Raises:
+        PipelineExecutionError: if any step fails.
+    """
 
     kwargs["async_mode"] = True
     return await _run_generation_pipeline_impl(dataset_type, kg, use_async_handlers=True, **kwargs)
