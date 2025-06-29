@@ -692,6 +692,7 @@ class DatasetBuilder:
                     fmt=fmt,
                     overrides=overrides,
                     verbose=verbose,
+                    async_mode=True,
                     multi_answer=multi_answer,
                 )
             )

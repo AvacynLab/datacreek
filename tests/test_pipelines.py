@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
@@ -399,8 +401,7 @@ def test_run_generation_pipeline_deduplicate(monkeypatch):
     assert len(res["qa_pairs"]) == 1
 
 
-@pytest.mark.asyncio
-async def test_run_generation_pipeline_async(monkeypatch):
+def test_run_generation_pipeline_async(monkeypatch):
     called = {}
 
     async def fake_generate(*args, **kwargs):
@@ -417,7 +418,7 @@ async def test_run_generation_pipeline_async(monkeypatch):
     kg = KnowledgeGraph()
     kg.add_document("d", source="s", text="text")
 
-    res = await run_generation_pipeline_async(DatasetType.QA, kg)
+    res = asyncio.run(run_generation_pipeline_async(DatasetType.QA, kg))
 
     assert res == "done"
     assert called.get("async") is True

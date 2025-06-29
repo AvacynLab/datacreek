@@ -728,7 +728,13 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
         calls["kwargs"] = kwargs
         return "ok"
 
-    monkeypatch.setattr("datacreek.pipelines.run_generation_pipeline", fake_run)
+    async def fake_run_async(*a, **k):
+        return fake_run(*a, **k)
+
+    monkeypatch.setattr(
+        "datacreek.pipelines.run_generation_pipeline_async",
+        fake_run_async,
+    )
 
     result = ds.run_post_kg_pipeline(num_pairs=5, async_mode=True)
 

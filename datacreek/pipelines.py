@@ -537,6 +537,9 @@ async def run_generation_pipeline_async(
 
     kwargs["async_mode"] = True
 
+    threshold = kwargs.pop("threshold", None)
+    fmt = kwargs.pop("fmt", None)
+
     try:
         pipeline = get_pipeline(dataset_type)
     except KeyError as exc:
@@ -558,7 +561,7 @@ async def run_generation_pipeline_async(
     data: Any = document_text
 
     async def _save(d: Any) -> Any:
-        format_type = kwargs.get("fmt") or fmt_cfg.default
+        format_type = fmt or fmt_cfg.default
         return convert_format(d, None, format_type, cfg)
 
     async def _generate(ct: ContentType, text: str) -> Any:
@@ -583,7 +586,7 @@ async def run_generation_pipeline_async(
         result = await curate_qa_pairs_async(
             d,
             None,
-            kwargs.get("threshold"),
+            threshold,
             options.api_base,
             options.model,
             options.config_path,
