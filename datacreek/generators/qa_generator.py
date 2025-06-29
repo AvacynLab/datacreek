@@ -70,8 +70,15 @@ class QAGenerator:
         if verbose:
             logger.info("Generating document summary...")
 
-        # Get summary prompt from config
-        prompt = get_prompt(self.config, "summary")
+        # Get summary prompt from config - prefer KG specific prompt when available
+        if self.kg:
+            try:
+                prompt = get_prompt(self.config, "kg_summary")
+                document_text = self.kg.to_text()
+            except Exception:
+                prompt = get_prompt(self.config, "summary")
+        else:
+            prompt = get_prompt(self.config, "summary")
 
         messages = [
             {"role": "system", "content": prompt},
@@ -150,8 +157,14 @@ class QAGenerator:
         all_qa_pairs: List[QAPair] = []
         pairs_per_chunk = max(1, round(num_pairs / len(chunks)))
 
-        # Get QA generation prompt template
-        qa_prompt_template = get_prompt(self.config, "qa_generation")
+        # Get QA generation prompt template - prefer KG specific one
+        if self.kg:
+            try:
+                qa_prompt_template = get_prompt(self.config, "kg_qa_generation")
+            except Exception:
+                qa_prompt_template = get_prompt(self.config, "qa_generation")
+        else:
+            qa_prompt_template = get_prompt(self.config, "qa_generation")
 
         # Prepare all message batches
         all_messages = []
@@ -278,7 +291,13 @@ class QAGenerator:
         all_qa_pairs: List[QAPair] = []
         pairs_per_chunk = max(1, round(num_pairs / len(chunks)))
 
-        qa_prompt_template = get_prompt(self.config, "qa_generation")
+        if self.kg:
+            try:
+                qa_prompt_template = get_prompt(self.config, "kg_qa_generation")
+            except Exception:
+                qa_prompt_template = get_prompt(self.config, "qa_generation")
+        else:
+            qa_prompt_template = get_prompt(self.config, "qa_generation")
 
         all_messages = []
         for i, chunk in enumerate(chunks):
@@ -358,8 +377,17 @@ class QAGenerator:
         batch_size = self.curate_config.batch_size
         temperature = self.curate_config.temperature
 
-        # Get rating prompt template
-        rating_prompt_template = get_prompt(self.config, "qa_rating")
+        # Get rating prompt template - prefer KG specific one when available
+        if self.kg:
+            try:
+                rating_prompt_template = get_prompt(self.config, "kg_qa_rating")
+                facts_text = self.kg.to_text()
+            except Exception:
+                rating_prompt_template = get_prompt(self.config, "qa_rating")
+                facts_text = None
+        else:
+            rating_prompt_template = get_prompt(self.config, "qa_rating")
+            facts_text = None
 
         # Process in batches
         batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
@@ -375,7 +403,12 @@ class QAGenerator:
             for batch in batches:
                 batch_dicts = [p.to_dict() if isinstance(p, QAPair) else p for p in batch]
                 batch_json = json.dumps(batch_dicts, indent=2)
-                rating_prompt = rating_prompt_template.format(pairs=batch_json)
+                if facts_text and "{facts}" in rating_prompt_template:
+                    rating_prompt = rating_prompt_template.format(
+                        pairs=batch_json, facts=facts_text
+                    )
+                else:
+                    rating_prompt = rating_prompt_template.format(pairs=batch_json)
                 message_batches.append([{"role": "system", "content": rating_prompt}])
 
             if async_mode:
@@ -452,7 +485,16 @@ class QAGenerator:
 
         batch_size = self.curate_config.batch_size
         temperature = self.curate_config.temperature
-        rating_prompt_template = get_prompt(self.config, "qa_rating")
+        if self.kg:
+            try:
+                rating_prompt_template = get_prompt(self.config, "kg_qa_rating")
+                facts_text = self.kg.to_text()
+            except Exception:
+                rating_prompt_template = get_prompt(self.config, "qa_rating")
+                facts_text = None
+        else:
+            rating_prompt_template = get_prompt(self.config, "qa_rating")
+            facts_text = None
 
         batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
         rated_pairs: List[QAPair] = []
@@ -465,7 +507,12 @@ class QAGenerator:
             for batch in batches:
                 batch_dicts = [p.to_dict() if isinstance(p, QAPair) else p for p in batch]
                 batch_json = json.dumps(batch_dicts, indent=2)
-                rating_prompt = rating_prompt_template.format(pairs=batch_json)
+                if facts_text and "{facts}" in rating_prompt_template:
+                    rating_prompt = rating_prompt_template.format(
+                        pairs=batch_json, facts=facts_text
+                    )
+                else:
+                    rating_prompt = rating_prompt_template.format(pairs=batch_json)
                 message_batches.append([{"role": "system", "content": rating_prompt}])
 
             responses = await async_process_batches(

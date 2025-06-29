@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_curate_settings, get_prompt
@@ -32,6 +33,7 @@ def curate_qa_pairs(
     verbose: bool = False,
     provider: Optional[str] = None,
     async_mode: bool = False,
+    kg: KnowledgeGraph | None = None,
 ) -> Any:
     """Clean and filter QA pairs based on quality ratings
 
@@ -59,6 +61,7 @@ def curate_qa_pairs(
                 config_path=config_path,
                 verbose=verbose,
                 provider=provider,
+                kg=kg,
             )
         )
 
@@ -96,7 +99,7 @@ def curate_qa_pairs(
         raise ValueError("threshold must be between 0 and 10")
 
     # Create QA generator
-    generator = QAGenerator(client, config_path)
+    generator = QAGenerator(client, config_path, kg=kg)
 
     # Get configuration
     curate_config = get_curate_settings(client.config)
@@ -110,7 +113,16 @@ def curate_qa_pairs(
         threshold = curate_config.threshold
 
     # Get rating prompt template
-    rating_prompt_template = get_prompt(client.config, "qa_rating")
+    if kg:
+        try:
+            rating_prompt_template = get_prompt(client.config, "kg_qa_rating")
+            facts_text = kg.to_text()
+        except Exception:
+            rating_prompt_template = get_prompt(client.config, "qa_rating")
+            facts_text = None
+    else:
+        rating_prompt_template = get_prompt(client.config, "qa_rating")
+        facts_text = None
 
     # Split QA pairs into batches
     batches = []
@@ -122,7 +134,10 @@ def curate_qa_pairs(
     all_messages = []
     for batch in batches:
         batch_json = json.dumps(batch, indent=2)
-        rating_prompt = rating_prompt_template.format(pairs=batch_json)
+        if facts_text and "{facts}" in rating_prompt_template:
+            rating_prompt = rating_prompt_template.format(pairs=batch_json, facts=facts_text)
+        else:
+            rating_prompt = rating_prompt_template.format(pairs=batch_json)
         messages = [{"role": "system", "content": rating_prompt}]
         all_messages.append(messages)
 
@@ -241,6 +256,7 @@ async def curate_qa_pairs_async(
     config_path: Optional[Path] = None,
     verbose: bool = False,
     provider: Optional[str] = None,
+    kg: KnowledgeGraph | None = None,
 ) -> Any:
     """Asynchronous version of :func:`curate_qa_pairs`."""
     # Reuse the synchronous function's logic but run async batch processing.
@@ -270,7 +286,7 @@ async def curate_qa_pairs_async(
     elif not 0 <= threshold <= 10:
         raise ValueError("threshold must be between 0 and 10")
 
-    generator = QAGenerator(client, config_path)
+    generator = QAGenerator(client, config_path, kg=kg)
     curate_config = get_curate_settings(client.config)
 
     batch_size = curate_config.batch_size
@@ -279,7 +295,16 @@ async def curate_qa_pairs_async(
     if threshold is None:
         threshold = curate_config.threshold
 
-    rating_prompt_template = get_prompt(client.config, "qa_rating")
+    if kg:
+        try:
+            rating_prompt_template = get_prompt(client.config, "kg_qa_rating")
+            facts_text = kg.to_text()
+        except Exception:
+            rating_prompt_template = get_prompt(client.config, "qa_rating")
+            facts_text = None
+    else:
+        rating_prompt_template = get_prompt(client.config, "qa_rating")
+        facts_text = None
 
     batches = []
     for i in range(0, len(qa_pairs), batch_size):
@@ -289,7 +314,10 @@ async def curate_qa_pairs_async(
     all_messages = []
     for batch in batches:
         batch_json = json.dumps(batch, indent=2)
-        rating_prompt = rating_prompt_template.format(pairs=batch_json)
+        if facts_text and "{facts}" in rating_prompt_template:
+            rating_prompt = rating_prompt_template.format(pairs=batch_json, facts=facts_text)
+        else:
+            rating_prompt = rating_prompt_template.format(pairs=batch_json)
         messages = [{"role": "system", "content": rating_prompt}]
         all_messages.append(messages)
 

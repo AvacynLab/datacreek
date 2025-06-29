@@ -1727,6 +1727,25 @@ class KnowledgeGraph:
         kg.index.build()
         return kg
 
+    def to_text(self) -> str:
+        """Return all chunk texts concatenated in document order."""
+
+        parts: list[str] = []
+        docs = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "document"]
+        docs.sort()
+        for doc_id in docs:
+            chunks = self.get_chunks_for_document(doc_id)
+            if chunks:
+                for cid in chunks:
+                    text = self.graph.nodes[cid].get("text")
+                    if text:
+                        parts.append(text)
+            else:
+                text = self.graph.nodes[doc_id].get("text")
+                if text:
+                    parts.append(text)
+        return "\n\n".join(parts)
+
     def to_json(self, path: str) -> str:
         """Save the graph to a JSON file."""
 

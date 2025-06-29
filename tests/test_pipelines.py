@@ -1,5 +1,6 @@
 import pytest
 
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
 from datacreek.pipelines import (
     DatasetType,
@@ -65,6 +66,7 @@ def test_run_generation_pipeline(monkeypatch):
         # content_type is passed positionally
         assert args[5] == ContentType.QA
         assert kwargs.get("async_mode") is True
+        assert "kg" in kwargs
         calls.append("gen")
         return {"qa_pairs": [{"question": "q", "answer": "a"}]}
 
@@ -82,7 +84,10 @@ def test_run_generation_pipeline(monkeypatch):
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
     monkeypatch.setattr("datacreek.pipelines.convert_format", fake_save)
 
-    result = run_generation_pipeline(DatasetType.QA, "text", verbose=True, async_mode=True)
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.QA, kg, verbose=True, async_mode=True)
 
     assert result == "done"
     assert calls == ["gen", "curate", "save"]
@@ -90,7 +95,9 @@ def test_run_generation_pipeline(monkeypatch):
 
 def test_run_generation_pipeline_invalid():
     with pytest.raises(ValueError):
-        run_generation_pipeline("wrong", "text")
+        kg = KnowledgeGraph()
+        kg.add_document("d", source="s", text="text")
+        run_generation_pipeline("wrong", kg)
 
 
 def test_run_generation_pipeline_cot(monkeypatch):
@@ -98,6 +105,7 @@ def test_run_generation_pipeline_cot(monkeypatch):
 
     def fake_generate(*args, **kwargs):
         assert args[5] == ContentType.COT
+        assert "kg" in kwargs
         calls.append("gen")
         return {"cot_examples": [{"question": "q", "reasoning": "r", "answer": "a"}]}
 
@@ -113,7 +121,10 @@ def test_run_generation_pipeline_cot(monkeypatch):
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
     monkeypatch.setattr("datacreek.pipelines.convert_format", fake_save)
 
-    result = run_generation_pipeline(DatasetType.COT, "text")
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.COT, kg)
 
     assert result == "done"
     assert calls == ["gen", "curate", "save"]
@@ -125,6 +136,7 @@ def test_run_generation_pipeline_vqa(monkeypatch):
     def fake_generate(*args, **kwargs):
         # VQA pipeline uses the special content type
         assert args[5] == ContentType.VQA_ADD_REASONING
+        assert "kg" in kwargs
         calls.append("gen")
         return {"qa_pairs": [{"question": "q", "answer": "a"}]}
 
@@ -140,7 +152,10 @@ def test_run_generation_pipeline_vqa(monkeypatch):
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
     monkeypatch.setattr("datacreek.pipelines.convert_format", fake_save)
 
-    result = run_generation_pipeline(DatasetType.VQA, "text")
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="img")
+
+    result = run_generation_pipeline(DatasetType.VQA, kg)
 
     assert result == "done"
     assert calls == ["gen", "curate", "save"]
@@ -151,6 +166,7 @@ def test_run_generation_pipeline_tool(monkeypatch):
 
     def fake_generate(*args, **kwargs):
         assert args[5] == ContentType.TOOL_CALL
+        assert "kg" in kwargs
         calls.append("gen")
         return {"conversations": []}
 
@@ -158,7 +174,98 @@ def test_run_generation_pipeline_tool(monkeypatch):
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
 
-    result = run_generation_pipeline(DatasetType.TOOL, "text")
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.TOOL, kg)
+
+    assert result == "done"
+    assert calls == ["gen"]
+
+
+def test_run_generation_pipeline_conversation(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        assert args[5] == ContentType.CONVERSATION
+        assert "kg" in kwargs
+        calls.append("gen")
+        return {"conversations": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.CONVERSATION, kg)
+
+    assert result == "done"
+    assert calls == ["gen"]
+
+
+def test_run_generation_pipeline_multi_tool(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        assert args[5] == ContentType.MULTI_TOOL
+        assert "kg" in kwargs
+        calls.append("gen")
+        return {"conversations": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.MULTI_TOOL, kg)
+
+    assert result == "done"
+    assert calls == ["gen"]
+
+
+def test_run_generation_pipeline_pref_pair(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        assert args[5] == ContentType.PREF_PAIR
+        assert "kg" in kwargs
+        calls.append("gen")
+        return {"pairs": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.PREF_PAIR, kg)
+
+    assert result == "done"
+    assert calls == ["gen"]
+
+
+def test_run_generation_pipeline_pref_list(monkeypatch):
+    calls = []
+
+    def fake_generate(*args, **kwargs):
+        assert args[5] == ContentType.PREF_LIST
+        assert "kg" in kwargs
+        calls.append("gen")
+        return {"responses": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.PREF_LIST, kg)
 
     assert result == "done"
     assert calls == ["gen"]
@@ -169,6 +276,8 @@ def test_run_generation_pipeline_from_kg(monkeypatch):
 
     def fake_generate(*args, **kwargs):
         assert args[5] == ContentType.FROM_KG
+        assert "kg" in kwargs
+        assert kwargs.get("multi_answer") is True
         calls.append("gen")
         return {"qa_pairs": []}
 
@@ -176,7 +285,10 @@ def test_run_generation_pipeline_from_kg(monkeypatch):
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
 
-    result = run_generation_pipeline(DatasetType.KG, "text")
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.KG, kg, multi_answer=True)
 
     assert result == "done"
     assert calls == ["gen"]
@@ -187,13 +299,17 @@ def test_run_generation_pipeline_overrides(monkeypatch):
 
     def fake_generate(*args, **kwargs):
         received["overrides"] = kwargs.get("config_overrides")
+        assert "kg" in kwargs
         return {"qa_pairs": []}
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda *a, **k: {})
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
 
-    run_generation_pipeline(DatasetType.QA, "text", overrides={"foo": 1})
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    run_generation_pipeline(DatasetType.QA, kg, overrides={"foo": 1})
 
     assert received["overrides"] == {"foo": 1}
 
@@ -202,4 +318,6 @@ def test_run_generation_pipeline_unsupported(monkeypatch):
     """Ensure unsupported dataset types raise errors."""
 
     with pytest.raises(ValueError):
-        run_generation_pipeline(DatasetType.TEXT, "text")
+        kg = KnowledgeGraph()
+        kg.add_document("d", source="s", text="text")
+        run_generation_pipeline(DatasetType.TEXT, kg)
