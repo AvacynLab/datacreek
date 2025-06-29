@@ -10,6 +10,7 @@ import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
+
 try:
     from neo4j import Driver, GraphDatabase
 except Exception:  # pragma: no cover - optional dependency for tests
