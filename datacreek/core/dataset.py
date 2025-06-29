@@ -675,10 +675,7 @@ class DatasetBuilder:
         several answers per fact.
         """
 
-        from datacreek.pipelines import (
-            run_generation_pipeline,
-            run_generation_pipeline_async,
-        )
+        from datacreek.pipelines import run_generation_pipeline, run_generation_pipeline_async
 
         if async_mode:
             return asyncio.run(
