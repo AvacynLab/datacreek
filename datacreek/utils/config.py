@@ -242,6 +242,17 @@ def merge_configs(base_config: Dict[str, Any], override_config: Dict[str, Any]) 
     return result
 
 
+def load_config_with_overrides(
+    config_path: str | None = None, overrides: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
+    """Convenience wrapper around :func:`load_config` applying ``overrides``."""
+
+    cfg = load_config(config_path)
+    if overrides:
+        cfg = merge_configs(cfg, overrides)
+    return cfg
+
+
 def get_model_profile(config: Dict[str, Any], name: str) -> Dict[str, Any]:
     """Retrieve a model profile by name."""
     profiles = config.get("models", {})

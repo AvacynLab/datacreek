@@ -45,19 +45,14 @@ class QAGenerator:
         self.client = client
         self.kg = kg
 
-        # Load base configuration from file or use the client's config
-        if config_path:
-            base_cfg = load_config(config_path)
+        if config_path or config_overrides:
+            from datacreek.utils.config import load_config_with_overrides
+
+            self.config = load_config_with_overrides(
+                str(config_path) if config_path else None, config_overrides
+            )
         else:
-            base_cfg = client.config
-
-        # Merge overrides if provided
-        if config_overrides:
-            from datacreek.utils.config import merge_configs
-
-            base_cfg = merge_configs(base_cfg, config_overrides)
-
-        self.config = base_cfg
+            self.config = client.config
 
         # Get specific configurations
         self.generation_config = get_generation_config(self.config)
@@ -179,51 +174,52 @@ class QAGenerator:
 
         logger.info("Processing %d chunks to generate QA pairs...", len(chunks))
 
+        from contextlib import nullcontext
+
         # Set up progress tracking based on verbose mode
-        if verbose:
-            progress_ctx, generate_task = create_progress("Generating QA pairs", len(chunks))
-            progress_ctx.start()
-        else:
-            progress_ctx = None
-            generate_task = None
+        ctx = (
+            progress_context("Generating QA pairs", len(chunks))
+            if verbose
+            else nullcontext((None, None))
+        )
+        with ctx as (progress_ctx, generate_task):
+            # Process in batches using helper
+            from datacreek.utils.batch import async_process_batches, process_batches
 
-        # Process in batches using helper
-        from datacreek.utils.batch import async_process_batches, process_batches
-
-        if async_mode:
-            batch_results = asyncio.run(
-                async_process_batches(
+            if async_mode:
+                batch_results = asyncio.run(
+                    async_process_batches(
+                        self.client,
+                        all_messages,
+                        batch_size=batch_size,
+                        temperature=temperature,
+                        parse_fn=parse_qa_pairs,
+                        raise_on_error=True,
+                    )
+                )
+            else:
+                batch_results = process_batches(
                     self.client,
                     all_messages,
                     batch_size=batch_size,
                     temperature=temperature,
                     parse_fn=parse_qa_pairs,
+                    raise_on_error=True,
                 )
-            )
-        else:
-            batch_results = process_batches(
-                self.client,
-                all_messages,
-                batch_size=batch_size,
-                temperature=temperature,
-                parse_fn=parse_qa_pairs,
-            )
 
-        for i, pairs in enumerate(batch_results):
-            cid, chunk_text, src = chunk_meta[i]
-            for p in pairs:
-                p.chunk = chunk_text
-                p.source = src or "inline"
-            all_qa_pairs.extend(pairs)
-            if verbose:
-                logger.info("  Generated %d pairs from chunk %d", len(pairs), i + 1)
+            for i, pairs in enumerate(batch_results):
+                cid, chunk_text, src = chunk_meta[i]
+                for p in pairs:
+                    p.chunk = chunk_text
+                    p.source = src or "inline"
+                all_qa_pairs.extend(pairs)
+                if verbose:
+                    logger.info("  Generated %d pairs from chunk %d", len(pairs), i + 1)
 
-            if progress_ctx and generate_task:
-                progress_ctx.update(generate_task, advance=1)
+                if progress_ctx and generate_task:
+                    progress_ctx.update(generate_task, advance=1)
 
-        # Stop progress bar if in verbose mode
-        if progress_ctx:
-            progress_ctx.stop()
+            # Stop progress bar automatically when context exits
 
         # Clear the progress line in non-verbose mode
         if not verbose:
@@ -323,6 +319,7 @@ class QAGenerator:
             batch_size=batch_size,
             temperature=temperature,
             parse_fn=parse_qa_pairs,
+            raise_on_error=True,
         )
 
         for i, pairs in enumerate(batch_results):
@@ -419,6 +416,7 @@ class QAGenerator:
                         batch_size=batch_size,
                         temperature=temperature,
                         parse_fn=lambda s: s,
+                        raise_on_error=True,
                     )
                 )
             else:
@@ -428,6 +426,7 @@ class QAGenerator:
                     batch_size=batch_size,
                     temperature=temperature,
                     parse_fn=lambda s: s,
+                    raise_on_error=True,
                 )
 
             for idx, response in enumerate(responses):
@@ -521,6 +520,7 @@ class QAGenerator:
                 batch_size=batch_size,
                 temperature=temperature,
                 parse_fn=lambda s: s,
+                raise_on_error=True,
             )
 
             for idx, response in enumerate(responses):

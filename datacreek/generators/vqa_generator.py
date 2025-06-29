@@ -48,19 +48,14 @@ class VQAGenerator:
 
         self.client = client
 
-        # Load base config from file or client
-        if config_path:
-            base_cfg = load_config(config_path)
+        if config_path or config_overrides:
+            from datacreek.utils.config import load_config_with_overrides
+
+            self.config = load_config_with_overrides(
+                str(config_path) if config_path else None, config_overrides
+            )
         else:
-            base_cfg = client.config
-
-        # Merge overrides if provided
-        if config_overrides:
-            from datacreek.utils.config import merge_configs
-
-            base_cfg = merge_configs(base_cfg, config_overrides)
-
-        self.config = base_cfg
+            self.config = client.config
 
         # Get specific configurations
         self.generation_config = get_generation_config(self.config)

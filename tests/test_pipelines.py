@@ -314,6 +314,19 @@ def test_run_generation_pipeline_overrides(monkeypatch):
     assert received["overrides"] == {"foo": 1}
 
 
+def test_run_generation_pipeline_validation(monkeypatch):
+    """Ensure missing keys raise an error during validation."""
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.QA, kg)
+
+
 def test_run_generation_pipeline_unsupported(monkeypatch):
     """Ensure unsupported dataset types raise errors."""
 

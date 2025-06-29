@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from datacreek.utils.batch import async_process_batches
+from datacreek.utils.batch import async_process_batches, process_batches
 
 
 class DummyClient:
@@ -48,7 +48,7 @@ def test_curate_async_mode(monkeypatch):
 
     monkeypatch.setattr("datacreek.core.curate.LLMClient", lambda *a, **k: DummyClient2())
 
-    async def fake_async(client, msgs, *, batch_size, temperature, parse_fn):
+    async def fake_async(client, msgs, *, batch_size, temperature, parse_fn, **kwargs):
         async_called["count"] = len(msgs)
         return [parse_fn('{"rating": 9}') for _ in msgs]
 
@@ -77,3 +77,38 @@ def test_curate_threshold_validation():
         curate_qa_pairs(
             {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]}, threshold=11
         )
+
+
+def test_process_batches_error(monkeypatch):
+    class ErrClient:
+        def batch_completion(self, *a, **k):
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        process_batches(
+            ErrClient(),
+            [[{"role": "user", "content": "a"}]],
+            batch_size=1,
+            temperature=0.0,
+            parse_fn=lambda s: s,
+            raise_on_error=True,
+        )
+
+
+def test_async_process_batches_error(monkeypatch):
+    class ErrClient:
+        async def async_batch_completion(self, *a, **k):
+            raise RuntimeError("boom")
+
+    async def run():
+        with pytest.raises(RuntimeError):
+            await async_process_batches(
+                ErrClient(),
+                [[{"role": "user", "content": "a"}]],
+                batch_size=1,
+                temperature=0.0,
+                parse_fn=lambda s: s,
+                raise_on_error=True,
+            )
+
+    asyncio.run(run())

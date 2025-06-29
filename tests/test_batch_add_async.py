@@ -14,7 +14,7 @@ class DummyClient:
 async_called = {}
 
 
-async def fake_async(client, messages, *, batch_size, temperature, parse_fn):
+async def fake_async(client, messages, *, batch_size, temperature, parse_fn, **kwargs):
     async_called["count"] = len(messages)
     return ["{}"] * len(messages)
 
@@ -38,7 +38,7 @@ def test_rate_qa_pairs_async(monkeypatch):
 def test_generate_qa_pairs_async(monkeypatch):
     async_called.clear()
 
-    async def fake_async2(client, messages, *, batch_size, temperature, parse_fn):
+    async def fake_async2(client, messages, *, batch_size, temperature, parse_fn, **kwargs):
         async_called["count"] = len(messages)
         return [parse_fn('[{"question": "q", "answer": "a"}]') for _ in messages]
 
@@ -60,7 +60,7 @@ def test_generate_qa_pairs_async(monkeypatch):
 def test_generate_qa_pairs_async_direct(monkeypatch):
     async_called.clear()
 
-    async def fake_async3(client, messages, *, batch_size, temperature, parse_fn):
+    async def fake_async3(client, messages, *, batch_size, temperature, parse_fn, **kwargs):
         async_called["count"] = len(messages)
         return [parse_fn('[{"question": "q", "answer": "a"}]') for _ in messages]
 
