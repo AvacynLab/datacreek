@@ -11,10 +11,7 @@ from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
 from datacreek.models.content_type import ContentType
-from datacreek.utils.config import (
-    get_format_settings,
-    load_config_with_overrides,
-)
+from datacreek.utils.config import get_format_settings, load_config_with_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -362,9 +359,7 @@ def run_generation_pipeline(
     data: Any = document_text
 
     def _save(d: Any) -> Any:
-        cfg = load_config_with_overrides(
-            str(config_path) if config_path else None, overrides
-        )
+        cfg = load_config_with_overrides(str(config_path) if config_path else None, overrides)
         fmt_cfg = get_format_settings(cfg)
         format_type = fmt or fmt_cfg.default
         return convert_format(d, None, format_type, cfg)
@@ -407,9 +402,7 @@ def run_generation_pipeline(
             if not isinstance(result, dict) or "conversations" not in result:
                 raise ValueError("Conversation generation missing 'conversations'")
         elif step is PipelineStep.GENERATE_CANDIDATES:
-            if not isinstance(result, dict) or not (
-                "pairs" in result or "responses" in result
-            ):
+            if not isinstance(result, dict) or not ("pairs" in result or "responses" in result):
                 raise ValueError("Candidate generation returned invalid data")
         return result
 
@@ -436,7 +429,11 @@ def run_generation_pipeline(
         PipelineStep.GENERATE_CONVERSATION: lambda d: _generate(ContentType.CONVERSATION, d),
         PipelineStep.GENERATE_MULTI_TOOL: lambda d: _generate(ContentType.MULTI_TOOL, d),
         PipelineStep.GENERATE_CANDIDATES: lambda d: _generate(
-            ContentType.PREF_PAIR if dataset_type == DatasetType.PREF_PAIR else ContentType.PREF_LIST,
+            (
+                ContentType.PREF_PAIR
+                if dataset_type == DatasetType.PREF_PAIR
+                else ContentType.PREF_LIST
+            ),
             d,
         ),
         PipelineStep.LABEL_PAIRS: lambda d: d,
