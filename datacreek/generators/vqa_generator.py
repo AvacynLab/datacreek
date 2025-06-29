@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # - datasets: For handling HuggingFace datasets
 # - huggingface_hub: For accessing HuggingFace repositories
 
+
 def _check_optional_deps() -> None:
     """Ensure optional dependencies are available."""
     try:
@@ -30,6 +31,8 @@ def _check_optional_deps() -> None:
         raise ImportError(
             "The 'datasets' and 'huggingface_hub' packages are required for VQA generation."
         ) from exc
+
+
 class VQAGenerator:
     """Generates Visual Question Answering data with reasoning"""
 
