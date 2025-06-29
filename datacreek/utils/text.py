@@ -8,7 +8,12 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-from unstructured.cleaners.core import clean as _clean
+try:
+    from unstructured.cleaners.core import clean as _clean
+
+    _UNSTRUCTURED = True
+except ImportError:  # pragma: no cover - optional dependency
+    _UNSTRUCTURED = False
 
 from .chunking import (
     contextual_chunk_split,
@@ -90,5 +95,8 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
 
 def clean_text(text: str) -> str:
     """Return ``text`` normalized using ``unstructured`` cleaners."""
+
+    if not _UNSTRUCTURED:
+        raise ImportError("The 'unstructured' package is required for text cleaning.")
 
     return _clean(text, extra_whitespace=True, dashes=True, bullets=True)

@@ -647,6 +647,27 @@ from datacreek import get_pipelines_for_training, TrainingGoal
 print(get_pipelines_for_training(TrainingGoal.SFT))
 ```
 
+Use `run_generation_pipeline` to execute the generation steps directly on a
+knowledge graph:
+
+```python
+from datacreek import (
+    run_generation_pipeline,
+    run_generation_pipeline_async,
+    DatasetType,
+    KnowledgeGraph,
+)
+
+kg = KnowledgeGraph()
+kg.add_document("doc", source="text", text="Hello world")
+
+# Synchronous usage
+qa_data = run_generation_pipeline(DatasetType.QA, kg)
+
+# Asynchronous usage
+# qa_data = await run_generation_pipeline_async(DatasetType.QA, kg)
+```
+
 ## Post-Ingestion Operations
 
 After parsing documents into the knowledge graph you can refine the data quality

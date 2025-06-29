@@ -10,6 +10,7 @@ from datacreek.pipelines import (
     get_pipelines_for_training,
     get_trainings_for_dataset,
     run_generation_pipeline,
+    run_generation_pipeline_async,
 )
 
 
@@ -334,3 +335,89 @@ def test_run_generation_pipeline_unsupported(monkeypatch):
         kg = KnowledgeGraph()
         kg.add_document("d", source="s", text="text")
         run_generation_pipeline(DatasetType.TEXT, kg)
+
+
+def test_run_generation_pipeline_dataclass(monkeypatch):
+    """Dataclass results should pass validation."""
+
+    from datacreek.models.qa import QAPair
+    from datacreek.models.results import QAGenerationResult
+
+    def fake_generate(*args, **kwargs):
+        return QAGenerationResult(summary="", qa_pairs=[QAPair(question="q", answer="a")])
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    result = run_generation_pipeline(DatasetType.QA, kg)
+
+    assert result == "done"
+
+
+def test_run_generation_pipeline_dataclass_invalid(monkeypatch):
+    """Invalid dataclass should raise error."""
+
+    from datacreek.models.cot import COTExample
+    from datacreek.models.results import COTGenerationResult
+
+    def fake_generate(*args, **kwargs):
+        return COTGenerationResult(
+            summary="",
+            cot_examples=[COTExample(question="q", reasoning="r", answer="a")],
+            conversations=[],
+        )
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.QA, kg)
+
+
+def test_run_generation_pipeline_deduplicate(monkeypatch):
+    """Duplicate QA pairs should be removed after curation."""
+
+    def fake_generate(*args, **kwargs):
+        return {"qa_pairs": [{"question": "q", "answer": "a"}, {"question": "q", "answer": "a"}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    res = run_generation_pipeline(DatasetType.QA, kg)
+
+    assert len(res["qa_pairs"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_generation_pipeline_async(monkeypatch):
+    called = {}
+
+    async def fake_generate(*args, **kwargs):
+        called["async"] = True
+        return {"qa_pairs": []}
+
+    async def fake_curate(d, *a, **k):
+        return d
+
+    monkeypatch.setattr("datacreek.pipelines.process_file_async", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs_async", fake_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    res = await run_generation_pipeline_async(DatasetType.QA, kg)
+
+    assert res == "done"
+    assert called.get("async") is True

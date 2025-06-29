@@ -10,9 +10,18 @@ import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
-from neo4j import Driver, GraphDatabase
-from sklearn.cluster import KMeans
-from sklearn.metrics.pairwise import cosine_similarity
+try:
+    from neo4j import Driver, GraphDatabase
+except Exception:  # pragma: no cover - optional dependency for tests
+    Driver = object  # type: ignore
+    GraphDatabase = None  # type: ignore
+
+try:
+    from sklearn.cluster import KMeans
+    from sklearn.metrics.pairwise import cosine_similarity
+except Exception:  # pragma: no cover - optional dependency for tests
+    KMeans = None
+    cosine_similarity = None
 
 from ..utils.retrieval import EmbeddingIndex
 

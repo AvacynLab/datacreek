@@ -1,5 +1,17 @@
-"""Core components for datacreek."""
+"""Core components for datacreek.
 
-from .context import AppContext
+This module avoids importing heavy dependencies at package import time by
+loading objects lazily via ``__getattr__``.  Only when ``AppContext`` is
+explicitly requested will the full context machinery (and its transitive
+dependencies) be imported.
+"""
 
 __all__ = ["AppContext"]
+
+
+def __getattr__(name: str):
+    if name == "AppContext":
+        from .context import AppContext as _AppContext
+
+        return _AppContext
+    raise AttributeError(name)

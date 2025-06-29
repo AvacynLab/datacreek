@@ -17,6 +17,7 @@ from .config import (
     load_config,
     merge_configs,
 )
+from .dataset_cleanup import deduplicate_pairs
 from .llm_processing import convert_to_conversation_format, parse_qa_pairs, parse_ratings
 from .progress import create_progress, progress_context
 from .text import clean_text, extract_json_from_text, split_into_chunks
@@ -59,6 +60,7 @@ __all__ = [
     "create_progress",
     "progress_context",
     "convert_to_conversation_format",
+    "deduplicate_pairs",
     "extract_facts",
     "extract_entities",
 ]

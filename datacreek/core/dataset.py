@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
@@ -674,7 +675,29 @@ class DatasetBuilder:
         several answers per fact.
         """
 
-        from datacreek.pipelines import run_generation_pipeline
+        from datacreek.pipelines import (
+            run_generation_pipeline,
+            run_generation_pipeline_async,
+        )
+
+        if async_mode:
+            return asyncio.run(
+                run_generation_pipeline_async(
+                    self.dataset_type,
+                    self.graph,
+                    config_path=config_path,
+                    provider=provider,
+                    profile=profile,
+                    api_base=api_base,
+                    model=model,
+                    num_pairs=num_pairs,
+                    threshold=threshold,
+                    fmt=fmt,
+                    overrides=overrides,
+                    verbose=verbose,
+                    multi_answer=multi_answer,
+                )
+            )
 
         return run_generation_pipeline(
             self.dataset_type,
@@ -689,6 +712,6 @@ class DatasetBuilder:
             fmt=fmt,
             overrides=overrides,
             verbose=verbose,
-            async_mode=async_mode,
+            async_mode=False,
             multi_answer=multi_answer,
         )

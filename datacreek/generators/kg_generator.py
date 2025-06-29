@@ -1,7 +1,10 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from sklearn.cluster import KMeans
+try:
+    from sklearn.cluster import KMeans
+except Exception:  # pragma: no cover - optional dependency
+    KMeans = None
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.qa import QAPair
@@ -30,6 +33,9 @@ class KGGenerator(BaseGenerator):
         if embeddings.size == 0:
             fact_nodes.sort(key=lambda n: kg.graph.degree(n), reverse=True)
             return fact_nodes[:num]
+
+        if KMeans is None:
+            raise ImportError("scikit-learn is required for KGGenerator")
 
         kmeans = KMeans(n_clusters=num, n_init="auto", random_state=0)
         labels = kmeans.fit_predict(embeddings)
