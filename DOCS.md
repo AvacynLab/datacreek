@@ -817,15 +817,10 @@ def curate_qa_pairs(input_path, output_path, threshold=None, api_base=None, mode
     
     # Get configuration
     curate_config = get_curate_config(client.config)
-    
-    # Allow environment variable to override batch size for debugging
-    env_batch_size = os.environ.get('SDK_BATCH_SIZE')
-    if env_batch_size and env_batch_size.isdigit():
-        batch_size = int(env_batch_size)
-        inference_batch = int(env_batch_size)
-    else:
-        batch_size = curate_config.get("batch_size", 32)
-        inference_batch = curate_config.get("inference_batch", 32)
+
+    # Load batch sizes from configuration (override via function arguments if needed)
+    batch_size = batch_size or curate_config.get("batch_size", 32)
+    inference_batch = inference_batch or curate_config.get("inference_batch", 32)
     
     # Process in batches with smart error handling
     batches = [qa_pairs[i:i+batch_size] for i in range(0, len(qa_pairs), batch_size)]
@@ -869,10 +864,9 @@ def curate_qa_pairs(input_path, output_path, threshold=None, api_base=None, mode
 The system includes several advanced features:
 
 1. **Batch Size Configuration**: Configurable batch sizes for optimal performance
-2. **Environment Variable Overrides**: `SDK_BATCH_SIZE` for debugging and testing
-3. **Fallback Processing**: If batch processing fails, falls back to single-item processing
-4. **Robust JSON Parsing**: Multiple parsing methods to handle different LLM output formats
-5. **Verbose Mode**: Detailed diagnostic information with the `-v` flag
+2. **Fallback Processing**: If batch processing fails, falls back to single-item processing
+3. **Robust JSON Parsing**: Multiple parsing methods to handle different LLM output formats
+4. **Verbose Mode**: Detailed diagnostic information with the `-v` flag
 
 ### Stage 4: Format Conversion (Save-as)
 
@@ -1183,14 +1177,12 @@ The toolkit supports these environment variables for debugging and configuration
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
 | `SDK_VERBOSE` | Enable verbose output for all operations | `false` | `export SDK_VERBOSE=true` |
-| `SDK_BATCH_SIZE` | Override batch size for curate command | Config setting | `export SDK_BATCH_SIZE=1` |
 
 Setting these variables can help with debugging and performance tuning:
 
 ```bash
 # Process one QA pair at a time with detailed output
 export SDK_VERBOSE=true
-export SDK_BATCH_SIZE=1
 synthetic-data-kit curate data/generated/results.json
 ```
 
@@ -1620,8 +1612,7 @@ For optimal JSON parsing, you can:
 
 1. **Install json5**: `pip install json5` for enhanced JSON parsing capabilities
 2. **Use verbose mode**: Run commands with `-v` flag to see detailed parsing information
-3. **Set environment variables**: `SDK_BATCH_SIZE=1` to process one item at a time for debugging
-4. **Adjust prompt templates**: Update config.yaml prompts for better JSON formatting
+3. **Adjust prompt templates**: Update config.yaml prompts for better JSON formatting
 
 #### Memory Issues with Large Models
 
