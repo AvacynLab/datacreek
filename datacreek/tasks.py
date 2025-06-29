@@ -75,16 +75,19 @@ def generate_task(
         src = db.get(SourceData, src_id)
         if not src or src.owner_id != user_id:
             raise RuntimeError("Source not found")
-        from datacreek.utils import get_path_config, load_config
+        from datacreek.utils import get_path_config
+        from datacreek.utils.config import load_config_with_overrides
 
-        cfg = load_config(str(config_path) if config_path else None)
-        output_dir = Path(get_path_config(cfg, "output", "generated"))
-        output_dir.mkdir(parents=True, exist_ok=True)
         overrides = {}
         if generation is not None:
             overrides["generation"] = generation
         if prompts is not None:
             overrides["prompts"] = prompts
+        cfg = load_config_with_overrides(
+            str(config_path) if config_path else None, overrides if overrides else None
+        )
+        output_dir = Path(get_path_config(cfg, "output", "generated"))
+        output_dir.mkdir(parents=True, exist_ok=True)
         out = generate_data(
             None,
             None,

@@ -24,7 +24,7 @@ from datacreek.utils.llm_processing import convert_to_conversation_format, parse
 
 
 def curate_qa_pairs(
-    input_data: Any,
+    input_data: str | Dict[str, Any],
     output_path: Optional[str] = None,
     threshold: Optional[float] = None,
     api_base: Optional[str] = None,
@@ -74,14 +74,20 @@ def curate_qa_pairs(
                 data = json.load(f)
         else:
             data = json.loads(input_data)
-    else:
+    elif isinstance(input_data, dict):
         data = input_data
+    else:
+        raise TypeError("input_data must be a path, JSON string or dictionary")
 
     # Extract QA pairs
+    if not isinstance(data, dict):
+        raise TypeError("Input data must resolve to a dictionary")
+
     qa_pairs = data.get("qa_pairs", [])
     summary = data.get("summary", "")
 
-    # If there are no QA pairs or they're already filtered
+    if not isinstance(qa_pairs, list):
+        raise ValueError("Input must contain a 'qa_pairs' list")
     if not qa_pairs:
         raise ValueError("No QA pairs found in the input file")
 
@@ -185,6 +191,7 @@ def curate_qa_pairs(
                 batch_size=inference_batch,
                 temperature=rating_temperature,
                 parse_fn=lambda resp: resp,
+                raise_on_error=True,
             )
         )
     else:
@@ -194,6 +201,7 @@ def curate_qa_pairs(
             batch_size=inference_batch,
             temperature=rating_temperature,
             parse_fn=lambda resp: resp,
+            raise_on_error=True,
         )
 
     for idx, response in enumerate(rated_batches):
@@ -248,7 +256,7 @@ def curate_qa_pairs(
 
 
 async def curate_qa_pairs_async(
-    input_data: Any,
+    input_data: str | Dict[str, Any],
     output_path: Optional[str] = None,
     threshold: Optional[float] = None,
     api_base: Optional[str] = None,
@@ -260,18 +268,24 @@ async def curate_qa_pairs_async(
 ) -> Any:
     """Asynchronous version of :func:`curate_qa_pairs`."""
     # Reuse the synchronous function's logic but run async batch processing.
-    # Load input
     if isinstance(input_data, str):
         if os.path.exists(input_data):
             with open(input_data, "r", encoding="utf-8") as f:
                 data = json.load(f)
         else:
             data = json.loads(input_data)
-    else:
+    elif isinstance(input_data, dict):
         data = input_data
+    else:
+        raise TypeError("input_data must be a path, JSON string or dictionary")
+
+    if not isinstance(data, dict):
+        raise TypeError("Input data must resolve to a dictionary")
 
     qa_pairs = data.get("qa_pairs", [])
     summary = data.get("summary", "")
+    if not isinstance(qa_pairs, list):
+        raise ValueError("Input must contain a 'qa_pairs' list")
     if not qa_pairs:
         raise ValueError("No QA pairs found in the input file")
 
@@ -341,6 +355,7 @@ async def curate_qa_pairs_async(
         batch_size=inference_batch,
         temperature=rating_temperature,
         parse_fn=lambda resp: resp,
+        raise_on_error=True,
     )
 
     for idx, response in enumerate(rated_batches):

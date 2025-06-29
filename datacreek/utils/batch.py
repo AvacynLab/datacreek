@@ -13,8 +13,9 @@ def process_batches(
     batch_size: int,
     temperature: float,
     parse_fn: Callable[[str], Any],
+    raise_on_error: bool = False,
 ) -> List[Any]:
-    """Helper to run LLM requests in batches with basic error handling."""
+    """Helper to run LLM requests in batches with optional error propagation."""
     results: List[Any] = []
     for start in range(0, len(message_batches), batch_size):
         end = min(start + batch_size, len(message_batches))
@@ -31,6 +32,8 @@ def process_batches(
                 except Exception as parse_err:
                     logger.error("Failed to parse response: %s", parse_err)
         except Exception as e:
+            if raise_on_error:
+                raise
             logger.error("Error processing batch %s-%s: %s", start, end, e)
     return results
 
@@ -42,6 +45,7 @@ async def async_process_batches(
     batch_size: int,
     temperature: float,
     parse_fn: Callable[[str], Any],
+    raise_on_error: bool = False,
 ) -> List[Any]:
     """Asynchronously process message batches with :class:`LLMClient`."""
 
@@ -61,5 +65,7 @@ async def async_process_batches(
                 except Exception as parse_err:
                     logger.error("Failed to parse response: %s", parse_err)
         except Exception as e:
+            if raise_on_error:
+                raise
             logger.error("Error processing batch %s-%s: %s", start, end, e)
     return results
