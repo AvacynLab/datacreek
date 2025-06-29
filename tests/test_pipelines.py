@@ -13,6 +13,7 @@ from datacreek.pipelines import (
     get_trainings_for_dataset,
     run_generation_pipeline,
     run_generation_pipeline_async,
+    PipelineExecutionError,
 )
 
 
@@ -131,6 +132,32 @@ def test_run_generation_pipeline_cot(monkeypatch):
 
     assert result == "done"
     assert calls == ["gen", "curate", "save"]
+
+
+def test_run_generation_pipeline_async_cot(monkeypatch):
+    """Async pipeline should call async handlers for CoT."""
+
+    called = {}
+
+    async def fake_generate(*args, **kwargs):
+        called["gen"] = True
+        return {"cot_examples": []}
+
+    async def fake_curate(d, *a, **k):
+        called["curate"] = True
+        return {"qa_pairs": [], "summary": ""}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file_async", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs_async", fake_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="text")
+
+    res = asyncio.run(run_generation_pipeline_async(DatasetType.COT, kg))
+
+    assert res == "done"
+    assert called == {"gen": True, "curate": True}
 
 
 def test_run_generation_pipeline_vqa(monkeypatch):
@@ -422,3 +449,27 @@ def test_run_generation_pipeline_async(monkeypatch):
 
     assert res == "done"
     assert called.get("async") is True
+
+
+
+def test_generation_pipeline_error(monkeypatch):
+    """Failing step should raise PipelineExecutionError."""
+    def bad_generate(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("datacreek.pipelines.process_file", bad_generate)
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+    with pytest.raises(PipelineExecutionError) as exc:
+        run_generation_pipeline(DatasetType.QA, kg)
+    assert exc.value.step is PipelineStep.GENERATE_QA
+
+
+def test_generation_pipeline_async_error(monkeypatch):
+    async def bad_generate(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr("datacreek.pipelines.process_file_async", bad_generate)
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+    with pytest.raises(PipelineExecutionError):
+        asyncio.run(run_generation_pipeline_async(DatasetType.QA, kg))
+

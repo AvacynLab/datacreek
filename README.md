@@ -666,6 +666,7 @@ qa_data = run_generation_pipeline(DatasetType.QA, kg)
 
 # Asynchronous usage
 # qa_data = await run_generation_pipeline_async(DatasetType.QA, kg)
+Both functions raise `PipelineExecutionError` when a step fails.
 ```
 
 ## Post-Ingestion Operations

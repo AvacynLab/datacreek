@@ -8,7 +8,6 @@
 import asyncio
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -16,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
 from datacreek.models.qa import QAPair
+from .base import BaseGenerator
 from datacreek.utils.config import (
     get_curate_settings,
     get_generation_config,
@@ -33,29 +33,16 @@ from datacreek.utils.text import split_into_chunks
 logger = logging.getLogger(__name__)
 
 
-class QAGenerator:
+class QAGenerator(BaseGenerator):
     def __init__(
         self,
         client: LLMClient,
         config_path: Optional[Path] = None,
         kg: Optional[KnowledgeGraph] = None,
         config_overrides: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> None:
         """Initialize the QA Generator with an LLM client and optional config"""
-        self.client = client
-        self.kg = kg
-
-        if config_path or config_overrides:
-            from datacreek.utils.config import load_config_with_overrides
-
-            self.config = load_config_with_overrides(
-                str(config_path) if config_path else None, config_overrides
-            )
-        else:
-            self.config = client.config
-
-        # Get specific configurations
-        self.generation_config = get_generation_config(self.config)
+        super().__init__(client, config_path, kg=kg, config_overrides=config_overrides)
         self.curate_config = get_curate_settings(self.config)
 
     def generate_summary(self, document_text: str, *, verbose: bool | None = None) -> str:
@@ -101,6 +88,48 @@ class QAGenerator:
         verbose: bool | None = None,
     ) -> List[QAPair]:
         """Generate QA pairs from the document using batched processing"""
+
+        return asyncio.run(
+            self._generate_qa_pairs_impl(
+                document_text,
+                summary,
+                num_pairs=num_pairs,
+                query=query,
+                verbose=verbose,
+                use_async=async_mode,
+            )
+        )
+
+    async def generate_qa_pairs_async(
+        self,
+        document_text: str,
+        summary: str,
+        num_pairs: int = 25,
+        query: Optional[str] = None,
+        *,
+        verbose: bool | None = None,
+    ) -> List[QAPair]:
+        """Asynchronous counterpart to :meth:`generate_qa_pairs`."""
+
+        return await self._generate_qa_pairs_impl(
+            document_text,
+            summary,
+            num_pairs=num_pairs,
+            query=query,
+            verbose=verbose,
+            use_async=True,
+        )
+
+    async def _generate_qa_pairs_impl(
+        self,
+        document_text: str,
+        summary: str,
+        num_pairs: int = 25,
+        query: Optional[str] = None,
+        *,
+        verbose: bool | None = None,
+        use_async: bool = False,
+    ) -> List[QAPair]:
         if verbose is None:
             verbose = logger.isEnabledFor(logging.DEBUG)
 
@@ -176,29 +205,26 @@ class QAGenerator:
 
         from contextlib import nullcontext
 
-        # Set up progress tracking based on verbose mode
         ctx = (
             progress_context("Generating QA pairs", len(chunks))
             if verbose
             else nullcontext((None, None))
         )
         with ctx as (progress_ctx, generate_task):
-            # Process in batches using helper
             from datacreek.utils.batch import async_process_batches, process_batches
 
-            if async_mode:
-                batch_results = asyncio.run(
-                    async_process_batches(
-                        self.client,
-                        all_messages,
-                        batch_size=batch_size,
-                        temperature=temperature,
-                        parse_fn=parse_qa_pairs,
-                        raise_on_error=True,
-                    )
+            if use_async:
+                batch_results = await async_process_batches(
+                    self.client,
+                    all_messages,
+                    batch_size=batch_size,
+                    temperature=temperature,
+                    parse_fn=parse_qa_pairs,
+                    raise_on_error=True,
                 )
             else:
-                batch_results = process_batches(
+                batch_results = await asyncio.to_thread(
+                    process_batches,
                     self.client,
                     all_messages,
                     batch_size=batch_size,
@@ -214,134 +240,20 @@ class QAGenerator:
                     p.source = src or "inline"
                 all_qa_pairs.extend(pairs)
                 if verbose:
-                    logger.info("  Generated %d pairs from chunk %d", len(pairs), i + 1)
-
+                    logger.info(
+                        "  Generated %d pairs from chunk %d",
+                        len(pairs),
+                        i + 1,
+                    )
                 if progress_ctx and generate_task:
                     progress_ctx.update(generate_task, advance=1)
 
-            # Stop progress bar automatically when context exits
-
-        # Clear the progress line in non-verbose mode
         if not verbose:
             logger.info("Batch processing complete.")
 
         logger.info("Generated %d QA pairs total", len(all_qa_pairs))
         return all_qa_pairs
 
-    async def generate_qa_pairs_async(
-        self,
-        document_text: str,
-        summary: str,
-        num_pairs: int = 25,
-        query: Optional[str] = None,
-        *,
-        verbose: bool | None = None,
-    ) -> List[QAPair]:
-        """Asynchronous counterpart to :meth:`generate_qa_pairs`."""
-        if verbose is None:
-            verbose = logger.isEnabledFor(logging.DEBUG)
-
-        chunk_size = self.generation_config.chunk_size
-        temperature = self.generation_config.temperature
-        overlap = self.generation_config.overlap
-        batch_size = self.generation_config.batch_size
-        chunk_method = self.generation_config.chunk_method
-        similarity_drop = self.generation_config.similarity_drop
-        top_k = self.generation_config.retrieval_top_k
-
-        chunks = split_into_chunks(
-            document_text,
-            chunk_size=chunk_size,
-            overlap=overlap,
-            method=chunk_method,
-            similarity_drop=similarity_drop,
-        )
-
-        chunk_meta: List[Tuple[str, str, Optional[str]]] = []
-
-        if self.kg and chunk_method in {"sliding", "semantic", "contextual"}:
-            for i, chunk in enumerate(chunks):
-                cid = f"chunk-{i}"
-                if "doc" not in self.kg.graph:
-                    self.kg.add_document("doc", source="inline")
-                self.kg.add_chunk("doc", cid, chunk)
-                chunk_meta.append((cid, chunk, self.kg.graph.nodes[cid].get("source")))
-
-        if query and self.kg:
-            selected_ids = self.kg.search_embeddings(query, k=top_k)
-            chunks = [self.kg.graph.nodes[c]["text"] for c in selected_ids if c in self.kg.graph]
-            chunk_meta = [
-                (cid, self.kg.graph.nodes[cid]["text"], self.kg.graph.nodes[cid].get("source"))
-                for cid in selected_ids
-                if cid in self.kg.graph
-            ]
-        else:
-            if not chunk_meta:
-                chunk_meta = [(f"chunk-{i}", ch, None) for i, ch in enumerate(chunks)]
-
-        if verbose:
-            logger.info("Generating QA pairs...")
-            logger.info("Document split into %d chunks", len(chunks))
-            logger.info("Using batch size of %d", batch_size)
-
-        all_qa_pairs: List[QAPair] = []
-        pairs_per_chunk = max(1, round(num_pairs / len(chunks)))
-
-        if self.kg:
-            try:
-                qa_prompt_template = get_prompt(self.config, "kg_qa_generation")
-            except Exception:
-                qa_prompt_template = get_prompt(self.config, "qa_generation")
-        else:
-            qa_prompt_template = get_prompt(self.config, "qa_generation")
-
-        all_messages = []
-        for i, chunk in enumerate(chunks):
-            qa_prompt = qa_prompt_template.format(
-                num_pairs=pairs_per_chunk, summary=summary[:100], text=chunk
-            )
-            all_messages.append([{"role": "system", "content": qa_prompt}])
-
-        logger.info("Processing %d chunks to generate QA pairs...", len(chunks))
-
-        if verbose:
-            progress_ctx, generate_task = create_progress("Generating QA pairs", len(chunks))
-            progress_ctx.start()
-        else:
-            progress_ctx = None
-            generate_task = None
-
-        from datacreek.utils.batch import async_process_batches
-
-        batch_results = await async_process_batches(
-            self.client,
-            all_messages,
-            batch_size=batch_size,
-            temperature=temperature,
-            parse_fn=parse_qa_pairs,
-            raise_on_error=True,
-        )
-
-        for i, pairs in enumerate(batch_results):
-            cid, chunk_text, src = chunk_meta[i]
-            for p in pairs:
-                p.chunk = chunk_text
-                p.source = src or "inline"
-            all_qa_pairs.extend(pairs)
-            if verbose:
-                logger.info("  Generated %d pairs from chunk %d", len(pairs), i + 1)
-
-            if progress_ctx and generate_task:
-                progress_ctx.update(generate_task, advance=1)
-
-        if progress_ctx:
-            progress_ctx.stop()
-
-        if not verbose:
-            logger.info("Batch processing complete.")
-
-        logger.info("Generated %d QA pairs total", len(all_qa_pairs))
-        return all_qa_pairs
 
     def rate_qa_pairs(
         self,
@@ -562,25 +474,12 @@ class QAGenerator:
         async_mode: bool = False,
     ) -> "QAGenerationResult":
         """Process a document to generate QA pairs without rating."""
-        # Set the verbose environment variable
-        # Verbose mode is controlled by logging level
 
-        # Generate summary
-        summary = self.generate_summary(document_text, verbose=verbose)
-
-        # Generate QA pairs
-        qa_pairs = self.generate_qa_pairs(
-            document_text,
-            summary,
-            num_pairs=num_pairs,
-            async_mode=async_mode,
-            verbose=verbose,
+        return asyncio.run(
+            self._process_document_impl(
+                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
+            )
         )
-
-        # Prepare result - no rating at this stage
-        from datacreek.models.results import QAGenerationResult
-
-        return QAGenerationResult(summary=summary, qa_pairs=qa_pairs)
 
     async def process_document_async(
         self,
@@ -589,12 +488,30 @@ class QAGenerator:
         verbose: bool = False,
     ) -> "QAGenerationResult":
         """Asynchronous version of :meth:`process_document`."""
-        summary = self.generate_summary(document_text, verbose=verbose)
-        qa_pairs = await self.generate_qa_pairs_async(
+
+        return await self._process_document_impl(
+            document_text, num_pairs=num_pairs, verbose=verbose, use_async=True
+        )
+
+    async def _process_document_impl(
+        self,
+        document_text: str,
+        *,
+        num_pairs: int = 25,
+        verbose: bool = False,
+        use_async: bool = False,
+    ) -> "QAGenerationResult":
+        if use_async:
+            summary = await asyncio.to_thread(self.generate_summary, document_text, verbose=verbose)
+        else:
+            summary = self.generate_summary(document_text, verbose=verbose)
+
+        qa_pairs = await self._generate_qa_pairs_impl(
             document_text,
             summary,
             num_pairs=num_pairs,
             verbose=verbose,
+            use_async=use_async,
         )
         from datacreek.models.results import QAGenerationResult
 

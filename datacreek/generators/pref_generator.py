@@ -22,8 +22,7 @@ class PrefPairGenerator(BaseGenerator):
         kg: Optional[KnowledgeGraph] = None,
         config_overrides: Optional[Dict[str, Any]] = None,
     ) -> None:
-        super().__init__(client, config_path, config_overrides)
-        self.kg = kg
+        super().__init__(client, config_path, kg=kg, config_overrides=config_overrides)
 
     def process_document(
         self,
@@ -35,40 +34,11 @@ class PrefPairGenerator(BaseGenerator):
     ) -> PrefPairResult:
         """Return pairwise preference data from ``document_text``."""
 
-        from .qa_generator import QAGenerator
-
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
-
-        if async_mode:
-            result = asyncio.run(
-                qa_gen.process_document_async(
-                    document_text, num_pairs=num_pairs * 2, verbose=verbose
-                )
+        return asyncio.run(
+            self._process_pair_impl(
+                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
             )
-        else:
-            result = qa_gen.process_document(
-                document_text, num_pairs=num_pairs * 2, verbose=verbose
-            )
-
-        pairs: List[Dict[str, Any]] = []
-        qa_iter = iter(result.qa_pairs)
-        for _ in range(num_pairs):
-            try:
-                a = next(qa_iter)
-                b = next(qa_iter)
-            except StopIteration:
-                break
-            pairs.append(
-                {
-                    "question": a.question,
-                    "chosen": a.answer,
-                    "rejected": b.answer,
-                    "chunk": a.chunk,
-                    "source": a.source,
-                }
-            )
-
-        return PrefPairResult(summary=result.summary, pairs=pairs)
+        )
 
     async def process_document_async(
         self,
@@ -79,13 +49,30 @@ class PrefPairGenerator(BaseGenerator):
     ) -> PrefPairResult:
         """Asynchronous version of :meth:`process_document`."""
 
+        return await self._process_pair_impl(
+            document_text, num_pairs=num_pairs, verbose=verbose, use_async=True
+        )
+
+    async def _process_pair_impl(
+        self,
+        document_text: str,
+        *,
+        num_pairs: int,
+        verbose: bool,
+        use_async: bool,
+    ) -> PrefPairResult:
         from .qa_generator import QAGenerator
 
         qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
 
-        result = await qa_gen.process_document_async(
-            document_text, num_pairs=num_pairs * 2, verbose=verbose
-        )
+        if use_async:
+            result = await qa_gen.process_document_async(
+                document_text, num_pairs=num_pairs * 2, verbose=verbose
+            )
+        else:
+            result = await asyncio.to_thread(
+                qa_gen.process_document, document_text, num_pairs=num_pairs * 2, verbose=verbose
+            )
 
         pairs: List[Dict[str, Any]] = []
         qa_iter = iter(result.qa_pairs)
@@ -118,8 +105,7 @@ class PrefListGenerator(BaseGenerator):
         kg: Optional[KnowledgeGraph] = None,
         config_overrides: Optional[Dict[str, Any]] = None,
     ) -> None:
-        super().__init__(client, config_path, config_overrides)
-        self.kg = kg
+        super().__init__(client, config_path, kg=kg, config_overrides=config_overrides)
 
     def process_document(
         self,
@@ -132,32 +118,15 @@ class PrefListGenerator(BaseGenerator):
     ) -> PrefListResult:
         """Return listwise preference data from ``document_text``."""
 
-        from .qa_generator import QAGenerator
-
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
-
-        total = num_lists * list_size
-        if async_mode:
-            result = asyncio.run(
-                qa_gen.process_document_async(document_text, num_pairs=total, verbose=verbose)
+        return asyncio.run(
+            self._process_list_impl(
+                document_text,
+                num_lists=num_lists,
+                list_size=list_size,
+                verbose=verbose,
+                use_async=async_mode,
             )
-        else:
-            result = qa_gen.process_document(document_text, num_pairs=total, verbose=verbose)
-
-        responses: List[Dict[str, Any]] = []
-        qa_iter = iter(result.qa_pairs)
-        for _ in range(num_lists):
-            items = []
-            for _ in range(list_size):
-                try:
-                    p = next(qa_iter)
-                except StopIteration:
-                    break
-                items.append({"text": p.answer, "chunk": p.chunk, "source": p.source})
-            if items:
-                responses.append({"question": items[0]["text"], "answers": items})
-
-        return PrefListResult(summary=result.summary, responses=responses)
+        )
 
     async def process_document_async(
         self,
@@ -169,14 +138,36 @@ class PrefListGenerator(BaseGenerator):
     ) -> PrefListResult:
         """Asynchronous version of :meth:`process_document`."""
 
+        return await self._process_list_impl(
+            document_text,
+            num_lists=num_lists,
+            list_size=list_size,
+            verbose=verbose,
+            use_async=True,
+        )
+
+    async def _process_list_impl(
+        self,
+        document_text: str,
+        *,
+        num_lists: int,
+        list_size: int,
+        verbose: bool,
+        use_async: bool,
+    ) -> PrefListResult:
         from .qa_generator import QAGenerator
 
         qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
 
         total = num_lists * list_size
-        result = await qa_gen.process_document_async(
-            document_text, num_pairs=total, verbose=verbose
-        )
+        if use_async:
+            result = await qa_gen.process_document_async(
+                document_text, num_pairs=total, verbose=verbose
+            )
+        else:
+            result = await asyncio.to_thread(
+                qa_gen.process_document, document_text, num_pairs=total, verbose=verbose
+            )
 
         responses: List[Dict[str, Any]] = []
         qa_iter = iter(result.qa_pairs)
