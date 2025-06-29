@@ -646,23 +646,9 @@ class DatasetBuilder:
     # ------------------------------------------------------------------
 
     def get_raw_text(self) -> str:
-        """Return all chunk texts concatenated in document order."""
+        """Return text representation of the underlying graph."""
 
-        parts: list[str] = []
-        docs = [n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "document"]
-        docs.sort()
-        for doc_id in docs:
-            chunks = self.get_chunks_for_document(doc_id)
-            if chunks:
-                for cid in chunks:
-                    text = self.graph.graph.nodes[cid].get("text")
-                    if text:
-                        parts.append(text)
-            else:
-                text = self.graph.graph.nodes[doc_id].get("text")
-                if text:
-                    parts.append(text)
-        return "\n\n".join(parts)
+        return self.graph.to_text()
 
     def run_post_kg_pipeline(
         self,
@@ -678,19 +664,21 @@ class DatasetBuilder:
         overrides: Dict[str, Any] | None = None,
         verbose: bool = False,
         async_mode: bool = False,
+        multi_answer: bool = False,
     ) -> Any:
         """Run generation steps after the knowledge graph stage.
 
         When ``async_mode`` is ``True`` the underlying LLM calls may be
         executed concurrently.
+        ``multi_answer`` forwards to the knowledge graph generator to produce
+        several answers per fact.
         """
 
         from datacreek.pipelines import run_generation_pipeline
 
-        document_text = self.get_raw_text()
         return run_generation_pipeline(
             self.dataset_type,
-            document_text,
+            self.graph,
             config_path=config_path,
             provider=provider,
             profile=profile,
@@ -702,4 +690,5 @@ class DatasetBuilder:
             overrides=overrides,
             verbose=verbose,
             async_mode=async_mode,
+            multi_answer=multi_answer,
         )

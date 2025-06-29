@@ -116,6 +116,37 @@ prompts:
     
     Text:
     {text}
+
+  kg_summary: |
+    Summarize the following knowledge graph in 3-5 sentences.
+
+    Graph:
+    {graph}
+
+  kg_qa_generation: |
+    Using only the information from this knowledge graph, create {num_pairs} question-answer pairs.
+
+    Return JSON format only:
+
+    [
+      {{"question": "Question?", "answer": "Answer."}}
+    ]
+
+    Graph:
+    {graph}
+
+  kg_question: |
+    Given the following facts, craft a concise question that can be answered using only this information.
+
+    Facts:
+    {facts}
+
+  kg_answer: |
+    Provide a factual answer to the question using only the given facts.
+
+    Facts:
+    {facts}
+    Question: {question}
   
   # QA pair rating prompt
   qa_rating: |
@@ -141,6 +172,16 @@ prompts:
     *** YOUR RESPONSE MUST BE VALID JSON AND NOTHING ELSE - NO EXPLANATION, NO MARKDOWN ***
     
     QA pairs to rate:
+    {pairs}
+
+  kg_qa_rating: |
+    Rate each question-answer pair using the knowledge graph facts below.
+    Apply the same 1-10 scale as for qa_rating.
+
+    Facts:
+    {facts}
+
+    Pairs:
     {pairs}
     
   # Chain of Thought generation prompt

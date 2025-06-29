@@ -4,10 +4,11 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
 from datacreek.models.content_type import ContentType
 from datacreek.utils.config import get_format_settings, load_config, merge_configs
@@ -86,6 +87,8 @@ class ProcessOptions:
     overrides: Dict[str, Any] | None = None
     verbose: bool = False
     async_mode: bool = False
+    kg: KnowledgeGraph | None = None
+    multi_answer: bool = False
 
 
 PIPELINES: Dict[DatasetType, GenerationPipeline] = {
@@ -295,7 +298,7 @@ def get_pipelines_for_training(goal: TrainingGoal) -> List[GenerationPipeline]:
 
 def run_generation_pipeline(
     dataset_type: DatasetType,
-    document_text: str,
+    kg: KnowledgeGraph,
     *,
     config_path: Path | None = None,
     provider: str | None = None,
@@ -308,14 +311,19 @@ def run_generation_pipeline(
     overrides: Dict[str, Any] | None = None,
     verbose: bool = False,
     async_mode: bool = False,
+    document_text: str | None = None,
+    multi_answer: bool = False,
 ) -> Any:
-    """Execute the generation steps for ``dataset_type`` on ``document_text``.
+    """Execute the generation steps for ``dataset_type`` using ``kg``.
 
-    Only steps after the knowledge graph construction are executed. In practice
-    this means generation, curation and formatting steps. The function returns
-    the final in-memory representation of the dataset without writing files.
-    When ``async_mode`` is True, generation steps use asynchronous LLM requests
-    when supported by the client.
+    The raw text is derived from the provided knowledge graph. Only steps after
+    the knowledge graph construction are executed. The function returns the
+    final in-memory representation of the dataset without writing files. When
+    ``async_mode`` is True, generation steps use asynchronous LLM requests when
+    supported by the client.
+
+    ``multi_answer`` controls whether multiple answers are generated per fact
+    when using the knowledge graph generator.
 
     At the moment only the QA, COT and VQA pipelines are implemented here. They
     share a common post-knowledge-graph flow consisting of generation, optional
@@ -333,6 +341,9 @@ def run_generation_pipeline(
     if dataset_type == DatasetType.TEXT:
         raise ValueError("run_generation_pipeline does not support the TEXT dataset type")
 
+    if document_text is None:
+        document_text = kg.to_text()
+
     options = ProcessOptions(
         config_path=config_path,
         provider=provider,
@@ -343,6 +354,8 @@ def run_generation_pipeline(
         overrides=overrides,
         verbose=verbose,
         async_mode=async_mode,
+        kg=kg,
+        multi_answer=multi_answer,
     )
     data: Any = document_text
 
@@ -368,6 +381,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.GENERATE_COT: lambda d: process_file(
@@ -383,6 +397,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.GENERATE_VQA: lambda d: process_file(
@@ -398,6 +413,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.GENERATE_FROM_KG: lambda d: process_file(
@@ -413,7 +429,9 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
+            multi_answer=options.multi_answer,
         ),
         PipelineStep.GENERATE_TOOL_CALL: lambda d: process_file(
             None,
@@ -428,6 +446,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.GENERATE_CONVERSATION: lambda d: process_file(
@@ -443,6 +462,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.GENERATE_MULTI_TOOL: lambda d: process_file(
@@ -458,6 +478,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.GENERATE_CANDIDATES: lambda d: process_file(
@@ -477,6 +498,7 @@ def run_generation_pipeline(
             provider=options.provider,
             profile=options.profile,
             document_text=d,
+            kg=options.kg,
             config_overrides=options.overrides,
         ),
         PipelineStep.LABEL_PAIRS: lambda d: d,
@@ -491,6 +513,7 @@ def run_generation_pipeline(
             options.verbose,
             options.provider,
             async_mode=options.async_mode,
+            kg=options.kg,
         ),
         PipelineStep.SAVE: lambda d: _save(d),
     }

@@ -11,6 +11,7 @@ class QAPair:
     rating: Optional[float] = None
     chunk: Optional[str] = None
     source: Optional[str] = None
+    facts: Optional[list[str]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         data = {"question": self.question, "answer": self.answer}
@@ -20,4 +21,6 @@ class QAPair:
             data["chunk"] = self.chunk
         if self.source is not None:
             data["source"] = self.source
+        if self.facts:
+            data["facts"] = self.facts
         return data

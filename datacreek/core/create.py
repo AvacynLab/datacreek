@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.generators.vqa_generator import VQAGenerator
 from datacreek.models.content_type import ContentType
@@ -68,8 +69,10 @@ def process_file(
     async_mode: bool = False,
     provider: Optional[str] = None,
     profile: Optional[str] = None,
+    kg: KnowledgeGraph,
     document_text: Optional[str] = None,
     config_overrides: Optional[Dict[str, Any]] = None,
+    multi_answer: bool = False,
 ) -> Any:
     """Process a file to generate content
 
@@ -84,6 +87,9 @@ def process_file(
             ("qa", "summary", "cot", "cot-enhance", "vqa_add_reasoning").
         num_pairs: Target number of QA pairs to generate
         async_mode: Use asynchronous LLM requests when supported
+        kg: Knowledge graph built during ingestion
+        multi_answer: Generate multiple answers per fact when using
+            the knowledge graph generator
 
     Returns:
         Path to the output file
@@ -110,11 +116,11 @@ def process_file(
     ct = ContentType(content_type)
 
     def _generate_qa() -> Any:
-        generator = QAGenerator(client, config_path, config_overrides=config_overrides)
+        generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
         if num_pairs is None:
             config = client.config
@@ -151,11 +157,11 @@ def process_file(
         return gen_result.to_dict()
 
     def _generate_summary() -> Any:
-        generator = QAGenerator(client, config_path, config_overrides=config_overrides)
+        generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
         summary = generator.generate_summary(document_text, verbose=verbose)
 
@@ -172,8 +178,8 @@ def process_file(
         generator = COTGenerator(client, config_path, config_overrides=config_overrides)
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
         if num_pairs is None:
             config = client.config
@@ -211,8 +217,8 @@ def process_file(
         # Initialize the CoT generator
         generator = COTGenerator(client, config_path, config_overrides=config_overrides)
 
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
         # Get max_examples from args or config
         max_examples = None
@@ -344,15 +350,11 @@ def process_file(
         )
 
     def _generate_from_kg() -> Any:
-        from datacreek.core.knowledge_graph import KnowledgeGraph
         from datacreek.generators.kg_generator import KGGenerator
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
-
-        kg = KnowledgeGraph()
-        kg.add_document("doc", source=file_path or "inline", text=document_text)
+        if document_text is None:
+            document_text = kg.to_text()
 
         generator = KGGenerator(client, config_path, config_overrides=config_overrides)
 
@@ -360,6 +362,7 @@ def process_file(
             kg,
             num_pairs=num_pairs or get_generation_config(client.config).num_pairs,
             verbose=verbose,
+            multi_answer=multi_answer,
         )
 
         if save_to_file:
@@ -373,10 +376,10 @@ def process_file(
         from datacreek.generators.tool_generator import ToolCallGenerator
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
-        generator = ToolCallGenerator(client, config_path, config_overrides=config_overrides)
+        generator = ToolCallGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_tool.json")
@@ -389,10 +392,12 @@ def process_file(
         from datacreek.generators.conversation_generator import ConversationGenerator
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
-        generator = ConversationGenerator(client, config_path, config_overrides=config_overrides)
+        generator = ConversationGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_conversation.json")
@@ -405,10 +410,12 @@ def process_file(
         from datacreek.generators.multi_tool_generator import MultiToolGenerator
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
-        generator = MultiToolGenerator(client, config_path, config_overrides=config_overrides)
+        generator = MultiToolGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_multi_tool.json")
@@ -421,10 +428,10 @@ def process_file(
         from datacreek.generators.pref_generator import PrefPairGenerator
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
-        generator = PrefPairGenerator(client, config_path, config_overrides=config_overrides)
+        generator = PrefPairGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_pref_pair.json")
@@ -437,10 +444,10 @@ def process_file(
         from datacreek.generators.pref_generator import PrefListGenerator
 
         nonlocal document_text
-        if document_text is None and file_path:
-            document_text = load_document_text(file_path)
+        if document_text is None:
+            document_text = kg.to_text()
 
-        generator = PrefListGenerator(client, config_path, config_overrides=config_overrides)
+        generator = PrefListGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_pref_list.json")

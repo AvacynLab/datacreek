@@ -722,9 +722,9 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
 
     calls = {}
 
-    def fake_run(dtype, doc_text, **kwargs):
+    def fake_run(dtype, graph, **kwargs):
         calls["dtype"] = dtype
-        calls["text"] = doc_text
+        calls["graph"] = graph
         calls["kwargs"] = kwargs
         return "ok"
 
@@ -734,6 +734,7 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
 
     assert result == "ok"
     assert calls["dtype"] == DatasetType.QA
-    assert "hello" in calls["text"] and "world" in calls["text"]
+    assert calls["graph"] is ds.graph
     assert calls["kwargs"]["num_pairs"] == 5
     assert calls["kwargs"]["async_mode"] is True
+    assert calls["kwargs"]["multi_answer"] is False
