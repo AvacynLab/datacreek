@@ -24,6 +24,8 @@ __all__: list[str] = [
     "extract_facts",
     "KnowledgeGraph",
     "GenerationSettings",
+    "run_generation_pipeline",
+    "run_generation_pipeline_async",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -42,6 +44,8 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         get_pipeline,
         get_pipelines_for_training,
         get_trainings_for_dataset,
+        run_generation_pipeline,
+        run_generation_pipeline_async,
     )
     from .utils.fact_extraction import extract_facts
 
@@ -101,4 +105,12 @@ def __getattr__(name: str):
         from .utils.fact_extraction import extract_facts as _ef
 
         return _ef
+    if name in {"run_generation_pipeline", "run_generation_pipeline_async"}:
+        from .pipelines import run_generation_pipeline as _rgp
+        from .pipelines import run_generation_pipeline_async as _rgp_async
+
+        return {
+            "run_generation_pipeline": _rgp,
+            "run_generation_pipeline_async": _rgp_async,
+        }[name]
     raise AttributeError(name)

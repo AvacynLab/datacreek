@@ -8,12 +8,11 @@ import asyncio
 import json
 import logging
 import os
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
-from datacreek.generators.qa_generator import QAGenerator
-from datacreek.generators.vqa_generator import VQAGenerator
 from datacreek.models.content_type import ContentType
 from datacreek.models.llm_client import LLMClient
 from datacreek.utils.config import get_generation_config, get_output_paths, load_config
@@ -54,6 +53,17 @@ def init_llm_client(
 
 def _base_name(file_path: Optional[str]) -> str:
     return os.path.splitext(os.path.basename(file_path))[0] if file_path else "input"
+
+
+def _write_json(data: Any, output_path: str) -> str:
+    """Write ``data`` to ``output_path`` as formatted JSON."""
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    if is_dataclass(data):
+        data = asdict(data)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return output_path
 
 
 def process_file(
@@ -116,6 +126,8 @@ def process_file(
     ct = ContentType(content_type)
 
     def _generate_qa() -> Any:
+        from datacreek.generators.qa_generator import QAGenerator
+
         generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
 
         nonlocal document_text
@@ -148,8 +160,7 @@ def process_file(
             output_path = os.path.join(output_dir, f"{base_name}_qa_pairs.json")
             logger.info("Saving result to %s", output_path)
             try:
-                with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(gen_result.to_dict(), f, indent=2)
+                _write_json(gen_result.to_dict(), output_path)
                 logger.info("Successfully wrote result to %s", output_path)
             except Exception as e:
                 logger.error("Error writing result file: %s", e)
@@ -167,8 +178,7 @@ def process_file(
 
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_summary.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump({"summary": summary}, f, indent=2)
+            _write_json({"summary": summary}, output_path)
             return output_path
         return {"summary": summary}
 
@@ -196,8 +206,7 @@ def process_file(
 
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_cot_examples.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(cot_result.to_dict(), f, indent=2)
+            _write_json(cot_result.to_dict(), output_path)
             if verbose and cot_result.cot_examples:
                 first_example = cot_result.cot_examples[0]
                 logger.debug(
@@ -326,11 +335,12 @@ def process_file(
 
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_enhanced.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                if is_single_conversation and len(enhanced_conversations) == 1:
-                    json.dump(enhanced_conversations[0], f, indent=2)
-                else:
-                    json.dump(enhanced_conversations, f, indent=2)
+            data = (
+                enhanced_conversations[0]
+                if is_single_conversation and len(enhanced_conversations) == 1
+                else enhanced_conversations
+            )
+            _write_json(data, output_path)
             if verbose:
                 logger.debug("Enhanced %d conversation(s)", len(enhanced_conversations))
             return output_path
@@ -340,6 +350,8 @@ def process_file(
         return enhanced_conversations
 
     def _vqa_reasoning() -> Any:
+        from datacreek.generators.vqa_generator import VQAGenerator
+
         generator = VQAGenerator(client, config_path, config_overrides=config_overrides)
 
         return generator.process_dataset(
@@ -367,8 +379,7 @@ def process_file(
 
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_kg_pairs.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
+            _write_json(result, output_path)
             return output_path
         return result
 
@@ -383,8 +394,7 @@ def process_file(
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_tool.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
+            _write_json(result, output_path)
             return output_path
         return result
 
@@ -401,8 +411,7 @@ def process_file(
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_conversation.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
+            _write_json(result, output_path)
             return output_path
         return result
 
@@ -419,8 +428,7 @@ def process_file(
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_multi_tool.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
+            _write_json(result, output_path)
             return output_path
         return result
 
@@ -435,8 +443,7 @@ def process_file(
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_pref_pair.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
+            _write_json(result, output_path)
             return output_path
         return result
 
@@ -451,8 +458,7 @@ def process_file(
         result = generator.process_document(document_text, verbose=verbose)
         if save_to_file:
             output_path = os.path.join(output_dir, f"{base_name}_pref_list.json")
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(result, f, indent=2)
+            _write_json(result, output_path)
             return output_path
         return result
 
@@ -474,3 +480,74 @@ def process_file(
         raise ValueError(f"Unknown content type: {content_type}")
 
     return handlers[ct]()
+
+
+async def process_file_async(
+    file_path: Optional[str],
+    output_dir: Optional[str],
+    config_path: Optional[Path] = None,
+    api_base: Optional[str] = None,
+    model: Optional[str] = None,
+    content_type: ContentType | str = ContentType.QA,
+    num_pairs: Optional[int] = None,
+    verbose: bool = False,
+    *,
+    provider: Optional[str] = None,
+    profile: Optional[str] = None,
+    kg: KnowledgeGraph,
+    document_text: Optional[str] = None,
+    config_overrides: Optional[Dict[str, Any]] = None,
+    multi_answer: bool = False,
+) -> Any:
+    """Asynchronous version of :func:`process_file`."""
+
+    if ContentType(content_type) is not ContentType.QA:
+        return await asyncio.to_thread(
+            process_file,
+            file_path,
+            output_dir,
+            config_path,
+            api_base,
+            model,
+            content_type,
+            num_pairs,
+            verbose,
+            async_mode=False,
+            provider=provider,
+            profile=profile,
+            kg=kg,
+            document_text=document_text,
+            config_overrides=config_overrides,
+            multi_answer=multi_answer,
+        )
+
+    client = init_llm_client(
+        config_path,
+        provider=provider,
+        profile=profile,
+        api_base=api_base,
+        model_name=model,
+    )
+
+    if document_text is None:
+        document_text = kg.to_text()
+
+    from datacreek.generators.qa_generator import QAGenerator
+
+    generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+    if num_pairs is None:
+        num_pairs = get_generation_config(client.config).num_pairs
+
+    result = await generator.process_document_async(
+        document_text,
+        num_pairs=num_pairs,
+        verbose=verbose,
+    )
+
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f"{_base_name(file_path)}_qa_pairs.json")
+        _write_json(result.to_dict(), output_path)
+        return output_path
+
+    return result.to_dict()

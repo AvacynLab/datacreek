@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.neighbors import NearestNeighbors
+try:
+    import numpy as np
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.neighbors import NearestNeighbors
+except Exception:  # pragma: no cover - optional dependency
+    np = None
+    TfidfVectorizer = None
+    NearestNeighbors = None
 
 
 class EmbeddingIndex:
@@ -37,6 +42,8 @@ class EmbeddingIndex:
     def build(self) -> None:
         if not self.texts:
             return
+        if TfidfVectorizer is None or NearestNeighbors is None or np is None:
+            raise ImportError("scikit-learn and numpy are required for EmbeddingIndex")
         self._vectorizer = TfidfVectorizer().fit(self.texts)
         self._matrix = self._vectorizer.transform(self.texts)
         self._nn = NearestNeighbors(metric="cosine")

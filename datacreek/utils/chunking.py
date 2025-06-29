@@ -3,7 +3,11 @@
 from typing import List
 
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
+
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+except Exception:  # pragma: no cover - optional dependency
+    TfidfVectorizer = None
 
 
 def sliding_window_chunks(text: str, window_size: int, overlap: int) -> List[str]:
@@ -35,6 +39,9 @@ def semantic_chunk_split(text: str, max_tokens: int, similarity_drop: float = 0.
     sentences = [s.strip() for s in text.split(".") if s.strip()]
     if not sentences:
         return []
+
+    if TfidfVectorizer is None:
+        raise ImportError("scikit-learn is required for semantic_chunk_split")
 
     vectorizer = TfidfVectorizer().fit(sentences)
     embeddings = vectorizer.transform(sentences).toarray()

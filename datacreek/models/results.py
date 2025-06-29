@@ -69,3 +69,36 @@ class COTGenerationResult:
             "cot_examples": [ex.to_dict() for ex in self.cot_examples],
             "conversations": self.conversations,
         }
+
+
+@dataclass
+class ConversationResult:
+    """Collection of generated conversations."""
+
+    summary: str
+    conversations: List[Dict[str, Any]]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"summary": self.summary, "conversations": self.conversations}
+
+
+@dataclass
+class PrefPairResult:
+    """Pairwise preference examples."""
+
+    summary: str
+    pairs: List[Dict[str, Any]]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"summary": self.summary, "pairs": self.pairs}
+
+
+@dataclass
+class PrefListResult:
+    """Listwise preference examples."""
+
+    summary: str
+    responses: List[Dict[str, Any]]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"summary": self.summary, "responses": self.responses}

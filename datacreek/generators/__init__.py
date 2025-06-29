@@ -4,15 +4,6 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Generator logic for both QA
-from .conversation_generator import ConversationGenerator
-from .cot_generator import COTGenerator
-from .kg_generator import KGGenerator
-from .multi_tool_generator import MultiToolGenerator
-from .pref_generator import PrefListGenerator, PrefPairGenerator
-from .qa_generator import QAGenerator
-from .tool_generator import ToolCallGenerator
-from .vqa_generator import VQAGenerator
-
 __all__ = [
     "QAGenerator",
     "COTGenerator",
@@ -24,3 +15,43 @@ __all__ = [
     "PrefPairGenerator",
     "PrefListGenerator",
 ]
+
+
+def __getattr__(name: str):
+    if name == "ConversationGenerator":
+        from .conversation_generator import ConversationGenerator as cls
+
+        return cls
+    if name == "COTGenerator":
+        from .cot_generator import COTGenerator as cls
+
+        return cls
+    if name == "KGGenerator":
+        from .kg_generator import KGGenerator as cls
+
+        return cls
+    if name == "MultiToolGenerator":
+        from .multi_tool_generator import MultiToolGenerator as cls
+
+        return cls
+    if name == "PrefListGenerator":
+        from .pref_generator import PrefListGenerator as cls
+
+        return cls
+    if name == "PrefPairGenerator":
+        from .pref_generator import PrefPairGenerator as cls
+
+        return cls
+    if name == "QAGenerator":
+        from .qa_generator import QAGenerator as cls
+
+        return cls
+    if name == "ToolCallGenerator":
+        from .tool_generator import ToolCallGenerator as cls
+
+        return cls
+    if name == "VQAGenerator":
+        from .vqa_generator import VQAGenerator as cls
+
+        return cls
+    raise AttributeError(name)

@@ -17,12 +17,22 @@ from datacreek.utils.format_converter import (
     to_hf_dataset,
     to_jsonl,
 )
-from datacreek.utils.llm_processing import convert_to_conversation_format
+
+FORMAT_DISPATCH = {
+    "jsonl": to_jsonl,
+    "alpaca": to_alpaca,
+    "ft": to_fine_tuning,
+    "chatml": to_chatml,
+}
 
 
 def _format_pairs(qa_pairs: List[Dict[str, str]], fmt: str) -> Any:
     """Return formatted data for in-memory conversion."""
 
+    if fmt not in FORMAT_DISPATCH:
+        raise ValueError(f"Unknown format type: {fmt}")
+
+    # Use dispatch table to build JSON string if no output path is provided
     if fmt == "jsonl":
         return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
     if fmt == "alpaca":
@@ -30,20 +40,16 @@ def _format_pairs(qa_pairs: List[Dict[str, str]], fmt: str) -> Any:
             [{"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs],
             indent=2,
         )
-    if fmt in {"ft", "chatml"}:
-        messages_key = [
-            [
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": p["question"]},
-                {"role": "assistant", "content": p["answer"]},
-            ]
-            for p in qa_pairs
-        ]
-        if fmt == "ft":
-            return json.dumps([{"messages": m} for m in messages_key], indent=2)
-        return json.dumps([{"messages": m} for m in messages_key], indent=2)
 
-    raise ValueError(f"Unknown format type: {fmt}")
+    messages_key = [
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": p["question"]},
+            {"role": "assistant", "content": p["answer"]},
+        ]
+        for p in qa_pairs
+    ]
+    return json.dumps([{"messages": m} for m in messages_key], indent=2)
 
 
 def convert_format(
@@ -65,8 +71,7 @@ def convert_format(
     Returns:
         Path to the output file or directory
     """
-    supported = {"jsonl", "alpaca", "ft", "chatml"}
-    if format_type not in supported:
+    if format_type not in FORMAT_DISPATCH:
         raise ValueError(f"Unknown format type: {format_type}")
 
     if isinstance(input_data, str):
@@ -105,27 +110,16 @@ def convert_format(
 
     # When using HF dataset storage format
     if storage_format == "hf":
-        # Prepare data in list-of-dict structure
-        if format_type == "jsonl":
-            formatted_pairs = qa_pairs
-        else:
-            formatted_pairs = json.loads(_format_pairs(qa_pairs, format_type))
-
-        # Save as HF dataset (Arrow format)
+        formatted_pairs = (
+            qa_pairs if format_type == "jsonl" else json.loads(_format_pairs(qa_pairs, format_type))
+        )
         if output_path:
             return to_hf_dataset(formatted_pairs, output_path)
-        else:
-            raise ValueError("HF dataset export requires output path")
+        raise ValueError("HF dataset export requires output path")
 
     # Standard JSON file storage format
-    else:
-        if format_type == "jsonl" and output_path:
-            return to_jsonl(qa_pairs, output_path)
-        if format_type == "alpaca" and output_path:
-            return to_alpaca(qa_pairs, output_path)
-        if format_type == "ft" and output_path:
-            return to_fine_tuning(qa_pairs, output_path)
-        if format_type == "chatml" and output_path:
-            return to_chatml(qa_pairs, output_path)
-
-        return _format_pairs(qa_pairs, format_type)
+    if output_path:
+        handler = FORMAT_DISPATCH.get(format_type)
+        if handler:
+            return handler(qa_pairs, output_path)
+    return _format_pairs(qa_pairs, format_type)
