@@ -792,3 +792,14 @@ def test_remove_document_rebuilds_index():
     assert kg.search_embeddings("hello", k=1, fetch_neighbors=False) == ["c1"]
     kg.remove_document("d")
     assert kg.search_embeddings("hello", k=1, fetch_neighbors=False) == []
+
+
+def test_deduplicate_chunks_similarity():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "Hello world!")
+    kg.add_chunk("d", "c2", "Hello world")
+
+    removed = kg.deduplicate_chunks(similarity=0.9)
+    assert removed == 1
+    assert "c2" not in kg.graph.nodes or "c1" not in kg.graph.nodes

@@ -77,3 +77,30 @@ def test_curate_parse_error(monkeypatch):
 
     with pytest.raises(curate.CurationError):
         curate.curate_qa_pairs(data, batch_size=1, inference_batch=1)
+
+
+def test_filter_rated_pairs():
+    pairs = [
+        QAPair(question="q1", answer="a1", rating=9),
+        QAPair(question="q2", answer="a2", rating=5),
+    ]
+    filtered = curate.filter_rated_pairs(pairs, threshold=7)
+    assert len(filtered) == 1
+    assert filtered[0].question == "q1"
+
+
+def test_apply_curation_threshold():
+    result = {
+        "summary": "",
+        "qa_pairs": [],
+        "conversations": [],
+        "metrics": {"total": 2, "filtered": 1, "retention_rate": 0.5, "avg_score": 7.5},
+        "rated_pairs": [
+            {"question": "q1", "answer": "a1", "rating": 8},
+            {"question": "q2", "answer": "a2", "rating": 6},
+        ],
+    }
+    new_res = curate.apply_curation_threshold(result, 7)
+    assert len(new_res.qa_pairs) == 1
+    assert new_res.qa_pairs[0].question == "q1"
+    assert new_res.metrics.filtered == 1

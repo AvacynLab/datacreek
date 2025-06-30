@@ -871,3 +871,39 @@ def test_run_post_kg_pipeline_logs_curation(monkeypatch):
         "retention_rate": 0.5,
         "avg_score": 8.0,
     }
+
+
+def test_run_post_kg_pipeline_extra_opts(monkeypatch):
+    ds = DatasetBuilder(DatasetType.QA)
+    ds.add_document("d", source="s")
+    called = {}
+
+    def fake_run(
+        dtype,
+        graph,
+        *,
+        pipeline_config_path=None,
+        dedup_similarity=1.0,
+        keep_ratings=False,
+        dataset_builder=None,
+        **kwargs,
+    ):
+        called["config"] = pipeline_config_path
+        called["sim"] = dedup_similarity
+        called["ratings"] = keep_ratings
+        called["builder"] = dataset_builder
+        return "ok"
+
+    monkeypatch.setattr("datacreek.pipelines.run_generation_pipeline", fake_run)
+
+    res = ds.run_post_kg_pipeline(
+        pipeline_config_path=Path("cfg.yml"),
+        dedup_similarity=0.95,
+        keep_ratings=True,
+    )
+
+    assert res == "ok"
+    assert called["config"] == Path("cfg.yml")
+    assert called["sim"] == 0.95
+    assert called["ratings"] is True
+    assert called["builder"] is ds

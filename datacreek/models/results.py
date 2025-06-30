@@ -45,14 +45,18 @@ class CurationResult:
     qa_pairs: List[QAPair]
     conversations: List[List[Dict[str, str]]]
     metrics: CurationMetrics
+    rated_pairs: List[QAPair] | None = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        data = {
             "summary": self.summary,
             "qa_pairs": [p.to_dict() for p in self.qa_pairs],
             "conversations": self.conversations,
             "metrics": self.metrics.to_dict(),
         }
+        if self.rated_pairs is not None:
+            data["rated_pairs"] = [p.to_dict() for p in self.rated_pairs]
+        return data
 
 
 @dataclass

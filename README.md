@@ -665,6 +665,8 @@ kg.add_document("doc", source="text", text="Hello world")
 qa_data = run_generation_pipeline(
     DatasetType.QA,
     kg,
+    dedup_similarity=0.95,
+    keep_ratings=True,
     resolve_threshold=0.85,
     resolve_aliases={"IBM": ["International Business Machines"]},
 )
@@ -672,6 +674,17 @@ qa_data = run_generation_pipeline(
 # Asynchronous usage
 # qa_data = await run_generation_pipeline_async(DatasetType.QA, kg)
 Both functions raise `PipelineExecutionError` when a step fails.
+You can override the default pipeline definitions with the `pipeline_config_path`
+parameter pointing to a YAML file like `configs/pipelines.yaml`.
+
+If you enabled `keep_ratings` you can later adjust the quality threshold
+without rerunning the pipeline:
+
+```python
+from datacreek import apply_curation_threshold
+
+# keep only pairs rated 8 or higher
+curated = apply_curation_threshold(qa_data, threshold=8)
 ```
 
 ## Post-Ingestion Operations
