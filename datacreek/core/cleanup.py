@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+from datacreek.models.results import KGCleanupStats
 
 from .knowledge_graph import KnowledgeGraph
-from datacreek.models.results import KGCleanupStats
 
 if TYPE_CHECKING:  # pragma: no cover - avoid circular import at runtime
     from .dataset import DatasetBuilder

@@ -785,9 +785,7 @@ def test_kg_cleanup_failure(monkeypatch):
     def bad_cleanup(self, *a, **k):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(
-        "datacreek.core.dataset.DatasetBuilder.cleanup_graph", bad_cleanup
-    )
+    monkeypatch.setattr("datacreek.core.dataset.DatasetBuilder.cleanup_graph", bad_cleanup)
     monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {})
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])

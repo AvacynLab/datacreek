@@ -292,11 +292,11 @@ def curate_qa_pairs(
             kg,
             batch_size,
             inference_batch,
-        keep_ratings,
-        temperature,
-        resume,
-        as_dataclass,
-        use_async_handlers=async_mode,
+            keep_ratings,
+            temperature,
+            resume,
+            as_dataclass,
+            use_async_handlers=async_mode,
         )
     )
 

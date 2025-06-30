@@ -13,12 +13,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from datacreek.core.dataset import DatasetBuilder
 
+from datacreek.core.cleanup import cleanup_knowledge_graph
 from datacreek.core.create import process_file, process_file_async
 from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
-from datacreek.core.cleanup import cleanup_knowledge_graph
-from datacreek.utils.progress import create_progress
 from datacreek.models.content_type import ContentType
 from datacreek.models.results import (
     ConversationResult,
@@ -28,6 +27,7 @@ from datacreek.models.results import (
     QAGenerationResult,
 )
 from datacreek.utils.config import get_format_settings, load_config_with_overrides
+from datacreek.utils.progress import create_progress
 
 logger = logging.getLogger(__name__)
 
@@ -138,9 +138,7 @@ STEP_FIELDS = {
 }
 
 
-def _validate_step_result(
-    dataset_type: DatasetType, step: PipelineStep, result: Any
-) -> Any:
+def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result: Any) -> Any:
     """Validate ``result`` for ``step`` and return it unchanged.
 
     Dataclass instances are accepted and preserved so later steps can rely on
@@ -785,7 +783,9 @@ async def _run_generation_pipeline_impl(
     if start_step and start_step in pipeline.steps:
         start_idx = pipeline.steps.index(start_step)
 
-    exec_steps = [s for s in pipeline.steps[start_idx:] if s not in {PipelineStep.INGEST, PipelineStep.TO_KG}]
+    exec_steps = [
+        s for s in pipeline.steps[start_idx:] if s not in {PipelineStep.INGEST, PipelineStep.TO_KG}
+    ]
     progress = None
     task = None
     if verbose:

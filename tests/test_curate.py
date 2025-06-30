@@ -106,7 +106,9 @@ def test_curate_resume(monkeypatch, tmp_path):
         ],
     }
 
-    res = curate.curate_qa_pairs(data, output_path=str(out), batch_size=1, inference_batch=1, resume=True)
+    res = curate.curate_qa_pairs(
+        data, output_path=str(out), batch_size=1, inference_batch=1, resume=True
+    )
     assert len(res["qa_pairs"]) == 2
 
 
