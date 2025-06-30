@@ -549,8 +549,10 @@ class KnowledgeGraph:
                     continue
                 self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
 
-    def deduplicate_chunks(self) -> int:
-        """Remove duplicate chunk nodes based on their text."""
+    def deduplicate_chunks(self, similarity: float = 1.0) -> int:
+        """Remove duplicate chunk nodes based on text similarity."""
+
+        from difflib import SequenceMatcher
 
         seen: Dict[str, str] = {}
         removed = 0
@@ -558,11 +560,23 @@ class KnowledgeGraph:
             if data.get("type") != "chunk":
                 continue
             text = data.get("text", "")
-            if text in seen:
-                self.remove_chunk(node)
-                removed += 1
-            else:
-                seen[text] = node
+            norm = re.sub(r"\s+", " ", text.strip().lower())
+            found = False
+            for stext, sid in seen.items():
+                if similarity >= 1.0:
+                    if norm == stext:
+                        self.remove_chunk(node)
+                        removed += 1
+                        found = True
+                        break
+                else:
+                    if SequenceMatcher(None, norm, stext).ratio() >= similarity:
+                        self.remove_chunk(node)
+                        removed += 1
+                        found = True
+                        break
+            if not found:
+                seen[norm] = node
         if removed:
             self.index.build()
         return removed
@@ -649,12 +663,14 @@ class KnowledgeGraph:
             Number of chunks modified.
         """
 
+        from bs4 import BeautifulSoup
+
         changed = 0
         for cid, data in list(self.graph.nodes(data=True)):
             if data.get("type") != "chunk":
                 continue
             text = data.get("text", "")
-            cleaned = re.sub(r"<[^>]+>", " ", text)
+            cleaned = BeautifulSoup(text, "html.parser").get_text(" ")
             cleaned = re.sub(r"\s+", " ", cleaned).strip()
             cleaned = "".join(ch for ch in cleaned if ch.isprintable())
             if cleaned != text:

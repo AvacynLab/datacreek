@@ -26,6 +26,10 @@ __all__: list[str] = [
     "GenerationSettings",
     "run_generation_pipeline",
     "run_generation_pipeline_async",
+    "curate_qa_pairs",
+    "curate_qa_pairs_async",
+    "filter_rated_pairs",
+    "apply_curation_threshold",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -112,5 +116,22 @@ def __getattr__(name: str):
         return {
             "run_generation_pipeline": _rgp,
             "run_generation_pipeline_async": _rgp_async,
+        }[name]
+    if name in {
+        "curate_qa_pairs",
+        "curate_qa_pairs_async",
+        "filter_rated_pairs",
+        "apply_curation_threshold",
+    }:
+        from .core.curate import apply_curation_threshold as _act
+        from .core.curate import curate_qa_pairs as _cqp
+        from .core.curate import curate_qa_pairs_async as _cqpa
+        from .core.curate import filter_rated_pairs as _frp
+
+        return {
+            "curate_qa_pairs": _cqp,
+            "curate_qa_pairs_async": _cqpa,
+            "filter_rated_pairs": _frp,
+            "apply_curation_threshold": _act,
         }[name]
     raise AttributeError(name)

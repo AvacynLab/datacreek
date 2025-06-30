@@ -107,6 +107,8 @@ class ProcessOptions:
     batch_size: int | None = None
     inference_batch: int | None = None
     checkpoint_dir: Path | None = None
+    keep_ratings: bool = False
+    dedup_similarity: float = 1.0
 
 
 # Expected dataclass types for generation results
@@ -182,6 +184,11 @@ def _validate_step_result(
                             or not str(item_dict["answer"]).strip()
                         ):
                             raise ValueError(f"{step_name}: invalid QA pair item")
+                        if (
+                            len(str(item_dict["question"])) > 1000
+                            or len(str(item_dict["answer"])) > 5000
+                        ):
+                            raise ValueError(f"{step_name}: QA pair too long")
                 if f == "cot_examples":
                     for item in result_dict[f]:
                         if is_dataclass(item):
@@ -260,6 +267,30 @@ class PipelineExecutionError(RuntimeError):
             )
         )
         super().__init__(f"{step.value} failed: {original_exception}")
+
+
+def load_pipelines_from_file(path: Path) -> Dict[DatasetType, GenerationPipeline]:
+    """Load pipeline definitions from a YAML configuration file."""
+
+    import yaml
+
+    data = yaml.safe_load(path.read_text())
+    pipelines: Dict[DatasetType, GenerationPipeline] = {}
+    for name, info in data.items():
+        try:
+            dtype = DatasetType(name)
+        except ValueError:
+            logger.warning("Unknown dataset type in config: %s", name)
+            continue
+        steps = [PipelineStep(s) for s in info.get("steps", [])]
+        trainings = [TrainingGoal(t) for t in info.get("trainings", [])]
+        pipelines[dtype] = GenerationPipeline(
+            dataset_type=dtype,
+            steps=steps,
+            compatible_trainings=trainings,
+            description=info.get("description", ""),
+        )
+    return pipelines
 
 
 PIPELINES: Dict[DatasetType, GenerationPipeline] = {
@@ -481,6 +512,7 @@ async def _run_generation_pipeline_impl(
     kg: KnowledgeGraph,
     *,
     dataset_builder: "DatasetBuilder | None" = None,
+    pipeline_config_path: Path | None = None,
     config_path: Path | None = None,
     provider: str | None = None,
     profile: str | None = None,
@@ -501,11 +533,17 @@ async def _run_generation_pipeline_impl(
     inference_batch: int | None = None,
     start_step: PipelineStep | None = None,
     checkpoint_dir: Path | None = None,
+    dedup_similarity: float = 1.0,
+    keep_ratings: bool = False,
 ) -> Any:
     """Shared implementation for sync and async generation pipelines."""
 
     try:
-        pipeline = get_pipeline(dataset_type)
+        if pipeline_config_path:
+            pipelines = load_pipelines_from_file(pipeline_config_path)
+            pipeline = pipelines[dataset_type]
+        else:
+            pipeline = get_pipeline(dataset_type)
     except KeyError as exc:
         raise ValueError(str(exc)) from exc
 
@@ -535,10 +573,21 @@ async def _run_generation_pipeline_impl(
         batch_size=batch_size,
         inference_batch=inference_batch,
         checkpoint_dir=checkpoint_dir,
+        keep_ratings=keep_ratings,
+        dedup_similarity=dedup_similarity,
     )
     if checkpoint_dir:
         checkpoint_dir = Path(checkpoint_dir)
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        meta = {
+            "dataset_type": dataset_type.value,
+            "model": model,
+            "config_path": str(config_path) if config_path else None,
+            "pipeline_config": str(pipeline_config_path) if pipeline_config_path else None,
+            "dedup_similarity": dedup_similarity,
+            "keep_ratings": keep_ratings,
+        }
+        (checkpoint_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
 
     data: Any = document_text
     if start_step and checkpoint_dir:
@@ -607,6 +656,7 @@ async def _run_generation_pipeline_impl(
                 kg=options.kg,
                 batch_size=options.batch_size,
                 inference_batch=options.inference_batch,
+                keep_ratings=options.keep_ratings,
             )
         else:
             result = await asyncio.to_thread(
@@ -623,6 +673,7 @@ async def _run_generation_pipeline_impl(
                 kg=options.kg,
                 batch_size=options.batch_size,
                 inference_batch=options.inference_batch,
+                keep_ratings=options.keep_ratings,
             )
 
         if dataset_builder is not None:
@@ -653,9 +704,10 @@ async def _run_generation_pipeline_impl(
             removed, cleaned = dataset_builder.cleanup_graph(
                 resolve_threshold=resolve_threshold,
                 resolve_aliases=resolve_aliases,
+                dedup_similarity=dedup_similarity,
             )
         else:
-            removed = kg.deduplicate_chunks()
+            removed = kg.deduplicate_chunks(dedup_similarity)
             cleaned = kg.clean_chunk_texts()
             kg.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
         if verbose:
@@ -734,8 +786,11 @@ def run_generation_pipeline(
     kg: KnowledgeGraph,
     *,
     dataset_builder: "DatasetBuilder | None" = None,
+    pipeline_config_path: Path | None = None,
     batch_size: int | None = None,
     inference_batch: int | None = None,
+    dedup_similarity: float = 1.0,
+    keep_ratings: bool = False,
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
@@ -748,6 +803,14 @@ def run_generation_pipeline(
     ----------
     dataset_builder:
         If provided, knowledge graph cleanup will log events on this builder.
+    pipeline_config_path:
+        Optional path to a YAML file describing pipeline definitions.
+    pipeline_config_path:
+        Optional path to a YAML file describing pipeline definitions.
+    dedup_similarity:
+        Similarity used when removing duplicate chunks during KG cleanup.
+    keep_ratings:
+        Return ratings for all generated pairs after curation.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
@@ -768,8 +831,11 @@ def run_generation_pipeline(
             kg,
             use_async_handlers=False,
             dataset_builder=dataset_builder,
+            pipeline_config_path=pipeline_config_path,
             batch_size=batch_size,
             inference_batch=inference_batch,
+            dedup_similarity=dedup_similarity,
+            keep_ratings=keep_ratings,
             resolve_threshold=resolve_threshold,
             resolve_aliases=resolve_aliases,
             start_step=start_step,
@@ -784,8 +850,11 @@ async def run_generation_pipeline_async(
     kg: KnowledgeGraph,
     *,
     dataset_builder: "DatasetBuilder | None" = None,
+    pipeline_config_path: Path | None = None,
     batch_size: int | None = None,
     inference_batch: int | None = None,
+    dedup_similarity: float = 1.0,
+    keep_ratings: bool = False,
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
@@ -798,6 +867,10 @@ async def run_generation_pipeline_async(
     ----------
     dataset_builder:
         If provided, knowledge graph cleanup will log events on this builder.
+    dedup_similarity:
+        Similarity used when removing duplicate chunks during KG cleanup.
+    keep_ratings:
+        Return ratings for all generated pairs after curation.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
@@ -818,8 +891,11 @@ async def run_generation_pipeline_async(
         kg,
         use_async_handlers=True,
         dataset_builder=dataset_builder,
+        pipeline_config_path=pipeline_config_path,
         batch_size=batch_size,
         inference_batch=inference_batch,
+        dedup_similarity=dedup_similarity,
+        keep_ratings=keep_ratings,
         resolve_threshold=resolve_threshold,
         resolve_aliases=resolve_aliases,
         start_step=start_step,

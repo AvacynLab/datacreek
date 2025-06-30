@@ -314,10 +314,17 @@ class DatasetBuilder:
 
         return self.graph.get_chunk_context(chunk_id, before=before, after=after)
 
-    def deduplicate_chunks(self) -> int:
-        """Remove duplicate chunk nodes from the graph."""
+    def deduplicate_chunks(self, similarity: float = 1.0) -> int:
+        """Remove duplicate chunk nodes from the graph.
 
-        removed = self.graph.deduplicate_chunks()
+        Parameters
+        ----------
+        similarity:
+            Similarity threshold between 0 and 1 for detecting duplicates. A
+            value of 1.0 removes only exact matches.
+        """
+
+        removed = self.graph.deduplicate_chunks(similarity)
         if removed:
             msg = f"Removed {removed} duplicate chunks"
             self._record_event("deduplicate_chunks", msg)
@@ -337,6 +344,7 @@ class DatasetBuilder:
         *,
         resolve_threshold: float = 0.8,
         resolve_aliases: dict[str, list[str]] | None = None,
+        dedup_similarity: float = 1.0,
     ) -> tuple[int, int]:
         """Run standard deduplication and cleaning steps on the graph.
 
@@ -350,6 +358,9 @@ class DatasetBuilder:
         resolve_aliases:
             Optional mapping of canonical labels to lists of aliases used during
             entity resolution.
+        dedup_similarity:
+            Threshold used when removing duplicate chunks. Values below 1.0
+            allow near-duplicate detection.
 
         Returns
         -------
@@ -357,7 +368,7 @@ class DatasetBuilder:
             Number of chunks removed and cleaned respectively.
         """
 
-        removed = self.deduplicate_chunks()
+        removed = self.deduplicate_chunks(similarity=dedup_similarity)
         cleaned = self.clean_chunks()
         self.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
         return removed, cleaned
@@ -804,14 +815,19 @@ class DatasetBuilder:
         inference_batch: int | None = None,
         start_step: PipelineStep | None = None,
         checkpoint_dir: Path | None = None,
+        pipeline_config_path: Path | None = None,
+        dedup_similarity: float = 1.0,
+        keep_ratings: bool = False,
     ) -> Any:
         """Run generation steps after the knowledge graph stage.
 
         When ``async_mode`` is ``True`` the underlying LLM calls may be
-        executed concurrently.
-        ``multi_answer`` forwards to the knowledge graph generator to produce
-        several answers per fact.
-        The dataset builder is passed to the pipeline so cleanup events are
+        executed concurrently. ``multi_answer`` forwards to the knowledge graph
+        generator to produce several answers per fact. ``pipeline_config_path``
+        can override the default pipeline definition. ``dedup_similarity``
+        adjusts near-duplicate detection during cleanup and ``keep_ratings``
+        controls whether ratings are preserved in the curation result. The
+        dataset builder is passed to the pipeline so cleanup events are
         recorded.
         """
 
@@ -839,6 +855,9 @@ class DatasetBuilder:
                     inference_batch=inference_batch,
                     start_step=start_step,
                     checkpoint_dir=checkpoint_dir,
+                    pipeline_config_path=pipeline_config_path,
+                    dedup_similarity=dedup_similarity,
+                    keep_ratings=keep_ratings,
                 )
             )
 
@@ -862,4 +881,7 @@ class DatasetBuilder:
             inference_batch=inference_batch,
             start_step=start_step,
             checkpoint_dir=checkpoint_dir,
+            pipeline_config_path=pipeline_config_path,
+            dedup_similarity=dedup_similarity,
+            keep_ratings=keep_ratings,
         )
