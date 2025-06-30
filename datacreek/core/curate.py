@@ -165,7 +165,6 @@ def curate_qa_pairs(
     total_evaluated = 0
     total_passed = 0
     parse_errors: List[Exception] = []
-    parse_errors: List[Exception] = []
 
     # Process batches with simple progress indicator rather than a detailed bar
     # This avoids conflicts with other output messages
@@ -363,6 +362,7 @@ async def curate_qa_pairs_async(
     total_score = 0
     total_evaluated = 0
     total_passed = 0
+    parse_errors: List[Exception] = []
 
     from datacreek.utils.batch import async_process_batches
 
