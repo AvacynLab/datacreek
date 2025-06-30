@@ -703,9 +703,16 @@ def test_kg_cleanup_with_params(monkeypatch):
     def fake_generate(*a, **k):
         return {"qa_pairs": []}
 
-    def fake_cleanup(self, *, resolve_threshold=0.8, resolve_aliases=None):
+    def fake_cleanup(
+        self,
+        *,
+        resolve_threshold=0.8,
+        resolve_aliases=None,
+        dedup_similarity=1.0,
+    ):
         called["threshold"] = resolve_threshold
         called["aliases"] = resolve_aliases
+        called["sim"] = dedup_similarity
         return 0, 0
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
@@ -727,3 +734,4 @@ def test_kg_cleanup_with_params(monkeypatch):
 
     assert called["threshold"] == 0.9
     assert called["aliases"] == {"IBM": ["International Business Machines"]}
+    assert called["sim"] == 1.0
