@@ -13,19 +13,24 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from datacreek.core.dataset import DatasetBuilder
 
+from datacreek.core.cleanup import cleanup_knowledge_graph
 from datacreek.core.create import process_file, process_file_async
 from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
 from datacreek.models.content_type import ContentType
+from datacreek.models.qa import QAPair
 from datacreek.models.results import (
     ConversationResult,
     COTGenerationResult,
+    CurationMetrics,
+    CurationResult,
     PrefListResult,
     PrefPairResult,
     QAGenerationResult,
 )
 from datacreek.utils.config import get_format_settings, load_config_with_overrides
+from datacreek.utils.progress import create_progress
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +114,9 @@ class ProcessOptions:
     checkpoint_dir: Path | None = None
     keep_ratings: bool = False
     dedup_similarity: float = 1.0
+    curation_temperature: float | None = None
+    curation_threshold: float | None = None
+    resume_curation: bool = False
 
 
 # Expected dataclass types for generation results
@@ -133,17 +141,20 @@ STEP_FIELDS = {
 }
 
 
-def _validate_step_result(
-    dataset_type: DatasetType, step: PipelineStep, result: Any
-) -> Dict[str, Any]:
-    """Return ``result`` as a dict and verify it matches ``step`` expectations."""
+def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result: Any) -> Any:
+    """Validate ``result`` for ``step`` and return it unchanged.
+
+    Dataclass instances are accepted and preserved so later steps can rely on
+    structured types. If ``result`` is a plain mapping, it is checked directly.
+    """
 
     step_name = step.value
     expected_cls = STEP_DATACLASSES.get(step)
     if step is PipelineStep.GENERATE_CANDIDATES:
         expected_cls = PrefPairResult if dataset_type == DatasetType.PREF_PAIR else PrefListResult
 
-    if is_dataclass(result):
+    is_dc = is_dataclass(result)
+    if is_dc:
         if expected_cls and not isinstance(result, expected_cls):
             raise ValueError(
                 f"{step_name}: expected {expected_cls.__name__}, got {type(result).__name__}"
@@ -241,7 +252,7 @@ def _validate_step_result(
                         if not str(ans.get("text", "")).strip():
                             raise ValueError(f"{step_name}: answer text is empty")
 
-    return result_dict
+    return result
 
 
 def _serialize(data: Any) -> Any:
@@ -255,17 +266,42 @@ def _serialize(data: Any) -> Any:
     return data
 
 
+@dataclass
+class StepError:
+    """Detailed information about a pipeline step failure."""
+
+    step: PipelineStep
+    exc_type: str
+    message: str
+    traceback: str
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "step": self.step.value,
+            "exc_type": self.exc_type,
+            "message": self.message,
+            "traceback": self.traceback,
+        }
+
+
 class PipelineExecutionError(RuntimeError):
     """Raised when a generation pipeline step fails with additional context."""
 
     def __init__(self, step: PipelineStep, original_exception: Exception):
-        self.step = step
-        self.original_exception = original_exception
-        self.traceback = "".join(
+        tb = "".join(
             traceback.format_exception(
                 type(original_exception), original_exception, original_exception.__traceback__
             )
         )
+        self.info = StepError(
+            step=step,
+            exc_type=type(original_exception).__name__,
+            message=str(original_exception),
+            traceback=tb,
+        )
+        self.step = step
+        self.original_exception = original_exception
+        self.traceback = tb
         super().__init__(f"{step.value} failed: {original_exception}")
 
 
@@ -535,6 +571,8 @@ async def _run_generation_pipeline_impl(
     checkpoint_dir: Path | None = None,
     dedup_similarity: float = 1.0,
     keep_ratings: bool = False,
+    curation_temperature: float | None = None,
+    resume_curation: bool = False,
 ) -> Any:
     """Shared implementation for sync and async generation pipelines."""
 
@@ -575,6 +613,9 @@ async def _run_generation_pipeline_impl(
         checkpoint_dir=checkpoint_dir,
         keep_ratings=keep_ratings,
         dedup_similarity=dedup_similarity,
+        curation_temperature=curation_temperature,
+        curation_threshold=threshold,
+        resume_curation=resume_curation,
     )
     if checkpoint_dir:
         checkpoint_dir = Path(checkpoint_dir)
@@ -603,7 +644,7 @@ async def _run_generation_pipeline_impl(
 
     async def _save(d: Any) -> Any:
         format_type = fmt or fmt_cfg.default
-        return await asyncio.to_thread(convert_format, d, None, format_type, cfg)
+        return await asyncio.to_thread(convert_format, _serialize(d), None, format_type, cfg)
 
     async def _generate(ct: ContentType, text: str) -> Any:
         if use_async_handlers:
@@ -657,6 +698,9 @@ async def _run_generation_pipeline_impl(
                 batch_size=options.batch_size,
                 inference_batch=options.inference_batch,
                 keep_ratings=options.keep_ratings,
+                temperature=options.curation_temperature,
+                resume=options.resume_curation,
+                as_dataclass=True,
             )
         else:
             result = await asyncio.to_thread(
@@ -674,44 +718,67 @@ async def _run_generation_pipeline_impl(
                 batch_size=options.batch_size,
                 inference_batch=options.inference_batch,
                 keep_ratings=options.keep_ratings,
+                temperature=options.curation_temperature,
+                resume=options.resume_curation,
+                as_dataclass=True,
             )
 
-        if dataset_builder is not None:
-            metrics = None
-            if isinstance(result, dict):
-                metrics = result.get("metrics")
-            elif hasattr(result, "metrics"):
-                metrics = result.metrics
-            if metrics:
-                if is_dataclass(metrics):
-                    metrics_dict = asdict(metrics)
-                else:
-                    metrics_dict = metrics
-                dataset_builder._record_event(
-                    "curate",
-                    "Curated %d/%d QA pairs"
-                    % (
-                        metrics_dict.get("filtered", 0),
-                        metrics_dict.get("total", 0),
-                    ),
-                    **metrics_dict,
+        metrics = None
+        if isinstance(result, dict):
+            metrics = result.get("metrics")
+        elif hasattr(result, "metrics"):
+            metrics = result.metrics
+        if dataset_builder is not None and metrics is not None:
+            metrics_dict = asdict(metrics) if is_dataclass(metrics) else metrics
+            dataset_builder._record_event(
+                "curate",
+                "Curated %d/%d QA pairs"
+                % (
+                    metrics_dict.get("filtered", 0),
+                    metrics_dict.get("total", 0),
+                ),
+                **metrics_dict,
+            )
+
+        # Convert plain dictionaries to a CurationResult for consistency
+        if isinstance(result, dict):
+            qa_pairs = [
+                QAPair(**p) if isinstance(p, dict) else p for p in result.get("qa_pairs", [])
+            ]
+            rated_pairs = (
+                [QAPair(**p) for p in result.get("rated_pairs", [])]
+                if "rated_pairs" in result
+                else None
+            )
+            metrics_obj = metrics if isinstance(metrics, CurationMetrics) else None
+            if metrics_obj is None:
+                metrics_obj = CurationMetrics(
+                    total=len(qa_pairs),
+                    filtered=len(qa_pairs),
+                    retention_rate=1.0,
+                    avg_score=0.0,
                 )
+            result = CurationResult(
+                summary=result.get("summary", ""),
+                qa_pairs=qa_pairs,
+                conversations=result.get("conversations", []),
+                metrics=metrics_obj,
+                rated_pairs=rated_pairs,
+            )
 
         return result
 
     async def _kg_cleanup(d: Any) -> Any:
-        if dataset_builder is not None:
-            removed, cleaned = dataset_builder.cleanup_graph(
-                resolve_threshold=resolve_threshold,
-                resolve_aliases=resolve_aliases,
-                dedup_similarity=dedup_similarity,
-            )
-        else:
-            removed = kg.deduplicate_chunks(dedup_similarity)
-            cleaned = kg.clean_chunk_texts()
-            kg.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
+        stats = await asyncio.to_thread(
+            cleanup_knowledge_graph,
+            kg,
+            dataset_builder=dataset_builder,
+            resolve_threshold=resolve_threshold,
+            resolve_aliases=resolve_aliases,
+            dedup_similarity=dedup_similarity,
+        )
         if verbose:
-            logger.info("  KG cleanup - removed:%d cleaned:%d", removed, cleaned)
+            logger.info("  KG cleanup - removed:%d cleaned:%d", stats.removed, stats.cleaned)
         return d
 
     handlers = {
@@ -740,36 +807,54 @@ async def _run_generation_pipeline_impl(
     start_idx = 0
     if start_step and start_step in pipeline.steps:
         start_idx = pipeline.steps.index(start_step)
-    for step in pipeline.steps[start_idx:]:
-        if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
-            continue
-        if verbose:
-            logger.info("Running step %s", step.value)
-        handler = handlers.get(step)
-        if handler:
-            start = time.perf_counter()
-            try:
-                result = await handler(data)
-            except Exception as exc:
-                logger.exception("Step %s failed", step.value)
-                raise PipelineExecutionError(step, exc) from exc
-            duration = time.perf_counter() - start
-            if step.name.startswith("GENERATE"):
-                data = _validate_step_result(dataset_type, step, result)
-            else:
-                data = result
-            if options.checkpoint_dir:
-                cp_file = Path(options.checkpoint_dir) / f"{step.value}.json"
-                cp_file.write_text(json.dumps(_serialize(data)))
+
+    exec_steps = [
+        s for s in pipeline.steps[start_idx:] if s not in {PipelineStep.INGEST, PipelineStep.TO_KG}
+    ]
+    if start_step is PipelineStep.CURATE and PipelineStep.SAVE in exec_steps:
+        exec_steps.remove(PipelineStep.SAVE)
+    progress = None
+    task = None
+    if verbose:
+        progress, task = create_progress("Generation pipeline", len(exec_steps))
+        progress.start()
+
+    try:
+        for step in exec_steps:
+            if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
+                continue
             if verbose:
-                logger.info("Finished %s in %.2fs", step.value, duration)
-                if isinstance(data, dict):
-                    if "qa_pairs" in data:
-                        logger.info("  Pairs: %d", len(data["qa_pairs"]))
-                    if "conversations" in data:
-                        logger.info("  Conversations: %d", len(data["conversations"]))
-                    if step is PipelineStep.CURATE and "metrics" in data:
-                        m = data["metrics"]
+                logger.info("Running step %s", step.value)
+            handler = handlers.get(step)
+            if handler:
+                start = time.perf_counter()
+                try:
+                    result = await handler(data)
+                except Exception as exc:
+                    logger.exception("Step %s failed", step.value)
+                    raise PipelineExecutionError(step, exc) from exc
+                duration = time.perf_counter() - start
+                if step.name.startswith("GENERATE"):
+                    data = _validate_step_result(dataset_type, step, result)
+                else:
+                    data = result
+                if options.checkpoint_dir:
+                    cp_file = Path(options.checkpoint_dir) / f"{step.value}.json"
+                    cp_file.write_text(json.dumps(_serialize(data)))
+                if verbose:
+                    logger.info("Finished %s in %.2fs", step.value, duration)
+                if progress:
+                    progress.update(task, advance=1)
+                if isinstance(data, dict) or is_dataclass(data):
+                    info = asdict(data) if is_dataclass(data) else data
+                    if "qa_pairs" in info:
+                        logger.info("  Pairs: %d", len(info["qa_pairs"]))
+                    if "conversations" in info:
+                        logger.info("  Conversations: %d", len(info["conversations"]))
+                    if step is PipelineStep.CURATE and "metrics" in info:
+                        m = info["metrics"]
+                        if is_dataclass(m):
+                            m = asdict(m)
                         logger.info(
                             "  Curation metrics - total:%d filtered:%d retention:%.2f avg:%.1f",
                             m.get("total", 0),
@@ -777,6 +862,9 @@ async def _run_generation_pipeline_impl(
                             m.get("retention_rate", 0.0),
                             m.get("avg_score", 0.0),
                         )
+    finally:
+        if progress:
+            progress.stop()
 
     return data
 
@@ -791,6 +879,9 @@ def run_generation_pipeline(
     inference_batch: int | None = None,
     dedup_similarity: float = 1.0,
     keep_ratings: bool = False,
+    curation_threshold: float | None = None,
+    curation_temperature: float | None = None,
+    resume_curation: bool = False,
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
@@ -811,6 +902,12 @@ def run_generation_pipeline(
         Similarity used when removing duplicate chunks during KG cleanup.
     keep_ratings:
         Return ratings for all generated pairs after curation.
+    curation_threshold:
+        Override the quality threshold used during curation.
+    curation_temperature:
+        Override the temperature used when rating pairs during curation.
+    resume_curation:
+        Continue curation from ``checkpoint_dir`` if previous ratings exist.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
@@ -836,6 +933,9 @@ def run_generation_pipeline(
             inference_batch=inference_batch,
             dedup_similarity=dedup_similarity,
             keep_ratings=keep_ratings,
+            threshold=curation_threshold,
+            curation_temperature=curation_temperature,
+            resume_curation=resume_curation,
             resolve_threshold=resolve_threshold,
             resolve_aliases=resolve_aliases,
             start_step=start_step,
@@ -855,6 +955,9 @@ async def run_generation_pipeline_async(
     inference_batch: int | None = None,
     dedup_similarity: float = 1.0,
     keep_ratings: bool = False,
+    curation_threshold: float | None = None,
+    curation_temperature: float | None = None,
+    resume_curation: bool = False,
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
@@ -871,6 +974,12 @@ async def run_generation_pipeline_async(
         Similarity used when removing duplicate chunks during KG cleanup.
     keep_ratings:
         Return ratings for all generated pairs after curation.
+    curation_threshold:
+        Override the quality threshold used during curation.
+    curation_temperature:
+        Override the temperature used when rating pairs during curation.
+    resume_curation:
+        Continue curation from ``checkpoint_dir`` if previous ratings exist.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
@@ -896,6 +1005,9 @@ async def run_generation_pipeline_async(
         inference_batch=inference_batch,
         dedup_similarity=dedup_similarity,
         keep_ratings=keep_ratings,
+        threshold=curation_threshold,
+        curation_temperature=curation_temperature,
+        resume_curation=resume_curation,
         resolve_threshold=resolve_threshold,
         resolve_aliases=resolve_aliases,
         start_step=start_step,

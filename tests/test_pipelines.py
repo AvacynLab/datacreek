@@ -611,6 +611,22 @@ def test_pipeline_curation_error(monkeypatch):
     assert exc.value.step is PipelineStep.CURATE
 
 
+def test_pipeline_error_details(monkeypatch):
+    def bad_generate(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", bad_generate)
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+    with pytest.raises(PipelineExecutionError) as exc:
+        run_generation_pipeline(DatasetType.QA, kg)
+
+    info = exc.value.info
+    assert info.step is PipelineStep.GENERATE_QA
+    assert info.exc_type == "RuntimeError"
+    assert "boom" in info.traceback
+
+
 def test_start_step_resume(monkeypatch):
     """Pipeline should resume from the specified step."""
 
@@ -638,7 +654,7 @@ def test_start_step_resume(monkeypatch):
 
     assert "generate" not in called
     assert called.get("curate") is True
-    assert res == {"qa_pairs": []}
+    assert isinstance(res, curate.CurationResult)
 
 
 def test_checkpoint_resume(monkeypatch, tmp_path):
@@ -673,7 +689,8 @@ def test_checkpoint_resume(monkeypatch, tmp_path):
 
     assert called["generate"] == 1
     assert called["curate"] == 2
-    assert res == {"qa_pairs": [{"question": "q", "answer": "a"}]}
+    assert isinstance(res, curate.CurationResult)
+    assert len(res.qa_pairs) == 1
 
 
 def test_kg_cleanup_step(monkeypatch):
@@ -735,3 +752,53 @@ def test_kg_cleanup_with_params(monkeypatch):
     assert called["threshold"] == 0.9
     assert called["aliases"] == {"IBM": ["International Business Machines"]}
     assert called["sim"] == 1.0
+
+
+def test_curation_threshold_param(monkeypatch):
+    """Pipeline should pass curation_threshold to curate_qa_pairs."""
+
+    received = {}
+
+    def fake_generate(*a, **k):
+        return {"qa_pairs": []}
+
+    def fake_curate(data, *a, **k):
+        # threshold is passed positionally
+        received["threshold"] = a[1] if len(a) > 1 else None
+        return {}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+
+    run_generation_pipeline(DatasetType.QA, kg, curation_threshold=7)
+
+    assert received["threshold"] == 7
+
+
+def test_kg_cleanup_failure(monkeypatch):
+    """Errors during KG cleanup should raise PipelineExecutionError."""
+
+    def bad_cleanup(self, *a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("datacreek.core.dataset.DatasetBuilder.cleanup_graph", bad_cleanup)
+    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {})
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+
+    with pytest.raises(PipelineExecutionError) as exc:
+        run_generation_pipeline(
+            DatasetType.QA,
+            kg,
+            dataset_builder=DatasetBuilder(DatasetType.QA),
+            start_step=PipelineStep.KG_CLEANUP,
+        )
+
+    assert exc.value.step is PipelineStep.KG_CLEANUP

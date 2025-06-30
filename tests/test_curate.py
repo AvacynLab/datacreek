@@ -79,6 +79,54 @@ def test_curate_parse_error(monkeypatch):
         curate.curate_qa_pairs(data, batch_size=1, inference_batch=1)
 
 
+def test_curate_resume(monkeypatch, tmp_path):
+    monkeypatch.setattr(curate, "LLMClient", DummyClient)
+    monkeypatch.setattr("datacreek.utils.batch.process_batches", fake_batch)
+    monkeypatch.setattr(curate, "parse_ratings", fake_parse)
+    monkeypatch.setattr(
+        "datacreek.utils.progress.create_progress", lambda *a, **k: (DummyProgress(), 0)
+    )
+    monkeypatch.setattr(curate, "get_prompt", lambda cfg, name: "{pairs}")
+
+    existing = {
+        "summary": "",
+        "qa_pairs": [],
+        "conversations": [],
+        "metrics": {"total": 1, "filtered": 1, "retention_rate": 1.0, "avg_score": 10},
+        "rated_pairs": [{"question": "q1", "answer": "a1", "rating": 10}],
+    }
+    out = tmp_path / "cur.json"
+    out.write_text(json.dumps(existing))
+
+    data = {
+        "summary": "",
+        "qa_pairs": [
+            {"question": "q1", "answer": "a1"},
+            {"question": "q2", "answer": "a2"},
+        ],
+    }
+
+    res = curate.curate_qa_pairs(
+        data, output_path=str(out), batch_size=1, inference_batch=1, resume=True
+    )
+    assert len(res["qa_pairs"]) == 2
+
+
+def test_curate_as_dataclass(monkeypatch):
+    monkeypatch.setattr(curate, "LLMClient", DummyClient)
+    monkeypatch.setattr("datacreek.utils.batch.process_batches", fake_batch)
+    monkeypatch.setattr(curate, "parse_ratings", fake_parse)
+    monkeypatch.setattr(
+        "datacreek.utils.progress.create_progress", lambda *a, **k: (DummyProgress(), 0)
+    )
+    monkeypatch.setattr(curate, "get_prompt", lambda cfg, name: "{pairs}")
+
+    data = {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]}
+
+    res = curate.curate_qa_pairs(data, batch_size=1, inference_batch=1, as_dataclass=True)
+    assert isinstance(res, curate.CurationResult)
+
+
 def test_filter_rated_pairs():
     pairs = [
         QAPair(question="q1", answer="a1", rating=9),
