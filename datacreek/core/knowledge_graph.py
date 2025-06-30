@@ -656,6 +656,7 @@ class KnowledgeGraph:
             text = data.get("text", "")
             cleaned = re.sub(r"<[^>]+>", " ", text)
             cleaned = re.sub(r"\s+", " ", cleaned).strip()
+            cleaned = "".join(ch for ch in cleaned if ch.isprintable())
             if cleaned != text:
                 data["text"] = cleaned
                 self.index.remove(cid)

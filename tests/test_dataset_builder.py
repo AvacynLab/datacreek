@@ -1,8 +1,11 @@
+from pathlib import Path
+
 import fakeredis
 import requests
 
+from datacreek.core import dataset
 from datacreek.core.dataset import DatasetBuilder
-from datacreek.pipelines import DatasetType
+from datacreek.pipelines import DatasetType, PipelineStep
 
 
 def test_dataset_has_its_own_graph():
@@ -424,6 +427,8 @@ def test_co_mentions_wrapper():
     added = ds.link_chunks_by_entity()
     assert added == 1
     assert ds.graph.graph.has_edge("c1", "c2")
+    assert ds.events[-1].operation == "link_chunks_by_entity"
+    assert ds.events[-1].params == {"added": 1}
 
 
 def test_link_documents_by_entity_wrapper():
@@ -439,6 +444,8 @@ def test_link_documents_by_entity_wrapper():
     added = ds.link_documents_by_entity()
     assert added == 1
     assert ds.graph.graph.has_edge("doc1", "doc2")
+    assert ds.events[-1].operation == "link_documents_by_entity"
+    assert ds.events[-1].params == {"added": 1}
 
 
 def test_link_sections_by_entity_wrapper():
@@ -455,6 +462,8 @@ def test_link_sections_by_entity_wrapper():
     added = ds.link_sections_by_entity()
     assert added == 1
     assert ds.graph.graph.has_edge("s1", "s2")
+    assert ds.events[-1].operation == "link_sections_by_entity"
+    assert ds.events[-1].params == {"added": 1}
 
 
 def test_link_authors_organizations_wrapper():
@@ -465,16 +474,57 @@ def test_link_authors_organizations_wrapper():
 
     assert added == 1
     assert ds.graph.graph.has_edge("alice", "acme")
+    assert ds.events[-1].operation == "link_authors_organizations"
+    assert ds.events[-1].params == {"added": 1}
 
 
-def test_clean_chunks_wrapper():
+def test_clean_chunks_wrapper(monkeypatch):
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "<b>Hello</b>\n")
+    logs = []
+    monkeypatch.setattr(dataset.logger, "info", lambda msg: logs.append(msg))
 
     changed = ds.clean_chunks()
     assert changed == 1
     assert ds.graph.graph.nodes["c1"]["text"] == "Hello"
+    assert logs[-1] == "Cleaned 1 chunks"
+    assert ds.history[-1] == "Cleaned 1 chunks"
+    assert ds.events[-1].operation == "clean_chunks"
+
+
+def test_cleanup_logging(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "text")
+    ds.add_chunk("d", "c2", "text")
+
+    logs = []
+    monkeypatch.setattr(dataset.logger, "info", lambda msg: logs.append(msg))
+
+    removed = ds.deduplicate_chunks()
+    assert removed == 1
+    assert logs[-1] == "Removed 1 duplicate chunks"
+    assert ds.history[-1] == logs[-1]
+    assert ds.events[-1].operation == "deduplicate_chunks"
+
+
+def test_cleanup_graph(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "<b>Hello</b>")
+    ds.add_chunk("d", "c2", "<b>Hello</b>")
+
+    logs = []
+    monkeypatch.setattr(dataset.logger, "info", lambda msg: logs.append(msg))
+
+    removed, cleaned = ds.cleanup_graph()
+
+    assert removed == 1
+    assert cleaned == 1
+    assert "c2" not in ds.graph.graph.nodes
+    assert ds.events[-2].operation == "deduplicate_chunks"
+    assert ds.events[-1].operation == "clean_chunks"
 
 
 def test_normalize_dates_wrapper():
@@ -726,6 +776,7 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
         calls["dtype"] = dtype
         calls["graph"] = graph
         calls["kwargs"] = kwargs
+        calls["builder"] = kwargs.get("dataset_builder")
         return "ok"
 
     async def fake_run_async(*a, **k):
@@ -736,7 +787,14 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
         fake_run_async,
     )
 
-    result = ds.run_post_kg_pipeline(num_pairs=5, async_mode=True)
+    result = ds.run_post_kg_pipeline(
+        num_pairs=5,
+        async_mode=True,
+        batch_size=2,
+        inference_batch=1,
+        start_step=PipelineStep.CURATE,
+        checkpoint_dir=Path("/tmp"),
+    )
 
     assert result == "ok"
     assert calls["dtype"] == DatasetType.QA
@@ -744,3 +802,48 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
     assert calls["kwargs"]["num_pairs"] == 5
     assert calls["kwargs"]["async_mode"] is True
     assert calls["kwargs"]["multi_answer"] is False
+    assert calls["kwargs"]["batch_size"] == 2
+    assert calls["kwargs"]["start_step"] is PipelineStep.CURATE
+    assert calls["builder"] is ds
+
+
+def test_run_post_kg_pipeline_logs_cleanup(monkeypatch):
+    ds = DatasetBuilder(DatasetType.QA)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "<b>Hello</b>")
+    ds.add_chunk("d", "c2", "<b>Hello</b>")
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []})
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: {"qa_pairs": []})
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    ds.run_post_kg_pipeline(start_step=PipelineStep.KG_CLEANUP)
+
+    assert "c2" not in ds.graph.graph.nodes
+    assert ds.events[-2].operation == "deduplicate_chunks"
+    assert ds.events[-1].operation == "clean_chunks"
+
+
+def test_run_post_kg_pipeline_logs_curation(monkeypatch):
+    ds = DatasetBuilder(DatasetType.QA)
+    ds.add_document("d", source="s")
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []})
+    monkeypatch.setattr(
+        "datacreek.pipelines.curate_qa_pairs",
+        lambda d, *a, **k: {
+            "qa_pairs": [],
+            "metrics": {"total": 2, "filtered": 1, "retention_rate": 0.5, "avg_score": 8.0},
+        },
+    )
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    ds.run_post_kg_pipeline(start_step=PipelineStep.CURATE)
+
+    assert ds.events[-1].operation == "curate"
+    assert ds.events[-1].params == {
+        "total": 2,
+        "filtered": 1,
+        "retention_rate": 0.5,
+        "avg_score": 8.0,
+    }

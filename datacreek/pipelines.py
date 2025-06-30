@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
+import traceback
 from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:  # pragma: no cover - for type checkers only
+    from datacreek.core.dataset import DatasetBuilder
 
 from datacreek.core.create import process_file, process_file_async
 from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
@@ -20,7 +25,6 @@ from datacreek.models.results import (
     PrefPairResult,
     QAGenerationResult,
 )
-from datacreek.utils import deduplicate_pairs
 from datacreek.utils.config import get_format_settings, load_config_with_overrides
 
 logger = logging.getLogger(__name__)
@@ -60,6 +64,7 @@ class PipelineStep(str, Enum):
 
     INGEST = "ingest"
     TO_KG = "to_kg"
+    KG_CLEANUP = "kg_cleanup"
     GENERATE_QA = "generate_qa"
     GENERATE_COT = "generate_cot"
     GENERATE_VQA = "generate_vqa"
@@ -99,6 +104,9 @@ class ProcessOptions:
     async_mode: bool = False
     kg: KnowledgeGraph | None = None
     multi_answer: bool = False
+    batch_size: int | None = None
+    inference_batch: int | None = None
+    checkpoint_dir: Path | None = None
 
 
 # Expected dataclass types for generation results
@@ -155,16 +163,102 @@ def _validate_step_result(
             missing = [f for f in expected_fields if f not in result_dict]
             if missing:
                 raise ValueError(f"{step_name}: missing fields {', '.join(missing)}")
+        for f in expected_fields:
+            if f in result_dict:
+                if not isinstance(result_dict[f], list):
+                    raise ValueError(f"{step_name}: field '{f}' must be a list")
+                if f == "qa_pairs":
+                    for item in result_dict[f]:
+                        if is_dataclass(item):
+                            item_dict = asdict(item)
+                        elif isinstance(item, dict):
+                            item_dict = item
+                        else:
+                            raise ValueError(f"{step_name}: qa_pairs items must be mappings")
+                        if (
+                            "question" not in item_dict
+                            or "answer" not in item_dict
+                            or not str(item_dict["question"]).strip()
+                            or not str(item_dict["answer"]).strip()
+                        ):
+                            raise ValueError(f"{step_name}: invalid QA pair item")
+                if f == "cot_examples":
+                    for item in result_dict[f]:
+                        if is_dataclass(item):
+                            item_dict = asdict(item)
+                        elif isinstance(item, dict):
+                            item_dict = item
+                        else:
+                            raise ValueError(f"{step_name}: cot_examples items must be mappings")
+                        required = {"question", "reasoning", "answer"}
+                        if (
+                            any(k not in item_dict for k in required)
+                            or not str(item_dict["question"]).strip()
+                            or not str(item_dict["answer"]).strip()
+                            or not str(item_dict["reasoning"]).strip()
+                        ):
+                            raise ValueError(f"{step_name}: invalid COT example item")
+
+        if step is PipelineStep.GENERATE_CANDIDATES:
+            if dataset_type == DatasetType.PREF_PAIR:
+                pairs = result_dict.get("pairs", [])
+                if not isinstance(pairs, list):
+                    raise ValueError(f"{step_name}: field 'pairs' must be a list")
+                for item in pairs:
+                    if not isinstance(item, dict):
+                        raise ValueError(f"{step_name}: pairs items must be mappings")
+                    if (
+                        "question" not in item
+                        or "chosen" not in item
+                        or "rejected" not in item
+                        or not str(item["question"]).strip()
+                        or not str(item["chosen"]).strip()
+                        or not str(item["rejected"]).strip()
+                    ):
+                        raise ValueError(f"{step_name}: invalid pair item")
+            else:
+                responses = result_dict.get("responses", [])
+                if not isinstance(responses, list):
+                    raise ValueError(f"{step_name}: field 'responses' must be a list")
+                for resp in responses:
+                    if not isinstance(resp, dict):
+                        raise ValueError(f"{step_name}: responses items must be mappings")
+                    if not str(resp.get("question", "")).strip():
+                        raise ValueError(f"{step_name}: response question is empty")
+                    answers = resp.get("answers")
+                    if not isinstance(answers, list) or not answers:
+                        raise ValueError(f"{step_name}: response answers must be a non-empty list")
+                    for ans in answers:
+                        if not isinstance(ans, dict):
+                            raise ValueError(f"{step_name}: answers items must be mappings")
+                        if not str(ans.get("text", "")).strip():
+                            raise ValueError(f"{step_name}: answer text is empty")
 
     return result_dict
 
 
+def _serialize(data: Any) -> Any:
+    """Recursively convert dataclasses to dictionaries for JSON dumping."""
+    if is_dataclass(data):
+        return asdict(data)
+    if isinstance(data, dict):
+        return {k: _serialize(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_serialize(x) for x in data]
+    return data
+
+
 class PipelineExecutionError(RuntimeError):
-    """Raised when a generation pipeline step fails."""
+    """Raised when a generation pipeline step fails with additional context."""
 
     def __init__(self, step: PipelineStep, original_exception: Exception):
         self.step = step
         self.original_exception = original_exception
+        self.traceback = "".join(
+            traceback.format_exception(
+                type(original_exception), original_exception, original_exception.__traceback__
+            )
+        )
         super().__init__(f"{step.value} failed: {original_exception}")
 
 
@@ -174,6 +268,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_QA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -195,6 +290,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_COT,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -213,6 +309,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_VQA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -231,6 +328,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_FROM_KG,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -252,6 +350,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.LABEL_PAIRS,
             PipelineStep.SAVE,
@@ -270,6 +369,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.RANK_RESPONSES,
             PipelineStep.SAVE,
@@ -282,6 +382,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_TOOL_CALL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -303,6 +404,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_CONVERSATION,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -324,6 +426,7 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_MULTI_TOOL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -377,6 +480,7 @@ async def _run_generation_pipeline_impl(
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
     *,
+    dataset_builder: "DatasetBuilder | None" = None,
     config_path: Path | None = None,
     provider: str | None = None,
     profile: str | None = None,
@@ -391,6 +495,10 @@ async def _run_generation_pipeline_impl(
     document_text: str | None = None,
     multi_answer: bool = False,
     use_async_handlers: bool = False,
+    batch_size: int | None = None,
+    inference_batch: int | None = None,
+    start_step: PipelineStep | None = None,
+    checkpoint_dir: Path | None = None,
 ) -> Any:
     """Shared implementation for sync and async generation pipelines."""
 
@@ -422,8 +530,22 @@ async def _run_generation_pipeline_impl(
         async_mode=async_mode,
         kg=kg,
         multi_answer=multi_answer,
+        batch_size=batch_size,
+        inference_batch=inference_batch,
+        checkpoint_dir=checkpoint_dir,
     )
+    if checkpoint_dir:
+        checkpoint_dir = Path(checkpoint_dir)
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
     data: Any = document_text
+    if start_step and checkpoint_dir:
+        idx = pipeline.steps.index(start_step)
+        if idx > 0:
+            prev_step = pipeline.steps[idx - 1]
+            cp_file = checkpoint_dir / f"{prev_step.value}.json"
+            if cp_file.exists():
+                data = json.loads(cp_file.read_text())
 
     async def _identity(d: Any) -> Any:
         return d
@@ -481,6 +603,8 @@ async def _run_generation_pipeline_impl(
                 options.verbose,
                 options.provider,
                 kg=options.kg,
+                batch_size=options.batch_size,
+                inference_batch=options.inference_batch,
             )
         else:
             result = await asyncio.to_thread(
@@ -495,13 +619,43 @@ async def _run_generation_pipeline_impl(
                 options.provider,
                 async_mode=options.async_mode,
                 kg=options.kg,
+                batch_size=options.batch_size,
+                inference_batch=options.inference_batch,
             )
-        if isinstance(result, dict) and "qa_pairs" in result:
-            before = len(result["qa_pairs"])
-            result["qa_pairs"] = deduplicate_pairs(result["qa_pairs"])
-            if options.verbose and before != len(result["qa_pairs"]):
-                logger.info("  Removed %d duplicate pairs", before - len(result["qa_pairs"]))
+
+        if dataset_builder is not None:
+            metrics = None
+            if isinstance(result, dict):
+                metrics = result.get("metrics")
+            elif hasattr(result, "metrics"):
+                metrics = result.metrics
+            if metrics:
+                if is_dataclass(metrics):
+                    metrics_dict = asdict(metrics)
+                else:
+                    metrics_dict = metrics
+                dataset_builder._record_event(
+                    "curate",
+                    "Curated %d/%d QA pairs"
+                    % (
+                        metrics_dict.get("filtered", 0),
+                        metrics_dict.get("total", 0),
+                    ),
+                    **metrics_dict,
+                )
+
         return result
+
+    async def _kg_cleanup(d: Any) -> Any:
+        if dataset_builder is not None:
+            removed, cleaned = dataset_builder.cleanup_graph()
+        else:
+            removed = kg.deduplicate_chunks()
+            cleaned = kg.clean_chunk_texts()
+            kg.resolve_entities()
+        if verbose:
+            logger.info("  KG cleanup - removed:%d cleaned:%d", removed, cleaned)
+        return d
 
     handlers = {
         PipelineStep.GENERATE_QA: lambda d: _generate(ContentType.QA, d),
@@ -521,11 +675,15 @@ async def _run_generation_pipeline_impl(
         ),
         PipelineStep.LABEL_PAIRS: _identity,
         PipelineStep.RANK_RESPONSES: _identity,
+        PipelineStep.KG_CLEANUP: _kg_cleanup,
         PipelineStep.CURATE: _curate,
         PipelineStep.SAVE: _save,
     }
 
-    for step in pipeline.steps:
+    start_idx = 0
+    if start_step and start_step in pipeline.steps:
+        start_idx = pipeline.steps.index(start_step)
+    for step in pipeline.steps[start_idx:]:
         if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
             continue
         if verbose:
@@ -537,12 +695,15 @@ async def _run_generation_pipeline_impl(
                 result = await handler(data)
             except Exception as exc:
                 logger.exception("Step %s failed", step.value)
-                raise PipelineExecutionError(step, exc)
+                raise PipelineExecutionError(step, exc) from exc
             duration = time.perf_counter() - start
             if step.name.startswith("GENERATE"):
                 data = _validate_step_result(dataset_type, step, result)
             else:
                 data = result
+            if options.checkpoint_dir:
+                cp_file = Path(options.checkpoint_dir) / f"{step.value}.json"
+                cp_file.write_text(json.dumps(_serialize(data)))
             if verbose:
                 logger.info("Finished %s in %.2fs", step.value, duration)
                 if isinstance(data, dict):
@@ -566,29 +727,79 @@ async def _run_generation_pipeline_impl(
 def run_generation_pipeline(
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
+    *,
+    dataset_builder: "DatasetBuilder | None" = None,
+    batch_size: int | None = None,
+    inference_batch: int | None = None,
+    start_step: PipelineStep | None = None,
+    checkpoint_dir: Path | None = None,
     **kwargs: Any,
 ) -> Any:
     """Execute the generation steps synchronously.
 
-    Raises:
-        PipelineExecutionError: if any step fails.
+    Parameters
+    ----------
+    dataset_builder:
+        If provided, knowledge graph cleanup will log events on this builder.
+    checkpoint_dir:
+        Directory to store intermediate results for resuming later.
+
+    Raises
+    ------
+    PipelineExecutionError
+        If any step fails.
     """
 
     return asyncio.run(
-        _run_generation_pipeline_impl(dataset_type, kg, use_async_handlers=False, **kwargs)
+        _run_generation_pipeline_impl(
+            dataset_type,
+            kg,
+            use_async_handlers=False,
+            dataset_builder=dataset_builder,
+            batch_size=batch_size,
+            inference_batch=inference_batch,
+            start_step=start_step,
+            checkpoint_dir=checkpoint_dir,
+            **kwargs,
+        )
     )
 
 
 async def run_generation_pipeline_async(
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
+    *,
+    dataset_builder: "DatasetBuilder | None" = None,
+    batch_size: int | None = None,
+    inference_batch: int | None = None,
+    start_step: PipelineStep | None = None,
+    checkpoint_dir: Path | None = None,
     **kwargs: Any,
 ) -> Any:
     """Asynchronous counterpart to :func:`run_generation_pipeline`.
 
-    Raises:
-        PipelineExecutionError: if any step fails.
+    Parameters
+    ----------
+    dataset_builder:
+        If provided, knowledge graph cleanup will log events on this builder.
+    checkpoint_dir:
+        Directory to store intermediate results for resuming later.
+
+    Raises
+    ------
+    PipelineExecutionError
+        If any step fails.
     """
 
     kwargs["async_mode"] = True
-    return await _run_generation_pipeline_impl(dataset_type, kg, use_async_handlers=True, **kwargs)
+    return await _run_generation_pipeline_impl(
+        dataset_type,
+        kg,
+        use_async_handlers=True,
+        dataset_builder=dataset_builder,
+        batch_size=batch_size,
+        inference_batch=inference_batch,
+        start_step=start_step,
+        checkpoint_dir=checkpoint_dir,
+        **kwargs,
+    )

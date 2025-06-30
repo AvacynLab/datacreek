@@ -15,7 +15,17 @@ from typing import Any, Dict, List, Optional
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.generators.qa_generator import QAGenerator
 from datacreek.models.llm_client import LLMClient
+from datacreek.utils import deduplicate_pairs
 from datacreek.utils.config import get_curate_settings, get_prompt
+
+
+class CurationError(RuntimeError):
+    """Raised when QA pair curation encounters parsing errors."""
+
+    def __init__(self, message: str, errors: List[Exception]):
+        super().__init__(message)
+        self.errors = errors
+
 
 logger = logging.getLogger(__name__)
 from datacreek.models.qa import QAPair
@@ -34,6 +44,8 @@ def curate_qa_pairs(
     provider: Optional[str] = None,
     async_mode: bool = False,
     kg: KnowledgeGraph | None = None,
+    batch_size: int | None = None,
+    inference_batch: int | None = None,
 ) -> Any:
     """Clean and filter QA pairs based on quality ratings
 
@@ -110,8 +122,8 @@ def curate_qa_pairs(
     # Get configuration
     curate_config = get_curate_settings(client.config)
 
-    batch_size = curate_config.batch_size
-    inference_batch = curate_config.inference_batch
+    batch_size = batch_size or curate_config.batch_size
+    inference_batch = inference_batch or curate_config.inference_batch
 
     rating_temperature = curate_config.temperature
 
@@ -152,6 +164,7 @@ def curate_qa_pairs(
     total_score = 0
     total_evaluated = 0
     total_passed = 0
+    parse_errors: List[Exception] = []
 
     # Process batches with simple progress indicator rather than a detailed bar
     # This avoids conflicts with other output messages
@@ -209,6 +222,7 @@ def curate_qa_pairs(
         try:
             filtered_pairs.extend(_parse_and_collect(response, original_batch))
         except Exception as e:
+            parse_errors.append(e)
             logger.error("Error processing batch %d: %s", idx + 1, e)
 
         if progress_ctx and rate_task:
@@ -233,6 +247,13 @@ def curate_qa_pairs(
     logger.info("Rated %d QA pairs", total_evaluated)
     logger.info("Retained %d pairs (threshold: %s)", total_passed, threshold)
     logger.info("Average score: %s", metrics.avg_score)
+
+    before = len(filtered_pairs)
+    filtered_pairs = deduplicate_pairs(filtered_pairs)
+    if verbose and before != len(filtered_pairs):
+        logger.info("Removed %d duplicate pairs", before - len(filtered_pairs))
+    if parse_errors:
+        raise CurationError("Failed to parse some batches", parse_errors)
 
     conversations = convert_to_conversation_format(filtered_pairs)
 
@@ -265,6 +286,8 @@ async def curate_qa_pairs_async(
     verbose: bool = False,
     provider: Optional[str] = None,
     kg: KnowledgeGraph | None = None,
+    batch_size: int | None = None,
+    inference_batch: int | None = None,
 ) -> Any:
     """Asynchronous version of :func:`curate_qa_pairs`."""
     # Reuse the synchronous function's logic but run async batch processing.
@@ -303,8 +326,8 @@ async def curate_qa_pairs_async(
     generator = QAGenerator(client, config_path, kg=kg)
     curate_config = get_curate_settings(client.config)
 
-    batch_size = curate_config.batch_size
-    inference_batch = curate_config.inference_batch
+    batch_size = batch_size or curate_config.batch_size
+    inference_batch = inference_batch or curate_config.inference_batch
     rating_temperature = curate_config.temperature
     if threshold is None:
         threshold = curate_config.threshold
@@ -339,6 +362,7 @@ async def curate_qa_pairs_async(
     total_score = 0
     total_evaluated = 0
     total_passed = 0
+    parse_errors: List[Exception] = []
 
     from datacreek.utils.batch import async_process_batches
 
@@ -370,6 +394,7 @@ async def curate_qa_pairs_async(
                         filtered_pairs.append(pair.to_dict())
                         total_passed += 1
         except Exception as e:
+            parse_errors.append(e)
             logger.error("Error processing batch %d: %s", idx + 1, e)
 
         if progress_ctx and rate_task:
@@ -391,6 +416,13 @@ async def curate_qa_pairs_async(
     logger.info("Rated %d QA pairs", total_evaluated)
     logger.info("Retained %d pairs (threshold: %s)", total_passed, threshold)
     logger.info("Average score: %s", metrics.avg_score)
+
+    before = len(filtered_pairs)
+    filtered_pairs = deduplicate_pairs(filtered_pairs)
+    if verbose and before != len(filtered_pairs):
+        logger.info("Removed %d duplicate pairs", before - len(filtered_pairs))
+    if parse_errors:
+        raise CurationError("Failed to parse some batches", parse_errors)
 
     conversations = convert_to_conversation_format(filtered_pairs)
 
