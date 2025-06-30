@@ -19,9 +19,12 @@ from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
 from datacreek.models.content_type import ContentType
+from datacreek.models.qa import QAPair
 from datacreek.models.results import (
     ConversationResult,
     COTGenerationResult,
+    CurationMetrics,
+    CurationResult,
     PrefListResult,
     PrefPairResult,
     QAGenerationResult,
@@ -720,26 +723,48 @@ async def _run_generation_pipeline_impl(
                 as_dataclass=True,
             )
 
-        if dataset_builder is not None:
-            metrics = None
-            if isinstance(result, dict):
-                metrics = result.get("metrics")
-            elif hasattr(result, "metrics"):
-                metrics = result.metrics
-            if metrics:
-                if is_dataclass(metrics):
-                    metrics_dict = asdict(metrics)
-                else:
-                    metrics_dict = metrics
-                dataset_builder._record_event(
-                    "curate",
-                    "Curated %d/%d QA pairs"
-                    % (
-                        metrics_dict.get("filtered", 0),
-                        metrics_dict.get("total", 0),
-                    ),
-                    **metrics_dict,
+        metrics = None
+        if isinstance(result, dict):
+            metrics = result.get("metrics")
+        elif hasattr(result, "metrics"):
+            metrics = result.metrics
+        if dataset_builder is not None and metrics is not None:
+            metrics_dict = asdict(metrics) if is_dataclass(metrics) else metrics
+            dataset_builder._record_event(
+                "curate",
+                "Curated %d/%d QA pairs"
+                % (
+                    metrics_dict.get("filtered", 0),
+                    metrics_dict.get("total", 0),
+                ),
+                **metrics_dict,
+            )
+
+        # Convert plain dictionaries to a CurationResult for consistency
+        if isinstance(result, dict):
+            qa_pairs = [
+                QAPair(**p) if isinstance(p, dict) else p for p in result.get("qa_pairs", [])
+            ]
+            rated_pairs = (
+                [QAPair(**p) for p in result.get("rated_pairs", [])]
+                if "rated_pairs" in result
+                else None
+            )
+            metrics_obj = metrics if isinstance(metrics, CurationMetrics) else None
+            if metrics_obj is None:
+                metrics_obj = CurationMetrics(
+                    total=len(qa_pairs),
+                    filtered=len(qa_pairs),
+                    retention_rate=1.0,
+                    avg_score=0.0,
                 )
+            result = CurationResult(
+                summary=result.get("summary", ""),
+                qa_pairs=qa_pairs,
+                conversations=result.get("conversations", []),
+                metrics=metrics_obj,
+                rated_pairs=rated_pairs,
+            )
 
         return result
 
@@ -786,6 +811,8 @@ async def _run_generation_pipeline_impl(
     exec_steps = [
         s for s in pipeline.steps[start_idx:] if s not in {PipelineStep.INGEST, PipelineStep.TO_KG}
     ]
+    if start_step is PipelineStep.CURATE and PipelineStep.SAVE in exec_steps:
+        exec_steps.remove(PipelineStep.SAVE)
     progress = None
     task = None
     if verbose:
