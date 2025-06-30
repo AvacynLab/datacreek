@@ -4,6 +4,7 @@ import pytest
 
 from datacreek.core import curate
 from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.content_type import ContentType
 from datacreek.pipelines import (
     DatasetType,
@@ -694,3 +695,35 @@ def test_kg_cleanup_step(monkeypatch):
 
     assert "c2" not in kg.graph.nodes
     assert kg.graph.nodes["c1"]["text"] == "Hello"
+
+
+def test_kg_cleanup_with_params(monkeypatch):
+    called = {}
+
+    def fake_generate(*a, **k):
+        return {"qa_pairs": []}
+
+    def fake_cleanup(self, *, resolve_threshold=0.8, resolve_aliases=None):
+        called["threshold"] = resolve_threshold
+        called["aliases"] = resolve_aliases
+        return 0, 0
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.core.dataset.DatasetBuilder.cleanup_graph", fake_cleanup)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+
+    run_generation_pipeline(
+        DatasetType.QA,
+        kg,
+        dataset_builder=DatasetBuilder(DatasetType.QA),
+        resolve_threshold=0.9,
+        resolve_aliases={"IBM": ["International Business Machines"]},
+        start_step=PipelineStep.KG_CLEANUP,
+    )
+
+    assert called["threshold"] == 0.9
+    assert called["aliases"] == {"IBM": ["International Business Machines"]}

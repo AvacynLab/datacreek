@@ -527,6 +527,28 @@ def test_cleanup_graph(monkeypatch):
     assert ds.events[-1].operation == "clean_chunks"
 
 
+def test_cleanup_graph_with_params(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "<b>Hello</b>")
+    ds.add_entity("e1", "IBM")
+    ds.add_entity("e2", "International Business Machines")
+
+    recorded = {}
+
+    def fake_resolve(threshold: float = 0.8, aliases=None):
+        recorded["threshold"] = threshold
+        recorded["aliases"] = aliases
+        return 0
+
+    monkeypatch.setattr(ds, "resolve_entities", fake_resolve)
+
+    ds.cleanup_graph(resolve_threshold=0.9, resolve_aliases={"IBM": ["International Business Machines"]})
+
+    assert recorded["threshold"] == 0.9
+    assert recorded["aliases"] == {"IBM": ["International Business Machines"]}
+
+
 def test_normalize_dates_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.graph.graph.add_node("e1", type="entity", start_date="1 Feb 2023")

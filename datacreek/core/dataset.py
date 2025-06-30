@@ -332,11 +332,24 @@ class DatasetBuilder:
             self._record_event("clean_chunks", msg)
         return cleaned
 
-    def cleanup_graph(self) -> tuple[int, int]:
+    def cleanup_graph(
+        self,
+        *,
+        resolve_threshold: float = 0.8,
+        resolve_aliases: dict[str, list[str]] | None = None,
+    ) -> tuple[int, int]:
         """Run standard deduplication and cleaning steps on the graph.
 
         This removes duplicate chunks, normalizes their text and resolves
         entities so later pipeline stages work with a clean knowledge graph.
+
+        Parameters
+        ----------
+        resolve_threshold:
+            Minimum similarity score when merging entities.
+        resolve_aliases:
+            Optional mapping of canonical labels to lists of aliases used during
+            entity resolution.
 
         Returns
         -------
@@ -346,7 +359,7 @@ class DatasetBuilder:
 
         removed = self.deduplicate_chunks()
         cleaned = self.clean_chunks()
-        self.resolve_entities()
+        self.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
         return removed, cleaned
 
     def normalize_dates(self) -> int:

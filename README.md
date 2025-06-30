@@ -59,7 +59,7 @@ Below is a quick overview of the main options and operations exposed at each sta
 **Knowledge graph operations**
 
 - `deduplicate_chunks()` – drop identical chunks
-- `resolve_entities()` – merge aliases into canonical entities
+- `resolve_entities(threshold=0.85, aliases={...})` – merge aliases into canonical entities using a similarity threshold
 - `link_*()` – connect nodes that mention the same entities
 - `prune_sources([...])` – remove unwanted data from the graph
 - `compute_graph_embeddings()` – build Node2Vec embeddings
@@ -662,7 +662,12 @@ kg = KnowledgeGraph()
 kg.add_document("doc", source="text", text="Hello world")
 
 # Synchronous usage
-qa_data = run_generation_pipeline(DatasetType.QA, kg)
+qa_data = run_generation_pipeline(
+    DatasetType.QA,
+    kg,
+    resolve_threshold=0.85,
+    resolve_aliases={"IBM": ["International Business Machines"]},
+)
 
 # Asynchronous usage
 # qa_data = await run_generation_pipeline_async(DatasetType.QA, kg)
@@ -675,7 +680,7 @@ After parsing documents into the knowledge graph you can refine the data quality
 with a few helper methods:
 
 - `deduplicate_chunks()` removes chunks with identical text
-- `resolve_entities(aliases={...})` merges entity nodes referring to the same concept and accepts a case-insensitive alias mapping
+- `resolve_entities(threshold=0.85, aliases={...})` merges entity nodes referring to the same concept using a similarity threshold and optional alias mapping
 - `prune_sources(['src'])` deletes nodes originating from unwanted sources
 - `link_chunks_by_entity()` connects chunks that mention the same entity
 - `link_sections_by_entity()` connects sections that mention the same entity

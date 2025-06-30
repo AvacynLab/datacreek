@@ -494,6 +494,8 @@ async def _run_generation_pipeline_impl(
     async_mode: bool = False,
     document_text: str | None = None,
     multi_answer: bool = False,
+    resolve_threshold: float = 0.8,
+    resolve_aliases: dict[str, list[str]] | None = None,
     use_async_handlers: bool = False,
     batch_size: int | None = None,
     inference_batch: int | None = None,
@@ -648,11 +650,16 @@ async def _run_generation_pipeline_impl(
 
     async def _kg_cleanup(d: Any) -> Any:
         if dataset_builder is not None:
-            removed, cleaned = dataset_builder.cleanup_graph()
+            removed, cleaned = dataset_builder.cleanup_graph(
+                resolve_threshold=resolve_threshold,
+                resolve_aliases=resolve_aliases,
+            )
         else:
             removed = kg.deduplicate_chunks()
             cleaned = kg.clean_chunk_texts()
-            kg.resolve_entities()
+            kg.resolve_entities(
+                threshold=resolve_threshold, aliases=resolve_aliases
+            )
         if verbose:
             logger.info("  KG cleanup - removed:%d cleaned:%d", removed, cleaned)
         return d
@@ -731,6 +738,8 @@ def run_generation_pipeline(
     dataset_builder: "DatasetBuilder | None" = None,
     batch_size: int | None = None,
     inference_batch: int | None = None,
+    resolve_threshold: float = 0.8,
+    resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
     checkpoint_dir: Path | None = None,
     **kwargs: Any,
@@ -741,6 +750,11 @@ def run_generation_pipeline(
     ----------
     dataset_builder:
         If provided, knowledge graph cleanup will log events on this builder.
+    resolve_threshold:
+        Similarity threshold used when merging entities during knowledge graph
+        cleanup.
+    resolve_aliases:
+        Optional alias mapping passed to :meth:`DatasetBuilder.resolve_entities`.
     checkpoint_dir:
         Directory to store intermediate results for resuming later.
 
@@ -758,6 +772,8 @@ def run_generation_pipeline(
             dataset_builder=dataset_builder,
             batch_size=batch_size,
             inference_batch=inference_batch,
+            resolve_threshold=resolve_threshold,
+            resolve_aliases=resolve_aliases,
             start_step=start_step,
             checkpoint_dir=checkpoint_dir,
             **kwargs,
@@ -772,6 +788,8 @@ async def run_generation_pipeline_async(
     dataset_builder: "DatasetBuilder | None" = None,
     batch_size: int | None = None,
     inference_batch: int | None = None,
+    resolve_threshold: float = 0.8,
+    resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
     checkpoint_dir: Path | None = None,
     **kwargs: Any,
@@ -782,6 +800,11 @@ async def run_generation_pipeline_async(
     ----------
     dataset_builder:
         If provided, knowledge graph cleanup will log events on this builder.
+    resolve_threshold:
+        Similarity threshold used when merging entities during knowledge graph
+        cleanup.
+    resolve_aliases:
+        Optional alias mapping passed to :meth:`DatasetBuilder.resolve_entities`.
     checkpoint_dir:
         Directory to store intermediate results for resuming later.
 
@@ -799,6 +822,8 @@ async def run_generation_pipeline_async(
         dataset_builder=dataset_builder,
         batch_size=batch_size,
         inference_batch=inference_batch,
+        resolve_threshold=resolve_threshold,
+        resolve_aliases=resolve_aliases,
         start_step=start_step,
         checkpoint_dir=checkpoint_dir,
         **kwargs,
