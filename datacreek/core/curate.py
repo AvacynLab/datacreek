@@ -45,10 +45,19 @@ async def _curate_qa_pairs_impl(
     batch_size: int | None,
     inference_batch: int | None,
     keep_ratings: bool,
+    temperature: float | None,
+    resume: bool,
+    as_dataclass: bool,
     *,
     use_async_handlers: bool,
 ) -> Any:
-    """Internal coroutine implementing QA pair curation."""
+    """Internal coroutine implementing QA pair curation.
+
+    Parameters
+    ----------
+    as_dataclass:
+        Return a :class:`CurationResult` instead of a dictionary when ``True``.
+    """
 
     if isinstance(input_data, str):
         if os.path.exists(input_data):
@@ -65,6 +74,16 @@ async def _curate_qa_pairs_impl(
 
     qa_pairs = data.get("qa_pairs", [])
     summary = data.get("summary", "")
+    existing_rated: List[QAPair] = []
+    if resume and output_path and os.path.exists(output_path):
+        try:
+            prev = json.loads(Path(output_path).read_text())
+            for p in prev.get("rated_pairs", []):
+                existing_rated.append(QAPair(**p))
+        except Exception:
+            pass
+        existing_set = {(p.question, p.answer) for p in existing_rated}
+        qa_pairs = [p for p in qa_pairs if (p.get("question"), p.get("answer")) not in existing_set]
     if not isinstance(qa_pairs, list):
         raise ValueError("Input must contain a 'qa_pairs' list")
     if not qa_pairs:
@@ -83,7 +102,7 @@ async def _curate_qa_pairs_impl(
     curate_config = get_curate_settings(client.config)
     batch_size = batch_size or curate_config.batch_size
     inference_batch = inference_batch or curate_config.inference_batch
-    rating_temperature = curate_config.temperature
+    rating_temperature = temperature if temperature is not None else curate_config.temperature
     if threshold is None:
         threshold = curate_config.threshold
 
@@ -189,6 +208,11 @@ async def _curate_qa_pairs_impl(
     logger.info("Retained %d pairs (threshold: %s)", total_passed, threshold)
     logger.info("Average score: %s", metrics.avg_score)
 
+    for p in existing_rated:
+        if p.rating is not None and p.rating >= threshold:
+            filtered_pairs.append(p.to_dict())
+        rated_pairs.append(p)
+
     before = len(filtered_pairs)
     filtered_pairs = deduplicate_pairs(filtered_pairs)
     if verbose and before != len(filtered_pairs):
@@ -214,8 +238,9 @@ async def _curate_qa_pairs_impl(
         await asyncio.to_thread(
             Path(output_path).write_text, json.dumps(result.to_dict(), indent=2)
         )
-        return output_path
 
+    if as_dataclass:
+        return result
     return result.to_dict()
 
 
@@ -233,6 +258,9 @@ def curate_qa_pairs(
     batch_size: int | None = None,
     inference_batch: int | None = None,
     keep_ratings: bool = False,
+    temperature: float | None = None,
+    resume: bool = False,
+    as_dataclass: bool = False,
 ) -> Any:
     """Clean and filter QA pairs based on quality ratings
 
@@ -244,8 +272,9 @@ def curate_qa_pairs(
         model: Model to use
         config_path: Path to configuration file
         verbose: Show detailed output
-        async_mode: Use asynchronous LLM requests when supported
-        keep_ratings: Return ratings for all pairs even if filtered
+    async_mode: Use asynchronous LLM requests when supported
+    keep_ratings: Return ratings for all pairs even if filtered
+    as_dataclass: Return a :class:`CurationResult` instead of a dict
 
     Returns:
         Path to the cleaned output file
@@ -263,8 +292,11 @@ def curate_qa_pairs(
             kg,
             batch_size,
             inference_batch,
-            keep_ratings,
-            use_async_handlers=async_mode,
+        keep_ratings,
+        temperature,
+        resume,
+        as_dataclass,
+        use_async_handlers=async_mode,
         )
     )
 
@@ -282,8 +314,17 @@ async def curate_qa_pairs_async(
     batch_size: int | None = None,
     inference_batch: int | None = None,
     keep_ratings: bool = False,
+    temperature: float | None = None,
+    resume: bool = False,
+    as_dataclass: bool = False,
 ) -> Any:
-    """Asynchronous version of :func:`curate_qa_pairs`."""
+    """Asynchronous version of :func:`curate_qa_pairs`.
+
+    Parameters
+    ----------
+    as_dataclass:
+        Return a :class:`CurationResult` instead of a dictionary when ``True``.
+    """
 
     return await _curate_qa_pairs_impl(
         input_data,
@@ -298,6 +339,9 @@ async def curate_qa_pairs_async(
         batch_size,
         inference_batch,
         keep_ratings,
+        temperature,
+        resume,
+        as_dataclass,
         use_async_handlers=True,
     )
 

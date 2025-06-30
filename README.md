@@ -677,6 +677,29 @@ Both functions raise `PipelineExecutionError` when a step fails.
 You can override the default pipeline definitions with the `pipeline_config_path`
 parameter pointing to a YAML file like `configs/pipelines.yaml`.
 
+If an error occurs the exception has an ``info`` attribute with details:
+
+```python
+try:
+    run_generation_pipeline(DatasetType.QA, kg)
+except PipelineExecutionError as exc:
+    err = exc.info
+    print(err.step, err.exc_type)
+``` 
+
+You can also resume a previously interrupted curation step and override the
+rating temperature:
+
+```python
+qa_data = run_generation_pipeline(
+    DatasetType.QA,
+    kg,
+    resume_curation=True,
+    curation_temperature=0.3,
+    curation_threshold=8,
+)
+```
+
 If you enabled `keep_ratings` you can later adjust the quality threshold
 without rerunning the pipeline:
 
@@ -686,6 +709,43 @@ from datacreek import apply_curation_threshold
 # keep only pairs rated 8 or higher
 curated = apply_curation_threshold(qa_data, threshold=8)
 ```
+
+### Knowledge Graph Cleanup Metrics
+
+If you want to inspect how many duplicates or noisy texts were removed, you can
+call ``cleanup_knowledge_graph`` directly:
+
+```python
+from datacreek.core.cleanup import cleanup_knowledge_graph
+
+stats = cleanup_knowledge_graph(kg, resolve_threshold=0.9)
+print(stats.removed, stats.cleaned)
+```
+
+### Returning dataclasses from curation
+
+``curate_qa_pairs`` can return a :class:`CurationResult` when ``as_dataclass=True``:
+
+```python
+res = curate_qa_pairs(data, as_dataclass=True)
+print(res.metrics.avg_score)
+```
+
+### Returning dataclasses from pipelines
+
+`run_generation_pipeline` normally serializes results when saving, but you can
+skip the save step and obtain structured objects instead. For example:
+
+```python
+res = run_generation_pipeline(
+    DatasetType.QA,
+    kg,
+    start_step=PipelineStep.CURATE,
+)
+print(res.metrics.avg_score)
+```
+
+The returned value is the same dataclass produced by the curation helpers.
 
 ## Post-Ingestion Operations
 

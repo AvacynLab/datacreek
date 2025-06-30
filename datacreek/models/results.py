@@ -106,3 +106,14 @@ class PrefListResult:
 
     def to_dict(self) -> Dict[str, Any]:
         return {"summary": self.summary, "responses": self.responses}
+
+
+@dataclass
+class KGCleanupStats:
+    """Statistics returned after cleaning up a knowledge graph."""
+
+    removed: int
+    cleaned: int
+
+    def to_dict(self) -> Dict[str, int]:
+        return {"removed": self.removed, "cleaned": self.cleaned}
