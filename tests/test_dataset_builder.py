@@ -543,7 +543,9 @@ def test_cleanup_graph_with_params(monkeypatch):
 
     monkeypatch.setattr(ds, "resolve_entities", fake_resolve)
 
-    ds.cleanup_graph(resolve_threshold=0.9, resolve_aliases={"IBM": ["International Business Machines"]})
+    ds.cleanup_graph(
+        resolve_threshold=0.9, resolve_aliases={"IBM": ["International Business Machines"]}
+    )
 
     assert recorded["threshold"] == 0.9
     assert recorded["aliases"] == {"IBM": ["International Business Machines"]}

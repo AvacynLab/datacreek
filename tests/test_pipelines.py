@@ -3,8 +3,8 @@ import asyncio
 import pytest
 
 from datacreek.core import curate
-from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
 from datacreek.pipelines import (
     DatasetType,

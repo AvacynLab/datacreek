@@ -657,9 +657,7 @@ async def _run_generation_pipeline_impl(
         else:
             removed = kg.deduplicate_chunks()
             cleaned = kg.clean_chunk_texts()
-            kg.resolve_entities(
-                threshold=resolve_threshold, aliases=resolve_aliases
-            )
+            kg.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
         if verbose:
             logger.info("  KG cleanup - removed:%d cleaned:%d", removed, cleaned)
         return d
