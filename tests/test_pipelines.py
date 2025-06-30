@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 
+from datacreek.core import curate
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
 from datacreek.pipelines import (
@@ -410,6 +411,108 @@ def test_run_generation_pipeline_dataclass_invalid(monkeypatch):
         run_generation_pipeline(DatasetType.QA, kg)
 
 
+def test_validate_qa_pair_items(monkeypatch):
+    """QA pair items must contain question and answer."""
+
+    def fake_generate(*args, **kwargs):
+        return {"qa_pairs": [{"question": "q"}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.QA, kg)
+
+
+def test_validate_cot_example_items(monkeypatch):
+    """COT example items must contain question, reasoning and answer."""
+
+    def fake_generate(*args, **kwargs):
+        return {"cot_examples": [{"question": "q", "answer": "a"}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.COT, kg)
+
+
+def test_validate_qa_pair_items_empty(monkeypatch):
+    """QA pair items must not have empty question or answer."""
+
+    def fake_generate(*args, **kwargs):
+        return {"qa_pairs": [{"question": " ", "answer": ""}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.QA, kg)
+
+
+def test_validate_cot_example_items_empty(monkeypatch):
+    """COT items must not have empty fields."""
+
+    def fake_generate(*args, **kwargs):
+        return {"cot_examples": [{"question": "q", "reasoning": "", "answer": ""}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.COT, kg)
+
+
+def test_validate_pref_pair_items(monkeypatch):
+    """Pairwise preference items must contain question, chosen and rejected."""
+
+    def fake_generate(*args, **kwargs):
+        return {"pairs": [{"question": "q", "chosen": "a"}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.PREF_PAIR, kg)
+
+
+def test_validate_pref_list_items(monkeypatch):
+    """Listwise preference items must include non-empty answers."""
+
+    def fake_generate(*args, **kwargs):
+        return {"responses": [{"question": "q", "answers": [{"text": ""}]}]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: {})
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(ValueError):
+        run_generation_pipeline(DatasetType.PREF_LIST, kg)
+
+
 def test_run_generation_pipeline_deduplicate(monkeypatch):
     """Duplicate QA pairs should be removed after curation."""
 
@@ -417,7 +520,13 @@ def test_run_generation_pipeline_deduplicate(monkeypatch):
         return {"qa_pairs": [{"question": "q", "answer": "a"}, {"question": "q", "answer": "a"}]}
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
-    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+
+    def fake_curate(data, *a, **k):
+        from datacreek.utils import deduplicate_pairs
+
+        return {"qa_pairs": deduplicate_pairs(data["qa_pairs"])}
+
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
 
     kg = KnowledgeGraph()
@@ -463,6 +572,8 @@ def test_generation_pipeline_error(monkeypatch):
     with pytest.raises(PipelineExecutionError) as exc:
         run_generation_pipeline(DatasetType.QA, kg)
     assert exc.value.step is PipelineStep.GENERATE_QA
+    assert isinstance(exc.value.__cause__, RuntimeError)
+    assert "boom" in exc.value.traceback
 
 
 def test_generation_pipeline_async_error(monkeypatch):
@@ -474,3 +585,112 @@ def test_generation_pipeline_async_error(monkeypatch):
     kg.add_document("d", source="s", text="t")
     with pytest.raises(PipelineExecutionError):
         asyncio.run(run_generation_pipeline_async(DatasetType.QA, kg))
+
+
+def test_pipeline_curation_error(monkeypatch):
+    """Curation errors should be wrapped in PipelineExecutionError."""
+
+    monkeypatch.setattr(
+        "datacreek.pipelines.process_file",
+        lambda *a, **k: {"qa_pairs": [{"question": "q", "answer": "a"}]},
+    )
+
+    def bad_curate(*a, **k):
+        raise curate.CurationError("oops", [ValueError("bad")])
+
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", bad_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    with pytest.raises(PipelineExecutionError) as exc:
+        run_generation_pipeline(DatasetType.QA, kg)
+
+    assert exc.value.step is PipelineStep.CURATE
+
+
+def test_start_step_resume(monkeypatch):
+    """Pipeline should resume from the specified step."""
+
+    called = {}
+
+    def fake_generate(*a, **k):
+        called["generate"] = True
+
+    def fake_curate(data, *a, **k):
+        called["curate"] = True
+        return {"qa_pairs": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    res = run_generation_pipeline(
+        DatasetType.QA,
+        kg,
+        start_step=PipelineStep.CURATE,
+    )
+
+    assert "generate" not in called
+    assert called.get("curate") is True
+    assert res == {"qa_pairs": []}
+
+
+def test_checkpoint_resume(monkeypatch, tmp_path):
+    """Pipeline should load data from checkpoint when resuming."""
+
+    called = {"generate": 0, "curate": 0}
+
+    def fake_generate(*a, **k):
+        called["generate"] += 1
+        return {"qa_pairs": [{"question": "q", "answer": "a"}]}
+
+    def fake_curate(data, *a, **k):
+        called["curate"] += 1
+        return {"qa_pairs": data["qa_pairs"]}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s", text="t")
+
+    run_generation_pipeline(DatasetType.QA, kg, checkpoint_dir=tmp_path)
+    assert (tmp_path / "generate_qa.json").exists()
+
+    res = run_generation_pipeline(
+        DatasetType.QA,
+        kg,
+        start_step=PipelineStep.CURATE,
+        checkpoint_dir=tmp_path,
+    )
+
+    assert called["generate"] == 1
+    assert called["curate"] == 2
+    assert res == {"qa_pairs": [{"question": "q", "answer": "a"}]}
+
+
+def test_kg_cleanup_step(monkeypatch):
+    """KG_CLEANUP should deduplicate and clean chunk texts."""
+
+    def fake_generate(*a, **k):
+        return {"qa_pairs": []}
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
+    monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
+
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "<b>Hello</b>")
+    kg.add_chunk("d", "c2", "<b>Hello</b>")
+
+    run_generation_pipeline(DatasetType.QA, kg, start_step=PipelineStep.KG_CLEANUP)
+
+    assert "c2" not in kg.graph.nodes
+    assert kg.graph.nodes["c1"]["text"] == "Hello"

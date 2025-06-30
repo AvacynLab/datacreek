@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 from copy import deepcopy
@@ -12,8 +13,20 @@ from typing import Any, Dict, List, Optional
 
 import redis
 
-from ..pipelines import DatasetType
+from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HistoryEvent:
+    """Record a dataset modification for auditing."""
+
+    operation: str
+    message: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    params: Optional[Dict[str, Any]] | None = None
 
 
 @dataclass
@@ -26,8 +39,17 @@ class DatasetBuilder:
     graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     history: List[str] = field(default_factory=list)
+    events: List[HistoryEvent] = field(default_factory=list)
     versions: List[Dict[str, Any]] = field(default_factory=list)
     stage: int = 0  # 0=created, 1=ingest, 2=generation, 3=curation, 4=exported
+
+    def _record_event(self, operation: str, message: str, **params: Any) -> None:
+        """Store a history event and log it."""
+
+        event = HistoryEvent(operation, message, params=params or None)
+        self.events.append(event)
+        self.history.append(message)
+        logger.info(message)
 
     def add_document(
         self,
@@ -47,6 +69,11 @@ class DatasetBuilder:
             author=author,
             organization=organization,
         )
+        self._record_event(
+            "add_document",
+            f"Added document {doc_id}",
+            source=source,
+        )
 
     def add_section(
         self,
@@ -60,6 +87,11 @@ class DatasetBuilder:
         """Insert a section node for ``doc_id``."""
 
         self.graph.add_section(doc_id, section_id, title=title, source=source, page=page)
+        self._record_event(
+            "add_section",
+            f"Added section {section_id} to {doc_id}",
+            source=source,
+        )
 
     def add_chunk(
         self,
@@ -74,6 +106,11 @@ class DatasetBuilder:
         """Insert a chunk node in the dataset graph."""
 
         self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id, page=page)
+        self._record_event(
+            "add_chunk",
+            f"Added chunk {chunk_id} to {doc_id}",
+            source=source,
+        )
 
     def add_image(
         self,
@@ -86,11 +123,17 @@ class DatasetBuilder:
         """Insert an image node in the dataset graph."""
 
         self.graph.add_image(doc_id, image_id, path, page=page)
+        self._record_event("add_image", f"Added image {image_id} to {doc_id}")
 
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
 
         self.graph.add_entity(entity_id, text, source)
+        self._record_event(
+            "add_entity",
+            f"Added entity {entity_id}",
+            source=source,
+        )
 
     def link_entity(
         self,
@@ -103,6 +146,12 @@ class DatasetBuilder:
         """Link an entity to another node."""
 
         self.graph.link_entity(node_id, entity_id, relation, provenance=provenance)
+        self._record_event(
+            "link_entity",
+            f"Linked {node_id} to {entity_id}",
+            relation=relation,
+            provenance=provenance,
+        )
 
     def search_chunks(self, query: str) -> list[str]:
         return self.graph.search_chunks(query)
@@ -183,7 +232,12 @@ class DatasetBuilder:
 
         added = self.graph.link_chunks_by_entity()
         if added:
-            self.history.append(f"Added {added} co-mention links")
+            msg = f"Added {added} co-mention links"
+            self._record_event(
+                "link_chunks_by_entity",
+                msg,
+                added=added,
+            )
         return added
 
     def link_documents_by_entity(self) -> int:
@@ -191,7 +245,12 @@ class DatasetBuilder:
 
         added = self.graph.link_documents_by_entity()
         if added:
-            self.history.append(f"Linked {added} co-mentioned documents")
+            msg = f"Linked {added} co-mentioned documents"
+            self._record_event(
+                "link_documents_by_entity",
+                msg,
+                added=added,
+            )
         return added
 
     def link_sections_by_entity(self) -> int:
@@ -199,7 +258,12 @@ class DatasetBuilder:
 
         added = self.graph.link_sections_by_entity()
         if added:
-            self.history.append(f"Linked {added} co-mentioned sections")
+            msg = f"Linked {added} co-mentioned sections"
+            self._record_event(
+                "link_sections_by_entity",
+                msg,
+                added=added,
+            )
         return added
 
     def link_authors_organizations(self) -> int:
@@ -207,7 +271,12 @@ class DatasetBuilder:
 
         added = self.graph.link_authors_organizations()
         if added:
-            self.history.append(f"Linked {added} authors to organizations")
+            msg = f"Linked {added} authors to organizations"
+            self._record_event(
+                "link_authors_organizations",
+                msg,
+                added=added,
+            )
         return added
 
     def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:
@@ -250,7 +319,8 @@ class DatasetBuilder:
 
         removed = self.graph.deduplicate_chunks()
         if removed:
-            self.history.append(f"Removed {removed} duplicate chunks")
+            msg = f"Removed {removed} duplicate chunks"
+            self._record_event("deduplicate_chunks", msg)
         return removed
 
     def clean_chunks(self) -> int:
@@ -258,15 +328,34 @@ class DatasetBuilder:
 
         cleaned = self.graph.clean_chunk_texts()
         if cleaned:
-            self.history.append(f"Cleaned {cleaned} chunks")
+            msg = f"Cleaned {cleaned} chunks"
+            self._record_event("clean_chunks", msg)
         return cleaned
+
+    def cleanup_graph(self) -> tuple[int, int]:
+        """Run standard deduplication and cleaning steps on the graph.
+
+        This removes duplicate chunks, normalizes their text and resolves
+        entities so later pipeline stages work with a clean knowledge graph.
+
+        Returns
+        -------
+        tuple[int, int]
+            Number of chunks removed and cleaned respectively.
+        """
+
+        removed = self.deduplicate_chunks()
+        cleaned = self.clean_chunks()
+        self.resolve_entities()
+        return removed, cleaned
 
     def normalize_dates(self) -> int:
         """Standardize date attributes on nodes to ISO format."""
 
         changed = self.graph.normalize_date_fields()
         if changed:
-            self.history.append(f"Normalized {changed} date fields")
+            msg = f"Normalized {changed} date fields"
+            self._record_event("normalize_dates", msg)
         return changed
 
     def prune_sources(self, sources: List[str]) -> int:
@@ -275,7 +364,8 @@ class DatasetBuilder:
         removed = self.graph.prune_sources(sources)
         if removed:
             joined = ", ".join(sources)
-            self.history.append(f"Pruned {removed} nodes from {joined}")
+            msg = f"Pruned {removed} nodes from {joined}"
+            self._record_event("prune_sources", msg, sources=sources)
         return removed
 
     def resolve_entities(
@@ -287,26 +377,40 @@ class DatasetBuilder:
 
         merged = self.graph.resolve_entities(threshold=threshold, aliases=aliases)
         if merged:
-            self.history.append(f"Merged {merged} entities")
+            msg = f"Merged {merged} entities"
+            self._record_event(
+                "resolve_entities",
+                msg,
+                threshold=threshold,
+                aliases=list(aliases.keys()) if aliases else None,
+            )
         return merged
 
     def predict_links(self, threshold: float = 0.8, *, use_graph_embeddings: bool = False) -> None:
         """Infer missing relations between entities based on similarity."""
 
         self.graph.predict_links(threshold=threshold, use_graph_embeddings=use_graph_embeddings)
-        self.history.append("Predicted entity links")
+        self._record_event(
+            "predict_links",
+            "Predicted entity links",
+            threshold=threshold,
+            use_graph_embeddings=use_graph_embeddings,
+        )
 
     def enrich_entity(self, entity_id: str) -> None:
         """Enrich an entity node using external sources like Wikidata."""
 
         self.graph.enrich_entity_wikidata(entity_id)
-        self.history.append(f"Entity {entity_id} enriched")
+        self._record_event("enrich_entity", f"Entity {entity_id} enriched")
 
     def enrich_entity_dbpedia(self, entity_id: str) -> None:
         """Enrich an entity node using DBpedia."""
 
         self.graph.enrich_entity_dbpedia(entity_id)
-        self.history.append(f"Entity {entity_id} enriched from DBpedia")
+        self._record_event(
+            "enrich_entity_dbpedia",
+            f"Entity {entity_id} enriched from DBpedia",
+        )
 
     def consolidate_schema(self) -> None:
         """Normalize labels in the underlying knowledge graph."""
@@ -331,11 +435,17 @@ class DatasetBuilder:
 
     def score_trust(self) -> None:
         self.graph.score_trust()
+        self._record_event("score_trust", "Computed trust scores")
 
     def compute_centrality(self, node_type: str = "entity", metric: str = "degree") -> None:
         """Compute centrality metrics for graph nodes."""
         self.graph.compute_centrality(node_type=node_type, metric=metric)
-        self.history.append(f"Centrality ({metric}) computed for {node_type} nodes")
+        self._record_event(
+            "compute_centrality",
+            f"Centrality ({metric}) computed for {node_type} nodes",
+            node_type=node_type,
+            metric=metric,
+        )
 
     def compute_graph_embeddings(
         self,
@@ -354,7 +464,15 @@ class DatasetBuilder:
             workers=workers,
             seed=seed,
         )
-        self.history.append("Graph embeddings computed")
+        self._record_event(
+            "compute_graph_embeddings",
+            "Graph embeddings computed",
+            dimensions=dimensions,
+            walk_length=walk_length,
+            num_walks=num_walks,
+            workers=workers,
+            seed=seed,
+        )
 
     def update_embeddings(self, node_type: str = "chunk") -> None:
         """Materialize embeddings for nodes of ``node_type``."""
@@ -387,7 +505,7 @@ class DatasetBuilder:
         """Run named entity recognition on all chunks."""
 
         self.graph.extract_entities(model=model)
-        self.history.append("Entities extracted")
+        self._record_event("extract_entities", "Entities extracted", model=model)
 
     def find_conflicting_facts(self) -> List[tuple[str, str, Dict[str, List[str]]]]:
         """Return edges with the same subject/predicate but different objects."""
@@ -422,7 +540,8 @@ class DatasetBuilder:
 
         marked = self.graph.mark_conflicting_facts()
         if marked:
-            self.history.append(f"Marked {marked} conflicting facts")
+            msg = f"Marked {marked} conflicting facts"
+            self._record_event("mark_conflicts", msg)
         return marked
 
     def validate_coherence(self) -> int:
@@ -430,7 +549,8 @@ class DatasetBuilder:
 
         marked = self.graph.validate_coherence()
         if marked:
-            self.history.append(f"Marked {marked} inconsistent relations")
+            msg = f"Marked {marked} inconsistent relations"
+            self._record_event("validate_coherence", msg)
         return marked
 
     def get_chunks_for_document(self, doc_id: str) -> list[str]:
@@ -566,14 +686,15 @@ class DatasetBuilder:
             preds = list(self.graph.graph.predecessors(chunk_id))
             self.graph.remove_chunk(chunk_id)
             if preds:
-                self.history.append(f"Removed chunk {chunk_id} from {preds[0]}")
+                msg = f"Removed chunk {chunk_id} from {preds[0]}"
+                self._record_event("remove_chunk", msg)
 
     def remove_document(self, doc_id: str) -> None:
         """Remove a document and all its chunks."""
         if not self.graph.graph.has_node(doc_id):
             return
         self.graph.remove_document(doc_id)
-        self.history.append(f"Removed document {doc_id}")
+        self._record_event("remove_document", f"Removed document {doc_id}")
 
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
         """Return a deep copy of this dataset with a new optional name."""
@@ -666,6 +787,10 @@ class DatasetBuilder:
         verbose: bool = False,
         async_mode: bool = False,
         multi_answer: bool = False,
+        batch_size: int | None = None,
+        inference_batch: int | None = None,
+        start_step: PipelineStep | None = None,
+        checkpoint_dir: Path | None = None,
     ) -> Any:
         """Run generation steps after the knowledge graph stage.
 
@@ -673,6 +798,8 @@ class DatasetBuilder:
         executed concurrently.
         ``multi_answer`` forwards to the knowledge graph generator to produce
         several answers per fact.
+        The dataset builder is passed to the pipeline so cleanup events are
+        recorded.
         """
 
         from datacreek.pipelines import run_generation_pipeline, run_generation_pipeline_async
@@ -682,6 +809,7 @@ class DatasetBuilder:
                 run_generation_pipeline_async(
                     self.dataset_type,
                     self.graph,
+                    dataset_builder=self,
                     config_path=config_path,
                     provider=provider,
                     profile=profile,
@@ -694,12 +822,17 @@ class DatasetBuilder:
                     verbose=verbose,
                     async_mode=True,
                     multi_answer=multi_answer,
+                    batch_size=batch_size,
+                    inference_batch=inference_batch,
+                    start_step=start_step,
+                    checkpoint_dir=checkpoint_dir,
                 )
             )
 
         return run_generation_pipeline(
             self.dataset_type,
             self.graph,
+            dataset_builder=self,
             config_path=config_path,
             provider=provider,
             profile=profile,
@@ -712,4 +845,8 @@ class DatasetBuilder:
             verbose=verbose,
             async_mode=False,
             multi_answer=multi_answer,
+            batch_size=batch_size,
+            inference_batch=inference_batch,
+            start_step=start_step,
+            checkpoint_dir=checkpoint_dir,
         )
