@@ -39,6 +39,8 @@ STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/")
 app.config["SECRET_KEY"] = os.urandom(24)
+# Explicit server name ensures Flask session cookies work consistently in tests
+app.config.setdefault("SERVER_NAME", "localhost")
 
 login_manager = LoginManager(app)
 login_manager.login_view = None
@@ -86,9 +88,8 @@ init_db()
 
 @login_manager.user_loader
 def load_user(user_id: str) -> User | None:
-    from datacreek.db import SessionLocal as _SessionLocal
-
-    with _SessionLocal() as db:
+    """Return the user instance for ``user_id`` using the current DB session."""
+    with get_db_session() as db:
         return db.get(User, int(user_id))
 
 
