@@ -23,7 +23,11 @@ from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import ingest_into_dataset
 from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
-from datacreek.db import SessionLocal, User, init_db
+from datacreek.db import SessionLocal as _SessionLocal
+from datacreek.db import User, init_db
+
+# Expose SessionLocal for backward compatibility
+SessionLocal = _SessionLocal
 from datacreek.models.llm_client import LLMClient
 from datacreek.persistence import delete_dataset as delete_dataset_state
 from datacreek.persistence import get_neo4j_driver, get_redis_client, load_dataset, persist_dataset
@@ -86,6 +90,11 @@ def load_user(user_id: str) -> User | None:
 
     with _SessionLocal() as db:
         return db.get(User, int(user_id))
+
+
+def get_db_session():
+    """Return a new database session using the current configuration."""
+    return SessionLocal()
 
 
 def get_dataset_or_404(name: str) -> DatasetBuilder:
@@ -188,7 +197,7 @@ def api_login():
     password = data.get("password")
     if not username or not password:
         return jsonify({"error": "missing credentials"}), 400
-    with SessionLocal() as db:
+    with get_db_session() as db:
         user = db.query(User).filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
@@ -226,7 +235,7 @@ def api_register():
     password = data.get("password")
     if not username or not password:
         return jsonify({"error": "missing credentials"}), 400
-    with SessionLocal() as db:
+    with get_db_session() as db:
         if db.query(User).filter_by(username=username).first():
             return jsonify({"error": "username exists"}), 400
         api_key = generate_api_key()
