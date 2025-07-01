@@ -41,6 +41,7 @@ app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/")
 app.config["SECRET_KEY"] = os.urandom(24)
 # Explicit server name ensures Flask session cookies work consistently in tests
 app.config.setdefault("SERVER_NAME", "localhost")
+app.config.setdefault("SESSION_COOKIE_DOMAIN", "localhost")
 
 login_manager = LoginManager(app)
 login_manager.login_view = None
