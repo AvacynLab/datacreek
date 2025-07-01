@@ -70,6 +70,10 @@ def _patch_persistence(monkeypatch):
     # Ensure server uses the test database
     monkeypatch.setattr(app_module, "SessionLocal", db.SessionLocal)
 
+    app.config["SERVER_NAME"] = "localhost"
+    app.config["TESTING"] = True
+    app.config["SECRET_KEY"] = "test-key"
+
 
 app.config["WTF_CSRF_ENABLED"] = False
 
