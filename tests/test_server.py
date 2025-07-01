@@ -70,7 +70,9 @@ def _patch_persistence(monkeypatch):
     # Ensure server uses the test database
     monkeypatch.setattr(app_module, "SessionLocal", db.SessionLocal)
 
-    app.config["SERVER_NAME"] = "localhost"
+    # Use full domain to ensure session cookies are sent correctly
+    app.config["SERVER_NAME"] = "localhost.localdomain"
+    app.config["SESSION_COOKIE_DOMAIN"] = "localhost.localdomain"
     app.config["TESTING"] = True
     app.config["SECRET_KEY"] = "test-key"
 
