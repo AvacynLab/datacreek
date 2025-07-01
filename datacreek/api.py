@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from datacreek.db import Dataset, SessionLocal, User, init_db
+from datacreek.persistence import delete_dataset as delete_dataset_state
 from datacreek.schemas import (
     CurateParams,
     DatasetCreate,
@@ -110,6 +111,7 @@ def delete_dataset_route(
         raise HTTPException(status_code=404, detail="Dataset not found")
     db.delete(ds)
     db.commit()
+    delete_dataset_state(ds.path)
     return {"status": "deleted"}
 
 

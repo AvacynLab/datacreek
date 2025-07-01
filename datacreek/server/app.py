@@ -13,7 +13,6 @@ from typing import Dict
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf import FlaskForm
-from neo4j import GraphDatabase
 from werkzeug.security import check_password_hash, generate_password_hash
 from wtforms import FileField, IntegerField, PasswordField, SelectField, StringField, SubmitField
 from wtforms.validators import DataRequired
@@ -26,9 +25,11 @@ from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.db import SessionLocal, User, init_db
 from datacreek.models.llm_client import LLMClient
+from datacreek.persistence import delete_dataset as delete_dataset_state
+from datacreek.persistence import get_neo4j_driver, get_redis_client, load_dataset, persist_dataset
 from datacreek.pipelines import DatasetType
 from datacreek.services import generate_api_key, hash_key
-from datacreek.utils.config import get_llm_provider, get_neo4j_config, load_config
+from datacreek.utils.config import get_llm_provider, load_config
 
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
@@ -85,15 +86,14 @@ def load_user(user_id: str) -> User | None:
         return db.get(User, int(user_id))
 
 
-def get_neo4j_driver():
-    """Return a Neo4j driver using config or environment variables."""
-    cfg = get_neo4j_config(config)
-    uri = os.getenv("NEO4J_URI", cfg.get("uri"))
-    user = os.getenv("NEO4J_USER", cfg.get("user"))
-    password = os.getenv("NEO4J_PASSWORD", cfg.get("password"))
-    if not uri or not user or not password:
-        return None
-    return GraphDatabase.driver(uri, auth=(user, password))
+def get_dataset_or_404(name: str) -> DatasetBuilder:
+    """Return dataset ``name`` or abort with 404 if missing."""
+    ds = DATASETS.get(name)
+    if ds is None:
+        ds = load_dataset(name)
+    if ds is None:
+        abort(404)
+    return ds
 
 
 # In-memory store of datasets being built
@@ -276,6 +276,7 @@ def api_create_dataset():
         ds.history.append(f"Initialized from graph {graph_name}")
     ds.history.append("Dataset created")
     DATASETS[name] = ds
+    persist_dataset(ds)
     return jsonify({"message": "Dataset created"})
 
 
@@ -283,7 +284,7 @@ def api_create_dataset():
 @login_required
 def api_dataset_detail(name: str):
     """Return dataset details as JSON."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     nodes = ds.graph.graph
@@ -325,7 +326,7 @@ def api_dataset_detail(name: str):
 @login_required
 def api_dataset_content(name: str):
     """Return dataset documents with their chunks."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     docs = []
@@ -347,7 +348,7 @@ def api_dataset_content(name: str):
 @login_required
 def api_dataset_ingest(name: str):
     """Ingest a document into the dataset."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     data = request.get_json() or {}
@@ -364,6 +365,7 @@ def api_dataset_ingest(name: str):
         client = LLMClient(provider=provider, profile=profile)
     if not path:
         abort(400)
+    driver = get_neo4j_driver()
     ingest_into_dataset(
         path,
         ds,
@@ -374,9 +376,15 @@ def api_dataset_ingest(name: str):
         extract_entities=extract_entities,
         extract_facts=extract_facts,
         client=client,
+        redis_client=get_redis_client(),
+        neo4j_driver=driver,
+        redis_key=f"dataset:{ds.name}",
     )
+    if driver:
+        driver.close()
     ds.history.append(f"Ingested {os.path.basename(path)}")
     ds.stage = max(ds.stage, 1)
+    persist_dataset(ds)
     return jsonify({"message": "ingested"})
 
 
@@ -384,7 +392,7 @@ def api_dataset_ingest(name: str):
 @login_required
 def api_dataset_generate(name: str):
     """Record a generation run with optional parameters."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     data = request.get_json() or {}
@@ -399,6 +407,7 @@ def api_dataset_generate(name: str):
         )
         ds.stage = max(ds.stage, 2)
         ds.history.append(f"Dataset generated (v{len(ds.versions)})")
+        persist_dataset(ds)
 
     tid = run_task(f"generate {name}", _generate)
     return jsonify({"task_id": tid})
@@ -407,7 +416,7 @@ def api_dataset_generate(name: str):
 @app.delete("/api/datasets/<name>/chunks/<cid>")
 @login_required
 def api_delete_chunk(name: str, cid: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.remove_chunk(cid)
@@ -418,12 +427,13 @@ def api_delete_chunk(name: str, cid: str):
 @login_required
 def api_deduplicate(name: str):
     """Remove duplicate chunks from the dataset."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     removed = ds.deduplicate_chunks()
     if removed:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"removed": removed})
 
 
@@ -432,12 +442,13 @@ def api_deduplicate(name: str):
 def api_clean_chunks(name: str):
     """Normalize chunk text by stripping markup and whitespace."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cleaned = ds.clean_chunks()
     if cleaned:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"cleaned": cleaned})
 
 
@@ -446,12 +457,13 @@ def api_clean_chunks(name: str):
 def api_normalize_dates(name: str):
     """Normalize date fields on dataset nodes."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     changed = ds.normalize_dates()
     if changed:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"normalized": changed})
 
 
@@ -460,7 +472,7 @@ def api_normalize_dates(name: str):
 def api_prune(name: str):
     """Remove nodes originating from specific sources."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
 
@@ -472,6 +484,7 @@ def api_prune(name: str):
     removed = ds.prune_sources(sources)
     if removed:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"removed": removed})
 
 
@@ -479,12 +492,13 @@ def api_prune(name: str):
 @login_required
 def api_similarity(name: str):
     """Create similarity links between chunks."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     k = int(request.args.get("k", 3))
     ds.link_similar_chunks(k=k)
     ds.history.append("Similarity links created")
+    persist_dataset(ds)
     return jsonify({"message": "similarity"})
 
 
@@ -493,12 +507,13 @@ def api_similarity(name: str):
 def api_section_similarity(name: str):
     """Create similarity links between section titles."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     k = int(request.args.get("k", 3))
     ds.link_similar_sections(k=k)
     ds.history.append("Section similarity links created")
+    persist_dataset(ds)
     return jsonify({"message": "section_similarity"})
 
 
@@ -507,12 +522,13 @@ def api_section_similarity(name: str):
 def api_document_similarity(name: str):
     """Create similarity links between documents."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     k = int(request.args.get("k", 3))
     ds.link_similar_documents(k=k)
     ds.history.append("Document similarity links created")
+    persist_dataset(ds)
     return jsonify({"message": "document_similarity"})
 
 
@@ -521,12 +537,13 @@ def api_document_similarity(name: str):
 def api_co_mentions(name: str):
     """Create links between chunks that mention the same entity."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     added = ds.link_chunks_by_entity()
     if added:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"added": added})
 
 
@@ -535,12 +552,13 @@ def api_co_mentions(name: str):
 def api_doc_co_mentions(name: str):
     """Create links between documents that mention the same entity."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     added = ds.link_documents_by_entity()
     if added:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"added": added})
 
 
@@ -549,12 +567,13 @@ def api_doc_co_mentions(name: str):
 def api_section_co_mentions(name: str):
     """Create links between sections that mention the same entity."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     added = ds.link_sections_by_entity()
     if added:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"added": added})
 
 
@@ -563,12 +582,13 @@ def api_section_co_mentions(name: str):
 def api_author_org_links(name: str):
     """Link document authors to their organizations."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     added = ds.link_authors_organizations()
     if added:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"added": added})
 
 
@@ -577,7 +597,7 @@ def api_author_org_links(name: str):
 def api_similar_chunks(name: str):
     """Return chunk IDs similar to ``cid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -593,7 +613,7 @@ def api_similar_chunks(name: str):
 def api_similar_chunks_data(name: str):
     """Return similar chunk info for ``cid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -609,7 +629,7 @@ def api_similar_chunks_data(name: str):
 def api_chunk_neighbors(name: str):
     """Return nearest neighbors for every chunk in the dataset."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     k = int(request.args.get("k", 3))
@@ -622,7 +642,7 @@ def api_chunk_neighbors(name: str):
 def api_chunk_neighbors_data(name: str):
     """Return neighbor data for every chunk."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     k = int(request.args.get("k", 3))
@@ -635,7 +655,7 @@ def api_chunk_neighbors_data(name: str):
 def api_similar_sections(name: str):
     """Return section IDs similar to ``sid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     sid = request.args.get("sid")
@@ -651,7 +671,7 @@ def api_similar_sections(name: str):
 def api_similar_documents(name: str):
     """Return document IDs similar to ``did``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     did = request.args.get("did")
@@ -667,7 +687,7 @@ def api_similar_documents(name: str):
 def api_chunk_context(name: str):
     """Return IDs of chunks surrounding ``cid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -684,7 +704,7 @@ def api_chunk_context(name: str):
 def api_chunk_document(name: str):
     """Return the document ID owning ``cid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -699,7 +719,7 @@ def api_chunk_document(name: str):
 def api_chunk_page(name: str):
     """Return the page number for ``cid`` if available."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -714,7 +734,7 @@ def api_chunk_page(name: str):
 def api_section_document(name: str):
     """Return the document ID owning ``sid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     sid = request.args.get("sid")
@@ -729,7 +749,7 @@ def api_section_document(name: str):
 def api_section_page(name: str):
     """Return the page number recorded for ``sid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     sid = request.args.get("sid")
@@ -742,7 +762,7 @@ def api_section_page(name: str):
 @app.get("/api/datasets/<name>/chunk_entities")
 @login_required
 def api_chunk_entities(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -755,7 +775,7 @@ def api_chunk_entities(name: str):
 @app.get("/api/datasets/<name>/chunk_facts")
 @login_required
 def api_chunk_facts(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     cid = request.args.get("cid")
@@ -768,7 +788,7 @@ def api_chunk_facts(name: str):
 @app.get("/api/datasets/<name>/fact_sections")
 @login_required
 def api_fact_sections(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     fid = request.args.get("fid")
@@ -781,7 +801,7 @@ def api_fact_sections(name: str):
 @app.get("/api/datasets/<name>/fact_documents")
 @login_required
 def api_fact_documents(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     fid = request.args.get("fid")
@@ -796,7 +816,7 @@ def api_fact_documents(name: str):
 def api_fact_pages(name: str):
     """Return page numbers referencing ``fid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     fid = request.args.get("fid")
@@ -809,7 +829,7 @@ def api_fact_pages(name: str):
 @app.get("/api/datasets/<name>/entity_documents")
 @login_required
 def api_entity_documents(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     eid = request.args.get("eid")
@@ -822,7 +842,7 @@ def api_entity_documents(name: str):
 @app.get("/api/datasets/<name>/entity_chunks")
 @login_required
 def api_entity_chunks(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     eid = request.args.get("eid")
@@ -835,7 +855,7 @@ def api_entity_chunks(name: str):
 @app.get("/api/datasets/<name>/entity_facts")
 @login_required
 def api_entity_facts(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     eid = request.args.get("eid")
@@ -850,7 +870,7 @@ def api_entity_facts(name: str):
 def api_entity_pages(name: str):
     """Return page numbers mentioning ``eid``."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     eid = request.args.get("eid")
@@ -864,7 +884,7 @@ def api_entity_pages(name: str):
 @login_required
 def api_search_hybrid(name: str):
     """Hybrid lexical/vector search on nodes."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     query = request.args.get("q")
@@ -880,7 +900,7 @@ def api_search_hybrid(name: str):
 @login_required
 def api_search_links(name: str):
     """Search and expand results through graph links."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     query = request.args.get("q")
@@ -895,110 +915,120 @@ def api_search_links(name: str):
 @app.post("/api/datasets/<name>/consolidate")
 @login_required
 def api_consolidate(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.consolidate_schema()
     ds.history.append("Schema consolidated")
+    persist_dataset(ds)
     return jsonify({"message": "consolidated"})
 
 
 @app.post("/api/datasets/<name>/communities")
 @login_required
 def api_communities(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.detect_communities()
     ds.history.append("Communities detected")
+    persist_dataset(ds)
     return jsonify({"message": "communities"})
 
 
 @app.post("/api/datasets/<name>/entity_groups")
 @login_required
 def api_entity_groups(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.detect_entity_groups()
     ds.history.append("Entity groups detected")
+    persist_dataset(ds)
     return jsonify({"message": "entity_groups"})
 
 
 @app.post("/api/datasets/<name>/summaries")
 @login_required
 def api_summaries(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.summarize_communities()
     ds.history.append("Communities summarized")
+    persist_dataset(ds)
     return jsonify({"message": "summaries"})
 
 
 @app.post("/api/datasets/<name>/entity_group_summaries")
 @login_required
 def api_entity_group_summaries(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.summarize_entity_groups()
     ds.history.append("Entity groups summarized")
+    persist_dataset(ds)
     return jsonify({"message": "entity_group_summaries"})
 
 
 @app.post("/api/datasets/<name>/resolve_entities")
 @login_required
 def api_resolve_entities(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     data = request.get_json() or {}
     threshold = float(data.get("threshold", 0.8))
     aliases = data.get("aliases") if isinstance(data.get("aliases"), dict) else None
     merged = ds.resolve_entities(threshold=threshold, aliases=aliases)
+    persist_dataset(ds)
     return jsonify({"merged": merged})
 
 
 @app.post("/api/datasets/<name>/predict_links")
 @login_required
 def api_predict_links(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     use_graph = request.args.get("graph") == "true"
     ds.predict_links(use_graph_embeddings=use_graph)
+    persist_dataset(ds)
     return jsonify({"message": "links_predicted"})
 
 
 @app.post("/api/datasets/<name>/enrich_entity/<eid>")
 @login_required
 def api_enrich_entity(name: str, eid: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.enrich_entity(eid)
+    persist_dataset(ds)
     return jsonify({"message": "enriched"})
 
 
 @app.post("/api/datasets/<name>/enrich_entity_dbpedia/<eid>")
 @login_required
 def api_enrich_entity_dbpedia(name: str, eid: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.enrich_entity_dbpedia(eid)
+    persist_dataset(ds)
     return jsonify({"message": "enriched"})
 
 
 @app.post("/api/datasets/<name>/trust")
 @login_required
 def api_trust(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.score_trust()
     ds.history.append("Trust scores computed")
+    persist_dataset(ds)
     return jsonify({"message": "trust"})
 
 
@@ -1007,12 +1037,13 @@ def api_trust(name: str):
 def api_centrality(name: str):
     """Compute centrality for dataset nodes."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     metric = request.args.get("metric", "degree")
     node_type = request.args.get("type", "entity")
     ds.compute_centrality(node_type=node_type, metric=metric)
+    persist_dataset(ds)
     return jsonify({"message": "centrality"})
 
 
@@ -1021,7 +1052,7 @@ def api_centrality(name: str):
 def api_graph_embeddings(name: str):
     """Generate Node2Vec embeddings for all nodes."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
 
@@ -1039,7 +1070,7 @@ def api_graph_embeddings(name: str):
         workers=workers,
         seed=seed,
     )
-
+    persist_dataset(ds)
     return jsonify({"message": "graph_embeddings"})
 
 
@@ -1047,7 +1078,7 @@ def api_graph_embeddings(name: str):
 @login_required
 def api_extract_facts(name: str):
     """Extract atomic facts from dataset chunks using an LLM."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     provider = request.json.get("provider") if request.json else None
@@ -1057,6 +1088,7 @@ def api_extract_facts(name: str):
         client = LLMClient(provider=provider, profile=profile)
     ds.extract_facts(client)
     ds.history.append("Facts extracted")
+    persist_dataset(ds)
     return jsonify({"message": "facts"})
 
 
@@ -1065,18 +1097,19 @@ def api_extract_facts(name: str):
 def api_extract_entities(name: str):
     """Run named entity recognition on dataset chunks."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     model = request.json.get("model") if request.json else "en_core_web_sm"
     ds.extract_entities(model=model)
+    persist_dataset(ds)
     return jsonify({"message": "entities"})
 
 
 @app.get("/api/datasets/<name>/conflicts")
 @login_required
 def api_conflicts(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     conflicts = ds.find_conflicting_facts()
@@ -1088,12 +1121,13 @@ def api_conflicts(name: str):
 def api_mark_conflicts(name: str):
     """Flag conflicting facts on graph edges."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     marked = ds.mark_conflicting_facts()
     if marked:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"marked": marked})
 
 
@@ -1102,12 +1136,13 @@ def api_mark_conflicts(name: str):
 def api_validate(name: str):
     """Run logical consistency checks on the dataset."""
 
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     marked = ds.validate_coherence()
     if marked:
         ds.stage = max(ds.stage, 3)
+    persist_dataset(ds)
     return jsonify({"marked": marked})
 
 
@@ -1115,11 +1150,12 @@ def api_validate(name: str):
 @login_required
 def api_export_dataset(name: str):
     """Return the dataset as JSON and mark it exported."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     ds.stage = max(ds.stage, 4)
     ds.history.append("Dataset exported")
+    persist_dataset(ds)
     return jsonify(ds.to_dict())
 
 
@@ -1146,9 +1182,20 @@ def api_create_graph():
     if name in GRAPHS:
         abort(400, description="Graph already exists")
     kg_ds = DatasetBuilder(DatasetType.DOCUMENT, name=name)
+    driver = get_neo4j_driver()
     for path in docs:
-        ingest_into_dataset(path, kg_ds, config=config)
+        ingest_into_dataset(
+            path,
+            kg_ds,
+            config=config,
+            redis_client=get_redis_client(),
+            neo4j_driver=driver,
+            redis_key=f"dataset:{kg_ds.id}",
+        )
+    if driver:
+        driver.close()
     kg_ds.history.append("Graph created")
+    persist_dataset(kg_ds)
     GRAPHS[name] = kg_ds
     return jsonify({"message": "graph created"})
 
@@ -1196,6 +1243,7 @@ def datasets():
         ds_type = DatasetType(form.dataset_type.data)
         DATASETS[name] = DatasetBuilder(ds_type, name=name)
         DATASETS[name].history.append("Dataset created")
+        persist_dataset(DATASETS[name])
         flash("Dataset created", "success")
         return redirect(url_for("dataset_detail", name=name))
     return render_template("datasets.html", datasets=DATASETS, form=form)
@@ -1204,7 +1252,7 @@ def datasets():
 @app.route("/datasets/<name>")
 @login_required
 def dataset_detail(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     return render_template("dataset_detail.html", dataset=ds)
@@ -1214,7 +1262,7 @@ def dataset_detail(name: str):
 @login_required
 def dataset_graph(name: str):
     """Return dataset knowledge graph as JSON."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     return jsonify(ds.graph.to_dict())
@@ -1224,7 +1272,7 @@ def dataset_graph(name: str):
 @login_required
 def dataset_search(name: str):
     """Return node ids matching the query."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     query = request.args.get("q")
@@ -1239,7 +1287,7 @@ def dataset_search(name: str):
 @login_required
 def dataset_ingest(name: str):
     """Ingest a file or URL into the dataset knowledge graph."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
 
@@ -1252,6 +1300,7 @@ def dataset_ingest(name: str):
         return redirect(url_for("dataset_detail", name=name))
 
     try:
+        driver = get_neo4j_driver()
         ingest_into_dataset(
             input_path,
             ds,
@@ -1259,9 +1308,15 @@ def dataset_ingest(name: str):
             config=config,
             high_res=high_res,
             ocr=ocr,
+            redis_client=get_redis_client(),
+            neo4j_driver=driver,
+            redis_key=f"dataset:{ds.name}",
         )
+        if driver:
+            driver.close()
         ds.history.append(f"Ingested {os.path.basename(input_path)}")
         ds.stage = max(ds.stage, 1)
+        persist_dataset(ds)
         flash("Document ingested", "success")
     except Exception as e:  # pragma: no cover - flash message only
         flash(f"Error ingesting document: {e}", "danger")
@@ -1273,7 +1328,7 @@ def dataset_ingest(name: str):
 @login_required
 def save_dataset_neo4j(name: str):
     """Persist the dataset graph to Neo4j."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     driver = get_neo4j_driver()
@@ -1282,6 +1337,7 @@ def save_dataset_neo4j(name: str):
     ds.graph.to_neo4j(driver)
     driver.close()
     ds.history.append("Saved to Neo4j")
+    persist_dataset(ds)
     flash("Graph saved to Neo4j", "success")
     return redirect(url_for("dataset_detail", name=name))
 
@@ -1290,7 +1346,7 @@ def save_dataset_neo4j(name: str):
 @login_required
 def load_dataset_neo4j(name: str):
     """Load the dataset graph from Neo4j."""
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     driver = get_neo4j_driver()
@@ -1299,6 +1355,7 @@ def load_dataset_neo4j(name: str):
     ds.graph = KnowledgeGraph.from_neo4j(driver)
     driver.close()
     ds.history.append("Loaded from Neo4j")
+    persist_dataset(ds)
     flash("Graph loaded from Neo4j", "success")
     return redirect(url_for("dataset_detail", name=name))
 
@@ -1307,6 +1364,7 @@ def load_dataset_neo4j(name: str):
 @login_required
 def delete_dataset(name: str):
     DATASETS.pop(name, None)
+    delete_dataset_state(name)
     flash("Dataset deleted", "success")
     return redirect(url_for("datasets"))
 
@@ -1314,7 +1372,7 @@ def delete_dataset(name: str):
 @app.post("/datasets/<name>/copy")
 @login_required
 def copy_dataset(name: str):
-    ds = DATASETS.get(name)
+    ds = get_dataset_or_404(name)
     if not ds:
         abort(404)
     new_name = f"{name}_copy"
@@ -1324,6 +1382,7 @@ def copy_dataset(name: str):
         new_name = f"{name}_copy{counter}"
     DATASETS[new_name] = ds.clone(name=new_name)
     DATASETS[new_name].history.append(f"Copied from {name}")
+    persist_dataset(DATASETS[new_name])
     flash("Dataset copied", "success")
     return redirect(url_for("dataset_detail", name=new_name))
 

@@ -10,6 +10,9 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+import redis
+from neo4j import Driver
+
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from datacreek.core.dataset import DatasetBuilder
 
@@ -111,7 +114,6 @@ class ProcessOptions:
     multi_answer: bool = False
     batch_size: int | None = None
     inference_batch: int | None = None
-    checkpoint_dir: Path | None = None
     keep_ratings: bool = False
     dedup_similarity: float = 1.0
     curation_temperature: float | None = None
@@ -568,11 +570,13 @@ async def _run_generation_pipeline_impl(
     batch_size: int | None = None,
     inference_batch: int | None = None,
     start_step: PipelineStep | None = None,
-    checkpoint_dir: Path | None = None,
     dedup_similarity: float = 1.0,
     keep_ratings: bool = False,
     curation_temperature: float | None = None,
     resume_curation: bool = False,
+    redis_client: redis.Redis | None = None,
+    redis_key: str | None = None,
+    neo4j_driver: "Driver" | None = None,
 ) -> Any:
     """Shared implementation for sync and async generation pipelines."""
 
@@ -610,34 +614,33 @@ async def _run_generation_pipeline_impl(
         multi_answer=multi_answer,
         batch_size=batch_size,
         inference_batch=inference_batch,
-        checkpoint_dir=checkpoint_dir,
         keep_ratings=keep_ratings,
         dedup_similarity=dedup_similarity,
         curation_temperature=curation_temperature,
         curation_threshold=threshold,
         resume_curation=resume_curation,
     )
-    if checkpoint_dir:
-        checkpoint_dir = Path(checkpoint_dir)
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        meta = {
-            "dataset_type": dataset_type.value,
-            "model": model,
-            "config_path": str(config_path) if config_path else None,
-            "pipeline_config": str(pipeline_config_path) if pipeline_config_path else None,
-            "dedup_similarity": dedup_similarity,
-            "keep_ratings": keep_ratings,
-        }
-        (checkpoint_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
+    meta = {
+        "dataset_type": dataset_type.value,
+        "model": model,
+        "config_path": str(config_path) if config_path else None,
+        "pipeline_config": str(pipeline_config_path) if pipeline_config_path else None,
+        "dedup_similarity": dedup_similarity,
+        "keep_ratings": keep_ratings,
+    }
+    if redis_client:
+        key = f"{redis_key or 'pipeline'}:meta"
+        redis_client.set(key, json.dumps(meta))
 
     data: Any = document_text
-    if start_step and checkpoint_dir:
+    if start_step:
         idx = pipeline.steps.index(start_step)
         if idx > 0:
             prev_step = pipeline.steps[idx - 1]
-            cp_file = checkpoint_dir / f"{prev_step.value}.json"
-            if cp_file.exists():
-                data = json.loads(cp_file.read_text())
+            if redis_client:
+                prev = redis_client.get(f"{redis_key or 'pipeline'}:{prev_step.value}")
+                if prev:
+                    data = json.loads(prev)
 
     async def _identity(d: Any) -> Any:
         return d
@@ -838,9 +841,16 @@ async def _run_generation_pipeline_impl(
                     data = _validate_step_result(dataset_type, step, result)
                 else:
                     data = result
-                if options.checkpoint_dir:
-                    cp_file = Path(options.checkpoint_dir) / f"{step.value}.json"
-                    cp_file.write_text(json.dumps(_serialize(data)))
+                if redis_client:
+                    key = f"{redis_key or 'pipeline'}:{step.value}"
+                    redis_client.set(key, json.dumps(_serialize(data)))
+                if dataset_builder is not None:
+                    dataset_builder.save_state(
+                        redis_client,
+                        neo4j_driver,
+                        redis_key=redis_key,
+                        clear_neo4j=False,
+                    )
                 if verbose:
                     logger.info("Finished %s in %.2fs", step.value, duration)
                 if progress:
@@ -885,7 +895,9 @@ def run_generation_pipeline(
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
-    checkpoint_dir: Path | None = None,
+    redis_client: redis.Redis | None = None,
+    redis_key: str | None = None,
+    neo4j_driver: Driver | None = None,
     **kwargs: Any,
 ) -> Any:
     """Execute the generation steps synchronously.
@@ -906,15 +918,11 @@ def run_generation_pipeline(
         Override the quality threshold used during curation.
     curation_temperature:
         Override the temperature used when rating pairs during curation.
-    resume_curation:
-        Continue curation from ``checkpoint_dir`` if previous ratings exist.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
     resolve_aliases:
         Optional alias mapping passed to :meth:`DatasetBuilder.resolve_entities`.
-    checkpoint_dir:
-        Directory to store intermediate results for resuming later.
 
     Raises
     ------
@@ -939,7 +947,9 @@ def run_generation_pipeline(
             resolve_threshold=resolve_threshold,
             resolve_aliases=resolve_aliases,
             start_step=start_step,
-            checkpoint_dir=checkpoint_dir,
+            redis_client=redis_client,
+            redis_key=redis_key,
+            neo4j_driver=neo4j_driver,
             **kwargs,
         )
     )
@@ -961,7 +971,9 @@ async def run_generation_pipeline_async(
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
-    checkpoint_dir: Path | None = None,
+    redis_client: redis.Redis | None = None,
+    redis_key: str | None = None,
+    neo4j_driver: Driver | None = None,
     **kwargs: Any,
 ) -> Any:
     """Asynchronous counterpart to :func:`run_generation_pipeline`.
@@ -978,15 +990,11 @@ async def run_generation_pipeline_async(
         Override the quality threshold used during curation.
     curation_temperature:
         Override the temperature used when rating pairs during curation.
-    resume_curation:
-        Continue curation from ``checkpoint_dir`` if previous ratings exist.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
     resolve_aliases:
         Optional alias mapping passed to :meth:`DatasetBuilder.resolve_entities`.
-    checkpoint_dir:
-        Directory to store intermediate results for resuming later.
 
     Raises
     ------
@@ -1011,6 +1019,8 @@ async def run_generation_pipeline_async(
         resolve_threshold=resolve_threshold,
         resolve_aliases=resolve_aliases,
         start_step=start_step,
-        checkpoint_dir=checkpoint_dir,
+        redis_client=redis_client,
+        redis_key=redis_key,
+        neo4j_driver=neo4j_driver,
         **kwargs,
     )

@@ -104,11 +104,8 @@ def process_file(
     Returns:
         Path to the output file
     """
-    save_to_file = output_dir is not None
-    if output_dir is None:
-        output_dir = resolve_output_dir(config_path)
-    if save_to_file:
-        os.makedirs(output_dir, exist_ok=True)
+    # output_dir is ignored; generation results are kept in memory
+    save_to_file = False
 
     client = init_llm_client(
         config_path,
@@ -543,11 +540,5 @@ async def process_file_async(
         num_pairs=num_pairs,
         verbose=verbose,
     )
-
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"{_base_name(file_path)}_qa_pairs.json")
-        _write_json(result.to_dict(), output_path)
-        return output_path
 
     return result.to_dict()

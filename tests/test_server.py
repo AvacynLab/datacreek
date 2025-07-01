@@ -22,12 +22,51 @@ with db.SessionLocal() as session:
     session.add(user)
     session.commit()
 
+import fakeredis
+import pytest
+
 import datacreek.server.app as app_module
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.db import verify_password
 from datacreek.pipelines import DatasetType
 from datacreek.server.app import DATASETS, app
+
+
+@pytest.fixture(autouse=True)
+def _patch_persistence(monkeypatch):
+    monkeypatch.setattr(
+        app_module,
+        "get_redis_client",
+        lambda: fakeredis.FakeStrictRedis(),
+    )
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            pass
+
+        def run(self, *a, **kw):
+            return None
+
+        def execute_write(self, fn, *args, **kwargs):
+            return fn(self, *args, **kwargs)
+
+    class _FakeDriver:
+        def close(self):
+            pass
+
+        def session(self):
+            return _FakeSession()
+
+    monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: _FakeDriver())
+
+    monkeypatch.setattr(app_module, "persist_dataset", lambda ds: None)
+    # Ensure server uses the test database
+    monkeypatch.setattr(app_module, "SessionLocal", db.SessionLocal)
+
 
 app.config["WTF_CSRF_ENABLED"] = False
 

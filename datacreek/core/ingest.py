@@ -12,6 +12,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import redis
+from neo4j import Driver
+
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
@@ -226,6 +229,9 @@ def ingest_into_dataset(
     extract_entities: bool = False,
     extract_facts: bool = False,
     client: "LLMClient" | None = None,
+    redis_client: redis.Redis | None = None,
+    neo4j_driver: "Driver" | None = None,
+    redis_key: str | None = None,
 ) -> str:
     """Parse ``file_path`` and populate ``dataset`` with its content.
 
@@ -277,4 +283,6 @@ def ingest_into_dataset(
     if extract_facts:
         dataset.extract_facts(client)
         dataset.history.append("Facts extracted on ingest")
+
+    dataset.save_state(redis_client, neo4j_driver, redis_key=redis_key)
     return doc_id

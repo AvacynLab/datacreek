@@ -817,7 +817,6 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
         batch_size=2,
         inference_batch=1,
         start_step=PipelineStep.CURATE,
-        checkpoint_dir=Path("/tmp"),
     )
 
     assert result == "ok"

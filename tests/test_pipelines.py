@@ -1,5 +1,6 @@
 import asyncio
 
+import fakeredis
 import pytest
 
 from datacreek.core import curate
@@ -677,14 +678,15 @@ def test_checkpoint_resume(monkeypatch, tmp_path):
     kg = KnowledgeGraph()
     kg.add_document("d", source="s", text="t")
 
-    run_generation_pipeline(DatasetType.QA, kg, checkpoint_dir=tmp_path)
-    assert (tmp_path / "generate_qa.json").exists()
+    client = fakeredis.FakeStrictRedis()
+    run_generation_pipeline(DatasetType.QA, kg, redis_client=client, redis_key="test")
 
     res = run_generation_pipeline(
         DatasetType.QA,
         kg,
         start_step=PipelineStep.CURATE,
-        checkpoint_dir=tmp_path,
+        redis_client=client,
+        redis_key="test",
     )
 
     assert called["generate"] == 1

@@ -75,15 +75,6 @@ async def _curate_qa_pairs_impl(
     qa_pairs = data.get("qa_pairs", [])
     summary = data.get("summary", "")
     existing_rated: List[QAPair] = []
-    if resume and output_path and os.path.exists(output_path):
-        try:
-            prev = json.loads(Path(output_path).read_text())
-            for p in prev.get("rated_pairs", []):
-                existing_rated.append(QAPair(**p))
-        except Exception:
-            pass
-        existing_set = {(p.question, p.answer) for p in existing_rated}
-        qa_pairs = [p for p in qa_pairs if (p.get("question"), p.get("answer")) not in existing_set]
     if not isinstance(qa_pairs, list):
         raise ValueError("Input must contain a 'qa_pairs' list")
     if not qa_pairs:
@@ -233,12 +224,6 @@ async def _curate_qa_pairs_impl(
         rated_pairs=rated_pairs if keep_ratings else None,
     )
 
-    if output_path:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        await asyncio.to_thread(
-            Path(output_path).write_text, json.dumps(result.to_dict(), indent=2)
-        )
-
     if as_dataclass:
         return result
     return result.to_dict()
@@ -266,7 +251,7 @@ def curate_qa_pairs(
 
     Args:
         input_path: Path to the input file with QA pairs
-        output_path: Path to save the cleaned output
+        output_path: Unused output path kept for backward compatibility
         threshold: Quality threshold (1-10)
         api_base: VLLM API base URL
         model: Model to use
@@ -322,6 +307,7 @@ async def curate_qa_pairs_async(
 
     Parameters
     ----------
+    output_path: Unused output path kept for backward compatibility
     as_dataclass:
         Return a :class:`CurationResult` instead of a dictionary when ``True``.
     """

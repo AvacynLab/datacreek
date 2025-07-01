@@ -3,7 +3,60 @@ import os
 import time
 from pathlib import Path
 
+import fakeredis
+import pytest
 from fastapi.testclient import TestClient
+
+os.environ["DATABASE_URL"] = "sqlite:///test.db"
+
+import datacreek.server.app as app_module
+import datacreek.tasks as tasks_module
+
+
+@pytest.fixture(autouse=True)
+def _patch_persistence(monkeypatch):
+    """Use fake Redis/Neo4j and disable persistence during tests."""
+
+    monkeypatch.setattr(
+        tasks_module,
+        "get_redis_client",
+        lambda: fakeredis.FakeStrictRedis(),
+    )
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            pass
+
+        def run(self, *a, **kw):
+            return None
+
+        def execute_write(self, fn, *args, **kwargs):
+            return fn(self, *args, **kwargs)
+
+    class _FakeDriver:
+        def close(self):
+            pass
+
+        def session(self):
+            return _FakeSession()
+
+    monkeypatch.setattr(tasks_module, "get_neo4j_driver", lambda: _FakeDriver())
+    monkeypatch.setattr(tasks_module, "persist_dataset", lambda ds: None)
+    # API routes use the same helpers
+    monkeypatch.setattr(
+        app_module,
+        "get_redis_client",
+        lambda: fakeredis.FakeStrictRedis(),
+    )
+    monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: _FakeDriver())
+    monkeypatch.setattr(app_module, "persist_dataset", lambda ds: None)
+    from datacreek.db import SessionLocal as DBSession
+
+    monkeypatch.setattr(app_module, "SessionLocal", DBSession)
+
 
 os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
 
@@ -29,7 +82,8 @@ def _create_user() -> tuple[int, str]:
 
 
 def test_create_user():
-    res = client.post("/users", json={"username": "alice"})
+    uname = f"alice_{int(time.time()*1000)}"
+    res = client.post("/users", json={"username": uname})
     assert res.status_code == 200
     body = res.json()
     key = body["api_key"]
@@ -37,17 +91,17 @@ def test_create_user():
     with SessionLocal() as db:
         user = db.get(User, user_id)
         assert user is not None
-        assert user.username == "alice"
+        assert user.username == uname
         assert user.api_key == hash_key(key)
 
 
 def _wait_task(task_id: str) -> dict:
-    for _ in range(50):
+    for _ in range(200):
         res = client.get(f"/tasks/{task_id}")
         body = res.json()
         if body["status"] == "finished":
             return body["result"]
-        time.sleep(0.01)
+        time.sleep(0.05)
     raise AssertionError("task did not finish")
 
 

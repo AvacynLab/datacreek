@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import redis
+from neo4j import Driver
 
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
@@ -787,6 +788,44 @@ class DatasetBuilder:
             raise KeyError(key)
         return cls.from_dict(json.loads(data))
 
+    def save_state(
+        self,
+        redis_client: redis.Redis | None = None,
+        neo4j_driver: "Driver" | None = None,
+        *,
+        redis_key: str | None = None,
+        clear_neo4j: bool = True,
+    ) -> None:
+        """Persist the dataset and graph to Redis and Neo4j."""
+
+        if redis_client:
+            self.to_redis(redis_client, redis_key)
+        if neo4j_driver:
+            self.graph.to_neo4j(neo4j_driver, clear=clear_neo4j)
+
+    @classmethod
+    def load_state(
+        cls,
+        *,
+        redis_client: redis.Redis | None = None,
+        neo4j_driver: "Driver" | None = None,
+        redis_key: str | None = None,
+        dataset_type: DatasetType | None = None,
+    ) -> "DatasetBuilder":
+        """Restore a dataset and its graph from Redis and Neo4j."""
+
+        if redis_client:
+            ds = cls.from_redis(
+                redis_client, redis_key or (dataset_type.name if dataset_type else "dataset")
+            )
+        else:
+            if dataset_type is None:
+                raise ValueError("dataset_type is required when redis_client is None")
+            ds = cls(dataset_type=dataset_type)
+        if neo4j_driver:
+            ds.graph = KnowledgeGraph.from_neo4j(neo4j_driver)
+        return ds
+
     # ------------------------------------------------------------------
     # Generation helpers
     # ------------------------------------------------------------------
@@ -814,10 +853,13 @@ class DatasetBuilder:
         batch_size: int | None = None,
         inference_batch: int | None = None,
         start_step: PipelineStep | None = None,
-        checkpoint_dir: Path | None = None,
         pipeline_config_path: Path | None = None,
         dedup_similarity: float = 1.0,
         keep_ratings: bool = False,
+        redis_client: redis.Redis | None = None,
+        neo4j_driver: Driver | None = None,
+        redis_key: str | None = None,
+        clear_neo4j: bool = True,
     ) -> Any:
         """Run generation steps after the knowledge graph stage.
 
@@ -834,7 +876,7 @@ class DatasetBuilder:
         from datacreek.pipelines import run_generation_pipeline, run_generation_pipeline_async
 
         if async_mode:
-            return asyncio.run(
+            result = asyncio.run(
                 run_generation_pipeline_async(
                     self.dataset_type,
                     self.graph,
@@ -854,34 +896,41 @@ class DatasetBuilder:
                     batch_size=batch_size,
                     inference_batch=inference_batch,
                     start_step=start_step,
-                    checkpoint_dir=checkpoint_dir,
                     pipeline_config_path=pipeline_config_path,
                     dedup_similarity=dedup_similarity,
                     keep_ratings=keep_ratings,
+                    redis_client=redis_client,
+                    redis_key=redis_key,
+                    neo4j_driver=neo4j_driver,
                 )
             )
+        else:
+            result = run_generation_pipeline(
+                self.dataset_type,
+                self.graph,
+                dataset_builder=self,
+                config_path=config_path,
+                provider=provider,
+                profile=profile,
+                api_base=api_base,
+                model=model,
+                num_pairs=num_pairs,
+                curation_threshold=threshold,
+                fmt=fmt,
+                overrides=overrides,
+                verbose=verbose,
+                async_mode=False,
+                multi_answer=multi_answer,
+                batch_size=batch_size,
+                inference_batch=inference_batch,
+                start_step=start_step,
+                pipeline_config_path=pipeline_config_path,
+                dedup_similarity=dedup_similarity,
+                keep_ratings=keep_ratings,
+                redis_client=redis_client,
+                redis_key=redis_key,
+                neo4j_driver=neo4j_driver,
+            )
 
-        return run_generation_pipeline(
-            self.dataset_type,
-            self.graph,
-            dataset_builder=self,
-            config_path=config_path,
-            provider=provider,
-            profile=profile,
-            api_base=api_base,
-            model=model,
-            num_pairs=num_pairs,
-            curation_threshold=threshold,
-            fmt=fmt,
-            overrides=overrides,
-            verbose=verbose,
-            async_mode=False,
-            multi_answer=multi_answer,
-            batch_size=batch_size,
-            inference_batch=inference_batch,
-            start_step=start_step,
-            checkpoint_dir=checkpoint_dir,
-            pipeline_config_path=pipeline_config_path,
-            dedup_similarity=dedup_similarity,
-            keep_ratings=keep_ratings,
-        )
+        self.save_state(redis_client, neo4j_driver, redis_key=redis_key, clear_neo4j=clear_neo4j)
+        return result
