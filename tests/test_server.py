@@ -12,6 +12,9 @@ if "datacreek.db" in sys.modules:
     importlib.reload(sys.modules["datacreek.db"])
 import datacreek.db as db
 
+if "datacreek.server.app" in sys.modules:
+    importlib.reload(sys.modules["datacreek.server.app"])
+
 db.init_db()
 with db.SessionLocal() as session:
     user = db.User(
