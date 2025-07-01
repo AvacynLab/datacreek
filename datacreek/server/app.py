@@ -82,7 +82,9 @@ init_db()
 
 @login_manager.user_loader
 def load_user(user_id: str) -> User | None:
-    with SessionLocal() as db:
+    from datacreek.db import SessionLocal as _SessionLocal
+
+    with _SessionLocal() as db:
         return db.get(User, int(user_id))
 
 

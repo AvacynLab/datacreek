@@ -95,37 +95,26 @@ def generate_task(
         if prompts is not None:
             overrides["prompts"] = prompts
 
-        ds_builder = DatasetBuilder(DatasetType(content_type), name=f"ds_{src_id}")
-        to_kg(src.content, ds_builder, str(src_id))
-
-        redis_client = get_redis_client()
-        neo4j_driver = get_neo4j_driver()
-        ds_builder.run_post_kg_pipeline(
-            config_path=Path(config_path) if config_path else None,
+        cfg = load_config_with_overrides(
+            str(config_path) if config_path else None,
+            overrides if overrides else None,
+        )
+        _ = get_path_config(cfg, "output", "generated")
+        out = generate_data(
+            None,
+            None,
+            Path(config_path) if config_path else None,
+            api_base,
+            model,
+            content_type,
+            num_pairs,
+            False,
             provider=provider,
             profile=profile,
-            api_base=api_base,
-            model=model,
-            num_pairs=num_pairs,
-            overrides=overrides if overrides else None,
-            redis_client=redis_client,
-            neo4j_driver=neo4j_driver,
-            redis_key=f"dataset:{ds_builder.name}",
+            document_text=src.content,
+            config_overrides=overrides if overrides else None,
         )
-        ds_builder.save_state(redis_client, neo4j_driver, redis_key=f"dataset:{ds_builder.name}")
-        persist_dataset(ds_builder)
-        try:
-            redis_client.close()
-        except Exception:
-            pass
-        neo4j_driver.close()
-        ds = create_dataset(
-            db,
-            user_id,
-            src_id,
-            path=ds_builder.name,
-            content=ds_builder.dataset_type.value,
-        )
+        ds = create_dataset(db, user_id, src_id, content=json.dumps(out))
         return {"id": ds.id}
 
 
@@ -133,69 +122,29 @@ def generate_task(
 def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
     _update_eager()
     with SessionLocal() as db:
-        ds_rec = db.get(Dataset, ds_id)
-        if not ds_rec or ds_rec.owner_id != user_id:
+        ds = db.get(Dataset, ds_id)
+        if not ds or ds.owner_id != user_id:
             raise RuntimeError("Dataset not found")
 
-        name = ds_rec.path
-        dtype = DatasetType(ds_rec.content or "qa")
-        redis_client = get_redis_client()
-        neo4j_driver = get_neo4j_driver()
-        builder = DatasetBuilder.load_state(
-            redis_client=redis_client,
-            neo4j_driver=neo4j_driver,
-            redis_key=f"dataset:{name}",
-            dataset_type=dtype,
-        )
-        builder.run_post_kg_pipeline(
-            start_step=PipelineStep.CURATE,
-            threshold=threshold,
-            redis_client=redis_client,
-            neo4j_driver=neo4j_driver,
-            redis_key=f"dataset:{name}",
-        )
-        builder.save_state(redis_client, neo4j_driver, redis_key=f"dataset:{name}")
-        persist_dataset(builder)
-        try:
-            redis_client.close()
-        except Exception:
-            pass
-        neo4j_driver.close()
-        return {"id": ds_rec.id}
+        data = json.loads(ds.content or "{}")
+        result = curate_qa_pairs(data, None, threshold, None, None, None, False, async_mode=False)
+        ds.content = json.dumps(result)
+        db.commit()
+        db.refresh(ds)
+        return {"id": ds.id}
 
 
 @celery_app.task
 def save_task(user_id: int, ds_id: int, fmt: str) -> dict:
     _update_eager()
     with SessionLocal() as db:
-        ds_rec = db.get(Dataset, ds_id)
-        if not ds_rec or ds_rec.owner_id != user_id:
+        ds = db.get(Dataset, ds_id)
+        if not ds or ds.owner_id != user_id:
             raise RuntimeError("Dataset not found")
 
-        name = ds_rec.path
-        dtype = DatasetType(ds_rec.content or "qa")
-        redis_client = get_redis_client()
-        neo4j_driver = get_neo4j_driver()
-        builder = DatasetBuilder.load_state(
-            redis_client=redis_client,
-            neo4j_driver=neo4j_driver,
-            redis_key=f"dataset:{name}",
-            dataset_type=dtype,
-        )
-        data = builder.run_post_kg_pipeline(
-            start_step=PipelineStep.SAVE,
-            fmt=fmt,
-            redis_client=redis_client,
-            neo4j_driver=neo4j_driver,
-            redis_key=f"dataset:{name}",
-        )
-        key = f"dataset:{name}:export:{fmt}"
-        redis_client.set(key, data if isinstance(data, str) else json.dumps(data))
-        builder.save_state(redis_client, neo4j_driver, redis_key=f"dataset:{name}")
-        persist_dataset(builder)
-        try:
-            redis_client.close()
-        except Exception:
-            pass
-        neo4j_driver.close()
-        return {"id": ds_rec.id, "redis_key": key}
+        data = json.loads(ds.content or "{}")
+        out = convert_format(data, None, fmt, {}, "json")
+        ds.content = out if isinstance(out, str) else json.dumps(out)
+        db.commit()
+        db.refresh(ds)
+        return {"id": ds.id}
