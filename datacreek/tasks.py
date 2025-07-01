@@ -19,6 +19,7 @@ from datacreek.services import create_dataset, create_source
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
 from datacreek.utils import get_path_config, load_config
+from datacreek.utils.config import load_config_with_overrides
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")

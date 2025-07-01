@@ -53,9 +53,14 @@ def _patch_persistence(monkeypatch):
     )
     monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: _FakeDriver())
     monkeypatch.setattr(app_module, "persist_dataset", lambda ds: None)
+    monkeypatch.setattr(app_module, "delete_dataset_state", lambda name: None)
     from datacreek.db import SessionLocal as DBSession
 
     monkeypatch.setattr(app_module, "SessionLocal", DBSession)
+
+    import datacreek.api as api_module
+
+    monkeypatch.setattr(api_module, "delete_dataset_state", lambda name: None)
 
 
 os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")
