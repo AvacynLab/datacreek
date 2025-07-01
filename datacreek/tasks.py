@@ -27,10 +27,17 @@ celery_app = Celery("datacreek", broker=CELERY_BROKER_URL, backend=CELERY_BACKEN
 celery_app.conf.accept_content = ["json"]
 celery_app.conf.task_serializer = "json"
 celery_app.conf.result_serializer = "json"
-celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "false").lower() in {
-    "1",
-    "true",
-}
+
+
+def _update_eager() -> None:
+    """Set Celery eager mode from the ``CELERY_TASK_ALWAYS_EAGER`` env var."""
+    celery_app.conf.task_always_eager = os.environ.get(
+        "CELERY_TASK_ALWAYS_EAGER", "false"
+    ).lower() in {"1", "true"}
+
+
+_update_eager()
+celery_app.conf.task_store_eager_result = True
 celery_app.conf.task_store_eager_result = True
 
 
@@ -45,6 +52,7 @@ def ingest_task(
     extract_entities: bool = False,
     extract_facts: bool = False,
 ) -> dict:
+    _update_eager()
     with SessionLocal() as db:
         content = ingest_file(path, high_res=high_res, ocr=ocr, use_unstructured=use_unstructured)
         ents = extract_entities_func(content) if extract_entities else None
@@ -75,6 +83,7 @@ def generate_task(
     generation: dict | None = None,
     prompts: dict | None = None,
 ) -> dict:
+    _update_eager()
     with SessionLocal() as db:
         src = db.get(SourceData, src_id)
         if not src or src.owner_id != user_id:
@@ -122,6 +131,7 @@ def generate_task(
 
 @celery_app.task
 def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
+    _update_eager()
     with SessionLocal() as db:
         ds_rec = db.get(Dataset, ds_id)
         if not ds_rec or ds_rec.owner_id != user_id:
@@ -156,6 +166,7 @@ def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
 
 @celery_app.task
 def save_task(user_id: int, ds_id: int, fmt: str) -> dict:
+    _update_eager()
     with SessionLocal() as db:
         ds_rec = db.get(Dataset, ds_id)
         if not ds_rec or ds_rec.owner_id != user_id:

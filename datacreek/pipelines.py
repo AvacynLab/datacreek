@@ -930,29 +930,35 @@ def run_generation_pipeline(
         If any step fails.
     """
 
-    return asyncio.run(
-        _run_generation_pipeline_impl(
-            dataset_type,
-            kg,
-            use_async_handlers=False,
-            dataset_builder=dataset_builder,
-            pipeline_config_path=pipeline_config_path,
-            batch_size=batch_size,
-            inference_batch=inference_batch,
-            dedup_similarity=dedup_similarity,
-            keep_ratings=keep_ratings,
-            threshold=curation_threshold,
-            curation_temperature=curation_temperature,
-            resume_curation=resume_curation,
-            resolve_threshold=resolve_threshold,
-            resolve_aliases=resolve_aliases,
-            start_step=start_step,
-            redis_client=redis_client,
-            redis_key=redis_key,
-            neo4j_driver=neo4j_driver,
-            **kwargs,
-        )
+    coro = _run_generation_pipeline_impl(
+        dataset_type,
+        kg,
+        use_async_handlers=False,
+        dataset_builder=dataset_builder,
+        pipeline_config_path=pipeline_config_path,
+        batch_size=batch_size,
+        inference_batch=inference_batch,
+        dedup_similarity=dedup_similarity,
+        keep_ratings=keep_ratings,
+        threshold=curation_threshold,
+        curation_temperature=curation_temperature,
+        resume_curation=resume_curation,
+        resolve_threshold=resolve_threshold,
+        resolve_aliases=resolve_aliases,
+        start_step=start_step,
+        redis_client=redis_client,
+        redis_key=redis_key,
+        neo4j_driver=neo4j_driver,
+        **kwargs,
     )
+    try:
+        asyncio.get_running_loop()
+        import nest_asyncio
+
+        nest_asyncio.apply()
+    except RuntimeError:
+        pass
+    return asyncio.run(coro)
 
 
 async def run_generation_pipeline_async(

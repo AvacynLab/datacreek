@@ -23,7 +23,14 @@ from datacreek.services import (
     create_user_with_generated_key,
     get_user_by_key,
 )
-from datacreek.tasks import celery_app, curate_task, generate_task, ingest_task, save_task
+from datacreek.tasks import (
+    _update_eager,
+    celery_app,
+    curate_task,
+    generate_task,
+    ingest_task,
+    save_task,
+)
 
 init_db()
 app = FastAPI(title="Datacreek API")
@@ -135,6 +142,7 @@ async def ingest_async(
     payload: SourceCreate,
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    _update_eager()
     celery_task = ingest_task.apply_async(
         args=[current_user.id, payload.path],
         kwargs={
@@ -154,6 +162,7 @@ async def generate_async(
     current_user: User = Depends(get_current_user),
     x_config_path: str | None = Header(None, alias="X-Config-Path"),
 ) -> dict:
+    _update_eager()
     celery_task = generate_task.apply_async(
         args=[current_user.id, params.src_id, params.content_type, params.num_pairs],
         kwargs={
@@ -178,6 +187,7 @@ async def curate_async(
     params: CurateParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    _update_eager()
     celery_task = curate_task.apply_async(args=[current_user.id, params.ds_id, params.threshold])
     return {"task_id": celery_task.id}
 
@@ -187,6 +197,7 @@ async def save_async(
     params: SaveParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    _update_eager()
     celery_task = save_task.apply_async(args=[current_user.id, params.ds_id, params.fmt])
     return {"task_id": celery_task.id}
 
