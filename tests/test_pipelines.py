@@ -1,7 +1,7 @@
 import asyncio
 
-import pytest
 import fakeredis
+import pytest
 
 from datacreek.core import curate
 from datacreek.core.dataset import DatasetBuilder
