@@ -6,12 +6,16 @@ import logging
 import os
 import secrets
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from .ingest import IngestOptions
 
 import redis
+from neo4j import Driver
 
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
@@ -38,10 +42,14 @@ class DatasetBuilder:
     name: Optional[str] = None
     graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    owner_id: int | None = None
     history: List[str] = field(default_factory=list)
     events: List[HistoryEvent] = field(default_factory=list)
     versions: List[Dict[str, Any]] = field(default_factory=list)
+    ingested_docs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     stage: int = 0  # 0=created, 1=ingest, 2=generation, 3=curation, 4=exported
+    redis_client: redis.Redis | None = field(default=None, repr=False)
+    neo4j_driver: Driver | None = field(default=None, repr=False, compare=False)
 
     def _record_event(self, operation: str, message: str, **params: Any) -> None:
         """Store a history event and log it."""
@@ -50,6 +58,35 @@ class DatasetBuilder:
         self.events.append(event)
         self.history.append(message)
         logger.info(message)
+        if self.redis_client and self.name:
+            key = f"dataset:{self.name}"
+            try:
+                self.to_redis(self.redis_client, key)
+                self.redis_client.sadd("datasets", self.name)
+                if self.owner_id is not None:
+                    self.redis_client.sadd(f"user:{self.owner_id}:datasets", self.name)
+                self.redis_client.rpush(
+                    f"{key}:events",
+                    json.dumps(
+                        {
+                            "operation": event.operation,
+                            "message": event.message,
+                            "timestamp": event.timestamp.isoformat(),
+                            "params": event.params,
+                        }
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to persist dataset %s", self.name)
+        if self.neo4j_driver and self.name:
+            try:
+                self.graph.to_neo4j(
+                    self.neo4j_driver,
+                    clear=True,
+                    dataset=self.name,
+                )
+            except Exception:
+                logger.exception("Failed to persist graph %s to Neo4j", self.name)
 
     def add_document(
         self,
@@ -345,6 +382,9 @@ class DatasetBuilder:
         resolve_threshold: float = 0.8,
         resolve_aliases: dict[str, list[str]] | None = None,
         dedup_similarity: float = 1.0,
+        normalize_dates: bool = True,
+        mark_conflicts: bool = False,
+        validate: bool = False,
     ) -> tuple[int, int]:
         """Run standard deduplication and cleaning steps on the graph.
 
@@ -370,7 +410,13 @@ class DatasetBuilder:
 
         removed = self.deduplicate_chunks(similarity=dedup_similarity)
         cleaned = self.clean_chunks()
+        if normalize_dates:
+            self.normalize_dates()
         self.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
+        if mark_conflicts:
+            self.mark_conflicting_facts()
+        if validate:
+            self.validate_coherence()
         return removed, cleaned
 
     def normalize_dates(self) -> int:
@@ -440,22 +486,35 @@ class DatasetBuilder:
         """Normalize labels in the underlying knowledge graph."""
 
         self.graph.consolidate_schema()
+        self._record_event("consolidate_schema", "Schema consolidated")
 
     def detect_communities(self, n_clusters: int = 3) -> None:
         """Cluster chunks into communities."""
 
         self.graph.cluster_chunks(n_clusters=n_clusters)
+        self._record_event(
+            "detect_communities",
+            "Communities detected",
+            n_clusters=n_clusters,
+        )
 
     def detect_entity_groups(self, n_clusters: int = 3) -> None:
         """Cluster entity nodes into groups."""
 
         self.graph.cluster_entities(n_clusters=n_clusters)
+        self._record_event(
+            "detect_entity_groups",
+            "Entity groups detected",
+            n_clusters=n_clusters,
+        )
 
     def summarize_entity_groups(self) -> None:
         self.graph.summarize_entity_groups()
+        self._record_event("summarize_entity_groups", "Entity groups summarized")
 
     def summarize_communities(self) -> None:
         self.graph.summarize_communities()
+        self._record_event("summarize_communities", "Communities summarized")
 
     def score_trust(self) -> None:
         self.graph.score_trust()
@@ -502,6 +561,7 @@ class DatasetBuilder:
         """Materialize embeddings for nodes of ``node_type``."""
 
         self.graph.update_embeddings(node_type=node_type)
+        self._record_event("update_embeddings", "Embeddings materialized", node_type=node_type)
 
     def extract_facts(self, client: Optional["LLMClient"] = None) -> None:
         """Run fact extraction on all chunk nodes."""
@@ -524,6 +584,7 @@ class DatasetBuilder:
                 self.graph.graph.add_edge(
                     cid, fid, relation="has_fact", provenance=data.get("source")
                 )
+        self._record_event("extract_facts", "Facts extracted")
 
     def extract_entities(self, model: str | None = "en_core_web_sm") -> None:
         """Run named entity recognition on all chunks."""
@@ -723,6 +784,7 @@ class DatasetBuilder:
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
         """Return a deep copy of this dataset with a new optional name."""
         clone = DatasetBuilder(self.dataset_type, name=name, graph=deepcopy(self.graph))
+        clone.owner_id = self.owner_id
         clone.history = self.history.copy()
         clone.versions = deepcopy(self.versions)
         clone.stage = self.stage
@@ -735,9 +797,12 @@ class DatasetBuilder:
             "dataset_type": self.dataset_type.value,
             "id": self.id,
             "name": self.name,
+            "owner_id": self.owner_id,
             "created_at": self.created_at.isoformat(),
             "history": self.history,
             "versions": self.versions,
+            "ingested_docs": self.ingested_docs,
+            "events": [{**asdict(e), "timestamp": e.timestamp.isoformat()} for e in self.events],
             "graph": self.graph.to_dict(),
             "stage": self.stage,
         }
@@ -749,8 +814,23 @@ class DatasetBuilder:
             ds.id = data["id"]
         if ts := data.get("created_at"):
             ds.created_at = datetime.fromisoformat(ts)
+        ds.owner_id = data.get("owner_id")
         ds.history = list(data.get("history", []))
         ds.versions = list(data.get("versions", []))
+        ds.ingested_docs = dict(data.get("ingested_docs", {}))
+        ds.events = [
+            HistoryEvent(
+                e.get("operation"),
+                e.get("message"),
+                timestamp=(
+                    datetime.fromisoformat(e["timestamp"])
+                    if "timestamp" in e
+                    else datetime.now(timezone.utc)
+                ),
+                params=e.get("params"),
+            )
+            for e in data.get("events", [])
+        ]
         ds.graph = KnowledgeGraph.from_dict(data.get("graph", {}))
         ds.stage = int(data.get("stage", 0))
         return ds
@@ -778,6 +858,23 @@ class DatasetBuilder:
 
         key = key or (self.name or "dataset")
         client.set(key, json.dumps(self.to_dict()))
+        events_key = f"{key}:events"
+        client.delete(events_key)
+        if self.events:
+            client.rpush(
+                events_key,
+                *[
+                    json.dumps(
+                        {
+                            "operation": ev.operation,
+                            "message": ev.message,
+                            "timestamp": ev.timestamp.isoformat(),
+                            "params": ev.params,
+                        }
+                    )
+                    for ev in self.events
+                ],
+            )
         return key
 
     @classmethod
@@ -785,7 +882,82 @@ class DatasetBuilder:
         data = client.get(key)
         if data is None:
             raise KeyError(key)
-        return cls.from_dict(json.loads(data))
+        ds = cls.from_dict(json.loads(data))
+        ds.redis_client = client
+        ds.neo4j_driver = None
+        events_key = f"{key}:events"
+        raw_events = client.lrange(events_key, 0, -1)
+        if raw_events:
+            ds.events = []
+            for e in raw_events:
+                ev = json.loads(e)
+                ts = ev.get("timestamp")
+                if ts:
+                    ev["timestamp"] = datetime.fromisoformat(ts)
+                ds.events.append(HistoryEvent(**ev))
+            ds.history = [ev.message for ev in ds.events]
+        return ds
+
+    def ingest_file(
+        self,
+        path: str,
+        doc_id: str | None = None,
+        *,
+        config: dict[str, Any] | None = None,
+        high_res: bool = False,
+        ocr: bool = False,
+        use_unstructured: bool | None = None,
+        extract_entities: bool = False,
+        extract_facts: bool = False,
+        client: "LLMClient" | None = None,
+        options: "IngestOptions" | None = None,
+    ) -> str:
+        """Parse ``path`` and ingest its content into the dataset."""
+
+        from .ingest import ingest_into_dataset
+
+        if options is not None:
+            config = options.config
+            high_res = options.high_res
+            ocr = options.ocr
+            use_unstructured = options.use_unstructured
+            extract_entities = options.extract_entities
+            extract_facts = options.extract_facts
+
+        doc = ingest_into_dataset(
+            path,
+            self,
+            doc_id=doc_id,
+            config=config,
+            high_res=high_res,
+            ocr=ocr,
+            use_unstructured=use_unstructured,
+            extract_entities=extract_entities,
+            extract_facts=extract_facts,
+            client=client,
+            options=None,
+        )
+        self.ingested_docs[doc] = {
+            "path": path,
+            "config": config,
+            "high_res": high_res,
+            "ocr": ocr,
+            "use_unstructured": use_unstructured,
+            "extract_entities": extract_entities,
+            "extract_facts": extract_facts,
+        }
+        self.stage = max(self.stage, 1)
+        self._record_event(
+            "ingest_document",
+            f"Ingested {doc}",
+            path=path,
+            high_res=high_res,
+            ocr=ocr,
+            use_unstructured=use_unstructured,
+            extract_entities=extract_entities,
+            extract_facts=extract_facts,
+        )
+        return doc
 
     # ------------------------------------------------------------------
     # Generation helpers
@@ -814,10 +986,10 @@ class DatasetBuilder:
         batch_size: int | None = None,
         inference_batch: int | None = None,
         start_step: PipelineStep | None = None,
-        checkpoint_dir: Path | None = None,
         pipeline_config_path: Path | None = None,
         dedup_similarity: float = 1.0,
         keep_ratings: bool = False,
+        redis_client: redis.Redis | None = None,
     ) -> Any:
         """Run generation steps after the knowledge graph stage.
 
@@ -833,8 +1005,11 @@ class DatasetBuilder:
 
         from datacreek.pipelines import run_generation_pipeline, run_generation_pipeline_async
 
+        if redis_client is None:
+            redis_client = self.redis_client
+
         if async_mode:
-            return asyncio.run(
+            result = asyncio.run(
                 run_generation_pipeline_async(
                     self.dataset_type,
                     self.graph,
@@ -854,34 +1029,90 @@ class DatasetBuilder:
                     batch_size=batch_size,
                     inference_batch=inference_batch,
                     start_step=start_step,
-                    checkpoint_dir=checkpoint_dir,
                     pipeline_config_path=pipeline_config_path,
                     dedup_similarity=dedup_similarity,
                     keep_ratings=keep_ratings,
+                    redis_client=redis_client,
                 )
             )
+        else:
+            result = run_generation_pipeline(
+                self.dataset_type,
+                self.graph,
+                dataset_builder=self,
+                config_path=config_path,
+                provider=provider,
+                profile=profile,
+                api_base=api_base,
+                model=model,
+                num_pairs=num_pairs,
+                curation_threshold=threshold,
+                fmt=fmt,
+                overrides=overrides,
+                verbose=verbose,
+                async_mode=False,
+                multi_answer=multi_answer,
+                batch_size=batch_size,
+                inference_batch=inference_batch,
+                start_step=start_step,
+                pipeline_config_path=pipeline_config_path,
+                dedup_similarity=dedup_similarity,
+                keep_ratings=keep_ratings,
+                redis_client=redis_client,
+            )
 
-        return run_generation_pipeline(
-            self.dataset_type,
-            self.graph,
-            dataset_builder=self,
-            config_path=config_path,
-            provider=provider,
-            profile=profile,
-            api_base=api_base,
-            model=model,
-            num_pairs=num_pairs,
-            curation_threshold=threshold,
-            fmt=fmt,
-            overrides=overrides,
-            verbose=verbose,
-            async_mode=False,
-            multi_answer=multi_answer,
-            batch_size=batch_size,
-            inference_batch=inference_batch,
-            start_step=start_step,
-            checkpoint_dir=checkpoint_dir,
-            pipeline_config_path=pipeline_config_path,
-            dedup_similarity=dedup_similarity,
-            keep_ratings=keep_ratings,
+        params = {
+            "provider": provider,
+            "profile": profile,
+            "api_base": api_base,
+            "model": model,
+            "num_pairs": num_pairs,
+            "threshold": threshold,
+            "fmt": fmt,
+            "multi_answer": multi_answer,
+            "batch_size": batch_size,
+            "inference_batch": inference_batch,
+            "start_step": start_step.value if start_step else None,
+            "pipeline_config_path": str(pipeline_config_path) if pipeline_config_path else None,
+            "dedup_similarity": dedup_similarity,
+            "keep_ratings": keep_ratings,
+        }
+
+        res_data = (
+            asdict(result) if is_dataclass(result) else result if isinstance(result, dict) else None
         )
+        self.versions.append(
+            {"params": params, "time": datetime.now(timezone.utc).isoformat(), "result": res_data}
+        )
+        self.stage = max(self.stage, 2)
+        self._record_event("generate", f"Post-KG pipeline run (v{len(self.versions)})")
+
+        return result
+
+    def mark_exported(self) -> None:
+        """Update the dataset stage and history after export."""
+
+        self.stage = max(self.stage, 4)
+        self._record_event("export_dataset", "Dataset exported")
+
+    # ------------------------------------------------------------------
+    # Neo4j helpers
+    # ------------------------------------------------------------------
+
+    def save_neo4j(self, driver: Driver | None = None) -> None:
+        """Persist the knowledge graph to Neo4j."""
+
+        driver = driver or self.neo4j_driver
+        if not driver:
+            raise ValueError("Neo4j driver required")
+        self.graph.to_neo4j(driver, dataset=self.name)
+        self._record_event("save_neo4j", "Graph saved to Neo4j")
+
+    def load_neo4j(self, driver: Driver | None = None) -> None:
+        """Load the knowledge graph from Neo4j."""
+
+        driver = driver or self.neo4j_driver
+        if not driver:
+            raise ValueError("Neo4j driver required")
+        self.graph = self.graph.__class__.from_neo4j(driver, dataset=self.name)
+        self._record_event("load_neo4j", "Graph loaded from Neo4j")

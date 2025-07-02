@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -19,6 +20,18 @@ from datacreek.utils.config import get_generation_config, get_path_config, load_
 from datacreek.utils.text import clean_text, split_into_chunks
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class IngestOptions:
+    """Configuration for ingesting a document."""
+
+    config: Optional[Dict[str, Any]] = None
+    high_res: bool = False
+    ocr: bool = False
+    use_unstructured: bool | None = None
+    extract_entities: bool = False
+    extract_facts: bool = False
 
 
 def _resolve_input_path(file_path: str, config: Dict[str, Any]) -> str:
@@ -226,11 +239,14 @@ def ingest_into_dataset(
     extract_entities: bool = False,
     extract_facts: bool = False,
     client: "LLMClient" | None = None,
+    options: IngestOptions | None = None,
 ) -> str:
     """Parse ``file_path`` and populate ``dataset`` with its content.
 
     Parameters
     ----------
+    options:
+        Optional :class:`IngestOptions` overriding individual parameters.
     extract_entities:
         Run NER over inserted chunks if ``True``.
     extract_facts:
@@ -238,6 +254,14 @@ def ingest_into_dataset(
         When enabled, ``client`` may supply an :class:`~datacreek.models.llm_client.LLMClient`
         instance to use for extraction.
     """
+
+    if options is not None:
+        config = options.config
+        high_res = options.high_res
+        ocr = options.ocr
+        use_unstructured = options.use_unstructured
+        extract_entities = options.extract_entities
+        extract_facts = options.extract_facts
 
     result = process_file(
         file_path,

@@ -1791,7 +1791,13 @@ class KnowledgeGraph:
     # Neo4j helpers
     # ------------------------------------------------------------------
 
-    def to_neo4j(self, driver: Driver, *, clear: bool = True) -> None:
+    def to_neo4j(
+        self,
+        driver: Driver,
+        *,
+        clear: bool = True,
+        dataset: str | None = None,
+    ) -> None:
         """Persist the graph to a Neo4j database.
 
         Parameters
@@ -1803,33 +1809,59 @@ class KnowledgeGraph:
         """
 
         def _write(tx):
-            if clear:
+            if dataset:
+                if clear:
+                    tx.run(
+                        "MATCH (n {dataset:$dataset}) DETACH DELETE n",
+                        dataset=dataset,
+                    )
+            elif clear:
                 tx.run("MATCH (n) DETACH DELETE n")
+
             for n, data in self.graph.nodes(data=True):
                 label = data.get("type", "Node").capitalize()
+                props = {k: v for k, v in data.items() if k != "type"}
+                if dataset:
+                    props["dataset"] = dataset
                 tx.run(
-                    f"MERGE (m:{label} {{id:$id}}) SET m += $props",
+                    f"MERGE (m:{label} {{id:$id{', dataset:$dataset' if dataset else ''}}}) SET m += $props",
                     id=n,
-                    props={k: v for k, v in data.items() if k != "type"},
+                    **({"dataset": dataset} if dataset else {}),
+                    props=props,
                 )
             for u, v, edata in self.graph.edges(data=True):
                 rel = edata.get("relation", "RELATED_TO").upper()
+                props = {k: v for k, v in edata.items() if k != "relation"}
+                if dataset:
+                    props["dataset"] = dataset
                 tx.run(
-                    f"MATCH (a {{id:$u}}), (b {{id:$v}}) MERGE (a)-[r:{rel}]->(b) SET r += $props",
+                    f"MATCH (a {{id:$u{', dataset:$dataset' if dataset else ''}}}), (b {{id:$v{', dataset:$dataset' if dataset else ''}}}) MERGE (a)-[r:{rel}]->(b) SET r += $props",
                     u=u,
                     v=v,
-                    props={k: v for k, v in edata.items() if k != "relation"},
+                    **({"dataset": dataset} if dataset else {}),
+                    props=props,
                 )
 
         with driver.session() as session:
             session.execute_write(_write)
 
     @classmethod
-    def from_neo4j(cls, driver: Driver) -> "KnowledgeGraph":
+    def from_neo4j(
+        cls,
+        driver: Driver,
+        *,
+        dataset: str | None = None,
+    ) -> "KnowledgeGraph":
         kg = cls()
 
         def _read(tx):
-            nodes = tx.run("MATCH (n) RETURN n, labels(n)[0] AS label")
+            if dataset:
+                nodes = tx.run(
+                    "MATCH (n {dataset:$dataset}) RETURN n, labels(n)[0] AS label",
+                    dataset=dataset,
+                )
+            else:
+                nodes = tx.run("MATCH (n) RETURN n, labels(n)[0] AS label")
             for record in nodes:
                 props = record["n"]
                 node_id = props.pop("id")
@@ -1837,9 +1869,15 @@ class KnowledgeGraph:
                 kg.graph.add_node(node_id, type=node_type, **props)
                 if node_type == "chunk" and "text" in props:
                     kg.index.add(node_id, props["text"])
-            edges = tx.run(
-                "MATCH (a)-[r]->(b) RETURN a.id AS src, type(r) AS rel, b.id AS tgt, r as rel_props"
-            )
+            if dataset:
+                edges = tx.run(
+                    "MATCH (a {dataset:$dataset})-[r]->(b {dataset:$dataset}) RETURN a.id AS src, type(r) AS rel, b.id AS tgt, r as rel_props",
+                    dataset=dataset,
+                )
+            else:
+                edges = tx.run(
+                    "MATCH (a)-[r]->(b) RETURN a.id AS src, type(r) AS rel, b.id AS tgt, r as rel_props"
+                )
             for record in edges:
                 props = dict(record["rel_props"])
                 kg.graph.add_edge(

@@ -17,6 +17,9 @@ def cleanup_knowledge_graph(
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     dedup_similarity: float = 1.0,
+    normalize_dates: bool = True,
+    mark_conflicts: bool = False,
+    validate: bool = False,
 ) -> KGCleanupStats:
     """Run standard cleanup operations on ``kg``.
 
@@ -36,9 +39,18 @@ def cleanup_knowledge_graph(
             resolve_threshold=resolve_threshold,
             resolve_aliases=resolve_aliases,
             dedup_similarity=dedup_similarity,
+            normalize_dates=normalize_dates,
+            mark_conflicts=mark_conflicts,
+            validate=validate,
         )
     else:
         removed = kg.deduplicate_chunks(dedup_similarity)
         cleaned = kg.clean_chunk_texts()
+        if normalize_dates:
+            kg.normalize_date_fields()
         kg.resolve_entities(threshold=resolve_threshold, aliases=resolve_aliases)
+        if mark_conflicts:
+            kg.mark_conflicting_facts()
+        if validate:
+            kg.validate_coherence()
     return KGCleanupStats(removed=removed, cleaned=cleaned)
