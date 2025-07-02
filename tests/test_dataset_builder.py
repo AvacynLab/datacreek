@@ -5,6 +5,7 @@ import requests
 
 from datacreek.core import dataset
 from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.ingest import IngestOptions
 from datacreek.pipelines import DatasetType, PipelineStep
 
 
@@ -65,6 +66,105 @@ def test_dataset_persistence_redis():
     assert loaded.search_chunks("hello") == ["c1"]
     # id should round-trip through persistence
     assert loaded.id == ds.id
+
+
+def test_auto_persist(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.QA, name="auto")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hi")
+
+    stored = client.get("dataset:auto")
+    assert stored is not None
+    loaded = DatasetBuilder.from_redis(client, "dataset:auto")
+    assert loaded.search("hi") == ["c1"]
+
+
+def test_extract_facts_auto_persist(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="facts")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "Paris is the capital of France.")
+    ds.extract_facts()
+
+    stored = client.get("dataset:facts")
+    assert stored is not None
+    loaded = DatasetBuilder.from_redis(client, "dataset:facts")
+    fact_nodes = [n for n, d in loaded.graph.graph.nodes(data=True) if d.get("type") == "fact"]
+    assert fact_nodes
+
+
+def test_auto_persist_neo4j(monkeypatch):
+    ds = DatasetBuilder(DatasetType.QA, name="neo")
+    called = {}
+    ds.neo4j_driver = object()
+    monkeypatch.setattr(
+        ds.graph,
+        "to_neo4j",
+        lambda driver, clear=True, dataset=None: called.setdefault("driver", driver),
+    )
+    ds.add_document("d", source="s")
+    assert called["driver"] is ds.neo4j_driver
+
+
+def test_save_and_load_neo4j_methods(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT, name="neo2")
+    fake_driver = object()
+    called = {}
+
+    monkeypatch.setattr(
+        ds.graph.__class__,
+        "to_neo4j",
+        lambda self, driver, clear=True, dataset=None: called.setdefault("save", driver),
+    )
+    monkeypatch.setattr(
+        ds.graph.__class__,
+        "from_neo4j",
+        staticmethod(
+            lambda driver, dataset=None: called.setdefault("load", driver) or ds.graph.__class__()
+        ),
+    )
+
+    ds.save_neo4j(fake_driver)
+    assert called.get("save") is fake_driver
+    assert any(e.operation == "save_neo4j" for e in ds.events)
+
+    ds.load_neo4j(fake_driver)
+    assert called.get("load") is fake_driver
+    assert any(e.operation == "load_neo4j" for e in ds.events)
+
+
+def test_events_persisted_roundtrip():
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="evt")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hi")
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:evt")
+    assert any(e.operation == "add_chunk" for e in loaded.events)
+    assert client.llen("dataset:evt:events") == len(loaded.events)
+
+
+def test_ingest_file_method(tmp_path):
+    f = tmp_path / "doc.txt"
+    f.write_text("hello world")
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+
+    ds.ingest_file(str(f), options=IngestOptions())
+
+    assert ds.stage == 1
+    assert ds.events[-1].operation == "ingest_document"
+    assert client.get("dataset:demo") is not None
+    assert list(ds.ingested_docs) == ["doc"]
+    info = ds.ingested_docs["doc"]
+    assert info["path"] == str(f)
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert loaded.ingested_docs == ds.ingested_docs
 
 
 def test_remove_chunk_updates_order():
@@ -514,6 +614,7 @@ def test_cleanup_graph(monkeypatch):
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "<b>Hello</b>")
     ds.add_chunk("d", "c2", "<b>Hello</b>")
+    ds.graph.graph.nodes["c1"]["start_date"] = "1 Feb 2023"
 
     logs = []
     monkeypatch.setattr(dataset.logger, "info", lambda msg: logs.append(msg))
@@ -523,8 +624,10 @@ def test_cleanup_graph(monkeypatch):
     assert removed == 1
     assert cleaned == 1
     assert "c2" not in ds.graph.graph.nodes
-    assert ds.events[-2].operation == "deduplicate_chunks"
-    assert ds.events[-1].operation == "clean_chunks"
+    assert ds.events[-3].operation == "deduplicate_chunks"
+    assert ds.events[-2].operation == "clean_chunks"
+    assert ds.events[-1].operation == "normalize_dates"
+    assert ds.graph.graph.nodes["c1"]["start_date"] == "2023-02-01"
 
 
 def test_cleanup_graph_with_params(monkeypatch):
@@ -535,20 +638,30 @@ def test_cleanup_graph_with_params(monkeypatch):
     ds.add_entity("e2", "International Business Machines")
 
     recorded = {}
+    norm_called = 0
 
     def fake_resolve(threshold: float = 0.8, aliases=None):
         recorded["threshold"] = threshold
         recorded["aliases"] = aliases
         return 0
 
+    def fake_norm():
+        nonlocal norm_called
+        norm_called += 1
+        return 0
+
     monkeypatch.setattr(ds, "resolve_entities", fake_resolve)
+    monkeypatch.setattr(ds, "normalize_dates", fake_norm)
 
     ds.cleanup_graph(
-        resolve_threshold=0.9, resolve_aliases={"IBM": ["International Business Machines"]}
+        resolve_threshold=0.9,
+        resolve_aliases={"IBM": ["International Business Machines"]},
+        normalize_dates=False,
     )
 
     assert recorded["threshold"] == 0.9
     assert recorded["aliases"] == {"IBM": ["International Business Machines"]}
+    assert norm_called == 0
 
 
 def test_normalize_dates_wrapper():
@@ -817,7 +930,6 @@ def test_get_raw_text_and_run_pipeline(monkeypatch):
         batch_size=2,
         inference_batch=1,
         start_step=PipelineStep.CURATE,
-        checkpoint_dir=Path("/tmp"),
     )
 
     assert result == "ok"
@@ -844,8 +956,8 @@ def test_run_post_kg_pipeline_logs_cleanup(monkeypatch):
     ds.run_post_kg_pipeline(start_step=PipelineStep.KG_CLEANUP)
 
     assert "c2" not in ds.graph.graph.nodes
-    assert ds.events[-2].operation == "deduplicate_chunks"
-    assert ds.events[-1].operation == "clean_chunks"
+    assert ds.events[-3].operation == "deduplicate_chunks"
+    assert ds.events[-2].operation == "clean_chunks"
 
 
 def test_run_post_kg_pipeline_logs_curation(monkeypatch):
@@ -864,8 +976,8 @@ def test_run_post_kg_pipeline_logs_curation(monkeypatch):
 
     ds.run_post_kg_pipeline(start_step=PipelineStep.CURATE)
 
-    assert ds.events[-1].operation == "curate"
-    assert ds.events[-1].params == {
+    assert ds.events[-2].operation == "curate"
+    assert ds.events[-2].params == {
         "total": 2,
         "filtered": 1,
         "retention_rate": 0.5,
@@ -907,3 +1019,28 @@ def test_run_post_kg_pipeline_extra_opts(monkeypatch):
     assert called["sim"] == 0.95
     assert called["ratings"] is True
     assert called["builder"] is ds
+
+
+def test_run_post_kg_pipeline_uses_redis(monkeypatch):
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    client = fakeredis.FakeStrictRedis()
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+
+    received = {}
+
+    def fake_run(dtype, graph, *, redis_client=None, **kwargs):
+        received["client"] = redis_client
+        return "ok"
+
+    monkeypatch.setattr("datacreek.pipelines.run_generation_pipeline", fake_run)
+
+    ds.run_post_kg_pipeline()
+    assert received["client"] is client
+
+
+def test_mark_exported_records_event():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.mark_exported()
+    assert ds.stage == 4
+    assert ds.events[-1].operation == "export_dataset"

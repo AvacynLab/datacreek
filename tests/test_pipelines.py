@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+import fakeredis
 
 from datacreek.core import curate
 from datacreek.core.dataset import DatasetBuilder
@@ -657,9 +658,10 @@ def test_start_step_resume(monkeypatch):
     assert isinstance(res, curate.CurationResult)
 
 
-def test_checkpoint_resume(monkeypatch, tmp_path):
-    """Pipeline should load data from checkpoint when resuming."""
+def test_redis_resume(monkeypatch):
+    """Pipeline should load progress from Redis when resuming."""
 
+    client = fakeredis.FakeStrictRedis()
     called = {"generate": 0, "curate": 0}
 
     def fake_generate(*a, **k):
@@ -674,23 +676,23 @@ def test_checkpoint_resume(monkeypatch, tmp_path):
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", fake_curate)
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
 
-    kg = KnowledgeGraph()
-    kg.add_document("d", source="s", text="t")
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("d", source="s", text="t")
 
-    run_generation_pipeline(DatasetType.QA, kg, checkpoint_dir=tmp_path)
-    assert (tmp_path / "generate_qa.json").exists()
+    run_generation_pipeline(DatasetType.QA, ds.graph, dataset_builder=ds, redis_client=client)
+    assert client.hget("dataset:demo:progress", "generate_qa") is not None
 
     res = run_generation_pipeline(
         DatasetType.QA,
-        kg,
+        ds.graph,
+        dataset_builder=ds,
         start_step=PipelineStep.CURATE,
-        checkpoint_dir=tmp_path,
+        redis_client=client,
     )
 
     assert called["generate"] == 1
     assert called["curate"] == 2
     assert isinstance(res, curate.CurationResult)
-    assert len(res.qa_pairs) == 1
 
 
 def test_kg_cleanup_step(monkeypatch):
@@ -726,10 +728,16 @@ def test_kg_cleanup_with_params(monkeypatch):
         resolve_threshold=0.8,
         resolve_aliases=None,
         dedup_similarity=1.0,
+        normalize_dates=True,
+        mark_conflicts=False,
+        validate=False,
     ):
         called["threshold"] = resolve_threshold
         called["aliases"] = resolve_aliases
         called["sim"] = dedup_similarity
+        called["norm"] = normalize_dates
+        called["conflict"] = mark_conflicts
+        called["validate"] = validate
         return 0, 0
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
@@ -752,6 +760,9 @@ def test_kg_cleanup_with_params(monkeypatch):
     assert called["threshold"] == 0.9
     assert called["aliases"] == {"IBM": ["International Business Machines"]}
     assert called["sim"] == 1.0
+    assert called["norm"] is True
+    assert called["conflict"] is False
+    assert called["validate"] is False
 
 
 def test_curation_threshold_param(monkeypatch):

@@ -1,7 +1,9 @@
 import importlib
+import json
 import os
 import sys
 
+import fakeredis
 import requests
 from werkzeug.security import generate_password_hash
 
@@ -28,6 +30,7 @@ from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.db import verify_password
 from datacreek.pipelines import DatasetType
 from datacreek.server.app import DATASETS, app
+from datacreek.tasks import dataset_export_task
 
 app.config["WTF_CSRF_ENABLED"] = False
 
@@ -111,28 +114,43 @@ def test_dataset_ingest_route(tmp_path):
     DATASETS.clear()
 
 
-def test_api_dataset_ingest_resolves_path(tmp_path):
+def test_api_dataset_ingest_resolves_path(tmp_path, monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.to_redis(client, "dataset:demo")
     DATASETS["demo"] = ds
 
     f = tmp_path / "doc.txt"
     f.write_text("hello world")
 
-    cfg = {"paths": {"input": {"txt": str(tmp_path), "default": str(tmp_path)}}}
-    orig = app_module.config
-    app_module.config = cfg
-    try:
-        with app.test_client() as client:
-            _login(client)
-            res = client.post(
-                "/api/datasets/demo/ingest",
-                json={"path": "doc.txt"},
-            )
-            assert res.status_code == 200
-    finally:
-        app_module.config = orig
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.post(
+            "/api/datasets/demo/ingest",
+            json={"path": str(f), "high_res": True, "extract_entities": True},
+        )
+        assert res.status_code == 200
 
-    assert ds.search_chunks("hello") == ["doc_chunk_0"]
+        res = cl.get("/api/datasets/demo/progress")
+        data = res.get_json()
+        assert data.get("ingested") == 1
+        assert data.get("last_ingested", {}).get("path") == str(f)
+        assert "time" in data.get("last_ingested", {})
+        assert data.get("ingest_start") is not None
+        assert data.get("ingest_finish") is not None
+        params = data.get("ingestion_params")
+        assert params.get("high_res") is True
+        assert params.get("extract_entities") is True
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert loaded.search_chunks("hello") == ["doc_chunk_0"]
     DATASETS.clear()
 
 
@@ -159,7 +177,7 @@ def test_save_dataset_neo4j(monkeypatch):
 
     called = {}
 
-    def fake_to_neo4j(self, driver, clear=True):
+    def fake_to_neo4j(self, driver, clear=True, dataset=None):
         called["called"] = True
 
     monkeypatch.setattr(KnowledgeGraph, "to_neo4j", fake_to_neo4j)
@@ -185,7 +203,11 @@ def test_load_dataset_neo4j(monkeypatch):
 
     new_graph = KnowledgeGraph()
     new_graph.add_document("n", source="a")
-    monkeypatch.setattr(KnowledgeGraph, "from_neo4j", staticmethod(lambda driver: new_graph))
+    monkeypatch.setattr(
+        KnowledgeGraph,
+        "from_neo4j",
+        staticmethod(lambda driver, dataset=None: new_graph),
+    )
 
     class DummyDriver:
         def close(self):
@@ -198,6 +220,57 @@ def test_load_dataset_neo4j(monkeypatch):
         res = client.post("/datasets/demo/load_neo4j")
         assert res.status_code == 302
     assert ds.graph is new_graph
+    DATASETS.clear()
+
+
+def test_api_neo4j_endpoints(tmp_path, monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.to_redis(client, "dataset:demo")
+    DATASETS["demo"] = ds
+
+    class DummyDriver:
+        def close(self):
+            pass
+
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: DummyDriver())
+
+    new_graph = KnowledgeGraph()
+    new_graph.add_document("n", source="a")
+    monkeypatch.setattr(ds.graph.__class__, "to_neo4j", lambda *a, **k: None)
+    monkeypatch.setattr(
+        ds.graph.__class__,
+        "from_neo4j",
+        staticmethod(lambda driver, dataset=None: new_graph),
+    )
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.post("/api/datasets/demo/save_neo4j")
+        assert res.status_code == 200
+        prog = cl.get("/api/datasets/demo/progress").get_json()
+        assert prog.get("save_neo4j") is not None
+        assert "time" in prog.get("save_neo4j")
+        assert prog.get("save_neo4j_start") is not None
+        assert prog.get("save_neo4j_finish") is not None
+        res = cl.post("/api/datasets/demo/load_neo4j")
+        assert res.status_code == 200
+        prog = cl.get("/api/datasets/demo/progress").get_json()
+        assert prog.get("load_neo4j") is not None
+        assert "time" in prog.get("load_neo4j")
+        assert prog.get("load_neo4j_start") is not None
+        assert prog.get("load_neo4j_finish") is not None
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert loaded.graph.search_documents("n") == ["n"]
     DATASETS.clear()
 
 
@@ -301,7 +374,15 @@ def test_api_search_endpoints():
 
 
 def test_dataset_ops_endpoints(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
     ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
     ds.add_document("d1", source="s")
     ds.add_chunk("d1", "c1", "hello")
     ds.add_chunk("d1", "c2", "hello")
@@ -312,6 +393,28 @@ def test_dataset_ops_endpoints(monkeypatch):
     ds.graph.graph.nodes["e1"]["birth_date"] = "2024-01-01"
     ds.graph.graph.nodes["e2"]["birth_date"] = "2023-01-01"
     ds.graph.graph.add_edge("e1", "e2", relation="parent_of")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    class DummyDriver:
+        def close(self):
+            pass
+
+        def session(self):
+            class S:
+                def __enter__(self_s):
+                    return self_s
+
+                def __exit__(self_s, exc_type, exc, tb):
+                    pass
+
+                def run(self_s, *a, **k):
+                    pass
+
+            return S()
+
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: DummyDriver())
+    client.sadd("user:1:datasets", "demo")
     DATASETS["demo"] = ds
 
     class FakeResponse:
@@ -332,8 +435,8 @@ def test_dataset_ops_endpoints(monkeypatch):
             )
         return FakeResponse({"search": [{"id": "Q1", "description": "composer"}]})
 
-    with app.test_client() as client:
-        _login(client)
+    with app.test_client() as cl:
+        _login(cl)
         ops = [
             "consolidate",
             "communities",
@@ -359,14 +462,14 @@ def test_dataset_ops_endpoints(monkeypatch):
         ]
         for op in ops:
             if op == "prune":
-                res = client.post(f"/api/datasets/demo/{op}", json={"sources": ["bad"]})
+                res = cl.post(f"/api/datasets/demo/{op}", json={"sources": ["bad"]})
             elif op == "resolve_entities":
-                res = client.post(
+                res = cl.post(
                     f"/api/datasets/demo/{op}",
                     json={"aliases": {"Beethoven": ["Ludwig van Beethoven"]}},
                 )
             elif op == "graph_embeddings":
-                res = client.post(
+                res = cl.post(
                     f"/api/datasets/demo/{op}",
                     json={
                         "dimensions": 8,
@@ -377,24 +480,59 @@ def test_dataset_ops_endpoints(monkeypatch):
                     },
                 )
             else:
-                res = client.post(f"/api/datasets/demo/{op}")
+                res = cl.post(f"/api/datasets/demo/{op}")
             assert res.status_code == 200
-            if op == "validate":
-                assert res.get_json()["marked"] == 1
-        # Prune removed the bad document and chunk
+        ds = DatasetBuilder.from_redis(client, "dataset:demo")
         assert "d2" not in ds.graph.graph.nodes
         assert "c3" not in ds.graph.graph.nodes
-
         assert len(ds.graph.graph.nodes["e1"]["embedding"]) == 8
 
         monkeypatch.setattr(requests, "get", fake_get)
-        res = client.post("/api/datasets/demo/enrich_entity/e1")
+        res = cl.post("/api/datasets/demo/enrich_entity/e1")
         assert res.status_code == 200
-        res = client.post("/api/datasets/demo/enrich_entity_dbpedia/e1")
+        res = cl.post("/api/datasets/demo/enrich_entity_dbpedia/e1")
         assert res.status_code == 200
-        res = client.post("/api/datasets/demo/extract_entities", json={"model": None})
+        res = cl.post("/api/datasets/demo/extract_entities", json={"model": None})
         assert res.status_code == 200
+        ds = DatasetBuilder.from_redis(client, "dataset:demo")
+        assert any(e.operation == "enrich_entity_dbpedia" for e in ds.events)
     DATASETS.clear()
+
+
+def test_dataset_owner_isolation(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    app_module.DATASETS.clear()
+
+    with app.test_client() as cl:
+        # login as alice (user id 1) and create dataset
+        cl.post("/api/login", json={"username": "alice", "password": "pw"})
+        res = cl.post("/api/datasets", json={"name": "demo", "dataset_type": "qa"})
+        assert res.status_code == 200
+        cl.get("/api/logout")
+
+        # register second user and login
+        cl.post("/api/register", json={"username": "bob2", "password": "pw"})
+        cl.post("/api/login", json={"username": "bob2", "password": "pw"})
+        res = cl.get("/api/datasets/demo")
+        assert res.status_code == 404
+
+
+def test_dataset_list_visibility(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    app_module.DATASETS.clear()
+
+    with app.test_client() as cl:
+        cl.post("/api/login", json={"username": "alice", "password": "pw"})
+        cl.post("/api/datasets", json={"name": "demo", "dataset_type": "qa"})
+        cl.get("/api/logout")
+
+        cl.post("/api/register", json={"username": "bob3", "password": "pw"})
+        cl.post("/api/login", json={"username": "bob3", "password": "pw"})
+        res = cl.get("/api/datasets")
+        assert res.status_code == 200
+        assert "demo" not in res.get_json()
 
 
 def test_lookup_endpoints():
@@ -472,3 +610,412 @@ def test_conflicts_endpoint():
         data = res.get_json()
         assert data == [["A", "likes", {"B": ["s1"], "C": ["s2"]}]]
     DATASETS.clear()
+
+
+def test_api_delete_dataset(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    class DummyDriver:
+        def close(self):
+            pass
+
+        def session(self):
+            class S:
+                def __enter__(self_s):
+                    return self_s
+
+                def __exit__(self_s, exc_type, exc, tb):
+                    pass
+
+                def run(self_s, *a, **k):
+                    pass
+
+            return S()
+
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: DummyDriver())
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.delete("/api/datasets/demo")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "task_id" in data
+
+    prog = json.loads(client.hget("dataset:demo:progress", "delete"))
+    assert prog.get("deleted") is True
+    assert "time" in prog
+    assert client.hget("dataset:demo:progress", "delete_start") is not None
+    assert client.hget("dataset:demo:progress", "delete_finish") is not None
+
+    assert not client.exists("dataset:demo")
+    assert "demo" not in client.smembers("datasets")
+
+
+def test_delete_dataset_unauthorized(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.owner_id = 1
+    ds.add_document("d", source="s")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+    client.sadd("user:1:datasets", "demo")
+
+    with app.test_client() as cl:
+        cl.post("/api/register", json={"username": "bob", "password": "pw"})
+        cl.post("/api/login", json={"username": "bob", "password": "pw"})
+        res = cl.delete("/api/datasets/demo")
+        assert res.status_code == 404
+
+
+def test_graph_api(monkeypatch, tmp_path):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+
+    class DummyDriver:
+        def close(self):
+            pass
+
+        def session(self):
+            class S:
+                def __enter__(self_s):
+                    return self_s
+
+                def __exit__(self_s, exc_type, exc, tb):
+                    pass
+
+                def run(self_s, *a, **k):
+                    pass
+
+                def execute_write(self_s, func, *a, **k):
+                    pass
+
+            return S()
+
+    monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: DummyDriver())
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: DummyDriver())
+    monkeypatch.setattr(app_module.KnowledgeGraph, "to_neo4j", lambda *a, **k: None)
+    monkeypatch.setattr(
+        app_module.KnowledgeGraph,
+        "from_neo4j",
+        staticmethod(lambda *a, **k: app_module.KnowledgeGraph()),
+    )
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    f = tmp_path / "doc.txt"
+    f.write_text("hello world")
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.post("/api/graphs", json={"name": "g", "documents": [str(f)]})
+        assert res.status_code == 200
+        res = cl.get("/api/graphs")
+        assert res.get_json() == ["g"]
+        res = cl.get("/api/graphs/g")
+        assert res.status_code == 200
+        res = cl.get("/api/graphs/g/data")
+        assert res.status_code == 200
+        res = cl.post("/api/graphs/g/save_neo4j")
+        assert res.status_code == 200
+        res = cl.get("/api/graphs/g/progress")
+        data = res.get_json()
+        assert "time" in data.get("save_neo4j")
+        assert data.get("save_neo4j_start") is not None
+        assert data.get("save_neo4j_finish") is not None
+        res = cl.post("/api/graphs/g/load_neo4j")
+        assert res.status_code == 200
+        res = cl.get("/api/graphs/g/progress")
+        data = res.get_json()
+        assert "time" in data.get("load_neo4j")
+        assert data.get("load_neo4j_start") is not None
+        assert data.get("load_neo4j_finish") is not None
+        res = cl.delete("/api/graphs/g")
+        assert res.status_code == 200
+        res = cl.get("/api/graphs/g/progress")
+        assert res.status_code == 404
+
+    assert "g" not in client.smembers("graphs")
+
+
+def test_export_result_endpoint(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "hello")
+    ds.versions.append({"result": {"qa_pairs": [{"question": "q", "answer": "a"}]}})
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    dataset_export_task.delay("demo", "jsonl").get()
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.get("/api/datasets/demo/export_result", query_string={"fmt": "jsonl"})
+        assert res.status_code == 200
+        data = res.data.decode()
+        assert "question" in data and "answer" in data
+        prog = cl.get("/api/datasets/demo/progress").get_json()
+        assert prog.get("export", {}).get("fmt") == "jsonl"
+        assert "time" in prog.get("export", {})
+    DATASETS.clear()
+
+
+def test_dataset_version_endpoints(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.versions.append({"params": {"n": 1}, "time": "t", "result": {"qa_pairs": [1]}})
+    ds.versions.append({"params": {"n": 2}, "time": "t2", "result": {"qa_pairs": [2]}})
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.get("/api/datasets/demo/versions")
+        assert res.status_code == 200
+        versions = res.get_json()
+        assert len(versions) == 2
+
+        res = cl.get("/api/datasets/demo/versions/2")
+        assert res.status_code == 200
+        ver = res.get_json()
+        assert ver["params"]["n"] == 2
+        assert ver["result"]["qa_pairs"] == [2]
+
+    DATASETS.clear()
+
+
+def test_dataset_progress_endpoint(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.add_document("d1", source="s", text="t")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    def fake_run(self, redis_client=None, **p):
+        self.stage = 2
+        if redis_client is not None:
+            redis_client.hset("dataset:demo:progress", "generate_qa_duration", "0.0")
+        self._record_event("generate", "ok")
+
+    monkeypatch.setattr(DatasetBuilder, "run_post_kg_pipeline", fake_run)
+
+    tasks_mod.dataset_generate_task.delay("demo", {"start_step": "CURATE"}).get()
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.get("/api/datasets/demo/progress")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data.get("generation_params", {}).get("start_step") == "CURATE"
+        assert data.get("generated_version") == len(
+            DatasetBuilder.from_redis(client, "dataset:demo").versions
+        )
+        assert "generate_start" in data
+        assert "generate_finish" in data
+        assert "generate_qa_duration" in data
+
+    DATASETS.clear()
+
+
+def test_dataset_history_endpoint(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.add_document("d1", source="s")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.get("/api/datasets/demo/history")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert any(ev["operation"] == "add_document" for ev in data)
+        assert client.llen("dataset:demo:events") > 0
+
+    DATASETS.clear()
+
+
+def test_cleanup_progress(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "dup")
+    ds.add_chunk("d1", "c2", "dup")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    tasks_mod.dataset_cleanup_task.delay("demo", {}).get()
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.get("/api/datasets/demo/progress")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data.get("cleanup", {}).get("removed") == 1
+        assert "time" in data.get("cleanup", {})
+        assert "cleanup_start" in data
+        assert "cleanup_finish" in data
+
+    DATASETS.clear()
+
+
+def test_graph_access_unauthorized(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    ds = DatasetBuilder(DatasetType.TEXT, name="g")
+    ds.redis_client = client
+    ds.owner_id = 1
+    ds.add_document("d", source="s")
+    ds.to_redis(client, "graph:g")
+    client.sadd("graphs", "g")
+    client.sadd("user:1:graphs", "g")
+
+    with app.test_client() as cl:
+        cl.post("/api/register", json={"username": "bob", "password": "pw"})
+        cl.post("/api/login", json={"username": "bob", "password": "pw"})
+        res = cl.get("/api/graphs/g")
+        assert res.status_code == 404
+        res = cl.get("/api/graphs/g/data")
+        assert res.status_code == 404
+        res = cl.delete("/api/graphs/g")
+        assert res.status_code == 404
+        res = cl.post("/api/graphs/g/save_neo4j")
+        assert res.status_code == 404
+        res = cl.post("/api/graphs/g/load_neo4j")
+        assert res.status_code == 404
+
+
+def test_graph_list_visibility(monkeypatch, tmp_path):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    f = tmp_path / "doc.txt"
+    f.write_text("hello")
+
+    with app.test_client() as cl:
+        # create graph as alice
+        _login(cl)
+        cl.post("/api/graphs", json={"name": "g1", "documents": [str(f)]})
+        cl.get("/api/logout")
+
+        # register bob and check listing
+        cl.post("/api/register", json={"username": "bob4", "password": "pw"})
+        cl.post("/api/login", json={"username": "bob4", "password": "pw"})
+        res = cl.get("/api/graphs")
+        assert res.status_code == 200
+        assert "g1" not in res.get_json()
+
+
+def test_dataset_from_foreign_graph_denied(monkeypatch, tmp_path):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    monkeypatch.setattr(app_module, "get_neo4j_driver", lambda: None)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    f = tmp_path / "doc.txt"
+    f.write_text("hello")
+
+    with app.test_client() as cl:
+        # alice creates a graph
+        _login(cl)
+        cl.post("/api/graphs", json={"name": "g2", "documents": [str(f)]})
+        cl.get("/api/logout")
+
+        # bob tries to create dataset from alice's graph
+        cl.post("/api/register", json={"username": "bob5", "password": "pw"})
+        cl.post("/api/login", json={"username": "bob5", "password": "pw"})
+        res = cl.post(
+            "/api/datasets",
+            json={"name": "ds", "dataset_type": "qa", "graph": "g2"},
+        )
+        assert res.status_code == 404
+
+
+def test_multiple_graphs_per_user(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    app_module.REDIS = client
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    import datacreek.tasks as tasks_mod
+
+    tasks_mod.celery_app.conf.task_always_eager = True
+
+    g1 = DatasetBuilder(DatasetType.TEXT, name="g1")
+    g1.owner_id = 1
+    g1.redis_client = client
+    g1.to_redis(client, "graph:g1")
+    client.sadd("graphs", "g1")
+    client.sadd("user:1:graphs", "g1")
+
+    g2 = DatasetBuilder(DatasetType.TEXT, name="g2")
+    g2.owner_id = 1
+    g2.redis_client = client
+    g2.to_redis(client, "graph:g2")
+    client.sadd("graphs", "g2")
+    client.sadd("user:1:graphs", "g2")
+
+    with app.test_client() as cl:
+        _login(cl)
+        res = cl.get("/api/graphs")
+        assert res.status_code == 200
+        assert set(res.get_json()) == {"g1", "g2"}

@@ -59,7 +59,7 @@ Below is a quick overview of the main options and operations exposed at each sta
 **Knowledge graph operations**
 
 - `deduplicate_chunks()` – drop identical chunks
-- `resolve_entities(threshold=0.85, aliases={...})` – merge aliases into canonical entities using a similarity threshold
+- `resolve_entities()` – merge aliases into canonical entities
 - `link_*()` – connect nodes that mention the same entities
 - `prune_sources([...])` – remove unwanted data from the graph
 - `compute_graph_embeddings()` – build Node2Vec embeddings
@@ -551,55 +551,6 @@ filenames work out of the box.
 # Clone a dataset to experiment with different cleaning steps
 ds_copy = ds.clone(name="copy")
 
-# Persist and reload later using Redis and Neo4j
-import redis
-from neo4j import GraphDatabase
-
-client = redis.Redis(host="localhost", port=6379)
-driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "neo4j"))
-
-ds.to_redis(client, "dataset:example")
-ds.graph.to_neo4j(driver)
-
-ds_loaded = DatasetBuilder.from_redis(client, "dataset:example")
-ds_loaded.graph = KnowledgeGraph.from_neo4j(driver)
-```
-
-Ingestion now has two phases. First `ingest_file()` parses a file into raw
-text, then `to_kg()` splits it into chunks and inserts them into your
-dataset's knowledge graph:
-
-```python
-from datacreek import ingest_file, to_kg
-
-text = ingest_file("paper.pdf")
-to_kg(text, ds, "paper")
-```
-`ingest_file` will also search the input directories configured in
-`config.yaml` when the provided path does not exist.
-
-### Mental Model:
-
-```mermaid
-graph LR
-    API[REST API] --> Ingest
-    API --> Generate
-    API --> Curate
-    API --> Save
-    Ingest --> HTMLFile[HTML File]
-    Ingest --> YouTubeURL[File Format]
-
-    Generate --> CoT[CoT]
-    Generate --> QA[QA Pairs]
-    Generate --> Summary[Summary]
-
-    Curate --> Filter[Filter by Quality]
-
-    Save --> JSONL[JSONL Format]
-    Save --> Alpaca[Alpaca Format]
-    Save --> FT[Fine-Tuning Format]
-    Save --> ChatML[ChatML Format]
-```
 
 ## Dataset Generation Pipelines
 
@@ -662,90 +613,12 @@ kg = KnowledgeGraph()
 kg.add_document("doc", source="text", text="Hello world")
 
 # Synchronous usage
-qa_data = run_generation_pipeline(
-    DatasetType.QA,
-    kg,
-    dedup_similarity=0.95,
-    keep_ratings=True,
-    resolve_threshold=0.85,
-    resolve_aliases={"IBM": ["International Business Machines"]},
-)
+qa_data = run_generation_pipeline(DatasetType.QA, kg)
 
 # Asynchronous usage
 # qa_data = await run_generation_pipeline_async(DatasetType.QA, kg)
 Both functions raise `PipelineExecutionError` when a step fails.
-You can override the default pipeline definitions with the `pipeline_config_path`
-parameter pointing to a YAML file like `configs/pipelines.yaml`.
-
-If an error occurs the exception has an ``info`` attribute with details:
-
-```python
-try:
-    run_generation_pipeline(DatasetType.QA, kg)
-except PipelineExecutionError as exc:
-    err = exc.info
-    print(err.step, err.exc_type)
-``` 
-
-You can also resume a previously interrupted curation step and override the
-rating temperature:
-
-```python
-qa_data = run_generation_pipeline(
-    DatasetType.QA,
-    kg,
-    resume_curation=True,
-    curation_temperature=0.3,
-    curation_threshold=8,
-)
 ```
-
-If you enabled `keep_ratings` you can later adjust the quality threshold
-without rerunning the pipeline:
-
-```python
-from datacreek import apply_curation_threshold
-
-# keep only pairs rated 8 or higher
-curated = apply_curation_threshold(qa_data, threshold=8)
-```
-
-### Knowledge Graph Cleanup Metrics
-
-If you want to inspect how many duplicates or noisy texts were removed, you can
-call ``cleanup_knowledge_graph`` directly:
-
-```python
-from datacreek.core.cleanup import cleanup_knowledge_graph
-
-stats = cleanup_knowledge_graph(kg, resolve_threshold=0.9)
-print(stats.removed, stats.cleaned)
-```
-
-### Returning dataclasses from curation
-
-``curate_qa_pairs`` can return a :class:`CurationResult` when ``as_dataclass=True``:
-
-```python
-res = curate_qa_pairs(data, as_dataclass=True)
-print(res.metrics.avg_score)
-```
-
-### Returning dataclasses from pipelines
-
-`run_generation_pipeline` normally serializes results when saving, but you can
-skip the save step and obtain structured objects instead. For example:
-
-```python
-res = run_generation_pipeline(
-    DatasetType.QA,
-    kg,
-    start_step=PipelineStep.CURATE,
-)
-print(res.metrics.avg_score)
-```
-
-The returned value is the same dataclass produced by the curation helpers.
 
 ## Post-Ingestion Operations
 
@@ -753,7 +626,7 @@ After parsing documents into the knowledge graph you can refine the data quality
 with a few helper methods:
 
 - `deduplicate_chunks()` removes chunks with identical text
-- `resolve_entities(threshold=0.85, aliases={...})` merges entity nodes referring to the same concept using a similarity threshold and optional alias mapping
+- `resolve_entities(aliases={...})` merges entity nodes referring to the same concept and accepts a case-insensitive alias mapping
 - `prune_sources(['src'])` deletes nodes originating from unwanted sources
 - `link_chunks_by_entity()` connects chunks that mention the same entity
 - `link_sections_by_entity()` connects sections that mention the same entity

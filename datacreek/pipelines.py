@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import traceback
 from dataclasses import asdict, dataclass, is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+import redis
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from datacreek.core.dataset import DatasetBuilder
@@ -29,10 +32,23 @@ from datacreek.models.results import (
     PrefPairResult,
     QAGenerationResult,
 )
-from datacreek.utils.config import get_format_settings, load_config_with_overrides
+from datacreek.utils.config import get_format_settings, get_redis_config, load_config_with_overrides
 from datacreek.utils.progress import create_progress
 
 logger = logging.getLogger(__name__)
+
+
+def get_redis_client() -> redis.Redis | None:
+    """Return a Redis client from config or environment variables."""
+    cfg = get_redis_config(load_config_with_overrides(None))
+    host = os.getenv("REDIS_HOST", cfg.get("host"))
+    port = int(os.getenv("REDIS_PORT", cfg.get("port", 6379)))
+    try:
+        client = redis.Redis(host=host, port=port, decode_responses=True)
+        client.ping()
+        return client
+    except Exception:
+        return None
 
 
 class TrainingGoal(str, Enum):
@@ -111,7 +127,6 @@ class ProcessOptions:
     multi_answer: bool = False
     batch_size: int | None = None
     inference_batch: int | None = None
-    checkpoint_dir: Path | None = None
     keep_ratings: bool = False
     dedup_similarity: float = 1.0
     curation_temperature: float | None = None
@@ -568,11 +583,11 @@ async def _run_generation_pipeline_impl(
     batch_size: int | None = None,
     inference_batch: int | None = None,
     start_step: PipelineStep | None = None,
-    checkpoint_dir: Path | None = None,
     dedup_similarity: float = 1.0,
     keep_ratings: bool = False,
     curation_temperature: float | None = None,
     resume_curation: bool = False,
+    redis_client: redis.Redis | None = None,
 ) -> Any:
     """Shared implementation for sync and async generation pipelines."""
 
@@ -610,34 +625,38 @@ async def _run_generation_pipeline_impl(
         multi_answer=multi_answer,
         batch_size=batch_size,
         inference_batch=inference_batch,
-        checkpoint_dir=checkpoint_dir,
         keep_ratings=keep_ratings,
         dedup_similarity=dedup_similarity,
         curation_temperature=curation_temperature,
         curation_threshold=threshold,
         resume_curation=resume_curation,
     )
-    if checkpoint_dir:
-        checkpoint_dir = Path(checkpoint_dir)
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        meta = {
-            "dataset_type": dataset_type.value,
-            "model": model,
-            "config_path": str(config_path) if config_path else None,
-            "pipeline_config": str(pipeline_config_path) if pipeline_config_path else None,
-            "dedup_similarity": dedup_similarity,
-            "keep_ratings": keep_ratings,
-        }
-        (checkpoint_dir / "metadata.json").write_text(json.dumps(meta, indent=2))
+    if redis_client is None:
+        if dataset_builder and dataset_builder.redis_client:
+            redis_client = dataset_builder.redis_client
+        else:
+            redis_client = get_redis_client()
+
+    cp_key = None
+    if redis_client and dataset_builder and dataset_builder.name:
+        cp_key = f"dataset:{dataset_builder.name}:progress"
+        if start_step is None:
+            meta = {
+                "dataset_type": dataset_type.value,
+                "model": model,
+                "dedup_similarity": dedup_similarity,
+                "keep_ratings": keep_ratings,
+            }
+            redis_client.hset(cp_key, "metadata", json.dumps(meta))
 
     data: Any = document_text
-    if start_step and checkpoint_dir:
+    if start_step and cp_key:
         idx = pipeline.steps.index(start_step)
         if idx > 0:
             prev_step = pipeline.steps[idx - 1]
-            cp_file = checkpoint_dir / f"{prev_step.value}.json"
-            if cp_file.exists():
-                data = json.loads(cp_file.read_text())
+            stored = redis_client.hget(cp_key, prev_step.value)
+            if stored:
+                data = json.loads(stored)
 
     async def _identity(d: Any) -> Any:
         return d
@@ -838,9 +857,13 @@ async def _run_generation_pipeline_impl(
                     data = _validate_step_result(dataset_type, step, result)
                 else:
                     data = result
-                if options.checkpoint_dir:
-                    cp_file = Path(options.checkpoint_dir) / f"{step.value}.json"
-                    cp_file.write_text(json.dumps(_serialize(data)))
+                if cp_key:
+                    redis_client.hset(cp_key, step.value, json.dumps(_serialize(data)))
+                    redis_client.hset(
+                        cp_key,
+                        f"{step.value}_duration",
+                        f"{duration:.2f}",
+                    )
                 if verbose:
                     logger.info("Finished %s in %.2fs", step.value, duration)
                 if progress:
@@ -885,7 +908,7 @@ def run_generation_pipeline(
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
-    checkpoint_dir: Path | None = None,
+    redis_client: redis.Redis | None = None,
     **kwargs: Any,
 ) -> Any:
     """Execute the generation steps synchronously.
@@ -907,14 +930,12 @@ def run_generation_pipeline(
     curation_temperature:
         Override the temperature used when rating pairs during curation.
     resume_curation:
-        Continue curation from ``checkpoint_dir`` if previous ratings exist.
+        Continue curation if previous ratings exist by loading progress from Redis.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
     resolve_aliases:
         Optional alias mapping passed to :meth:`DatasetBuilder.resolve_entities`.
-    checkpoint_dir:
-        Directory to store intermediate results for resuming later.
 
     Raises
     ------
@@ -939,7 +960,7 @@ def run_generation_pipeline(
             resolve_threshold=resolve_threshold,
             resolve_aliases=resolve_aliases,
             start_step=start_step,
-            checkpoint_dir=checkpoint_dir,
+            redis_client=redis_client,
             **kwargs,
         )
     )
@@ -961,7 +982,7 @@ async def run_generation_pipeline_async(
     resolve_threshold: float = 0.8,
     resolve_aliases: dict[str, list[str]] | None = None,
     start_step: PipelineStep | None = None,
-    checkpoint_dir: Path | None = None,
+    redis_client: redis.Redis | None = None,
     **kwargs: Any,
 ) -> Any:
     """Asynchronous counterpart to :func:`run_generation_pipeline`.
@@ -979,14 +1000,12 @@ async def run_generation_pipeline_async(
     curation_temperature:
         Override the temperature used when rating pairs during curation.
     resume_curation:
-        Continue curation from ``checkpoint_dir`` if previous ratings exist.
+        Continue curation if previous ratings exist by loading progress from Redis.
     resolve_threshold:
         Similarity threshold used when merging entities during knowledge graph
         cleanup.
     resolve_aliases:
         Optional alias mapping passed to :meth:`DatasetBuilder.resolve_entities`.
-    checkpoint_dir:
-        Directory to store intermediate results for resuming later.
 
     Raises
     ------
@@ -1011,6 +1030,6 @@ async def run_generation_pipeline_async(
         resolve_threshold=resolve_threshold,
         resolve_aliases=resolve_aliases,
         start_step=start_step,
-        checkpoint_dir=checkpoint_dir,
+        redis_client=redis_client,
         **kwargs,
     )

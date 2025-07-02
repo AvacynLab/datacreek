@@ -2,19 +2,26 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
+import redis
 from celery import Celery
+from neo4j import GraphDatabase
 
 from datacreek.core.create import process_file as generate_data
 from datacreek.core.curate import curate_qa_pairs
+from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.ingest import IngestOptions
 from datacreek.core.ingest import process_file as ingest_file
 from datacreek.core.save_as import convert_format
 from datacreek.db import Dataset, SessionLocal, SourceData
+from datacreek.models.llm_client import LLMClient
 from datacreek.services import create_dataset, create_source
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
 from datacreek.utils import get_path_config, load_config
+from datacreek.utils.config import get_neo4j_config, get_redis_config, load_config_with_overrides
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -28,6 +35,33 @@ celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "
     "true",
 }
 celery_app.conf.task_store_eager_result = True
+
+
+def get_redis_client() -> redis.Redis:
+    """Return a Redis client based on configuration or environment variables."""
+    cfg = get_redis_config(load_config_with_overrides(None))
+    host = os.getenv("REDIS_HOST", cfg.get("host"))
+    port = int(os.getenv("REDIS_PORT", cfg.get("port", 6379)))
+    return redis.Redis(host=host, port=port, decode_responses=True)
+
+
+def get_neo4j_driver():
+    """Return a Neo4j driver using config or environment variables."""
+    cfg = get_neo4j_config(load_config_with_overrides(None))
+    uri = os.getenv("NEO4J_URI", cfg.get("uri"))
+    user = os.getenv("NEO4J_USER", cfg.get("user"))
+    password = os.getenv("NEO4J_PASSWORD", cfg.get("password"))
+    if not uri or not user or not password:
+        return None
+    return GraphDatabase.driver(uri, auth=(user, password))
+
+
+def _record_error(client: redis.Redis, key: str, exc: Exception) -> None:
+    """Save task failure details in ``client`` under ``key``."""
+    try:
+        client.hset(key, "error", str(exc))
+    except Exception:
+        pass
 
 
 @celery_app.task
@@ -75,7 +109,6 @@ def generate_task(
         src = db.get(SourceData, src_id)
         if not src or src.owner_id != user_id:
             raise RuntimeError("Source not found")
-        from datacreek.utils import get_path_config
         from datacreek.utils.config import load_config_with_overrides
 
         overrides = {}
@@ -83,11 +116,9 @@ def generate_task(
             overrides["generation"] = generation
         if prompts is not None:
             overrides["prompts"] = prompts
-        cfg = load_config_with_overrides(
-            str(config_path) if config_path else None, overrides if overrides else None
-        )
-        output_dir = Path(get_path_config(cfg, "output", "generated"))
-        output_dir.mkdir(parents=True, exist_ok=True)
+        load_path = str(config_path) if config_path else None
+        load_overrides = overrides if overrides else None
+        load_config_with_overrides(load_path, load_overrides)
         out = generate_data(
             None,
             None,
@@ -132,3 +163,500 @@ def save_task(user_id: int, ds_id: int, fmt: str) -> dict:
         db.commit()
         db.refresh(ds)
         return {"id": ds.id}
+
+
+@celery_app.task
+def dataset_ingest_task(name: str, path: str, user_id: int | None = None, **kwargs) -> dict:
+    """Ingest a file into a persisted dataset."""
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    opt_fields = IngestOptions.__dataclass_fields__.keys()
+    opt_args = {k: kwargs.pop(k) for k in list(kwargs) if k in opt_fields}
+    options = IngestOptions(**opt_args) if opt_args else None
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "ingest_start", start_ts)
+    if opt_args:
+        client.hset(key, "ingestion_params", json.dumps(opt_args))
+    try:
+        doc_id = ds.ingest_file(path, options=options, **kwargs)
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        client.hincrby(key, "ingested", 1)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            f"ingested:{doc_id}",
+            json.dumps({"path": path, "time": ts}),
+        )
+        client.hset(
+            key,
+            "last_ingested",
+            json.dumps({"id": doc_id, "path": path, "time": ts}),
+        )
+        client.hset(key, "ingest_finish", ts)
+        return {"stage": ds.stage, "events": len(ds.events)}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_generate_task(
+    name: str, params: dict | None = None, user_id: int | None = None
+) -> dict:
+    """Run the post-KG pipeline for a persisted dataset."""
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    params = params or {}
+    key = f"dataset:{name}:progress"
+    ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "generate_start", ts)
+    if params:
+        client.hset(key, "generation_params", json.dumps(params))
+    try:
+        ds.run_post_kg_pipeline(redis_client=client, **params)
+        end_ts = datetime.now(timezone.utc).isoformat()
+        client.hset(key, "generated_version", json.dumps(len(ds.versions)))
+        client.hset(key, "generate_finish", end_ts)
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        return {"stage": ds.stage, "versions": len(ds.versions)}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_cleanup_task(name: str, params: dict | None = None, user_id: int | None = None) -> dict:
+    """Run cleanup operations on a persisted dataset."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    params = params or {}
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "cleanup_start", start_ts)
+    if params:
+        client.hset(key, "cleanup_params", json.dumps(params))
+
+    try:
+        removed, cleaned = ds.cleanup_graph(**params)
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "cleanup",
+            json.dumps({"removed": removed, "cleaned": cleaned, "time": ts}),
+        )
+        client.hset(key, "cleanup_finish", ts)
+
+        return {"stage": ds.stage, "removed": removed, "cleaned": cleaned}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_export_task(name: str, fmt: str = "jsonl", user_id: int | None = None) -> dict:
+    """Format the latest generation result and mark the dataset exported."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    data = None
+    key: str
+    progress_key = f"dataset:{name}:progress"
+    try:
+        if ds.versions and ds.versions[-1].get("result") is not None:
+            data = ds.versions[-1]["result"]
+            formatted = convert_format(data, None, fmt, {}, "json")
+            key = f"dataset:{name}:export:{fmt}"
+            client.set(key, formatted if isinstance(formatted, str) else json.dumps(formatted))
+        else:
+            key = f"dataset:{name}:export:json"
+            client.set(key, json.dumps(ds.to_dict()))
+
+        ds.mark_exported()
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(progress_key, "export", json.dumps({"fmt": fmt, "time": ts}))
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+
+        return {"stage": ds.stage, "key": key}
+    except Exception as exc:
+        _record_error(client, progress_key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
+    """Persist the dataset graph to Neo4j."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    driver = get_neo4j_driver()
+    if not driver:
+        raise RuntimeError("Neo4j not configured")
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "save_neo4j_start", start_ts)
+    try:
+        ds.save_neo4j(driver)
+        driver.close()
+        ds.redis_client = client
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "save_neo4j",
+            json.dumps({"nodes": len(ds.graph.graph), "time": ts}),
+        )
+        client.hset(key, "save_neo4j_finish", ts)
+        return {"stage": ds.stage}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_load_neo4j_task(name: str, user_id: int | None = None) -> dict:
+    """Load the dataset graph from Neo4j."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    driver = get_neo4j_driver()
+    if not driver:
+        raise RuntimeError("Neo4j not configured")
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "load_neo4j_start", start_ts)
+    try:
+        ds.load_neo4j(driver)
+        driver.close()
+        ds.neo4j_driver = None
+        ds.redis_client = client
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "load_neo4j",
+            json.dumps({"nodes": len(ds.graph.graph), "time": ts}),
+        )
+        client.hset(key, "load_neo4j_finish", ts)
+        return {"nodes": len(ds.graph.graph)}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_operation_task(
+    name: str, operation: str, params: dict | None = None, user_id: int | None = None
+) -> dict:
+    """Run an arbitrary dataset method and persist the result."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    params = params or {}
+    func = getattr(ds, operation)
+    prog_key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(prog_key, "delete_start", start_ts)
+    try:
+        result = func(**params)
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        try:
+            client.hset(
+                prog_key,
+                operation,
+                json.dumps({"result": result, "time": ts}, default=str),
+            )
+        except Exception:
+            client.hset(prog_key, operation, json.dumps({"time": ts}))
+        return {"result": result, "stage": ds.stage}
+    except Exception as exc:
+        _record_error(client, prog_key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_extract_facts_task(
+    name: str, provider: str | None = None, profile: str | None = None, user_id: int | None = None
+) -> dict:
+    """Run fact extraction asynchronously."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    llm_client = None
+    if provider or profile:
+        llm_client = LLMClient(provider=provider, profile=profile)
+    key = f"dataset:{name}:progress"
+    try:
+        ds.extract_facts(llm_client)
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "extract_facts",
+            json.dumps({"time": ts, "done": True}),
+        )
+        return {"stage": ds.stage}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_extract_entities_task(
+    name: str, model: str | None = None, user_id: int | None = None
+) -> dict:
+    """Run NER asynchronously."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    ds.neo4j_driver = None
+    key = f"dataset:{name}:progress"
+    try:
+        ds.extract_entities(model=model)
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:datasets", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "extract_entities",
+            json.dumps({"time": ts, "done": True}),
+        )
+        return {"stage": ds.stage}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def dataset_delete_task(name: str, user_id: int | None = None) -> dict:
+    """Remove a dataset from Redis and Neo4j."""
+
+    client = get_redis_client()
+    ds = None
+    try:
+        ds = DatasetBuilder.from_redis(client, f"dataset:{name}")
+    except KeyError:
+        pass
+    if user_id is not None and ds and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    prog_key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(prog_key, "delete_start", start_ts)
+    try:
+        for key in list(client.scan_iter(match=f"dataset:{name}*")):
+            k = key.decode() if isinstance(key, bytes) else key
+            if k != prog_key:
+                client.delete(key)
+        client.srem("datasets", name)
+        if ds and ds.owner_id is not None:
+            client.srem(f"user:{ds.owner_id}:datasets", name)
+
+        driver = get_neo4j_driver()
+        if driver:
+            try:
+                with driver.session() as session:
+                    session.run(
+                        "MATCH (n {dataset:$dataset}) DETACH DELETE n",
+                        dataset=name,
+                    )
+            finally:
+                driver.close()
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            prog_key,
+            "delete",
+            json.dumps({"deleted": True, "time": ts}),
+        )
+        client.hset(prog_key, "delete_finish", ts)
+        client.hset(
+            f"graph:{name}:progress",
+            "delete",
+            json.dumps({"deleted": True, "time": ts}),
+        )
+
+        return {"deleted": name}
+    except Exception as exc:
+        _record_error(client, prog_key, exc)
+        raise
+
+
+@celery_app.task
+def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
+    """Persist a knowledge graph to Neo4j."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"graph:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    driver = get_neo4j_driver()
+    if not driver:
+        raise RuntimeError("Neo4j not configured")
+    key = f"graph:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "save_neo4j_start", start_ts)
+    try:
+        ds.save_neo4j(driver)
+        driver.close()
+        ds.redis_client = client
+        ds.to_redis(client, f"graph:{name}")
+        client.sadd("graphs", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:graphs", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "save_neo4j",
+            json.dumps({"nodes": len(ds.graph.graph), "time": ts}),
+        )
+        client.hset(key, "save_neo4j_finish", ts)
+        return {"nodes": len(ds.graph.graph)}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:
+    """Load a knowledge graph from Neo4j."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"graph:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    driver = get_neo4j_driver()
+    if not driver:
+        raise RuntimeError("Neo4j not configured")
+    key = f"graph:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "load_neo4j_start", start_ts)
+    try:
+        ds.load_neo4j(driver)
+        driver.close()
+        ds.neo4j_driver = None
+        ds.redis_client = client
+        ds.to_redis(client, f"graph:{name}")
+        client.sadd("graphs", name)
+        if ds.owner_id is not None:
+            client.sadd(f"user:{ds.owner_id}:graphs", name)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "load_neo4j",
+            json.dumps({"nodes": len(ds.graph.graph), "time": ts}),
+        )
+        client.hset(key, "load_neo4j_finish", ts)
+        return {"nodes": len(ds.graph.graph)}
+    except Exception as exc:
+        _record_error(client, key, exc)
+        raise
+
+
+@celery_app.task
+def graph_delete_task(name: str, user_id: int | None = None) -> dict:
+    """Remove a knowledge graph from Redis and Neo4j."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"graph:{name}")
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    prog_key = f"graph:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(prog_key, "delete_start", start_ts)
+    try:
+        keys = list(client.scan_iter(match=f"graph:{name}*"))
+        for key in keys:
+            k = key.decode() if isinstance(key, bytes) else key
+            if k != prog_key:
+                client.delete(key)
+        client.srem("graphs", name)
+        if ds.owner_id is not None:
+            client.srem(f"user:{ds.owner_id}:graphs", name)
+
+        driver = get_neo4j_driver()
+        if driver:
+            try:
+                with driver.session() as session:
+                    session.run(
+                        "MATCH (n {dataset:$dataset}) DETACH DELETE n",
+                        dataset=name,
+                    )
+            finally:
+                driver.close()
+
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            prog_key,
+            "delete",
+            json.dumps({"deleted": True, "time": ts}),
+        )
+        client.hset(prog_key, "delete_finish", ts)
+
+        return {"deleted": name}
+    except Exception as exc:
+        _record_error(client, prog_key, exc)
+        raise
