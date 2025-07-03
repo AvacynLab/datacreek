@@ -1,11 +1,13 @@
 from pathlib import Path
 
 import fakeredis
+import pytest
 import requests
 
 from datacreek.core import dataset
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import IngestOptions
+from datacreek.models.stage import DatasetStage
 from datacreek.pipelines import DatasetType, PipelineStep
 
 
@@ -18,6 +20,14 @@ def test_dataset_has_its_own_graph():
     assert ds1.search("hello") == ["c1"]
     # second dataset should be empty
     assert ds2.search("hello") == []
+
+
+def test_dataset_name_validation():
+    with pytest.raises(ValueError):
+        DatasetBuilder(DatasetType.QA, name="bad name")
+    long_name = "a" * 65
+    with pytest.raises(ValueError):
+        DatasetBuilder(DatasetType.QA, name=long_name)
 
 
 def test_dataset_search_wrappers():
@@ -157,7 +167,7 @@ def test_ingest_file_method(tmp_path):
 
     ds.ingest_file(str(f), options=IngestOptions())
 
-    assert ds.stage == 1
+    assert ds.stage == DatasetStage.INGESTED
     assert ds.events[-1].operation == "ingest_document"
     assert client.get("dataset:demo") is not None
     assert list(ds.ingested_docs) == ["doc"]
@@ -165,6 +175,23 @@ def test_ingest_file_method(tmp_path):
     assert info["path"] == str(f)
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert loaded.ingested_docs == ds.ingested_docs
+
+
+def test_persist_after_decorator(monkeypatch):
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="decor")
+    ds.redis_client = client
+
+    def dummy_ingest(path, dataset, **kwargs):
+        dataset.add_document("d1", source=path)
+        return "d1"
+
+    monkeypatch.setattr("datacreek.core.ingest.ingest_into_dataset", dummy_ingest)
+    monkeypatch.setattr(ds, "_record_event", lambda *a, **k: None)
+
+    ds.ingest_file("file.txt")
+
+    assert client.get("dataset:decor") is not None
 
 
 def test_remove_chunk_updates_order():
@@ -624,9 +651,10 @@ def test_cleanup_graph(monkeypatch):
     assert removed == 1
     assert cleaned == 1
     assert "c2" not in ds.graph.graph.nodes
-    assert ds.events[-3].operation == "deduplicate_chunks"
-    assert ds.events[-2].operation == "clean_chunks"
-    assert ds.events[-1].operation == "normalize_dates"
+    assert ds.events[-4].operation == "deduplicate_chunks"
+    assert ds.events[-3].operation == "clean_chunks"
+    assert ds.events[-2].operation == "normalize_dates"
+    assert ds.events[-1].operation == "cleanup_graph"
     assert ds.graph.graph.nodes["c1"]["start_date"] == "2023-02-01"
 
 
@@ -956,8 +984,8 @@ def test_run_post_kg_pipeline_logs_cleanup(monkeypatch):
     ds.run_post_kg_pipeline(start_step=PipelineStep.KG_CLEANUP)
 
     assert "c2" not in ds.graph.graph.nodes
-    assert ds.events[-3].operation == "deduplicate_chunks"
-    assert ds.events[-2].operation == "clean_chunks"
+    assert ds.events[-4].operation == "deduplicate_chunks"
+    assert ds.events[-3].operation == "clean_chunks"
 
 
 def test_run_post_kg_pipeline_logs_curation(monkeypatch):
@@ -1042,5 +1070,5 @@ def test_run_post_kg_pipeline_uses_redis(monkeypatch):
 def test_mark_exported_records_event():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.mark_exported()
-    assert ds.stage == 4
+    assert ds.stage == DatasetStage.EXPORTED
     assert ds.events[-1].operation == "export_dataset"

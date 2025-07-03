@@ -1,11 +1,18 @@
-from fastapi import Depends, FastAPI, Header, HTTPException
+import json
+from typing import Any, Literal
+
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
+from datacreek.core.dataset import DatasetBuilder
 from datacreek.db import Dataset, SessionLocal, User, init_db
+from datacreek.models.export_format import ExportFormat
 from datacreek.schemas import (
     CurateParams,
     DatasetCreate,
+    DatasetInit,
+    DatasetName,
     DatasetOut,
     DatasetUpdate,
     GenerateParams,
@@ -22,7 +29,20 @@ from datacreek.services import (
     create_user_with_generated_key,
     get_user_by_key,
 )
-from datacreek.tasks import celery_app, curate_task, generate_task, ingest_task, save_task
+from datacreek.tasks import (
+    celery_app,
+    curate_task,
+    dataset_cleanup_task,
+    dataset_delete_task,
+    dataset_export_task,
+    dataset_generate_task,
+    dataset_ingest_task,
+    generate_task,
+    get_neo4j_driver,
+    get_redis_client,
+    ingest_task,
+    save_task,
+)
 
 init_db()
 app = FastAPI(title="Datacreek API")
@@ -52,6 +72,97 @@ def create_user_route(payload: UserCreate, db: Session = Depends(get_db)):
     return {"id": user.id, "username": user.username, "api_key": key}
 
 
+@app.get("/users/me/datasets", summary="List user's datasets")
+def list_user_datasets(current_user: User = Depends(get_current_user)) -> list[str]:
+    """Return dataset names owned by the authenticated user."""
+    client = get_redis_client()
+    if client is None:
+        return []
+    key = f"user:{current_user.id}:datasets"
+    names = [n.decode() if isinstance(n, bytes) else n for n in client.smembers(key)]
+    return sorted(names)
+
+
+@app.get("/users/me/datasets/details", summary="List user's datasets with progress")
+def list_user_datasets_details(current_user: User = Depends(get_current_user)) -> list[dict]:
+    """Return datasets with their stage and progress information."""
+    client = get_redis_client()
+    if client is None:
+        return []
+    key = f"user:{current_user.id}:datasets"
+    names = [n.decode() if isinstance(n, bytes) else n for n in client.smembers(key)]
+    datasets: list[dict] = []
+    for name in sorted(names):
+        try:
+            driver = get_neo4j_driver()
+            ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
+        except KeyError:
+            continue
+        finally:
+            if driver:
+                driver.close()
+        progress: dict[str, Any] = {}
+        for k, v in client.hgetall(f"dataset:{name}:progress").items():
+            if isinstance(v, bytes):
+                v = v.decode()
+            try:
+                progress[k] = json.loads(v)
+            except Exception:
+                progress[k] = v
+        datasets.append({"name": name, "stage": ds.stage, "progress": progress})
+    return datasets
+
+
+def _load_dataset(name: str, current_user: User) -> DatasetBuilder:
+    """Return ``DatasetBuilder`` for ``name`` if owned by ``current_user``."""
+
+    client = get_redis_client()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    try:
+        driver = get_neo4j_driver()
+        ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    finally:
+        if driver:
+            driver.close()
+    if ds.owner_id not in {None, current_user.id}:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    ds.redis_client = client
+    return ds
+
+
+@app.post("/datasets/{name}", summary="Create persisted dataset", status_code=201)
+def create_persisted_dataset(
+    name: DatasetName = Path(...),
+    params: DatasetInit = Body(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Initialize an empty dataset in Redis and Neo4j."""
+
+    client = get_redis_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    key = f"dataset:{name}"
+    if client.exists(key):
+        raise HTTPException(status_code=409, detail="Dataset already exists")
+
+    driver = get_neo4j_driver()
+    ds = DatasetBuilder(params.dataset_type, name=name, redis_client=client, neo4j_driver=driver)
+    ds.owner_id = current_user.id
+    ds.history.append("Dataset created")
+    ds._persist()
+
+    client.sadd("datasets", name)
+    client.sadd(f"user:{current_user.id}:datasets", name)
+    if driver:
+        driver.close()
+
+    return {"name": name, "stage": ds.stage}
+
+
 @app.post("/datasets", response_model=DatasetOut, summary="Add a dataset")
 def add_dataset(
     payload: DatasetCreate,
@@ -60,6 +171,19 @@ def add_dataset(
 ):
     ds = create_dataset(db, current_user.id, payload.source_id, payload.path)
     return ds
+
+
+@app.delete("/datasets/{name}", summary="Delete persisted dataset", status_code=202)
+def delete_persisted_dataset(
+    name: DatasetName = Path(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Delete a persisted dataset from Redis and Neo4j."""
+
+    _load_dataset(name, current_user)
+
+    celery_task = dataset_delete_task.apply_async(args=[name, current_user.id])
+    return {"task_id": celery_task.id}
 
 
 @app.get("/datasets", response_model=list[DatasetOut], summary="List datasets")
@@ -111,6 +235,224 @@ def delete_dataset_route(
     db.delete(ds)
     db.commit()
     return {"status": "deleted"}
+
+
+@app.get("/datasets/{name}/history", summary="Get dataset event history")
+def dataset_history(
+    name: DatasetName = Path(...),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Return stored dataset events from Redis."""
+    ds = _load_dataset(name, current_user)
+    client = ds.redis_client
+    events: list[dict] = []
+    key = f"dataset:{name}:events"
+    for raw in client.lrange(key, 0, -1):
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        try:
+            events.append(json.loads(raw))
+        except Exception:
+            continue
+    return events
+
+
+@app.get("/datasets/{name}/progress", summary="Get dataset progress")
+def dataset_progress(
+    name: DatasetName = Path(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return progress information stored in Redis."""
+    ds = _load_dataset(name, current_user)
+    client = ds.redis_client
+    progress: dict[str, Any] = {}
+    key = f"dataset:{name}:progress"
+    data = client.hgetall(key)
+    for k, v in data.items():
+        if isinstance(v, bytes):
+            v = v.decode()
+        try:
+            progress[k] = json.loads(v)
+        except Exception:
+            progress[k] = v
+    return progress
+
+
+@app.get("/graphs/{name}/progress", summary="Get graph progress")
+def graph_progress(
+    name: DatasetName = Path(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return progress information stored for a knowledge graph."""
+    client = get_redis_client()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    try:
+        driver = get_neo4j_driver()
+        ds = DatasetBuilder.from_redis(client, f"graph:{name}", driver)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    finally:
+        if driver:
+            driver.close()
+    if ds.owner_id not in {None, current_user.id}:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    progress: dict[str, Any] = {}
+    key = f"graph:{name}:progress"
+    for k, v in client.hgetall(key).items():
+        if isinstance(v, bytes):
+            v = v.decode()
+        try:
+            progress[k] = json.loads(v)
+        except Exception:
+            progress[k] = v
+    return progress
+
+
+@app.get("/datasets/{name}/progress/history", summary="Get progress history")
+def dataset_progress_history(
+    name: DatasetName = Path(...),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Return progress status history stored in Redis."""
+    ds = _load_dataset(name, current_user)
+    client = ds.redis_client
+    key = f"dataset:{name}:progress:history"
+    raw = client.lrange(key, 0, -1)
+    history: list[dict] = []
+    for item in raw:
+        if isinstance(item, bytes):
+            item = item.decode()
+        try:
+            history.append(json.loads(item))
+        except Exception:
+            continue
+    return history
+
+
+@app.get("/graphs/{name}/progress/history", summary="Get graph progress history")
+def graph_progress_history(
+    name: DatasetName = Path(...),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Return progress status history stored for a knowledge graph."""
+    client = get_redis_client()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    try:
+        driver = get_neo4j_driver()
+        ds = DatasetBuilder.from_redis(client, f"graph:{name}", driver)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    finally:
+        if driver:
+            driver.close()
+    if ds.owner_id not in {None, current_user.id}:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    key = f"graph:{name}:progress:history"
+    raw = client.lrange(key, 0, -1)
+    history: list[dict] = []
+    for item in raw:
+        if isinstance(item, bytes):
+            item = item.decode()
+        try:
+            history.append(json.loads(item))
+        except Exception:
+            continue
+    return history
+
+
+@app.post("/datasets/{name}/ingest", summary="Ingest file into dataset")
+def dataset_ingest_route(
+    name: DatasetName = Path(...),
+    payload: SourceCreate = Body(...),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Schedule ingestion of a file into a persisted dataset."""
+
+    ds = _load_dataset(name, current_user)
+    celery_task = dataset_ingest_task.apply_async(
+        args=[name, payload.path, current_user.id],
+        kwargs={
+            "doc_id": payload.name,
+            "high_res": payload.high_res or False,
+            "ocr": payload.ocr or False,
+            "use_unstructured": payload.use_unstructured,
+            "extract_entities": payload.extract_entities or False,
+            "extract_facts": payload.extract_facts or False,
+        },
+    )
+    return {"task_id": celery_task.id}
+
+
+@app.post("/datasets/{name}/generate", summary="Generate dataset asynchronously")
+def dataset_generate_route(
+    name: DatasetName = Path(...),
+    params: dict | None = Body(None),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Schedule the generation pipeline for a persisted dataset."""
+
+    _load_dataset(name, current_user)
+
+    celery_task = dataset_generate_task.apply_async(args=[name, params or {}, current_user.id])
+    return {"task_id": celery_task.id}
+
+
+@app.post("/datasets/{name}/cleanup", summary="Cleanup dataset asynchronously")
+def dataset_cleanup_route(
+    name: DatasetName = Path(...),
+    params: dict | None = Body(None),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Schedule cleanup operations on a persisted dataset."""
+
+    _load_dataset(name, current_user)
+
+    celery_task = dataset_cleanup_task.apply_async(args=[name, params or {}, current_user.id])
+    return {"task_id": celery_task.id}
+
+
+@app.post("/datasets/{name}/export", summary="Export dataset asynchronously")
+def dataset_export_task_route(
+    name: DatasetName = Path(...),
+    fmt: ExportFormat = ExportFormat.JSONL,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Schedule dataset export to the requested format."""
+
+    _load_dataset(name, current_user)
+
+    celery_task = dataset_export_task.apply_async(args=[name, fmt, current_user.id])
+    return {"task_id": celery_task.id}
+
+
+@app.get("/datasets/{name}/export", summary="Get exported dataset")
+def dataset_export_result(
+    name: DatasetName = Path(...),
+    fmt: ExportFormat = ExportFormat.JSONL,
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Return previously exported dataset from Redis."""
+    ds = _load_dataset(name, current_user)
+    client = ds.redis_client
+    progress_key = f"dataset:{name}:progress"
+    progress = client.hget(progress_key, "export")
+    key: str | None = None
+    if progress:
+        try:
+            entry = json.loads(progress)
+            key = entry.get("key")
+        except Exception:
+            pass
+    if not key:
+        key = f"dataset:{name}:export:{fmt.value if isinstance(fmt, ExportFormat) else fmt}"
+    data = client.get(key)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Export not found")
+    if isinstance(data, bytes):
+        data = data.decode()
+    return Response(data, media_type="application/json")
 
 
 @app.get("/datasets/{ds_id}/download", summary="Download dataset")
@@ -185,7 +527,7 @@ async def save_async(
     params: SaveParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    celery_task = save_task.apply_async(args=[current_user.id, params.ds_id, params.fmt])
+    celery_task = save_task.apply_async(args=[current_user.id, params.ds_id, params.fmt.value])
     return {"task_id": celery_task.id}
 
 

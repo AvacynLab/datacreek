@@ -37,6 +37,24 @@ def test_env_override(monkeypatch):
     assert gen_cfg.temperature == 0.5
 
 
+def test_openai_env_override(monkeypatch):
+    cfg = load_config()
+    monkeypatch.setenv("LLM_API_BASE", "http://override")
+    monkeypatch.setenv("API_ENDPOINT_KEY", "secret")
+    oa = get_openai_settings(cfg)
+    assert oa.api_base == "http://override"
+    assert oa.api_key == "secret"
+
+
+def test_vllm_env_override(monkeypatch):
+    cfg = load_config()
+    monkeypatch.setenv("LLM_API_BASE", "http://vllm")
+    monkeypatch.setenv("LLM_MODEL", "mymodel")
+    vllm = get_vllm_settings(cfg)
+    assert vllm.api_base == "http://vllm"
+    assert vllm.model == "mymodel"
+
+
 def test_generation_settings_model_validation():
     model = GenerationSettingsModel(temperature=0.4)
     settings = model.to_settings()

@@ -1,7 +1,13 @@
+import json
 import os
+import types
 from pathlib import Path
 
-from datacreek.core.create import _base_name, load_document_text, resolve_output_dir
+import fakeredis
+
+from datacreek.core.create import _base_name, load_document_text, process_file, resolve_output_dir
+from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.storage import RedisStorage
 from datacreek.utils import load_config
 
 
@@ -21,3 +27,131 @@ def test_resolve_output_dir(tmp_path):
     cfg = load_config(str(cfg_path))
     out_dir = resolve_output_dir(cfg_path)
     assert out_dir == cfg["paths"]["output"]["generated"]
+
+
+def test_process_file_no_output(monkeypatch, tmp_path):
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"x")
+
+    called = {"resolved": False}
+
+    def fake_resolve(path):
+        called["resolved"] = True
+        return str(tmp_path / "out")
+
+    class DummyParser:
+        def parse(self, file_path, **kwargs):
+            return "ok"
+
+        def save(self, content, output_path):
+            raise AssertionError("should not save")
+
+    monkeypatch.setattr("datacreek.core.create.resolve_output_dir", fake_resolve)
+
+    class DummyGenerator:
+        def __init__(self, *a, **k):
+            pass
+
+        def process_document(self, *a, **k):
+            return types.SimpleNamespace(to_dict=lambda: {"qa_pairs": []})
+
+    monkeypatch.setattr("datacreek.core.ingest.determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr("datacreek.generators.qa_generator.QAGenerator", DummyGenerator)
+    monkeypatch.setattr(
+        "datacreek.core.create.init_llm_client",
+        lambda *a, **k: types.SimpleNamespace(provider="test", config={}),
+    )
+
+    text = process_file(
+        str(pdf),
+        output_dir=None,
+        kg=KnowledgeGraph(),
+    )
+
+    assert text == {"qa_pairs": []}
+    assert called["resolved"] is False
+
+
+def test_process_file_redis_output(monkeypatch, tmp_path):
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"x")
+
+    class DummyParser:
+        def parse(self, file_path, **kwargs):
+            return "ok"
+
+        def save(self, content, output_path):
+            raise AssertionError("should not save")
+
+    class DummyGenerator:
+        def __init__(self, *a, **k):
+            pass
+
+        def process_document(self, *a, **k):
+            return types.SimpleNamespace(to_dict=lambda: {"qa_pairs": []})
+
+    monkeypatch.setattr("datacreek.core.ingest.determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr("datacreek.generators.qa_generator.QAGenerator", DummyGenerator)
+    monkeypatch.setattr(
+        "datacreek.core.create.init_llm_client",
+        lambda *a, **k: types.SimpleNamespace(provider="test", config={}),
+    )
+
+    client = fakeredis.FakeStrictRedis()
+
+    key = "out:data"
+    result = process_file(
+        str(pdf),
+        output_dir=None,
+        kg=KnowledgeGraph(),
+        redis_client=client,
+        redis_key=key,
+    )
+
+    assert result == key
+    assert json.loads(client.get(key)) == {"qa_pairs": []}
+
+
+class DummyBackend(RedisStorage):
+    def __init__(self, client):
+        super().__init__(client)
+
+
+def test_process_file_backend(monkeypatch, tmp_path):
+    pdf = tmp_path / "doc.pdf"
+    pdf.write_bytes(b"x")
+
+    class DummyParser:
+        def parse(self, file_path, **kwargs):
+            return "ok"
+
+        def save(self, content, output_path):
+            raise AssertionError("should not save")
+
+    class DummyGenerator:
+        def __init__(self, *a, **k):
+            pass
+
+        def process_document(self, *a, **k):
+            return types.SimpleNamespace(to_dict=lambda: {"qa_pairs": []})
+
+    monkeypatch.setattr("datacreek.core.ingest.determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr("datacreek.generators.qa_generator.QAGenerator", DummyGenerator)
+    monkeypatch.setattr(
+        "datacreek.core.create.init_llm_client",
+        lambda *a, **k: types.SimpleNamespace(provider="test", config={}),
+    )
+
+    client = fakeredis.FakeStrictRedis()
+    backend = DummyBackend(client)
+    key = "out:data"
+    result = process_file(
+        str(pdf),
+        output_dir=None,
+        kg=KnowledgeGraph(),
+        backend=backend,
+        redis_key=key,
+    )
+
+    assert result == key
+    assert json.loads(client.get(key)) == {"qa_pairs": []}

@@ -25,7 +25,9 @@ from datacreek.core.ingest import ingest_into_dataset
 from datacreek.core.ingest import process_file as ingest_process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.db import SessionLocal, User, init_db
+from datacreek.models.export_format import ExportFormat
 from datacreek.models.llm_client import LLMClient
+from datacreek.models.stage import DatasetStage
 from datacreek.pipelines import DatasetType
 from datacreek.services import generate_api_key, hash_key
 from datacreek.tasks import (
@@ -95,9 +97,10 @@ def load_datasets_from_redis() -> None:
         return
     for name in REDIS.smembers("datasets"):
         try:
-            ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}")
+            driver = get_neo4j_driver()
+            ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}", driver)
             ds.redis_client = REDIS
-            ds.neo4j_driver = get_neo4j_driver()
+            ds.neo4j_driver = driver
             DATASETS[name] = ds
         except KeyError:
             continue
@@ -113,9 +116,10 @@ def load_graphs_from_redis() -> None:
         return
     for name in REDIS.smembers("graphs"):
         try:
-            ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}")
+            driver = get_neo4j_driver()
+            ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}", driver)
             ds.redis_client = REDIS
-            ds.neo4j_driver = get_neo4j_driver()
+            ds.neo4j_driver = driver
             GRAPHS[name] = ds
         except KeyError:
             continue
@@ -162,9 +166,10 @@ def get_dataset(name: str) -> DatasetBuilder | None:
             if REDIS.exists(key) and not REDIS.sismember(key, name):
                 return None
         try:
-            ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}")
+            driver = get_neo4j_driver()
+            ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}", driver)
             ds.redis_client = REDIS
-            ds.neo4j_driver = get_neo4j_driver()
+            ds.neo4j_driver = driver
             if current_user.is_authenticated and ds.owner_id not in {None, current_user.id}:
                 return None
             DATASETS[name] = ds
@@ -213,9 +218,10 @@ def get_graph(name: str) -> DatasetBuilder | None:
             if REDIS.exists(key) and not REDIS.sismember(key, name):
                 return None
         try:
-            ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}")
+            driver = get_neo4j_driver()
+            ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}", driver)
             ds.redis_client = REDIS
-            ds.neo4j_driver = get_neo4j_driver()
+            ds.neo4j_driver = driver
             if current_user.is_authenticated and ds.owner_id not in {None, current_user.id}:
                 return None
             GRAPHS[name] = ds
@@ -394,7 +400,8 @@ def api_datasets():
             for raw in REDIS.smembers("datasets"):
                 name = raw.decode() if isinstance(raw, bytes) else raw
                 try:
-                    ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}")
+                    driver = get_neo4j_driver()
+                    ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}", driver)
                 except KeyError:
                     continue
                 if ds.owner_id in {None, current_user.id}:
@@ -428,7 +435,7 @@ def api_create_dataset():
         if not g:
             abort(404)
         ds.graph = KnowledgeGraph.from_dict(g.graph.to_dict())
-        ds.stage = max(ds.stage, 1)
+        ds.stage = max(ds.stage, DatasetStage.INGESTED)
         ds.history.append(f"Initialized from graph {graph_name}")
     ds.history.append("Dataset created")
     DATASETS[name] = ds
@@ -1267,7 +1274,7 @@ def api_export_dataset(name: str):
     ds = get_dataset(name)
     if not ds:
         abort(404)
-    fmt = request.args.get("fmt", "jsonl")
+    fmt = ExportFormat(request.args.get("fmt", "jsonl"))
     tid = dataset_export_task.delay(name, fmt, current_user.id).id
     return jsonify({"task_id": tid})
 
@@ -1401,7 +1408,8 @@ def api_graphs():
             for raw in REDIS.smembers("graphs"):
                 name = raw.decode() if isinstance(raw, bytes) else raw
                 try:
-                    ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}")
+                    driver = get_neo4j_driver()
+                    ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}", driver)
                 except KeyError:
                     continue
                 if ds.owner_id in {None, current_user.id}:

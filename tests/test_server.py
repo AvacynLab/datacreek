@@ -31,6 +31,7 @@ from datacreek.db import verify_password
 from datacreek.pipelines import DatasetType
 from datacreek.server.app import DATASETS, app
 from datacreek.tasks import dataset_export_task
+from datacreek.models.export_format import ExportFormat
 
 app.config["WTF_CSRF_ENABLED"] = False
 
@@ -773,7 +774,7 @@ def test_export_result_endpoint(monkeypatch):
     ds.to_redis(client, "dataset:demo")
     client.sadd("datasets", "demo")
 
-    dataset_export_task.delay("demo", "jsonl").get()
+    dataset_export_task.delay("demo", ExportFormat.JSONL).get()
     with app.test_client() as cl:
         _login(cl)
         res = cl.get("/api/datasets/demo/export_result", query_string={"fmt": "jsonl"})

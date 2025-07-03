@@ -4,10 +4,12 @@ import asyncio
 import json
 import logging
 import os
+import re
 import secrets
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
+from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -17,10 +19,14 @@ if TYPE_CHECKING:
 import redis
 from neo4j import Driver
 
+from ..models.stage import DatasetStage
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
+
+MAX_NAME_LENGTH = 64
+NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 @dataclass
@@ -47,9 +53,70 @@ class DatasetBuilder:
     events: List[HistoryEvent] = field(default_factory=list)
     versions: List[Dict[str, Any]] = field(default_factory=list)
     ingested_docs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    stage: int = 0  # 0=created, 1=ingest, 2=generation, 3=curation, 4=exported
+    stage: DatasetStage = DatasetStage.CREATED
     redis_client: redis.Redis | None = field(default=None, repr=False)
     neo4j_driver: Driver | None = field(default=None, repr=False, compare=False)
+
+    # ------------------------------------------------------------------
+    # Name validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def validate_name(name: str) -> str:
+        """Validate that ``name`` is a safe identifier."""
+        if len(name) > MAX_NAME_LENGTH or not NAME_PATTERN.match(name):
+            raise ValueError(f"Invalid dataset name: {name}")
+        return name
+
+    def __post_init__(self) -> None:
+        """Ensure persistence backends are configured when required."""
+        if self.name:
+            self.validate_name(self.name)
+        require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
+        if require and (self.redis_client is None or self.neo4j_driver is None):
+            raise ValueError("Redis and Neo4j must be configured")
+
+    # ------------------------------------------------------------------
+    # Persistence helpers
+    # ------------------------------------------------------------------
+
+    def _persist(self) -> None:
+        """Persist the dataset state to configured backends."""
+
+        if self.redis_client and self.name:
+            key = f"dataset:{self.name}"
+            try:
+                self.to_redis(self.redis_client, key)
+                self.redis_client.sadd("datasets", self.name)
+                if self.owner_id is not None:
+                    self.redis_client.sadd(f"user:{self.owner_id}:datasets", self.name)
+            except Exception:
+                logger.exception("Failed to persist dataset %s", self.name)
+        if self.neo4j_driver and self.name:
+            try:
+                self.graph.to_neo4j(
+                    self.neo4j_driver,
+                    clear=True,
+                    dataset=self.name,
+                )
+            except Exception:
+                logger.exception("Failed to persist graph %s to Neo4j", self.name)
+
+    # ------------------------------------------------------------------
+    # Decorators
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def persist_after(func):
+        """Decorator ensuring dataset state is persisted after ``func``."""
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            result = func(self, *args, **kwargs)
+            self._persist()
+            return result
+
+        return wrapper
 
     def _record_event(self, operation: str, message: str, **params: Any) -> None:
         """Store a history event and log it."""
@@ -61,10 +128,6 @@ class DatasetBuilder:
         if self.redis_client and self.name:
             key = f"dataset:{self.name}"
             try:
-                self.to_redis(self.redis_client, key)
-                self.redis_client.sadd("datasets", self.name)
-                if self.owner_id is not None:
-                    self.redis_client.sadd(f"user:{self.owner_id}:datasets", self.name)
                 self.redis_client.rpush(
                     f"{key}:events",
                     json.dumps(
@@ -77,16 +140,9 @@ class DatasetBuilder:
                     ),
                 )
             except Exception:
-                logger.exception("Failed to persist dataset %s", self.name)
-        if self.neo4j_driver and self.name:
-            try:
-                self.graph.to_neo4j(
-                    self.neo4j_driver,
-                    clear=True,
-                    dataset=self.name,
-                )
-            except Exception:
-                logger.exception("Failed to persist graph %s to Neo4j", self.name)
+                logger.exception("Failed to persist event %s", self.name)
+
+        self._persist()
 
     def add_document(
         self,
@@ -253,16 +309,31 @@ class DatasetBuilder:
         """Create similarity edges between chunks using embeddings."""
 
         self.graph.link_similar_chunks(k)
+        self._record_event(
+            "link_similar_chunks",
+            f"Linked similar chunks (k={k})",
+            k=k,
+        )
 
     def link_similar_sections(self, k: int = 3) -> None:
         """Create similarity edges between section titles."""
 
         self.graph.link_similar_sections(k)
+        self._record_event(
+            "link_similar_sections",
+            f"Linked similar sections (k={k})",
+            k=k,
+        )
 
     def link_similar_documents(self, k: int = 3) -> None:
         """Create similarity edges between document texts."""
 
         self.graph.link_similar_documents(k)
+        self._record_event(
+            "link_similar_documents",
+            f"Linked similar documents (k={k})",
+            k=k,
+        )
 
     def link_chunks_by_entity(self) -> int:
         """Connect chunks that mention the same entity."""
@@ -376,6 +447,7 @@ class DatasetBuilder:
             self._record_event("clean_chunks", msg)
         return cleaned
 
+    @persist_after
     def cleanup_graph(
         self,
         *,
@@ -417,6 +489,15 @@ class DatasetBuilder:
             self.mark_conflicting_facts()
         if validate:
             self.validate_coherence()
+        self._record_event(
+            "cleanup_graph",
+            f"Graph cleaned (removed={removed}, cleaned={cleaned})",
+            resolve_threshold=resolve_threshold,
+            dedup_similarity=dedup_similarity,
+            removed=removed,
+            cleaned=cleaned,
+        )
+        self.stage = max(self.stage, DatasetStage.CURATED)
         return removed, cleaned
 
     def normalize_dates(self) -> int:
@@ -783,6 +864,8 @@ class DatasetBuilder:
 
     def clone(self, name: Optional[str] = None) -> "DatasetBuilder":
         """Return a deep copy of this dataset with a new optional name."""
+        if name is not None:
+            self.validate_name(name)
         clone = DatasetBuilder(self.dataset_type, name=name, graph=deepcopy(self.graph))
         clone.owner_id = self.owner_id
         clone.history = self.history.copy()
@@ -804,12 +887,15 @@ class DatasetBuilder:
             "ingested_docs": self.ingested_docs,
             "events": [{**asdict(e), "timestamp": e.timestamp.isoformat()} for e in self.events],
             "graph": self.graph.to_dict(),
-            "stage": self.stage,
+            "stage": int(self.stage),
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DatasetBuilder":
-        ds = cls(DatasetType(data["dataset_type"]), name=data.get("name"))
+        name = data.get("name")
+        if name is not None:
+            cls.validate_name(name)
+        ds = cls(DatasetType(data["dataset_type"]), name=name)
         if "id" in data:
             ds.id = data["id"]
         if ts := data.get("created_at"):
@@ -832,7 +918,7 @@ class DatasetBuilder:
             for e in data.get("events", [])
         ]
         ds.graph = KnowledgeGraph.from_dict(data.get("graph", {}))
-        ds.stage = int(data.get("stage", 0))
+        ds.stage = DatasetStage(int(data.get("stage", 0)))
         return ds
 
     def to_json(self, path: str) -> str:
@@ -857,6 +943,8 @@ class DatasetBuilder:
         """Persist the dataset in Redis under ``key``."""
 
         key = key or (self.name or "dataset")
+        if self.name:
+            self.validate_name(self.name)
         client.set(key, json.dumps(self.to_dict()))
         events_key = f"{key}:events"
         client.delete(events_key)
@@ -878,13 +966,22 @@ class DatasetBuilder:
         return key
 
     @classmethod
-    def from_redis(cls, client: redis.Redis, key: str) -> "DatasetBuilder":
+    def from_redis(
+        cls, client: redis.Redis | None, key: str, driver: Driver | None = None
+    ) -> "DatasetBuilder":
+        if client is None:
+            raise ValueError("Redis client required")
         data = client.get(key)
         if data is None:
             raise KeyError(key)
         ds = cls.from_dict(json.loads(data))
+        if ds.name:
+            cls.validate_name(ds.name)
         ds.redis_client = client
-        ds.neo4j_driver = None
+        ds.neo4j_driver = driver
+        require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
+        if require and driver is None:
+            raise ValueError("Neo4j driver required")
         events_key = f"{key}:events"
         raw_events = client.lrange(events_key, 0, -1)
         if raw_events:
@@ -898,6 +995,7 @@ class DatasetBuilder:
             ds.history = [ev.message for ev in ds.events]
         return ds
 
+    @persist_after
     def ingest_file(
         self,
         path: str,
@@ -946,7 +1044,7 @@ class DatasetBuilder:
             "extract_entities": extract_entities,
             "extract_facts": extract_facts,
         }
-        self.stage = max(self.stage, 1)
+        self.stage = max(self.stage, DatasetStage.INGESTED)
         self._record_event(
             "ingest_document",
             f"Ingested {doc}",
@@ -968,6 +1066,7 @@ class DatasetBuilder:
 
         return self.graph.to_text()
 
+    @persist_after
     def run_post_kg_pipeline(
         self,
         *,
@@ -1084,21 +1183,23 @@ class DatasetBuilder:
         self.versions.append(
             {"params": params, "time": datetime.now(timezone.utc).isoformat(), "result": res_data}
         )
-        self.stage = max(self.stage, 2)
+        self.stage = max(self.stage, DatasetStage.GENERATED)
         self._record_event("generate", f"Post-KG pipeline run (v{len(self.versions)})")
 
         return result
 
+    @persist_after
     def mark_exported(self) -> None:
         """Update the dataset stage and history after export."""
 
-        self.stage = max(self.stage, 4)
+        self.stage = max(self.stage, DatasetStage.EXPORTED)
         self._record_event("export_dataset", "Dataset exported")
 
     # ------------------------------------------------------------------
     # Neo4j helpers
     # ------------------------------------------------------------------
 
+    @persist_after
     def save_neo4j(self, driver: Driver | None = None) -> None:
         """Persist the knowledge graph to Neo4j."""
 
@@ -1108,6 +1209,7 @@ class DatasetBuilder:
         self.graph.to_neo4j(driver, dataset=self.name)
         self._record_event("save_neo4j", "Graph saved to Neo4j")
 
+    @persist_after
     def load_neo4j(self, driver: Driver | None = None) -> None:
         """Load the knowledge graph from Neo4j."""
 
