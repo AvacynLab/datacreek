@@ -28,10 +28,10 @@ import datacreek.server.app as app_module
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.db import verify_password
+from datacreek.models.export_format import ExportFormat
 from datacreek.pipelines import DatasetType
 from datacreek.server.app import DATASETS, app
 from datacreek.tasks import dataset_export_task
-from datacreek.models.export_format import ExportFormat
 
 app.config["WTF_CSRF_ENABLED"] = False
 
