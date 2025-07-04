@@ -22,21 +22,28 @@ jobs:
           - 7687:7687
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: pip install -e . fakeredis flask flask-wtf flask-login wtforms pre-commit pytest
-      - run: pre-commit run --all-files --show-diff-on-failure
-      - run: pytest -q
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "base=${{ github.event.before }}" >> $GITHUB_OUTPUT
+          fi
+          echo "head=${{ github.sha }}" >> $GITHUB_OUTPUT
+      - run: pre-commit run --from-ref ${{ steps.diff.outputs.base }} --to-ref ${{ steps.diff.outputs.head }} --show-diff-on-failure
       - name: Build container images
         run: docker compose build
-      - name: Run tests inside image
+      - name: Run tests
         run: |
-          docker build -t datacreek:test .
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace datacreek:test \
-            sh -c "pip install fakeredis flask flask-wtf flask-login wtforms pytest && pytest -q"
+          scripts/run_changed_tests.sh \
+            ${{ steps.diff.outputs.base }} \
+            ${{ steps.diff.outputs.head }}
 
   docker-build:
     runs-on: ubuntu-latest
