@@ -137,6 +137,20 @@ def get_vllm_settings(config: Dict[str, Any]) -> VLLMSettings:
     ).copy()
     for field_name in VLLMSettings.__dataclass_fields__:
         defaults.setdefault(field_name, getattr(VLLMSettings(), field_name))
+
+    env_map = {
+        "api_base": "LLM_API_BASE",
+        "model": "LLM_MODEL",
+        "max_retries": "LLM_MAX_RETRIES",
+        "retry_delay": "LLM_RETRY_DELAY",
+    }
+    for field, env in env_map.items():
+        if env_val := os.getenv(env):
+            try:
+                defaults[field] = type(defaults[field])(env_val)
+            except Exception:
+                defaults[field] = env_val
+
     return VLLMSettings.from_dict(defaults)
 
 
@@ -161,6 +175,21 @@ def get_openai_settings(config: Dict[str, Any]) -> OpenAISettings:
     ).copy()
     for field_name in OpenAISettings.__dataclass_fields__:
         defaults.setdefault(field_name, getattr(OpenAISettings(), field_name))
+
+    env_map = {
+        "api_base": "LLM_API_BASE",
+        "api_key": "API_ENDPOINT_KEY",
+        "model": "LLM_MODEL",
+        "max_retries": "LLM_MAX_RETRIES",
+        "retry_delay": "LLM_RETRY_DELAY",
+    }
+    for field, env in env_map.items():
+        if env_val := os.getenv(env):
+            try:
+                defaults[field] = type(defaults[field])(env_val)
+            except Exception:
+                defaults[field] = env_val
+
     return OpenAISettings.from_dict(defaults)
 
 

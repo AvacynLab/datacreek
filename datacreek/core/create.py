@@ -4,6 +4,8 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Generate the content: CoT/QA/Summary Datasets
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -12,9 +14,12 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import redis
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
 from datacreek.models.llm_client import LLMClient
+from datacreek.storage import StorageBackend
 from datacreek.utils.config import get_generation_config, get_output_paths, load_config
 
 logger = logging.getLogger(__name__)
@@ -83,6 +88,9 @@ def process_file(
     document_text: Optional[str] = None,
     config_overrides: Optional[Dict[str, Any]] = None,
     multi_answer: bool = False,
+    redis_client: "redis.Redis" | None = None,
+    redis_key: str | None = None,
+    backend: "StorageBackend" | None = None,
 ) -> Any:
     """Process a file to generate content
 
@@ -100,14 +108,16 @@ def process_file(
         kg: Knowledge graph built during ingestion
         multi_answer: Generate multiple answers per fact when using
             the knowledge graph generator
+        redis_client: Optional Redis connection to store the result
+        redis_key: Key used when persisting to Redis
+        backend: Optional storage backend overriding ``redis_client``
 
     Returns:
-        Path to the output file
+        Path to the output file or the backend key when persistence is used
     """
     save_to_file = output_dir is not None
-    if output_dir is None:
-        output_dir = resolve_output_dir(config_path)
     if save_to_file:
+        output_dir = output_dir or resolve_output_dir(config_path)
         os.makedirs(output_dir, exist_ok=True)
 
     client = init_llm_client(
@@ -479,7 +489,19 @@ def process_file(
     if ct not in handlers:
         raise ValueError(f"Unknown content type: {content_type}")
 
-    return handlers[ct]()
+    result = handlers[ct]()
+    if not save_to_file and backend is not None and redis_key:
+        try:
+            return backend.save(redis_key, json.dumps(result))
+        except Exception:
+            pass
+    if not save_to_file and redis_client and redis_key:
+        try:
+            redis_client.set(redis_key, json.dumps(result))
+            return redis_key
+        except Exception:
+            pass
+    return result
 
 
 async def process_file_async(

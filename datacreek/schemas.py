@@ -1,10 +1,22 @@
-from pydantic import BaseModel
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, StringConstraints, confloat, constr
+
+from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN
+
+# Dataset identifier constraints reused by API paths and tasks
+DatasetName = Annotated[
+    str,
+    StringConstraints(pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+]
 
 from datacreek.config_models import GenerationSettingsModel
+from datacreek.models.export_format import ExportFormat
+from datacreek.pipelines import DatasetType
 
 
 class UserCreate(BaseModel):
-    username: str
+    username: constr(min_length=1)
 
 
 class UserOut(BaseModel):
@@ -16,7 +28,7 @@ class UserOut(BaseModel):
 
 
 class SourceCreate(BaseModel):
-    path: str
+    path: constr(min_length=1)
     name: str | None = None
     high_res: bool | None = False
     ocr: bool | None = False
@@ -32,14 +44,17 @@ class SourceOut(BaseModel):
         from_attributes = True
 
 
+from datacreek.models.content_type import ContentType
+
+
 class GenerateParams(BaseModel):
     src_id: int
-    content_type: str = "qa"
+    content_type: ContentType = ContentType.QA
     num_pairs: int | None = None
-    provider: str | None = None
-    profile: str | None = None
-    model: str | None = None
-    api_base: str | None = None
+    provider: constr(min_length=1) | None = None
+    profile: constr(min_length=1) | None = None
+    model: constr(min_length=1) | None = None
+    api_base: constr(min_length=1) | None = None
     generation: GenerationSettingsModel | None = None
     prompts: dict | None = None
 
@@ -54,12 +69,12 @@ class DatasetOut(BaseModel):
 
 class CurateParams(BaseModel):
     ds_id: int
-    threshold: float | None = None
+    threshold: confloat(ge=0, le=1) | None = None
 
 
 class SaveParams(BaseModel):
     ds_id: int
-    fmt: str = "jsonl"
+    fmt: ExportFormat = ExportFormat.JSONL
 
 
 class UserWithKey(UserOut):
@@ -68,8 +83,14 @@ class UserWithKey(UserOut):
 
 class DatasetCreate(BaseModel):
     source_id: int
-    path: str
+    path: constr(min_length=1)
 
 
 class DatasetUpdate(BaseModel):
-    path: str | None = None
+    path: constr(min_length=1) | None = None
+
+
+class DatasetInit(BaseModel):
+    """Parameters for creating a persisted dataset."""
+
+    dataset_type: DatasetType = DatasetType.TEXT

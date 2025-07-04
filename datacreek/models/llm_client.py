@@ -18,7 +18,7 @@ from datacreek.utils.config import (
     get_llm_provider,
     get_openai_settings,
     get_vllm_settings,
-    load_config,
+    load_config_with_overrides,
 )
 
 # Set up logging
@@ -49,6 +49,8 @@ class LLMClient:
         model_name: Optional[str] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        *,
+        config_overrides: Optional[Dict[str, Any]] = None,
     ):
         """Initialize an LLM client that supports multiple providers
 
@@ -62,8 +64,8 @@ class LLMClient:
             max_retries: Override max retries from config
             retry_delay: Override retry delay from config
         """
-        # Load config
-        self.config = load_config(config_path)
+        # Load config with optional overrides
+        self.config = load_config_with_overrides(config_path, config_overrides)
 
         profile_cfg = {}
         if profile:

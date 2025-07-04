@@ -9,6 +9,9 @@ __all__ = [
     "ConversationResult",
     "PrefPairResult",
     "PrefListResult",
+    "ExportFormat",
+    "DatasetStage",
+    "TaskStatus",
 ]
 
 
@@ -53,6 +56,18 @@ def __getattr__(name: str):
         return cls
     if name == "PrefListResult":
         from .results import PrefListResult as cls
+
+        return cls
+    if name == "ExportFormat":
+        from .export_format import ExportFormat as cls
+
+        return cls
+    if name == "DatasetStage":
+        from .stage import DatasetStage as cls
+
+        return cls
+    if name == "TaskStatus":
+        from .task_status import TaskStatus as cls
 
         return cls
     raise AttributeError(name)

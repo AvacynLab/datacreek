@@ -94,9 +94,11 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
 
 
 def clean_text(text: str) -> str:
-    """Return ``text`` normalized using ``unstructured`` cleaners."""
+    """Normalize ``text`` using ``unstructured`` when available."""
 
-    if not _UNSTRUCTURED:
-        raise ImportError("The 'unstructured' package is required for text cleaning.")
+    if _UNSTRUCTURED:
+        return _clean(text, extra_whitespace=True, dashes=True, bullets=True)
 
-    return _clean(text, extra_whitespace=True, dashes=True, bullets=True)
+    # Fallback basic cleaning if ``unstructured`` isn't installed
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()

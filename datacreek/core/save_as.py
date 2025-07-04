@@ -4,12 +4,16 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Logic for saving file format
+from __future__ import annotations
 
 import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import redis
+
+from datacreek.storage import StorageBackend
 from datacreek.utils.format_converter import (
     to_alpaca,
     to_chatml,
@@ -58,6 +62,10 @@ def convert_format(
     format_type: str,
     config: Optional[Dict[str, Any]] = None,
     storage_format: str = "json",
+    *,
+    redis_client: "redis.Redis" | None = None,
+    redis_key: str | None = None,
+    backend: "StorageBackend" | None = None,
 ) -> Any:
     """Convert data to different formats
 
@@ -67,9 +75,12 @@ def convert_format(
         format_type: Output format (jsonl, alpaca, ft, chatml)
         config: Configuration dictionary
         storage_format: Storage format, either "json" or "hf" (Hugging Face dataset)
+        redis_client: Optional Redis connection for in-memory storage
+        redis_key: Key used when storing the result in Redis
 
     Returns:
-        Path to the output file or directory
+        Path to the output file or directory, or the Redis key when using
+        ``redis_client``
     """
     if format_type not in FORMAT_DISPATCH:
         raise ValueError(f"Unknown format type: {format_type}")
@@ -118,8 +129,23 @@ def convert_format(
         raise ValueError("HF dataset export requires output path")
 
     # Standard JSON file storage format
+    formatted = _format_pairs(qa_pairs, format_type)
+
     if output_path:
         handler = FORMAT_DISPATCH.get(format_type)
         if handler:
             return handler(qa_pairs, output_path)
-    return _format_pairs(qa_pairs, format_type)
+
+    if backend is not None and redis_key is not None:
+        try:
+            return backend.save(redis_key, formatted)
+        except Exception:
+            pass
+    if redis_client and redis_key:
+        try:
+            redis_client.set(redis_key, formatted)
+            return redis_key
+        except Exception:
+            pass
+
+    return formatted

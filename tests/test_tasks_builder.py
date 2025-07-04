@@ -5,6 +5,9 @@ import fakeredis
 import pytest
 
 from datacreek.core.dataset import DatasetBuilder, DatasetType
+from datacreek.models.export_format import ExportFormat
+from datacreek.models.stage import DatasetStage
+from datacreek.models.task_status import TaskStatus
 from datacreek.tasks import (
     dataset_cleanup_task,
     dataset_delete_task,
@@ -58,6 +61,10 @@ def test_dataset_ingest_task(tmp_path, monkeypatch):
     assert client.hget("dataset:demo:progress", "ingest_finish") is not None
     params = json.loads(client.hget("dataset:demo:progress", "ingestion_params"))
     assert params == {"high_res": True, "ocr": True, "extract_entities": True}
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
+    hist = [json.loads(x) for x in client.lrange("dataset:demo:progress:history", 0, -1)]
+    assert hist[0]["status"] == TaskStatus.INGESTING.value
+    assert hist[-1]["status"] == TaskStatus.COMPLETED.value
 
 
 def test_dataset_generate_task(monkeypatch):
@@ -77,7 +84,7 @@ def test_dataset_generate_task(monkeypatch):
         called["ok"] = True
         if redis_client is not None:
             redis_client.hset("dataset:demo:progress", "generate_qa_duration", "0.0")
-        self.stage = 2
+        self.stage = DatasetStage.GENERATED
         self._record_event("generate", "done")
         return {}
 
@@ -85,7 +92,7 @@ def test_dataset_generate_task(monkeypatch):
     dataset_generate_task.delay("demo", {"start_step": "CURATE"}).get()
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert called["ok"]
-    assert loaded.stage == 2
+    assert loaded.stage == DatasetStage.GENERATED
     assert any(e.operation == "generate" for e in loaded.events)
     progress = client.hget("dataset:demo:progress", "generation_params")
     assert progress is not None
@@ -96,6 +103,7 @@ def test_dataset_generate_task(monkeypatch):
     assert client.hget("dataset:demo:progress", "generate_start") is not None
     assert client.hget("dataset:demo:progress", "generate_finish") is not None
     assert client.hget("dataset:demo:progress", "generate_qa_duration") is not None
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
 
 def test_dataset_cleanup_and_export_tasks(monkeypatch):
@@ -113,20 +121,24 @@ def test_dataset_cleanup_and_export_tasks(monkeypatch):
     dataset_cleanup_task.delay("demo", {"normalize_dates": False}).get()
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert any(e.operation == "clean_chunks" for e in loaded.events)
+    assert any(e.operation == "cleanup_graph" for e in loaded.events)
     clean_prog = json.loads(client.hget("dataset:demo:progress", "cleanup"))
     assert "time" in clean_prog and clean_prog["removed"] >= 0
     assert client.hget("dataset:demo:progress", "cleanup_start") is not None
     assert client.hget("dataset:demo:progress", "cleanup_finish") is not None
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
-    result = dataset_export_task.delay("demo", "jsonl").get()
-    assert result["stage"] == 4
+    result = dataset_export_task.delay("demo", ExportFormat.JSONL).get()
+    assert result["stage"] == DatasetStage.EXPORTED
     assert client.get(result["key"]) is not None
     loaded2 = DatasetBuilder.from_redis(client, "dataset:demo")
-    assert loaded2.stage == 4
+    assert loaded2.stage == DatasetStage.EXPORTED
     assert any(e.operation == "export_dataset" for e in loaded2.events)
     progress = json.loads(client.hget("dataset:demo:progress", "export"))
     assert progress["fmt"] == "jsonl"
+    assert progress["key"] == result["key"]
     assert "time" in progress
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
 
 def test_dataset_save_and_load_neo4j_tasks(monkeypatch):
@@ -167,6 +179,7 @@ def test_dataset_save_and_load_neo4j_tasks(monkeypatch):
     assert "time" in save_prog
     assert client.hget("dataset:demo:progress", "save_neo4j_start") is not None
     assert client.hget("dataset:demo:progress", "save_neo4j_finish") is not None
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
     dataset_load_neo4j_task.delay("demo").get()
     loaded2 = DatasetBuilder.from_redis(client, "dataset:demo")
@@ -178,6 +191,7 @@ def test_dataset_save_and_load_neo4j_tasks(monkeypatch):
     assert "time" in load_prog
     assert client.hget("dataset:demo:progress", "load_neo4j_start") is not None
     assert client.hget("dataset:demo:progress", "load_neo4j_finish") is not None
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
 
 def test_dataset_delete_task(monkeypatch):
@@ -220,6 +234,7 @@ def test_dataset_delete_task(monkeypatch):
     assert "time" in prog
     assert client.hget("dataset:demo:progress", "delete_start") is not None
     assert client.hget("dataset:demo:progress", "delete_finish") is not None
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
 
 def test_dataset_operation_task_progress(monkeypatch):
@@ -228,16 +243,23 @@ def test_dataset_operation_task_progress(monkeypatch):
     ds.redis_client = client
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "<b>Hello world</b>")
+    ds.add_chunk("d", "c2", "Hello again")
     ds.to_redis(client, "dataset:demo")
     client.sadd("datasets", "demo")
 
     dataset_operation_task.delay("demo", "clean_chunks").get()
+    dataset_operation_task.delay("demo", "link_similar_chunks", {"k": 1}).get()
 
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert any(e.operation == "clean_chunks" for e in loaded.events)
     prog = json.loads(client.hget("dataset:demo:progress", "clean_chunks"))
     assert prog["result"] >= 1
     assert "time" in prog
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
+    assert any(e.operation == "link_similar_chunks" for e in loaded.events)
+    lprog = json.loads(client.hget("dataset:demo:progress", "link_similar_chunks"))
+    assert "time" in lprog
+    assert client.hget("dataset:demo:progress", "operation").decode() == "link_similar_chunks"
 
 
 def test_graph_tasks(monkeypatch):
@@ -290,6 +312,7 @@ def test_graph_tasks(monkeypatch):
     assert "time" in save_prog
     assert client.hget("graph:graph:progress", "save_neo4j_start") is not None
     assert client.hget("graph:graph:progress", "save_neo4j_finish") is not None
+    assert client.hget("graph:graph:progress", "status").decode() == TaskStatus.COMPLETED.value
 
     graph_load_neo4j_task.delay("graph", None).get()
     loaded2 = DatasetBuilder.from_redis(client, "graph:graph")
@@ -301,6 +324,7 @@ def test_graph_tasks(monkeypatch):
     assert "time" in load_prog
     assert client.hget("graph:graph:progress", "load_neo4j_start") is not None
     assert client.hget("graph:graph:progress", "load_neo4j_finish") is not None
+    assert client.hget("graph:graph:progress", "status").decode() == TaskStatus.COMPLETED.value
 
     graph_delete_task.delay("graph", None).get()
     assert not client.exists("graph:graph")
@@ -310,6 +334,7 @@ def test_graph_tasks(monkeypatch):
     assert "time" in prog
     assert client.hget("graph:graph:progress", "delete_start") is not None
     assert client.hget("graph:graph:progress", "delete_finish") is not None
+    assert client.hget("graph:graph:progress", "status").decode() == TaskStatus.COMPLETED.value
 
 
 def test_graph_delete_filters_dataset(monkeypatch):
@@ -364,6 +389,7 @@ def test_extract_tasks_progress(monkeypatch):
     assert f_prog["done"] is True
     assert e_prog["done"] is True
     assert "time" in f_prog and "time" in e_prog
+    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
 
 
 def test_graph_tasks_unauthorized(monkeypatch):
@@ -396,3 +422,23 @@ def test_dataset_tasks_unauthorized(monkeypatch):
         dataset_generate_task.delay("demo", None, 2).get()
     with pytest.raises(RuntimeError):
         dataset_delete_task.delay("demo", 2).get()
+
+
+def test_task_error_history(monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    def boom(*a, **k):
+        raise RuntimeError("fail")
+
+    monkeypatch.setattr(DatasetBuilder, "ingest_file", boom)
+
+    with pytest.raises(RuntimeError):
+        dataset_ingest_task.delay("demo", "bad", None).get()
+
+    hist = [json.loads(x) for x in client.lrange("dataset:demo:progress:history", 0, -1)]
+    assert hist and hist[-1]["status"] == TaskStatus.FAILED.value
+    assert "error" in hist[-1]
