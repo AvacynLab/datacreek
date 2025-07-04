@@ -5,7 +5,7 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
-from datacreek.core.dataset import DatasetBuilder
+from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN, DatasetBuilder
 from datacreek.db import Dataset, SessionLocal, User, init_db
 from datacreek.models.export_format import ExportFormat
 from datacreek.schemas import (
@@ -135,7 +135,7 @@ def _load_dataset(name: str, current_user: User) -> DatasetBuilder:
 
 @app.post("/datasets/{name}", summary="Create persisted dataset", status_code=201)
 def create_persisted_dataset(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     params: DatasetInit = Body(...),
     current_user: User = Depends(get_current_user),
 ):
@@ -175,7 +175,7 @@ def add_dataset(
 
 @app.delete("/datasets/{name}", summary="Delete persisted dataset", status_code=202)
 def delete_persisted_dataset(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Delete a persisted dataset from Redis and Neo4j."""
@@ -239,7 +239,7 @@ def delete_dataset_route(
 
 @app.get("/datasets/{name}/history", summary="Get dataset event history")
 def dataset_history(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return stored dataset events from Redis."""
@@ -259,7 +259,7 @@ def dataset_history(
 
 @app.get("/datasets/{name}/progress", summary="Get dataset progress")
 def dataset_progress(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Return progress information stored in Redis."""
@@ -280,7 +280,7 @@ def dataset_progress(
 
 @app.get("/graphs/{name}/progress", summary="Get graph progress")
 def graph_progress(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Return progress information stored for a knowledge graph."""
@@ -311,7 +311,7 @@ def graph_progress(
 
 @app.get("/datasets/{name}/progress/history", summary="Get progress history")
 def dataset_progress_history(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return progress status history stored in Redis."""
@@ -332,7 +332,7 @@ def dataset_progress_history(
 
 @app.get("/graphs/{name}/progress/history", summary="Get graph progress history")
 def graph_progress_history(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return progress status history stored for a knowledge graph."""
@@ -364,7 +364,7 @@ def graph_progress_history(
 
 @app.post("/datasets/{name}/ingest", summary="Ingest file into dataset")
 def dataset_ingest_route(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     payload: SourceCreate = Body(...),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -387,7 +387,7 @@ def dataset_ingest_route(
 
 @app.post("/datasets/{name}/generate", summary="Generate dataset asynchronously")
 def dataset_generate_route(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     params: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -401,7 +401,7 @@ def dataset_generate_route(
 
 @app.post("/datasets/{name}/cleanup", summary="Cleanup dataset asynchronously")
 def dataset_cleanup_route(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     params: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -415,7 +415,7 @@ def dataset_cleanup_route(
 
 @app.post("/datasets/{name}/export", summary="Export dataset asynchronously")
 def dataset_export_task_route(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     fmt: ExportFormat = ExportFormat.JSONL,
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -429,7 +429,7 @@ def dataset_export_task_route(
 
 @app.get("/datasets/{name}/export", summary="Get exported dataset")
 def dataset_export_result(
-    name: DatasetName = Path(...),
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
     fmt: ExportFormat = ExportFormat.JSONL,
     current_user: User = Depends(get_current_user),
 ) -> Response:

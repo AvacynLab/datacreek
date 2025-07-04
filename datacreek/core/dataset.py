@@ -96,7 +96,6 @@ class DatasetBuilder:
             try:
                 self.graph.to_neo4j(
                     self.neo4j_driver,
-                    clear=True,
                     dataset=self.name,
                 )
             except Exception:
