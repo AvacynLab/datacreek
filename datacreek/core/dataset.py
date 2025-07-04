@@ -56,6 +56,7 @@ class DatasetBuilder:
     stage: DatasetStage = DatasetStage.CREATED
     redis_client: redis.Redis | None = field(default=None, repr=False)
     neo4j_driver: Driver | None = field(default=None, repr=False, compare=False)
+    redis_key: str | None = field(default=None, repr=False)
 
     # ------------------------------------------------------------------
     # Name validation
@@ -84,7 +85,7 @@ class DatasetBuilder:
         """Persist the dataset state to configured backends."""
 
         if self.redis_client and self.name:
-            key = f"dataset:{self.name}"
+            key = self.redis_key or f"dataset:{self.name}"
             try:
                 self.to_redis(self.redis_client, key)
                 self.redis_client.sadd("datasets", self.name)
@@ -942,6 +943,7 @@ class DatasetBuilder:
         """Persist the dataset in Redis under ``key``."""
 
         key = key or (self.name or "dataset")
+        self.redis_key = key
         if self.name:
             self.validate_name(self.name)
         client.set(key, json.dumps(self.to_dict()))
@@ -978,6 +980,7 @@ class DatasetBuilder:
             cls.validate_name(ds.name)
         ds.redis_client = client
         ds.neo4j_driver = driver
+        ds.redis_key = key
         require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
         if require and driver is None:
             raise ValueError("Neo4j driver required")
