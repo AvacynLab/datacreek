@@ -391,10 +391,12 @@ def test_dataset_version_item_route(monkeypatch):
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
     ds.redis_client = redis_client
-    ds.versions.extend([
-        {"params": {}, "time": "t1", "result": {"v": 1}},
-        {"params": {}, "time": "t2", "result": {"v": 2}},
-    ])
+    ds.versions.extend(
+        [
+            {"params": {}, "time": "t1", "result": {"v": 1}},
+            {"params": {}, "time": "t2", "result": {"v": 2}},
+        ]
+    )
     ds.to_redis(redis_client, "dataset:demo")
     redis_client.sadd("datasets", "demo")
 
@@ -413,10 +415,12 @@ def test_dataset_version_delete_route(monkeypatch):
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
     ds.redis_client = redis_client
-    ds.versions.extend([
-        {"params": {}, "time": "t1", "result": {"v": 1}},
-        {"params": {}, "time": "t2", "result": {"v": 2}},
-    ])
+    ds.versions.extend(
+        [
+            {"params": {}, "time": "t1", "result": {"v": 1}},
+            {"params": {}, "time": "t2", "result": {"v": 2}},
+        ]
+    )
     ds.to_redis(redis_client, "dataset:demo")
     redis_client.sadd("datasets", "demo")
 

@@ -22,7 +22,6 @@ def test_load_document_text(tmp_path):
     assert load_document_text(str(p)) == "hello"
 
 
-
 def test_process_file_no_output(monkeypatch, tmp_path):
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"x")
@@ -36,7 +35,6 @@ def test_process_file_no_output(monkeypatch, tmp_path):
     class DummyParser:
         def parse(self, file_path, **kwargs):
             return "ok"
-
 
     class DummyGenerator:
         def __init__(self, *a, **k):

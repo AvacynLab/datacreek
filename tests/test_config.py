@@ -79,7 +79,6 @@ def test_format_settings_model_and_loader():
     assert settings.default == "json"
 
 
-
 def test_llm_and_provider_models():
     cfg = load_config()
     llm = get_llm_settings(cfg)

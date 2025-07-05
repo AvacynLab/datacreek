@@ -13,9 +13,8 @@ from typing import Any, Dict, Optional
 
 import redis
 
-from datacreek.storage import StorageBackend
-
 from datacreek.models.llm_client import LLMClient
+from datacreek.storage import StorageBackend
 from datacreek.utils.config import get_generation_config, load_config
 
 logger = logging.getLogger(__name__)
@@ -203,48 +202,48 @@ class VQAGenerator:
             if input_split is None:
                 input_split = self.config.get("input_split", None)
 
-        # Use the specified split if provided
-        if input_split is not None:
-            dataset = dataset[input_split]
+            # Use the specified split if provided
+            if input_split is not None:
+                dataset = dataset[input_split]
 
-            # Get max_examples from args or config
-            max_examples = num_examples
-            if max_examples is not None and max_examples > 0:
-                # Limit the dataset size
-                dataset = dataset.select(range(min(max_examples, len(dataset))))
+                # Get max_examples from args or config
+                max_examples = num_examples
+                if max_examples is not None and max_examples > 0:
+                    # Limit the dataset size
+                    dataset = dataset.select(range(min(max_examples, len(dataset))))
 
-            if verbose:
-                logger.info("Processing %d examples from dataset", len(dataset))
+                if verbose:
+                    logger.info("Processing %d examples from dataset", len(dataset))
 
-            # Get batch size from config
-            batch_size = self.generation_config.batch_size
+                # Get batch size from config
+                batch_size = self.generation_config.batch_size
 
-            if verbose:
-                logger.info("Using batch size of %d for dataset processing", batch_size)
+                if verbose:
+                    logger.info("Using batch size of %d for dataset processing", batch_size)
 
-            # Process the dataset
-            ds = dataset.map(
-                self.transform,
-                batch_size=batch_size,
-                batched=True,
-            )
+                # Process the dataset
+                ds = dataset.map(
+                    self.transform,
+                    batch_size=batch_size,
+                    batched=True,
+                )
 
-            if backend is not None and redis_key is not None:
-                try:
-                    return backend.save(redis_key, json.dumps(ds.to_dict()))
-                except Exception:
-                    logger.exception("Failed to save VQA data via backend")
-                    raise
+                if backend is not None and redis_key is not None:
+                    try:
+                        return backend.save(redis_key, json.dumps(ds.to_dict()))
+                    except Exception:
+                        logger.exception("Failed to save VQA data via backend")
+                        raise
 
-            if redis_client is not None and redis_key is not None:
-                try:
-                    redis_client.set(redis_key, json.dumps(ds.to_dict()))
-                    return redis_key
-                except Exception:
-                    logger.exception("Failed to save VQA data to Redis")
-                    raise
+                if redis_client is not None and redis_key is not None:
+                    try:
+                        redis_client.set(redis_key, json.dumps(ds.to_dict()))
+                        return redis_key
+                    except Exception:
+                        logger.exception("Failed to save VQA data to Redis")
+                        raise
 
-            return ds
+                return ds
 
         except Exception as e:
             logger.error("Error processing dataset: %s", e)

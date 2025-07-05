@@ -921,8 +921,6 @@ class DatasetBuilder:
         ds.stage = DatasetStage(int(data.get("stage", 0)))
         return ds
 
-
-
     # ------------------------------------------------------------------
     # Redis helpers
     # ------------------------------------------------------------------

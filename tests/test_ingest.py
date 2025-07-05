@@ -74,7 +74,6 @@ def test_determine_parser_errors(tmp_path):
         ingest_file(str(bad_file))
 
 
-
 def test_ingest_into_dataset_with_facts(tmp_path):
     text_file = tmp_path / "doc.txt"
     text_file.write_text("Paris is the capital of France.")

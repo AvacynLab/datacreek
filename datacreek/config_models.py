@@ -115,9 +115,6 @@ class FormatSettingsModel(BaseModel):
         return FormatSettings.from_dict(self.model_dump())
 
 
-
-
-
 @dataclass
 class VLLMSettings:
     """Configuration for vLLM server connection."""

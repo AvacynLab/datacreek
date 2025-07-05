@@ -73,8 +73,6 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     return config
 
 
-
-
 def get_llm_provider(config: Dict[str, Any]) -> str:
     """Get the selected LLM provider
 
@@ -225,8 +223,6 @@ def get_format_settings(config: Dict[str, Any]) -> FormatSettings:
     for field_name in FormatSettings.__dataclass_fields__:
         defaults.setdefault(field_name, getattr(FormatSettings(), field_name))
     return FormatSettings.from_dict(defaults)
-
-
 
 
 def get_format_config(config: Dict[str, Any]) -> Dict[str, Any]:

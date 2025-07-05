@@ -264,10 +264,7 @@ def dataset_versions(
 ) -> list[dict]:
     """Return generation versions stored for ``name``."""
     ds = _load_dataset(name, current_user)
-    return [
-        {"index": i + 1, **v}
-        for i, v in enumerate(ds.versions)
-    ]
+    return [{"index": i + 1, **v} for i, v in enumerate(ds.versions)]
 
 
 @app.get("/datasets/{name}/versions/{index}", summary="Get dataset version")

@@ -12,9 +12,9 @@ from neo4j import GraphDatabase
 from datacreek.core.create import process_file as generate_data
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.dataset import DatasetBuilder
-from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.ingest import IngestOptions
 from datacreek.core.ingest import process_file as ingest_file
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
 from datacreek.db import Dataset, SessionLocal, SourceData
 from datacreek.models.export_format import ExportFormat

@@ -94,7 +94,6 @@ def process_file(
         text = content
         pages = None
 
-
     if return_pages:
         return text, pages or []
     return text

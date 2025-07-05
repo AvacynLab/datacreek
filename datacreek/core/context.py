@@ -13,4 +13,3 @@ class AppContext:
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = config_path or DEFAULT_CONFIG_PATH
         self.config: Dict[str, Any] = {}
-

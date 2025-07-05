@@ -3,8 +3,8 @@ Flask application for the Datacreek web interface.
 """
 
 import json
-import os
 import logging
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,7 +62,6 @@ login_manager.login_view = None
 @login_manager.unauthorized_handler
 def unauthorized():
     return jsonify({"error": "login required"}), 401
-
 
 
 # Load SDK config
@@ -1755,9 +1754,6 @@ def curate():
     return render_template("curate.html", form=form, provider=provider, json_files=json_files)
 
 
-
-
-
 @app.route("/ingest", methods=["GET", "POST"])
 @login_required
 def ingest():
@@ -1767,7 +1763,6 @@ def ingest():
     if form.validate_on_submit():
         try:
             input_type = form.input_type.data
-
 
             if input_type == "file":
                 # Handle file upload
@@ -1820,8 +1815,6 @@ def ingest():
     }
 
     return render_template("ingest.html", form=form, examples=examples)
-
-
 
 
 def run_server(host="127.0.0.1", port=5000, debug=False):
