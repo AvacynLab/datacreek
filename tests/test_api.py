@@ -73,6 +73,7 @@ def _wait_task(task_id: str) -> dict:
 def test_async_pipeline(monkeypatch, tmp_path):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
     monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
@@ -155,6 +156,7 @@ def test_async_pipeline(monkeypatch, tmp_path):
 def test_dataset_history_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -171,9 +173,34 @@ def test_dataset_history_route(monkeypatch):
     assert any(ev["operation"] == "add_document" for ev in data)
 
 
+def test_global_event_log_route(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr(
+        "datacreek.backends.get_redis_client", lambda config_path=None: redis_client
+    )
+    user_id, key = _create_user()
+    ds = DatasetBuilder(DatasetType.TEXT, name="glob")
+    ds.owner_id = user_id
+    ds.redis_client = redis_client
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "hi")
+    ds.to_redis(redis_client, "dataset:glob")
+    redis_client.sadd("datasets", "glob")
+
+    headers = {"X-API-Key": key}
+
+    res = client.get("/datasets/events", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert any(ev["dataset"] == "glob" and ev["operation"] == "add_chunk" for ev in data)
+
+
 def test_dataset_progress_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -195,6 +222,7 @@ def test_dataset_progress_route(monkeypatch):
 def test_dataset_progress_history_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -219,6 +247,7 @@ def test_dataset_progress_history_route(monkeypatch):
 def test_dataset_progress_history_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = 999
     ds.redis_client = redis_client
@@ -236,6 +265,7 @@ def test_dataset_progress_history_unauthorized(monkeypatch):
 def test_dataset_export_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -253,6 +283,7 @@ def test_dataset_export_route(monkeypatch):
 def test_dataset_export_route_uses_progress_key(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -275,6 +306,7 @@ def test_dataset_export_route_uses_progress_key(monkeypatch):
 def test_dataset_history_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = 999
     ds.redis_client = redis_client
@@ -291,6 +323,7 @@ def test_dataset_history_unauthorized(monkeypatch):
 def test_dataset_progress_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = 999
     ds.redis_client = redis_client
@@ -306,6 +339,7 @@ def test_dataset_progress_unauthorized(monkeypatch):
 def test_graph_progress_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -325,6 +359,7 @@ def test_graph_progress_route(monkeypatch):
 def test_graph_progress_history_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -349,6 +384,7 @@ def test_graph_progress_history_route(monkeypatch):
 def test_graph_progress_history_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = 999
     ds.redis_client = redis_client
@@ -366,6 +402,7 @@ def test_graph_progress_history_unauthorized(monkeypatch):
 def test_dataset_versions_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -387,6 +424,7 @@ def test_dataset_versions_route(monkeypatch):
 def test_dataset_version_item_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -411,6 +449,7 @@ def test_dataset_version_item_route(monkeypatch):
 def test_dataset_version_delete_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -436,6 +475,7 @@ def test_dataset_version_delete_route(monkeypatch):
 def test_dataset_export_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = 999
     ds.redis_client = redis_client
@@ -451,6 +491,7 @@ def test_dataset_export_unauthorized(monkeypatch):
 def test_dataset_route_bad_name(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     headers = {"X-API-Key": key}
 
@@ -464,6 +505,7 @@ def test_dataset_route_bad_name(monkeypatch):
 def test_create_dataset_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     headers = {"X-API-Key": key}
 
@@ -475,6 +517,7 @@ def test_create_dataset_route(monkeypatch):
 def test_create_dataset_route_bad_name(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     headers = {"X-API-Key": key}
 
@@ -488,6 +531,7 @@ def test_create_dataset_route_bad_name(monkeypatch):
 def test_create_dataset_route_exists(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     headers = {"X-API-Key": key}
 
@@ -504,6 +548,7 @@ def test_create_dataset_route_exists(monkeypatch):
 def test_list_user_datasets(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     redis_client.sadd(f"user:{user_id}:datasets", "demo")
     headers = {"X-API-Key": key}
@@ -516,6 +561,7 @@ def test_list_user_datasets(monkeypatch):
 def test_list_user_datasets_details(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     ds.owner_id = user_id
@@ -537,6 +583,7 @@ def test_list_user_datasets_details(monkeypatch):
 def test_delete_persisted_dataset_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
     monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
@@ -559,6 +606,7 @@ def test_delete_persisted_dataset_route(monkeypatch):
 def test_delete_persisted_dataset_route_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
     monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)

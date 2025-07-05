@@ -10,6 +10,8 @@ class TaskStatus(str, Enum):
     EXPORTING = "exporting"
     SAVING_NEO4J = "saving_neo4j"
     LOADING_NEO4J = "loading_neo4j"
+    SAVING_REDIS_GRAPH = "saving_redis_graph"
+    LOADING_REDIS_GRAPH = "loading_redis_graph"
     DELETING = "deleting"
     EXTRACTING_FACTS = "extracting_facts"
     EXTRACTING_ENTITIES = "extracting_entities"

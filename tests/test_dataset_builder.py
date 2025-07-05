@@ -1,3 +1,5 @@
+import asyncio
+import json
 from pathlib import Path
 
 import fakeredis
@@ -158,6 +160,17 @@ def test_events_persisted_roundtrip():
     assert client.llen("dataset:evt:events") == len(loaded.events)
 
 
+def test_events_logged_globally():
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="glob")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hi")
+
+    events = [json.loads(e) for e in client.lrange("dataset:events", 0, -1)]
+    assert any(e["dataset"] == "glob" and e["operation"] == "add_chunk" for e in events)
+
+
 def test_ingest_file_method(tmp_path):
     f = tmp_path / "doc.txt"
     f.write_text("hello world")
@@ -173,6 +186,21 @@ def test_ingest_file_method(tmp_path):
     assert list(ds.ingested_docs) == ["doc"]
     info = ds.ingested_docs["doc"]
     assert info["path"] == str(f)
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert loaded.ingested_docs == ds.ingested_docs
+
+
+def test_ingest_file_async(tmp_path):
+    f = tmp_path / "doc.txt"
+    f.write_text("hello async")
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+
+    asyncio.run(ds.ingest_file_async(str(f), options=IngestOptions()))
+
+    assert ds.stage == DatasetStage.INGESTED
+    assert list(ds.ingested_docs) == ["doc"]
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert loaded.ingested_docs == ds.ingested_docs
 
@@ -1072,3 +1100,38 @@ def test_mark_exported_records_event():
     ds.mark_exported()
     assert ds.stage == DatasetStage.EXPORTED
     assert ds.events[-1].operation == "export_dataset"
+
+
+def test_restore_version_persist():
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.versions.append({"time": "t1", "result": {"qa_pairs": [1]}})
+    ds.versions.append({"time": "t2", "result": {"qa_pairs": [2]}})
+    ds.to_redis(client, "dataset:demo")
+
+    ds.restore_version(1)
+
+    assert len(ds.versions) == 3
+    assert ds.versions[-1]["result"] == {"qa_pairs": [1]}
+    assert ds.events[-1].operation == "restore_version"
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert len(loaded.versions) == 3
+    assert loaded.versions[-1]["result"] == {"qa_pairs": [1]}
+
+
+def test_prune_versions_respects_limit():
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.versions = [{"time": f"t{i}"} for i in range(5)]
+    ds.to_redis(client, "dataset:demo")
+
+    ds.prune_versions(3)
+
+    assert len(ds.versions) == 3
+    assert ds.events[-1].operation == "prune_versions"
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert len(loaded.versions) == 3

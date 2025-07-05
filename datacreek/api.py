@@ -1,10 +1,11 @@
 import json
 from typing import Any, Literal
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Query
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
+from datacreek.backends import get_neo4j_driver, get_redis_client
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN, DatasetBuilder
 from datacreek.db import Dataset, SessionLocal, User, init_db
 from datacreek.models.export_format import ExportFormat
@@ -27,6 +28,7 @@ from datacreek.services import (
     create_dataset,
     create_user,
     create_user_with_generated_key,
+    get_dataset_by_id,
     get_user_by_key,
 )
 from datacreek.tasks import (
@@ -38,11 +40,10 @@ from datacreek.tasks import (
     dataset_generate_task,
     dataset_ingest_task,
     generate_task,
-    get_neo4j_driver,
-    get_redis_client,
     ingest_task,
     save_task,
 )
+from datacreek.utils import decode_hash
 
 init_db()
 app = FastAPI(title="Datacreek API")
@@ -101,14 +102,9 @@ def list_user_datasets_details(current_user: User = Depends(get_current_user)) -
         finally:
             if driver:
                 driver.close()
-        progress: dict[str, Any] = {}
-        for k, v in client.hgetall(f"dataset:{name}:progress").items():
-            if isinstance(v, bytes):
-                v = v.decode()
-            try:
-                progress[k] = json.loads(v)
-            except Exception:
-                progress[k] = v
+
+        progress_key = f"dataset:{name}:progress"
+        progress = decode_hash(client.hgetall(progress_key))
         datasets.append({"name": name, "stage": ds.stage, "progress": progress})
     return datasets
 
@@ -194,13 +190,39 @@ def list_datasets(
     return db.query(Dataset).filter(Dataset.owner_id == current_user.id).all()
 
 
+@app.get("/datasets/events", summary="Get global dataset events")
+def global_dataset_events(
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Return recent dataset events across all datasets."""
+
+    client = get_redis_client()
+    if client is None:
+        return []
+    start = -(offset + limit)
+    end = -offset - 1
+    raw_events = client.lrange("dataset:events", start, end)
+    events: list[dict] = []
+    for raw in raw_events:
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        try:
+            events.append(json.loads(raw))
+        except Exception:
+            continue
+    events.reverse()
+    return events
+
+
 @app.get("/datasets/{ds_id}", response_model=DatasetOut, summary="Get dataset")
 def get_dataset(
     ds_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ds = db.get(Dataset, ds_id)
+    ds = get_dataset_by_id(db, ds_id)
     if not ds or ds.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
     return ds
@@ -213,7 +235,7 @@ def update_dataset(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ds = db.get(Dataset, ds_id)
+    ds = get_dataset_by_id(db, ds_id)
     if not ds or ds.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
     if payload.path:
@@ -229,7 +251,7 @@ def delete_dataset_route(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ds = db.get(Dataset, ds_id)
+    ds = get_dataset_by_id(db, ds_id)
     if not ds or ds.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
     db.delete(ds)
@@ -296,6 +318,22 @@ def delete_dataset_version_item(
     return {"status": "deleted"}
 
 
+@app.post("/datasets/{name}/versions/{index}/restore", summary="Restore dataset version")
+def restore_dataset_version_item(
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    index: int = Path(..., ge=1),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Copy version ``index`` to the end of the version list."""
+
+    ds = _load_dataset(name, current_user)
+    try:
+        ds.restore_version(index)
+    except IndexError:
+        raise HTTPException(status_code=404, detail="Version not found") from None
+    return {"status": "restored"}
+
+
 @app.get("/datasets/{name}/progress", summary="Get dataset progress")
 def dataset_progress(
     name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
@@ -304,17 +342,8 @@ def dataset_progress(
     """Return progress information stored in Redis."""
     ds = _load_dataset(name, current_user)
     client = ds.redis_client
-    progress: dict[str, Any] = {}
     key = f"dataset:{name}:progress"
-    data = client.hgetall(key)
-    for k, v in data.items():
-        if isinstance(v, bytes):
-            v = v.decode()
-        try:
-            progress[k] = json.loads(v)
-        except Exception:
-            progress[k] = v
-    return progress
+    return decode_hash(client.hgetall(key))
 
 
 @app.get("/graphs/{name}/progress", summary="Get graph progress")
@@ -336,16 +365,8 @@ def graph_progress(
             driver.close()
     if ds.owner_id not in {None, current_user.id}:
         raise HTTPException(status_code=404, detail="Graph not found")
-    progress: dict[str, Any] = {}
     key = f"graph:{name}:progress"
-    for k, v in client.hgetall(key).items():
-        if isinstance(v, bytes):
-            v = v.decode()
-        try:
-            progress[k] = json.loads(v)
-        except Exception:
-            progress[k] = v
-    return progress
+    return decode_hash(client.hgetall(key))
 
 
 @app.get("/datasets/{name}/progress/history", summary="Get progress history")
@@ -502,7 +523,7 @@ def download_dataset(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ds = db.get(Dataset, ds_id)
+    ds = get_dataset_by_id(db, ds_id)
     if not ds or ds.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
     filename = f"dataset_{ds_id}.json"

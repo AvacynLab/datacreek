@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-from datetime import datetime, timezone
+import traceback
+from dataclasses import asdict, is_dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import redis
 from celery import Celery
-from neo4j import GraphDatabase
 
+from datacreek.backends import get_neo4j_driver, get_redis_client, get_redis_graph, get_s3_storage
 from datacreek.core.create import process_file as generate_data
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.dataset import DatasetBuilder
-from datacreek.core.ingest import IngestOptions
+from datacreek.core.ingest import IngestOptions, IngestOptionsModel
 from datacreek.core.ingest import process_file as ingest_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
@@ -20,12 +23,12 @@ from datacreek.db import Dataset, SessionLocal, SourceData
 from datacreek.models.export_format import ExportFormat
 from datacreek.models.llm_client import LLMClient
 from datacreek.models.task_status import TaskStatus
+from datacreek.pipelines import GenerationOptionsModel
 from datacreek.schemas import DatasetName
 from datacreek.services import create_dataset, create_source
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
-from datacreek.utils import load_config
-from datacreek.utils.config import get_neo4j_config, get_redis_config, load_config_with_overrides
+from datacreek.utils.config import load_config_with_overrides
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -39,25 +42,6 @@ celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "
     "true",
 }
 celery_app.conf.task_store_eager_result = True
-
-
-def get_redis_client() -> redis.Redis:
-    """Return a Redis client based on configuration or environment variables."""
-    cfg = get_redis_config(load_config_with_overrides(None))
-    host = os.getenv("REDIS_HOST", cfg.get("host"))
-    port = int(os.getenv("REDIS_PORT", cfg.get("port", 6379)))
-    return redis.Redis(host=host, port=port, decode_responses=True)
-
-
-def get_neo4j_driver():
-    """Return a Neo4j driver using config or environment variables."""
-    cfg = get_neo4j_config(load_config_with_overrides(None))
-    uri = os.getenv("NEO4J_URI", cfg.get("uri"))
-    user = os.getenv("NEO4J_USER", cfg.get("user"))
-    password = os.getenv("NEO4J_PASSWORD", cfg.get("password"))
-    if not uri or not user or not password:
-        return None
-    return GraphDatabase.driver(uri, auth=(user, password))
 
 
 def _update_status(
@@ -82,18 +66,44 @@ def _update_status(
         logger.exception("Failed to update task status for %s", key)
 
 
-def _record_error(client: redis.Redis, key: str, exc: Exception) -> None:
-    """Save task failure details in ``client`` under ``key``."""
+def _record_error(
+    client: redis.Redis,
+    key: str,
+    exc: Exception,
+    dataset: DatasetBuilder | None = None,
+) -> None:
+    """Save task failure details in ``client`` under ``key`` and log event."""
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     entry = {
         "status": TaskStatus.FAILED.value,
         "error": str(exc),
+        "exc_type": type(exc).__name__,
+        "traceback": tb,
         "time": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        client.hset(key, mapping={"error": str(exc), "status": TaskStatus.FAILED.value})
+        client.hset(
+            key,
+            mapping={
+                "error": entry["error"],
+                "exc_type": entry["exc_type"],
+                "traceback": entry["traceback"],
+                "status": TaskStatus.FAILED.value,
+            },
+        )
         client.rpush(f"{key}:history", json.dumps(entry))
     except Exception:
         logger.exception("Failed to record error for %s", key)
+
+    if dataset is not None:
+        try:
+            dataset._record_event(
+                "task_error",
+                f"{type(exc).__name__}: {exc}",
+                traceback=tb,
+            )
+        except Exception:
+            logger.exception("Failed to record dataset error event for %s", key)
 
 
 @celery_app.task
@@ -204,21 +214,46 @@ def dataset_ingest_task(name: DatasetName, path: str, user_id: int | None = None
     """Ingest a file into a persisted dataset."""
     client = get_redis_client()
     driver = get_neo4j_driver()
+    storage = get_s3_storage()
     ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
     if user_id is not None and ds.owner_id not in {None, user_id}:
         raise RuntimeError("Unauthorized")
     ds.redis_client = client
-    opt_fields = IngestOptions.__dataclass_fields__.keys()
+    opt_fields = IngestOptionsModel.model_fields.keys()
     opt_args = {k: kwargs.pop(k) for k in list(kwargs) if k in opt_fields}
-    options = IngestOptions(**opt_args) if opt_args else None
+    options = IngestOptionsModel(**opt_args).to_options() if opt_args else None
+    async_mode = kwargs.pop("async_mode", False)
     key = f"dataset:{name}:progress"
     start_ts = datetime.now(timezone.utc).isoformat()
     client.hset(key, "ingest_start", start_ts)
     _update_status(client, key, TaskStatus.INGESTING, 0.0)
+    client.hset(key, "ingested_chunks", 0)
     if opt_args:
         client.hset(key, "ingestion_params", json.dumps(opt_args))
+
+    def chunk_progress(_idx: int) -> None:
+        try:
+            client.hincrby(key, "ingested_chunks", 1)
+        except Exception:
+            logger.exception("Failed to record chunk progress")
+
     try:
-        doc_id = ds.ingest_file(path, options=options, **kwargs)
+        if async_mode:
+            doc_id = asyncio.run(
+                ds.ingest_file_async(
+                    path,
+                    options=options,
+                    progress_callback=chunk_progress,
+                    **kwargs,
+                )
+            )
+        else:
+            doc_id = ds.ingest_file(
+                path,
+                options=options,
+                progress_callback=chunk_progress,
+                **kwargs,
+            )
         _update_status(client, key, TaskStatus.INGESTING, 0.5)
         client.hincrby(key, "ingested", 1)
         ts = datetime.now(timezone.utc).isoformat()
@@ -236,7 +271,7 @@ def dataset_ingest_task(name: DatasetName, path: str, user_id: int | None = None
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"stage": ds.stage, "events": len(ds.events)}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
     finally:
         if driver:
@@ -255,22 +290,27 @@ def dataset_generate_task(
         raise RuntimeError("Unauthorized")
     ds.redis_client = client
     params = params or {}
+    opt_fields = GenerationOptionsModel.model_fields.keys()
+    opt_args = {k: params.pop(k) for k in list(params) if k in opt_fields}
+    options = GenerationOptionsModel(**opt_args).to_options() if opt_args else None
     key = f"dataset:{name}:progress"
     ts = datetime.now(timezone.utc).isoformat()
     client.hset(key, "generate_start", ts)
     _update_status(client, key, TaskStatus.GENERATING, 0.0)
-    if params:
-        client.hset(key, "generation_params", json.dumps(params))
+    if opt_args or params:
+        all_args = opt_args.copy()
+        all_args.update(params)
+        client.hset(key, "generation_params", json.dumps(all_args))
+    opt_dict = asdict(options) if is_dataclass(options) else {}
     try:
-        ds.run_post_kg_pipeline(redis_client=client, **params)
-        _update_status(client, key, TaskStatus.GENERATING, 0.5)
+        ds.run_post_kg_pipeline(redis_client=client, **opt_dict, **params)
         end_ts = datetime.now(timezone.utc).isoformat()
         client.hset(key, "generated_version", json.dumps(len(ds.versions)))
         client.hset(key, "generate_finish", end_ts)
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"stage": ds.stage, "versions": len(ds.versions)}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -307,7 +347,7 @@ def dataset_cleanup_task(name: str, params: dict | None = None, user_id: int | N
 
         return {"stage": ds.stage, "removed": removed, "cleaned": cleaned}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -321,6 +361,7 @@ def dataset_export_task(
         fmt = ExportFormat(fmt)
     client = get_redis_client()
     driver = get_neo4j_driver()
+    storage = get_s3_storage()
     ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
     if user_id is not None and ds.owner_id not in {None, user_id}:
         raise RuntimeError("Unauthorized")
@@ -335,23 +376,24 @@ def dataset_export_task(
             formatted = convert_format(data, fmt.value, {}, "json")
             _update_status(client, progress_key, TaskStatus.EXPORTING, 0.5)
             key = f"dataset:{name}:export:{fmt.value}"
-            client.set(key, formatted if isinstance(formatted, str) else json.dumps(formatted))
+            payload = formatted if isinstance(formatted, str) else json.dumps(formatted)
         else:
             key = f"dataset:{name}:export:json"
-            client.set(key, json.dumps(ds.to_dict()))
+            payload = json.dumps(ds.to_dict())
+        client.set(key, payload)
+        s3_key = storage.save(key, payload) if storage else None
 
         ds.mark_exported()
         ts = datetime.now(timezone.utc).isoformat()
-        client.hset(
-            progress_key,
-            "export",
-            json.dumps({"fmt": fmt.value, "key": key, "time": ts}),
-        )
+        info = {"fmt": fmt.value, "key": key, "time": ts}
+        if storage:
+            info["s3_key"] = s3_key
+        client.hset(progress_key, "export", json.dumps(info))
         _update_status(client, progress_key, TaskStatus.COMPLETED, 1.0)
 
         return {"stage": ds.stage, "key": key}
     except Exception as exc:
-        _record_error(client, progress_key, exc)
+        _record_error(client, progress_key, exc, ds)
         raise
 
 
@@ -386,7 +428,7 @@ def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"stage": ds.stage}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -422,7 +464,73 @@ def dataset_load_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"nodes": len(ds.graph.graph)}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
+        raise
+
+
+@celery_app.task
+def dataset_save_redis_graph_task(name: DatasetName, user_id: int | None = None) -> dict:
+    """Persist the dataset graph to RedisGraph."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}", None)
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    graph = get_redis_graph(name)
+    if graph is None:
+        raise RuntimeError("RedisGraph not configured")
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "save_redis_graph_start", start_ts)
+    _update_status(client, key, TaskStatus.SAVING_REDIS_GRAPH, 0.0)
+    try:
+        ds.save_redis_graph(graph)
+        _update_status(client, key, TaskStatus.SAVING_REDIS_GRAPH, 0.5)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "save_redis_graph",
+            json.dumps({"nodes": len(ds.graph.graph), "time": ts}),
+        )
+        client.hset(key, "save_redis_graph_finish", ts)
+        _update_status(client, key, TaskStatus.COMPLETED, 1.0)
+        return {"nodes": len(ds.graph.graph)}
+    except Exception as exc:
+        _record_error(client, key, exc, ds)
+        raise
+
+
+@celery_app.task
+def dataset_load_redis_graph_task(name: DatasetName, user_id: int | None = None) -> dict:
+    """Load the dataset graph from RedisGraph."""
+
+    client = get_redis_client()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}", None)
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    graph = get_redis_graph(name)
+    if graph is None:
+        raise RuntimeError("RedisGraph not configured")
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "load_redis_graph_start", start_ts)
+    _update_status(client, key, TaskStatus.LOADING_REDIS_GRAPH, 0.0)
+    try:
+        ds.load_redis_graph(graph)
+        _update_status(client, key, TaskStatus.LOADING_REDIS_GRAPH, 0.5)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "load_redis_graph",
+            json.dumps({"nodes": len(ds.graph.graph), "time": ts}),
+        )
+        client.hset(key, "load_redis_graph_finish", ts)
+        _update_status(client, key, TaskStatus.COMPLETED, 1.0)
+        return {"nodes": len(ds.graph.graph)}
+    except Exception as exc:
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -460,11 +568,186 @@ def dataset_operation_task(
         _update_status(client, prog_key, TaskStatus.COMPLETED, 1.0)
         return {"result": result, "stage": ds.stage}
     except Exception as exc:
-        _record_error(client, prog_key, exc)
+        _record_error(client, prog_key, exc, ds)
         raise
     finally:
         if driver:
             driver.close()
+
+
+@celery_app.task
+def dataset_prune_versions_task(
+    name: DatasetName, limit: int | None = None, user_id: int | None = None
+) -> dict:
+    """Prune stored versions for ``name`` down to ``limit``."""
+
+    client = get_redis_client()
+    driver = get_neo4j_driver()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "prune_versions_start", start_ts)
+    client.hset(key, "operation", "prune_versions")
+    _update_status(client, key, TaskStatus.OPERATION, 0.0)
+    try:
+        removed = ds.prune_versions(limit)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(key, "prune_versions", json.dumps({"removed": removed, "time": ts}))
+        client.hset(key, "prune_versions_finish", ts)
+        _update_status(client, key, TaskStatus.COMPLETED, 1.0)
+        return {"removed": removed, "versions": len(ds.versions)}
+    except Exception as exc:
+        _record_error(client, key, exc, ds)
+        raise
+    finally:
+        if driver:
+            driver.close()
+
+
+@celery_app.task
+def dataset_restore_version_task(name: DatasetName, index: int, user_id: int | None = None) -> dict:
+    """Restore ``index`` for ``name`` as the latest dataset version."""
+
+    client = get_redis_client()
+    driver = get_neo4j_driver()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "restore_version_start", start_ts)
+    client.hset(key, "operation", "restore_version")
+    _update_status(client, key, TaskStatus.OPERATION, 0.0)
+    try:
+        ds.restore_version(index)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "restore_version",
+            json.dumps({"index": index, "time": ts}),
+        )
+        client.hset(key, "restore_version_finish", ts)
+        _update_status(client, key, TaskStatus.COMPLETED, 1.0)
+        return {"versions": len(ds.versions)}
+    except Exception as exc:
+        _record_error(client, key, exc, ds)
+        raise
+    finally:
+        if driver:
+            driver.close()
+
+
+@celery_app.task
+def dataset_delete_version_task(name: DatasetName, index: int, user_id: int | None = None) -> dict:
+    """Delete ``index`` from ``name`` and persist the dataset."""
+
+    client = get_redis_client()
+    driver = get_neo4j_driver()
+    ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
+    if user_id is not None and ds.owner_id not in {None, user_id}:
+        raise RuntimeError("Unauthorized")
+    ds.redis_client = client
+    key = f"dataset:{name}:progress"
+    start_ts = datetime.now(timezone.utc).isoformat()
+    client.hset(key, "delete_version_start", start_ts)
+    client.hset(key, "operation", "delete_version")
+    _update_status(client, key, TaskStatus.OPERATION, 0.0)
+    try:
+        ds.delete_version(index)
+        ts = datetime.now(timezone.utc).isoformat()
+        client.hset(
+            key,
+            "delete_version",
+            json.dumps({"index": index, "time": ts}),
+        )
+        client.hset(key, "delete_version_finish", ts)
+        _update_status(client, key, TaskStatus.COMPLETED, 1.0)
+        return {"versions": len(ds.versions)}
+    except Exception as exc:
+        _record_error(client, key, exc, ds)
+        raise
+    finally:
+        if driver:
+            driver.close()
+
+
+@celery_app.task
+def datasets_prune_versions_task(limit: int | None = None) -> dict:
+    """Prune stored versions for all datasets."""
+
+    client = get_redis_client()
+    if client is None:
+        raise RuntimeError("Redis unavailable")
+
+    names = [n.decode() if isinstance(n, bytes) else n for n in client.smembers("datasets")]
+    total_removed = 0
+    details: dict[str, int] = {}
+
+    for name in names:
+        driver = get_neo4j_driver()
+        ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
+        ds.redis_client = client
+        removed = ds.prune_versions(limit)
+        details[name] = removed
+        total_removed += removed
+        if driver:
+            driver.close()
+
+    return {"datasets": len(names), "removed": total_removed, "details": details}
+
+
+@celery_app.task
+def datasets_prune_stale_task(days: int = 30) -> dict:
+    """Delete datasets not accessed within ``days`` days."""
+
+    client = get_redis_client()
+    if client is None:
+        raise RuntimeError("Redis unavailable")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    names = [n.decode() if isinstance(n, bytes) else n for n in client.smembers("datasets")]
+    removed: list[str] = []
+
+    for name in names:
+        try:
+            ds = DatasetBuilder.from_redis(client, f"dataset:{name}", None)
+        except Exception:
+            continue
+        if ds.accessed_at < cutoff:
+            keys = [
+                k.decode() if isinstance(k, bytes) else k
+                for k in client.scan_iter(match=f"dataset:{name}*")
+            ]
+            pipe = client.pipeline()
+            for k in keys:
+                pipe.delete(k)
+            pipe.srem("datasets", name)
+            if ds.owner_id is not None:
+                pipe.srem(f"user:{ds.owner_id}:datasets", name)
+            pipe.execute()
+            graph = get_redis_graph(name)
+            if graph is not None:
+                try:
+                    graph.query(
+                        "MATCH (n {dataset:$ds}) DETACH DELETE n",
+                        {"ds": name},
+                    )
+                except Exception:
+                    logger.exception("Failed to delete RedisGraph for %s", name)
+            driver = get_neo4j_driver()
+            if driver:
+                try:
+                    with driver.session() as session:
+                        session.run("MATCH (n {dataset:$ds}) DETACH DELETE n", ds=name)
+                finally:
+                    driver.close()
+            removed.append(name)
+
+    return {"removed": removed, "count": len(removed)}
 
 
 @celery_app.task
@@ -499,7 +782,7 @@ def dataset_extract_facts_task(
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"stage": ds.stage}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -529,7 +812,7 @@ def dataset_extract_entities_task(
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"stage": ds.stage}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -551,13 +834,24 @@ def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict:
     client.hset(prog_key, "delete_start", start_ts)
     _update_status(client, prog_key, TaskStatus.DELETING, 0.0)
     try:
-        for key in list(client.scan_iter(match=f"dataset:{name}*")):
+        keys = []
+        for key in client.scan_iter(match=f"dataset:{name}*"):
             k = key.decode() if isinstance(key, bytes) else key
             if k != prog_key:
-                client.delete(key)
-        client.srem("datasets", name)
+                keys.append(k)
+        pipe = client.pipeline()
+        for k in keys:
+            pipe.delete(k)
+        pipe.srem("datasets", name)
         if ds and ds.owner_id is not None:
-            client.srem(f"user:{ds.owner_id}:datasets", name)
+            pipe.srem(f"user:{ds.owner_id}:datasets", name)
+        pipe.execute()
+        graph = get_redis_graph(name)
+        if graph is not None:
+            try:
+                graph.query("MATCH (n {dataset:$ds}) DETACH DELETE n", {"ds": name})
+            except Exception:
+                logger.exception("Failed to delete RedisGraph for %s", name)
         _update_status(client, prog_key, TaskStatus.DELETING, 0.5)
 
         driver = get_neo4j_driver()
@@ -586,7 +880,7 @@ def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict:
 
         return {"deleted": name}
     except Exception as exc:
-        _record_error(client, prog_key, exc)
+        _record_error(client, prog_key, exc, ds)
         raise
 
 
@@ -621,7 +915,7 @@ def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"nodes": len(ds.graph.graph)}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -657,7 +951,7 @@ def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"nodes": len(ds.graph.graph)}
     except Exception as exc:
-        _record_error(client, key, exc)
+        _record_error(client, key, exc, ds)
         raise
 
 
@@ -707,5 +1001,5 @@ def graph_delete_task(name: str, user_id: int | None = None) -> dict:
 
         return {"deleted": name}
     except Exception as exc:
-        _record_error(client, prog_key, exc)
+        _record_error(client, prog_key, exc, ds)
         raise

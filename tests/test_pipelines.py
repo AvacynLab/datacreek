@@ -765,6 +765,28 @@ def test_kg_cleanup_with_params(monkeypatch):
     assert called["validate"] is False
 
 
+def test_pipeline_records_step_events(monkeypatch):
+    """Pipeline should log events for each executed step."""
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []})
+    monkeypatch.setattr(
+        "datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: {"qa_pairs": d["qa_pairs"]}
+    )
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("d", source="s", text="t")
+    ds.add_chunk("d", "c1", "t")
+
+    run_generation_pipeline(DatasetType.QA, ds.graph, dataset_builder=ds)
+
+    ops = [e.operation for e in ds.events]
+    assert "kg_cleanup" in ops
+    assert "generate_qa" in ops
+    assert "curate" in ops
+    assert "save" in ops
+
+
 def test_curation_threshold_param(monkeypatch):
     """Pipeline should pass curation_threshold to curate_qa_pairs."""
 
@@ -813,3 +835,36 @@ def test_kg_cleanup_failure(monkeypatch):
         )
 
     assert exc.value.step is PipelineStep.KG_CLEANUP
+
+
+def test_pipeline_progress_timestamps(monkeypatch):
+    """Each pipeline step should record start and finish times."""
+
+    client = fakeredis.FakeStrictRedis()
+
+    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []})
+    monkeypatch.setattr(
+        "datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: {"qa_pairs": d["qa_pairs"]}
+    )
+    monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
+
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("d", source="s", text="t")
+    ds.add_chunk("d", "c1", "t")
+
+    run_generation_pipeline(
+        DatasetType.QA,
+        ds.graph,
+        dataset_builder=ds,
+        redis_client=client,
+    )
+
+    key = "dataset:demo:progress"
+    assert client.hget(key, "kg_cleanup_start") is not None
+    assert client.hget(key, "kg_cleanup_finish") is not None
+    assert client.hget(key, "generate_qa_start") is not None
+    assert client.hget(key, "generate_qa_finish") is not None
+    assert client.hget(key, "curate_start") is not None
+    assert client.hget(key, "curate_finish") is not None
+    assert client.hget(key, "save_start") is not None
+    assert client.hget(key, "save_finish") is not None

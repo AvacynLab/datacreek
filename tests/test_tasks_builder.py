@@ -11,6 +11,7 @@ from datacreek.models.task_status import TaskStatus
 from datacreek.tasks import (
     dataset_cleanup_task,
     dataset_delete_task,
+    dataset_delete_version_task,
     dataset_export_task,
     dataset_extract_entities_task,
     dataset_extract_facts_task,
@@ -18,7 +19,10 @@ from datacreek.tasks import (
     dataset_ingest_task,
     dataset_load_neo4j_task,
     dataset_operation_task,
+    dataset_prune_versions_task,
+    dataset_restore_version_task,
     dataset_save_neo4j_task,
+    datasets_prune_versions_task,
     get_redis_client,
     graph_delete_task,
     graph_load_neo4j_task,
@@ -57,6 +61,7 @@ def test_dataset_ingest_task(tmp_path, monkeypatch):
     last = json.loads(client.hget("dataset:demo:progress", "last_ingested"))
     assert last["path"] == str(f)
     assert "time" in last
+    assert int(client.hget("dataset:demo:progress", "ingested_chunks")) >= 1
     assert client.hget("dataset:demo:progress", "ingest_start") is not None
     assert client.hget("dataset:demo:progress", "ingest_finish") is not None
     params = json.loads(client.hget("dataset:demo:progress", "ingestion_params"))
@@ -65,6 +70,20 @@ def test_dataset_ingest_task(tmp_path, monkeypatch):
     hist = [json.loads(x) for x in client.lrange("dataset:demo:progress:history", 0, -1)]
     assert hist[0]["status"] == TaskStatus.INGESTING.value
     assert hist[-1]["status"] == TaskStatus.COMPLETED.value
+
+
+def test_dataset_ingest_task_async(tmp_path, monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    f = tmp_path / "doc.txt"
+    f.write_text("hello async")
+    dataset_ingest_task.delay("demo", str(f), async_mode=True).get()
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert loaded.search("hello") == ["doc_chunk_0"]
 
 
 def test_dataset_generate_task(monkeypatch):
@@ -235,6 +254,33 @@ def test_dataset_delete_task(monkeypatch):
     assert client.hget("dataset:demo:progress", "delete_start") is not None
     assert client.hget("dataset:demo:progress", "delete_finish") is not None
     assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
+
+
+def test_dataset_delete_task_removes_redis_graph(monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    class DummyGraph:
+        def __init__(self):
+            self.queries = []
+
+        def query(self, q, params=None):
+            self.queries.append(q)
+
+    dummy = DummyGraph()
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    monkeypatch.setattr("datacreek.tasks.get_redis_graph", lambda name: dummy)
+    monkeypatch.setattr("datacreek.core.dataset.get_redis_graph", lambda name: dummy)
+    monkeypatch.setenv("USE_REDIS_GRAPH", "1")
+
+    dataset_delete_task.delay("demo").get()
+
+    assert not client.exists("dataset:demo")
+    assert dummy.queries
 
 
 def test_dataset_operation_task_progress(monkeypatch):
@@ -442,3 +488,90 @@ def test_task_error_history(monkeypatch):
     hist = [json.loads(x) for x in client.lrange("dataset:demo:progress:history", 0, -1)]
     assert hist and hist[-1]["status"] == TaskStatus.FAILED.value
     assert "error" in hist[-1]
+
+
+def test_task_error_event(monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    def boom(*a, **k):
+        raise RuntimeError("fail")
+
+    monkeypatch.setattr(DatasetBuilder, "ingest_file", boom)
+
+    with pytest.raises(RuntimeError):
+        dataset_ingest_task.delay("demo", "bad", None).get()
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert any(e.operation == "task_error" for e in loaded.events)
+
+
+def test_dataset_prune_versions_task(monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+    ds.versions = [{"time": f"t{i}"} for i in range(5)]
+    ds.to_redis(client, "dataset:demo")
+    client.sadd("datasets", "demo")
+
+    dataset_prune_versions_task.delay("demo", 2).get()
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert len(loaded.versions) == 2
+    assert any(e.operation == "prune_versions" for e in loaded.events)
+
+
+def test_datasets_prune_versions_task(monkeypatch):
+    client = setup_fake(monkeypatch)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    for name in ["ds1", "ds2"]:
+        ds = DatasetBuilder(DatasetType.TEXT, name=name)
+        ds.redis_client = client
+        ds.versions = [{"time": f"t{i}"} for i in range(4)]
+        ds.to_redis(client, f"dataset:{name}")
+        client.sadd("datasets", name)
+
+    datasets_prune_versions_task.delay(2).get()
+
+    for name in ["ds1", "ds2"]:
+        loaded = DatasetBuilder.from_redis(client, f"dataset:{name}")
+        assert len(loaded.versions) == 2
+
+
+def test_dataset_restore_version_task(monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.versions = [
+        {"time": "t1", "result": {"qa_pairs": [1]}},
+        {"time": "t2", "result": {"qa_pairs": [2]}},
+    ]
+    ds.to_redis(client, "dataset:demo")
+
+    dataset_restore_version_task.delay("demo", 1).get()
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert len(loaded.versions) == 3
+    assert loaded.versions[-1]["result"] == {"qa_pairs": [1]}
+    assert any(e.operation == "restore_version" for e in loaded.events)
+
+
+def test_dataset_delete_version_task(monkeypatch):
+    client = setup_fake(monkeypatch)
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.redis_client = client
+    ds.versions = [
+        {"time": "t1", "result": {"qa_pairs": [1]}},
+        {"time": "t2", "result": {"qa_pairs": [2]}},
+    ]
+    ds.to_redis(client, "dataset:demo")
+
+    dataset_delete_version_task.delay("demo", 1).get()
+
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert len(loaded.versions) == 1
+    assert loaded.versions[0]["result"] == {"qa_pairs": [2]}
+    assert any(e.operation == "delete_version" for e in loaded.events)
