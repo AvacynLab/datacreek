@@ -9,8 +9,6 @@ from .config import (
     get_llm_settings,
     get_openai_config,
     get_openai_settings,
-    get_output_paths,
-    get_path_config,
     get_prompt,
     get_vllm_config,
     get_vllm_settings,
@@ -43,7 +41,6 @@ def __getattr__(name: str):
 
 __all__ = [
     "load_config",
-    "get_path_config",
     "get_vllm_config",
     "get_vllm_settings",
     "get_openai_config",
@@ -54,7 +51,6 @@ __all__ = [
     "get_curate_settings",
     "get_format_config",
     "get_format_settings",
-    "get_output_paths",
     "get_prompt",
     "merge_configs",
     "split_into_chunks",

@@ -129,14 +129,10 @@ pre-commit install
 
 ### 1. Tool Setup
 
-- The tool expects respective files to be put in named folders.
-
-```bash
-# Create directory structure
-mkdir -p data/{pdf,html,youtube,docx,ppt,txt,output,generated,cleaned,final}
-```
-
-- You also need a LLM backend that you will utilize for generating your dataset, if using vLLM:
+The application persists all state in Redis and Neo4j so no local data
+directories are required. Ensure both services are running and accessible
+via the configuration file. If you plan to use the bundled vLLM helpers
+start the server as shown below:
 
 ```bash
 # Start vLLM server
@@ -158,8 +154,15 @@ broker is used, but in production you should set `CELERY_BROKER_URL` and
 `CELERY_RESULT_BACKEND` to a Redis or RabbitMQ instance.
 
 Datasets can be managed through `/datasets` (create, list, update, delete and
-download). Every request must include an `X-API-Key` header issued when creating
-a user via `/users`.
+download). Each dataset records its history in Redis. Retrieve the current
+progress via `/datasets/<name>/progress` and past events via
+`/datasets/<name>/history`. Generation runs are versioned so you can review each
+attempt. List them via `/datasets/<name>/versions`, fetch a single run with
+`/datasets/<name>/versions/{n}` and remove unwanted entries with
+`DELETE /datasets/<name>/versions/{n}`. Each version stores the parameters and
+summary information for that generation. Every request must include an
+`X-API-Key` header issued when creating a user via `/users`.
+Datasets are persisted in Redis and Neo4j only. Use `DatasetBuilder.to_redis` and `save_neo4j` for persistence.
 ## Configuration
 
 The toolkit uses a YAML configuration file (default: `configs/config.yaml`).
@@ -416,7 +419,7 @@ curl -X POST localhost:8000/tasks/generate -d "src_id=1" -H "X-API-Key: <key>"
 
 ```bash
 # Bash script to process multiple files
-for file in data/pdf/*.pdf; do
+for file in /path/to/pdfs/*.pdf; do
   filename=$(basename "$file" .pdf)
 
   curl -X POST localhost:8000/tasks/ingest -d "path=$file" -H "X-API-Key: <key>"
@@ -545,8 +548,8 @@ curl -X GET  localhost:8000/api/datasets/example/fact_pages?fid=f1 -H "X-API-Key
 curl -X GET  localhost:8000/api/datasets/example/entity_pages?eid=A -H "X-API-Key: <key>"
 ```
 
-The `path` is resolved using the configured input directories so relative
-filenames work out of the box.
+Provide either a local path or a URL directly. Ingestion no longer relies on
+configured directories and simply reads the resource you specify.
 
 # Clone a dataset to experiment with different cleaning steps
 ds_copy = ds.clone(name="copy")

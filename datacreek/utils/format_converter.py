@@ -5,77 +5,61 @@
 # the root directory of this source tree.
 # Utils for format conversions
 import json
-import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
-def to_jsonl(data: List[Dict[str, Any]], output_path: str) -> str:
-    """Convert data to JSONL format and save to a file"""
-    with open(output_path, "w", encoding="utf-8") as f:
-        for item in data:
-            f.write(json.dumps(item) + "\n")
-    return output_path
+def to_jsonl(data: List[Dict[str, Any]]) -> str:
+    """Return data in JSONL format as a string."""
+    return "\n".join(json.dumps(item, ensure_ascii=False) for item in data)
 
 
-def to_alpaca(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to Alpaca format and save"""
-    alpaca_data = []
-
-    for pair in qa_pairs:
-        alpaca_item = {"instruction": pair["question"], "input": "", "output": pair["answer"]}
-        alpaca_data.append(alpaca_item)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(alpaca_data, f, indent=2)
-
-    return output_path
+def to_alpaca(qa_pairs: List[Dict[str, str]]) -> str:
+    """Return QA pairs in Alpaca format as a JSON string."""
+    alpaca_data = [
+        {"instruction": p["question"], "input": "", "output": p["answer"]}
+        for p in qa_pairs
+    ]
+    return json.dumps(alpaca_data, indent=2)
 
 
-def to_fine_tuning(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to fine-tuning format and save"""
-    ft_data = []
-
-    for pair in qa_pairs:
-        ft_item = {
+def to_fine_tuning(qa_pairs: List[Dict[str, str]]) -> str:
+    """Return QA pairs in the OpenAI fine-tuning format."""
+    ft_data = [
+        {
             "messages": [
                 {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": pair["question"]},
-                {"role": "assistant", "content": pair["answer"]},
+                {"role": "user", "content": p["question"]},
+                {"role": "assistant", "content": p["answer"]},
             ]
         }
-        ft_data.append(ft_item)
-
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(ft_data, f, indent=2)
-
-    return output_path
+        for p in qa_pairs
+    ]
+    return json.dumps(ft_data, indent=2)
 
 
-def to_chatml(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to ChatML format and save as JSONL"""
-    with open(output_path, "w", encoding="utf-8") as f:
-        for pair in qa_pairs:
-            chat = [
-                {"role": "system", "content": "You are a helpful AI assistant."},
-                {"role": "user", "content": pair["question"]},
-                {"role": "assistant", "content": pair["answer"]},
-            ]
-            f.write(json.dumps({"messages": chat}) + "\n")
+def to_chatml(qa_pairs: List[Dict[str, str]]) -> str:
+    """Return QA pairs in ChatML JSONL format."""
+    lines = []
+    for pair in qa_pairs:
+        chat = [
+            {"role": "system", "content": "You are a helpful AI assistant."},
+            {"role": "user", "content": pair["question"]},
+            {"role": "assistant", "content": pair["answer"]},
+        ]
+        lines.append(json.dumps({"messages": chat}))
+    return "\n".join(lines)
 
-    return output_path
 
-
-def to_hf_dataset(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
+def to_hf_dataset(qa_pairs: List[Dict[str, str]]) -> str:
     """
-    Convert QA pairs to a Hugging Face dataset and save in Arrow format.
+    Convert QA pairs to a Hugging Face dataset encoded as JSON.
 
     Args:
         qa_pairs: List of question-answer dictionaries
-        output_path: Directory path to save the dataset
 
     Returns:
-        Path to the saved dataset directory
+        JSON string representing the dataset
     """
     try:
         from datasets import Dataset
@@ -85,13 +69,6 @@ def to_hf_dataset(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
             "Install it with: pip install datasets"
         )
 
-    # Remove file extension if present
-    if output_path.endswith((".json", ".hf")):
-        output_path = os.path.splitext(output_path)[0]
-
-    # Create directory if needed
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
     # Convert list of dicts to dict of lists for Dataset.from_dict()
     dict_of_lists = {}
     for key in qa_pairs[0].keys():
@@ -99,8 +76,4 @@ def to_hf_dataset(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
 
     # Create dataset
     dataset = Dataset.from_dict(dict_of_lists)
-
-    # Save dataset in Arrow format
-    dataset.save_to_disk(output_path)
-
-    return output_path
+    return dataset.to_json()

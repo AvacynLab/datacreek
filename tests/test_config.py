@@ -13,8 +13,6 @@ from datacreek.config_models import (
     LLMSettingsModel,
     OpenAISettings,
     OpenAISettingsModel,
-    OutputPaths,
-    OutputPathsModel,
     VLLMSettings,
     VLLMSettingsModel,
 )
@@ -24,7 +22,6 @@ from datacreek.utils.config import (
     get_generation_config,
     get_llm_settings,
     get_openai_settings,
-    get_output_paths,
     get_vllm_settings,
     load_config,
 )
@@ -81,14 +78,6 @@ def test_format_settings_model_and_loader():
     settings = model.to_settings()
     assert settings.default == "json"
 
-
-def test_output_paths_model_and_loader():
-    cfg = load_config()
-    out = get_output_paths(cfg)
-    assert isinstance(out, OutputPaths)
-    model = OutputPathsModel(parsed="files/parsed")
-    settings = model.to_settings()
-    assert settings.parsed == "files/parsed"
 
 
 def test_llm_and_provider_models():

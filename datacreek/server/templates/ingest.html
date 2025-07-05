@@ -47,18 +47,6 @@
                         <div id="path_help_text" class="form-text">Enter the path to a local file or URL to parse.</div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="output_name" class="form-label">{{ form.output_name.label }}</label>
-                        {{ form.output_name(class="form-control", placeholder="Leave blank to use original name") }}
-                        {% if form.output_name.errors %}
-                        <div class="invalid-feedback d-block">
-                            {% for error in form.output_name.errors %}
-                            {{ error }}
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                        <div class="form-text">Optional. Specify a custom filename for the output text file.</div>
-                    </div>
                     
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                         {{ form.submit(class="btn btn-primary") }}

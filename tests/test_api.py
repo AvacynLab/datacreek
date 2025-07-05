@@ -77,7 +77,7 @@ def test_async_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
     monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
 
-    def dummy_generate(path, output_dir, *args, document_text=None, **kwargs):
+    def dummy_generate(path, *args, document_text=None, **kwargs):
         assert kwargs.get("config_overrides") == {"generation": {"temperature": 0.1}}
         assert kwargs.get("provider") == "api-endpoint"
         return {"qa_pairs": [{"question": "q", "answer": "a"}]}
@@ -85,7 +85,7 @@ def test_async_pipeline(monkeypatch, tmp_path):
     def dummy_curate(data, output_path=None, *args, **kwargs):
         return data
 
-    def dummy_save(data, output_path, fmt, cfg, storage):
+    def dummy_save(data, fmt, cfg, storage):
         return "converted"
 
     monkeypatch.setattr("datacreek.tasks.generate_data", dummy_generate)
@@ -361,6 +361,72 @@ def test_graph_progress_history_unauthorized(monkeypatch):
     headers = {"X-API-Key": key}
     res = client.get("/graphs/demo/progress/history", headers=headers)
     assert res.status_code == 404
+
+
+def test_dataset_versions_route(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    user_id, key = _create_user()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.owner_id = user_id
+    ds.redis_client = redis_client
+    ds.versions.append({"params": {}, "time": "t", "result": {"v": 1}})
+    ds.to_redis(redis_client, "dataset:demo")
+    redis_client.sadd("datasets", "demo")
+
+    headers = {"X-API-Key": key}
+
+    res = client.get("/datasets/demo/versions", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    assert data and data[0]["index"] == 1
+    assert data[0]["result"]["v"] == 1
+
+
+def test_dataset_version_item_route(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    user_id, key = _create_user()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.owner_id = user_id
+    ds.redis_client = redis_client
+    ds.versions.extend([
+        {"params": {}, "time": "t1", "result": {"v": 1}},
+        {"params": {}, "time": "t2", "result": {"v": 2}},
+    ])
+    ds.to_redis(redis_client, "dataset:demo")
+    redis_client.sadd("datasets", "demo")
+
+    headers = {"X-API-Key": key}
+
+    res = client.get("/datasets/demo/versions/2", headers=headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["result"]["v"] == 2
+
+
+def test_dataset_version_delete_route(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    user_id, key = _create_user()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.owner_id = user_id
+    ds.redis_client = redis_client
+    ds.versions.extend([
+        {"params": {}, "time": "t1", "result": {"v": 1}},
+        {"params": {}, "time": "t2", "result": {"v": 2}},
+    ])
+    ds.to_redis(redis_client, "dataset:demo")
+    redis_client.sadd("datasets", "demo")
+
+    headers = {"X-API-Key": key}
+
+    res = client.delete("/datasets/demo/versions/1", headers=headers)
+    assert res.status_code == 200
+    assert redis_client.exists("dataset:demo")
+    ds_loaded = DatasetBuilder.from_redis(redis_client, "dataset:demo")
+    assert len(ds_loaded.versions) == 1 and ds_loaded.versions[0]["result"]["v"] == 2
 
 
 def test_dataset_export_unauthorized(monkeypatch):

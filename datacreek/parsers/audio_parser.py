@@ -1,5 +1,3 @@
-import os
-
 from .base import BaseParser
 
 
@@ -23,7 +21,5 @@ class AudioParser(BaseParser):
         except sr.RequestError as exc:  # pragma: no cover - unlikely
             raise RuntimeError("Sphinx request error") from exc
 
-    def save(self, content: str, output_path: str) -> None:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(content)
+    def save(self, content: str, output_path: str) -> None:  # pragma: no cover - legacy
+        super().save(content, output_path)

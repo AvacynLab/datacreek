@@ -1,5 +1,3 @@
-import os
-
 from .base import BaseParser
 
 
@@ -21,7 +19,5 @@ class ImageParser(BaseParser):
                 texts.append(t)
         return "\n".join(texts)
 
-    def save(self, content: str, output_path: str) -> None:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(content)
+    def save(self, content: str, output_path: str) -> None:  # pragma: no cover - legacy
+        super().save(content, output_path)

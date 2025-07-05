@@ -1,23 +1,5 @@
 # Master configuration file for Datacreek
 
-# Global paths configuration
-paths:
-  # Input data locations
-  input:
-    pdf: "data/pdf"
-    html: "data/html"
-    youtube: "data/youtube"
-    docx: "data/docx"
-    ppt: "data/ppt"
-    txt: "data/txt"
-  
-  # Output locations
-  output:
-    parsed: "data/output"      # Where parsed text files are saved
-    generated: "data/generated" # Where generated content is saved
-    cleaned: "data/cleaned"     # Where cleaned content is saved
-    final: "data/final"         # Where final formatted content is saved
-
 # Database configuration
 database:
   url: "sqlite:///./datacreek.db"

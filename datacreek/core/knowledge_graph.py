@@ -1773,19 +1773,7 @@ class KnowledgeGraph:
                     parts.append(text)
         return "\n\n".join(parts)
 
-    def to_json(self, path: str) -> str:
-        """Save the graph to a JSON file."""
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.to_dict(), f, indent=2)
-        return path
-
-    @classmethod
-    def from_json(cls, path: str) -> "KnowledgeGraph":
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return cls.from_dict(data)
 
     # ------------------------------------------------------------------
     # Neo4j helpers

@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
-from datacreek.utils.config import get_generation_config, get_path_config, load_config
+from datacreek.utils.config import get_generation_config, load_config
 from datacreek.utils.text import clean_text, split_into_chunks
 
 logger = logging.getLogger(__name__)
@@ -32,28 +32,6 @@ class IngestOptions:
     use_unstructured: bool | None = None
     extract_entities: bool = False
     extract_facts: bool = False
-
-
-def _resolve_input_path(file_path: str, config: Dict[str, Any]) -> str:
-    """Resolve ``file_path`` using configured input directories."""
-
-    if file_path.startswith(("http://", "https://")):
-        return file_path
-
-    if os.path.exists(file_path):
-        return file_path
-
-    ext = os.path.splitext(file_path)[1].lstrip(".").lower()
-    candidates = []
-    if ext:
-        candidates.append(os.path.join(get_path_config(config, "input", ext), file_path))
-    candidates.append(os.path.join(get_path_config(config, "input", "default"), file_path))
-
-    for cand in candidates:
-        if os.path.exists(cand):
-            return cand
-
-    return file_path
 
 
 def determine_parser(file_path: str, config: Dict[str, Any]):
@@ -85,9 +63,6 @@ def determine_parser(file_path: str, config: Dict[str, Any]):
 
 def process_file(
     file_path: str,
-    output_dir: Optional[str] = None,
-    output_name: Optional[str] = None,
-    save: bool = False,
     config: Optional[Dict[str, Any]] = None,
     *,
     high_res: bool = False,
@@ -96,14 +71,13 @@ def process_file(
     use_unstructured: bool | None = None,
     return_elements: bool = False,
 ) -> str | list[Any] | tuple[str, list[str]]:
-    """Parse ``file_path`` and optionally save the result."""
+    """Parse ``file_path`` and return the extracted text."""
 
     cfg = config or load_config()
     if use_unstructured is None:
         use_unstructured = cfg.get("ingest", {}).get("use_unstructured", True)
 
-    resolved = _resolve_input_path(file_path, cfg)
-    parser = determine_parser(resolved, cfg)
+    parser = determine_parser(file_path, cfg)
     parse_kwargs = {}
     if isinstance(parser, PDFParser):
         parse_kwargs = {"high_res": high_res, "ocr": ocr, "return_pages": return_pages}
@@ -112,7 +86,7 @@ def process_file(
             parse_kwargs["use_unstructured"] = use_unstructured
         if return_elements and "return_elements" in parser.parse.__code__.co_varnames:
             parse_kwargs["return_elements"] = True
-    content = parser.parse(resolved, **parse_kwargs)
+    content = parser.parse(file_path, **parse_kwargs)
 
     if return_pages and isinstance(content, tuple):
         text, pages = content
@@ -120,18 +94,6 @@ def process_file(
         text = content
         pages = None
 
-    if save:
-        out_dir = Path(output_dir or get_path_config(cfg, "output", "parsed"))
-        out_dir.mkdir(parents=True, exist_ok=True)
-        if output_name is None:
-            stem = Path(resolved).stem
-            output_name = f"{stem}.txt"
-        out_path = out_dir / output_name
-        try:
-            parser.save(text, str(out_path))
-        except Exception:
-            # saving should not block ingestion but should be logged
-            logger.exception("Failed to save parsed content to %s", out_path)
 
     if return_pages:
         return text, pages or []
@@ -263,15 +225,19 @@ def ingest_into_dataset(
         extract_entities = options.extract_entities
         extract_facts = options.extract_facts
 
-    result = process_file(
-        file_path,
-        config=config,
-        high_res=high_res,
-        ocr=ocr,
-        use_unstructured=use_unstructured,
-        return_pages=True,
-        return_elements=True,
-    )
+    try:
+        result = process_file(
+            file_path,
+            config=config,
+            high_res=high_res,
+            ocr=ocr,
+            use_unstructured=use_unstructured,
+            return_pages=True,
+            return_elements=True,
+        )
+    except Exception:
+        logger.exception("Failed to parse %s", file_path)
+        raise
     elements = None
     if isinstance(result, list):
         elements = result
@@ -285,20 +251,32 @@ def ingest_into_dataset(
         text = result
         pages = None
     doc_id = doc_id or Path(file_path).stem
-    to_kg(
-        text,
-        dataset,
-        doc_id,
-        config,
-        build_index=True,
-        pages=pages,
-        elements=elements,
-        source=file_path,
-    )
+    try:
+        to_kg(
+            text,
+            dataset,
+            doc_id,
+            config,
+            build_index=True,
+            pages=pages,
+            elements=elements,
+            source=file_path,
+        )
+    except Exception:
+        logger.exception("Failed to build knowledge graph for %s", file_path)
+        raise
 
     if extract_entities:
-        dataset.extract_entities()
+        try:
+            dataset.extract_entities()
+        except Exception:
+            logger.exception("Failed to extract entities from %s", file_path)
+            raise
     if extract_facts:
-        dataset.extract_facts(client)
+        try:
+            dataset.extract_facts(client)
+        except Exception:
+            logger.exception("Failed to extract facts from %s", file_path)
+            raise
         dataset.history.append("Facts extracted on ingest")
     return doc_id

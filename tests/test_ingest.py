@@ -74,14 +74,6 @@ def test_determine_parser_errors(tmp_path):
         ingest_file(str(bad_file))
 
 
-def test_ingest_resolves_input_path(tmp_path):
-    f = tmp_path / "doc.txt"
-    f.write_text("hi")
-
-    cfg = {"paths": {"input": {"txt": str(tmp_path), "default": str(tmp_path)}}}
-    text = ingest_file("doc.txt", config=cfg)
-    assert text == "hi"
-
 
 def test_ingest_into_dataset_with_facts(tmp_path):
     text_file = tmp_path / "doc.txt"
@@ -138,9 +130,6 @@ def test_determine_parser_remote_image(monkeypatch):
             called["path"] = file_path
             return "ok"
 
-        def save(self, content, output_path):
-            pass
-
     monkeypatch.setitem(datacreek.parsers._PARSER_REGISTRY, ".png", DummyParser)
 
     text = ingest_file("https://example.com/test.png")
@@ -155,9 +144,6 @@ def test_determine_parser_remote_audio(monkeypatch):
         def parse(self, file_path):
             called["path"] = file_path
             return "ok"
-
-        def save(self, content, output_path):
-            pass
 
     monkeypatch.setitem(datacreek.parsers._PARSER_REGISTRY, ".mp3", DummyParser)
 
@@ -185,10 +171,6 @@ def test_process_file_unstructured(monkeypatch, tmp_path):
             assert use_unstructured is True
             return "ok"
 
-        def save(self, content, output_path):
-            called["saved"] = True
-
     monkeypatch.setattr(datacreek.core.ingest, "determine_parser", lambda f, c: Dummy())
     text = process_file(str(pdf), use_unstructured=True)
     assert text == "ok"
-    assert "saved" not in called

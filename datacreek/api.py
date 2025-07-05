@@ -257,6 +257,48 @@ def dataset_history(
     return events
 
 
+@app.get("/datasets/{name}/versions", summary="List dataset versions")
+def dataset_versions(
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
+    """Return generation versions stored for ``name``."""
+    ds = _load_dataset(name, current_user)
+    return [
+        {"index": i + 1, **v}
+        for i, v in enumerate(ds.versions)
+    ]
+
+
+@app.get("/datasets/{name}/versions/{index}", summary="Get dataset version")
+def dataset_version_item(
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    index: int = Path(..., ge=1),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return a single generation version for ``name``."""
+    ds = _load_dataset(name, current_user)
+    if index < 1 or index > len(ds.versions):
+        raise HTTPException(status_code=404, detail="Version not found")
+    return ds.versions[index - 1]
+
+
+@app.delete("/datasets/{name}/versions/{index}", summary="Delete dataset version")
+def delete_dataset_version_item(
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    index: int = Path(..., ge=1),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Delete a stored generation version for ``name``."""
+
+    ds = _load_dataset(name, current_user)
+    try:
+        ds.delete_version(index)
+    except IndexError:
+        raise HTTPException(status_code=404, detail="Version not found") from None
+    return {"status": "deleted"}
+
+
 @app.get("/datasets/{name}/progress", summary="Get dataset progress")
 def dataset_progress(
     name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
@@ -452,7 +494,9 @@ def dataset_export_result(
         raise HTTPException(status_code=404, detail="Export not found")
     if isinstance(data, bytes):
         data = data.decode()
-    return Response(data, media_type="application/json")
+    filename = f"{name}.{fmt.value if isinstance(fmt, ExportFormat) else fmt}"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return Response(data, media_type="application/json", headers=headers)
 
 
 @app.get("/datasets/{ds_id}/download", summary="Download dataset")
@@ -464,7 +508,9 @@ def download_dataset(
     ds = db.get(Dataset, ds_id)
     if not ds or ds.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
-    return Response(ds.content or "{}", media_type="application/json")
+    filename = f"dataset_{ds_id}.json"
+    headers = {"Content-Disposition": f"attachment; filename={filename}"}
+    return Response(ds.content or "{}", media_type="application/json", headers=headers)
 
 
 # ----- Asynchronous task endpoints -----

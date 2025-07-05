@@ -22,7 +22,7 @@
 Datacreek is a toolkit for preparing high-quality synthetic datasets to fine-tune Large Language Models (LLMs). The primary interface is a REST API that exposes each step of the data preparation workflow.
 
 All routes are asynchronous. Launch ingestion, generation, curation or saving through `/tasks/ingest`, `/tasks/generate`, `/tasks/curate` and `/tasks/save` and monitor progress via `/tasks/{task_id}`.
-Datasets created by these jobs can be managed with `/datasets` (create, update, delete and download) and every request requires an `X-API-Key` header associated with a user.
+Datasets created by these jobs can be managed with `/datasets` (create, update, delete and download). The API records every action in Redis so you can query `/datasets/<name>/progress` for the current status, `/datasets/<name>/history` for past events and `/datasets/<name>/versions` to inspect generation runs. Individual versions may be removed with `DELETE /datasets/<name>/versions/{n}`. Every request requires an `X-API-Key` header associated with a user.
 Background jobs are handled by Celery. Configure `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` to use an external broker such as Redis.
 
 **Typical workflow**
@@ -192,17 +192,7 @@ datacreek/
 │       └── format_converter.py # Format conversion
 ├── configs/                  # Configuration files
 │   └── config.yaml           # Default configuration
-├── data/                     # Data directories
-│   ├── pdf/                  # Input PDFs
-│   ├── html/                 # Input HTML files
-│   ├── youtube/              # YouTube transcripts
-│   ├── docx/                 # Input Word documents
-│   ├── ppt/                  # Input PowerPoint files
-│   ├── txt/                  # Input text files
-│   ├── output/               # Parsed text outputs
-│   ├── generated/            # Generated content
-│   ├── cleaned/              # Filtered content
-│   └── final/                # Formatted outputs
+├── data/                     # Database storage (SQLite by default)
 ├── setup.py                  # Package setup script
 ├── pyproject.toml            # Project metadata
 ├── MANIFEST.in               # Package manifest
@@ -216,7 +206,6 @@ classDiagram
     class AppContext {
         +config_path: Path
         +config: Dict
-        +_ensure_data_dirs()
     }
 
     class LLMClient {
@@ -243,22 +232,18 @@ classDiagram
 
     class Parser {
         +parse(file_path) str
-        +save(content, output_path) None
     }
 
     class PDFParser {
         +parse(file_path) str
-        +save(content, output_path) None
     }
 
     class HTMLParser {
         +parse(file_path) str
-        +save(content, output_path) None
     }
 
     class YouTubeParser {
         +parse(url) str
-        +save(content, output_path) None
     }
 
 
@@ -300,7 +285,7 @@ sequenceDiagram
     QAGenerator->>LLMClient: rate_qa_pairs()
     LLMClient-->>QAGenerator: Rated pairs
     QAGenerator-->>API: Results
-    API-->>User: QA pairs saved to data/generated/file_qa_pairs.json
+    API-->>User: QA pairs stored in Redis
 
     User->>API: POST /curate file_qa_pairs.json
     API->>LLMClient: Initialize with config
@@ -324,12 +309,12 @@ sequenceDiagram
     
     QAGenerator->>QAGenerator: Apply threshold & metrics
     QAGenerator-->>API: Filtered pairs with stats
-    API-->>User: Cleaned data saved to data/cleaned/file_cleaned.json
+    API-->>User: Cleaned data stored in Redis
 
     User->>API: POST /save file_cleaned.json fmt=ft
-    API->>FormatConverter: convert_format(input, output, format)
+    API->>FormatConverter: convert_format(input, format)
     FormatConverter-->>API: Converted data
-    API-->>User: Data saved to data/final/file_ft.json
+    API-->>User: Data stored in Redis
 ```
 
 ## 3. Installation
@@ -374,20 +359,7 @@ Datacreek uses a YAML-based configuration system with a central config file.
 ### Configuration File Structure
 
 ```yaml
-# paths: Configure input and output paths
-paths:
-  input:
-    pdf: "data/pdf"
-    html: "data/html"
-    youtube: "data/youtube"
-    docx: "data/docx"
-    ppt: "data/ppt"
-    txt: "data/txt"
-  output:
-    parsed: "data/output"  # (unused)
-    generated: "data/generated"
-    cleaned: "data/cleaned"
-    final: "data/final"
+
 
 # vllm: Configure VLLM server settings
 vllm:
@@ -479,7 +451,6 @@ The toolkit resolves configuration values in the following order:
 ```python
 from datacreek.utils.config import (
     load_config,
-    get_path_config,
     get_vllm_config,
     get_generation_config,
     get_curate_config,
@@ -495,9 +466,6 @@ vllm_config = get_vllm_config(config)
 generation_config = get_generation_config(config)
 curate_config = get_curate_config(config)
 format_config = get_format_config(config)
-
-# Get specific path
-output_dir = get_path_config(config, "output", "parsed")
 
 # Get prompt template
 summary_prompt = get_prompt(config, "summary")
@@ -653,66 +621,16 @@ graph TD
 The curate module processes QA pairs in batches for efficiency, with robust error handling and fallback mechanisms. The system has been enhanced to handle JSON parsing edge cases and provide detailed diagnostic information.
 
 ```python
-def curate_qa_pairs(input_path, output_path, threshold=None, api_base=None, model=None, config_path=None, verbose=False):
-    """Clean and filter QA pairs based on quality ratings"""
-    # Load input file and extract QA pairs
-    with open(input_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+def curate_qa_pairs(input_data, threshold=None, api_base=None, model=None, config_path=None, verbose=False):
+    """Clean and filter QA pairs based on quality ratings."""
+    if isinstance(input_data, str):
+        data = json.loads(Path(input_data).read_text()) if Path(input_data).exists() else json.loads(input_data)
+    else:
+        data = input_data
     qa_pairs = data.get("qa_pairs", [])
     summary = data.get("summary", "")
-    
-    # Initialize LLM client
-    client = LLMClient(config_path=config_path, api_base=api_base, model_name=model)
-    
-    # Get configuration
-    curate_config = get_curate_config(client.config)
-    
-    # Allow environment variable to override batch size for debugging
-    env_batch_size = os.environ.get('SDK_BATCH_SIZE')
-    if env_batch_size and env_batch_size.isdigit():
-        batch_size = int(env_batch_size)
-        inference_batch = int(env_batch_size)
-    else:
-        batch_size = curate_config.get("batch_size", 32)
-        inference_batch = curate_config.get("inference_batch", 32)
-    
-    # Process in batches with smart error handling
-    batches = [qa_pairs[i:i+batch_size] for i in range(0, len(qa_pairs), batch_size)]
-    for batch_start in range(0, len(all_messages), inference_batch):
-        batch_responses = client.batch_completion(current_batch, temperature=rating_temperature)
-        
-        # Process each response
-        for j, response in enumerate(batch_responses):
-            try:
-                # Pass original batch to enable fallback matching
-                rated_batch = parse_ratings(response, original_batch)
-                
-                # Process ratings
-                for pair in rated_batch:
-                    if "rating" in pair:
-                        rating = pair["rating"]
-                        if rating >= threshold:
-                            filtered_pairs.append(pair)
-            except Exception as e:
-                # Attempt individual processing as fallback
-                if verbose:
-                    print(f"Batch processing failed, trying individual items...")
-                    
-                # Process individual items in the batch as a fallback strategy
-                for item in original_batch:
-                    try:
-                        # Process single item
-                        item_response = client.chat_completion(
-                            [{"role": "system", "content": single_item_prompt}]
-                        )
-                        rated_item = parse_ratings(item_response, [item])
-                        # Add to filtered pairs if rating meets threshold
-                    except Exception:
-                        if verbose:
-                            print(f"Failed to process individual item")
-                
-    # Calculate metrics and return results
-    return output_path
+    # ... rating logic ...
+    return {"qa_pairs": filtered_pairs, "summary": summary}
 ```
 
 The system includes several advanced features:
@@ -753,7 +671,7 @@ graph TD
 #### Format Converter Logic
 
 ```python
-def convert_format(input_path, output_path, format_type):
+def convert_format(input_path, format_type):
     # Load input file
     with open(input_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -768,13 +686,13 @@ def convert_format(input_path, output_path, format_type):
 
     # Convert to requested format
     if format_type == "jsonl":
-        return to_jsonl(qa_pairs, output_path)
+        return to_jsonl(qa_pairs)
     elif format_type == "alpaca":
-        return to_alpaca(qa_pairs, output_path)
+        return to_alpaca(qa_pairs)
     elif format_type == "ft":
-        return to_fine_tuning(qa_pairs, output_path)
+        return to_fine_tuning(qa_pairs)
     elif format_type == "chatml":
-        return to_chatml(qa_pairs, output_path)
+        return to_chatml(qa_pairs)
     else:
         raise ValueError(f"Unknown format type: {format_type}")
 ```
@@ -918,9 +836,6 @@ class QAGenerator:
 class Parser:
     def parse(self, file_path: str) -> str:
         """Parse a document into plain text"""
-        
-    def save(self, content: str, output_path: str) -> None:
-        """Save the extracted text to a file"""
 ```
 
 Each parser implements this interface:
@@ -953,17 +868,17 @@ def convert_to_conversation_format(qa_pairs: List[Dict[str, str]]) -> List[List[
     """Convert QA pairs to conversation format"""
 
 # Format Conversion
-def to_jsonl(data: List[Dict[str, Any]], output_path: str) -> str:
-    """Convert data to JSONL format and save to a file"""
+def to_jsonl(data: List[Dict[str, Any]]) -> str:
+    """Convert data to JSONL format and return a JSONL string"""
     
-def to_alpaca(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to Alpaca format and save"""
+def to_alpaca(qa_pairs: List[Dict[str, str]]) -> str:
+    """Convert QA pairs to Alpaca format."""
     
-def to_fine_tuning(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to fine-tuning format and save"""
+def to_fine_tuning(qa_pairs: List[Dict[str, str]]) -> str:
+    """Convert QA pairs to fine-tuning format."""
     
-def to_chatml(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to ChatML format and save as JSONL"""
+def to_chatml(qa_pairs: List[Dict[str, str]]) -> str:
+    """Convert QA pairs to ChatML format as JSONL."""
 ```
 
 ## 8. Output Formats
@@ -1082,7 +997,7 @@ Content can be stored as Hugging Face datasets using the efficient Arrow format,
 from datasets import load_from_disk
 
 # Load the dataset
-dataset = load_from_disk('data/final/example_ft_hf')
+dataset = load_from_disk('example_ft_hf')
 
 # View the features
 print(dataset.features)
@@ -1116,7 +1031,7 @@ Setting these variables can help with debugging and performance tuning:
 # Process one QA pair at a time with detailed output
 export SDK_VERBOSE=true
 export SDK_BATCH_SIZE=1
-curl -X POST localhost:8000/curate -d "ds_path=data/generated/results.json"
+curl -X POST localhost:8000/curate -d "ds_key=dataset:results"
 ```
 
 ## 10. Workflow Examples
@@ -1311,11 +1226,6 @@ class MarkdownParser:
         
         return content
     
-    def save(self, content: str, output_path: str) -> None:
-        """Save the extracted text to a file"""
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
 ```
 
 Register the parser in `parsers/__init__.py`:
@@ -1350,8 +1260,8 @@ def determine_parser(file_path, config):
 Add a new converter function in `utils/format_converter.py`:
 
 ```python
-def to_custom_format(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
-    """Convert QA pairs to a custom format and save"""
+def to_custom_format(qa_pairs: List[Dict[str, str]]) -> str:
+    """Convert QA pairs to a custom format """
     
     # Create the custom format structure
     formatted_data = {
@@ -1373,21 +1283,18 @@ def to_custom_format(qa_pairs: List[Dict[str, str]], output_path: str) -> str:
             }
         })
     
-    # Save to file
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(formatted_data, f, indent=2)
-    
-    return output_path
+        
+    return json.dumps(formatted_data, indent=2)
 ```
 
 Update the format conversion in `core/save_as.py`:
 
 ```python
-def convert_format(input_path, output_path, format_type, config=None):
+def convert_format(input_path, format_type, config=None):
     # ... existing code ...
     
     elif format_type == "custom":
-        return to_custom_format(qa_pairs, output_path)
+        return to_custom_format(qa_pairs)
     
     # ... rest of the function ...
 ```
@@ -1480,12 +1387,7 @@ def process_file(...):
             num_examples=num_pairs  # Reuse the num_pairs parameter
         )
         
-        # Save output
-        output_path = os.path.join(output_dir, f"{base_name}_cot_examples.json")
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump({"cot_examples": examples}, f, indent=2)
-        
-        return output_path
+        return {"cot_examples": examples}
     
     # ... rest of the function ...
 ```
@@ -1574,11 +1476,8 @@ File not found: documents/paper.pdf
 
 **Solution**:
 - Verify the file path is correct (absolute vs. relative)
-- Check permissions on the file and directory
-- Create the directory structure if it doesn't exist:
-  ```bash
-  mkdir -p data/{pdf,html,youtube,docx,ppt,txt,output,generated,cleaned,final}
-  ```
+- Check permissions on the file
+- Ensure your Redis and Neo4j services are accessible
 
 ### Debugging Tips
 
@@ -1589,24 +1488,21 @@ File not found: documents/paper.pdf
 curl -X GET http://localhost:8000/v1/models
 ```
 
-#### Inspecting Generated Files
+#### Inspecting Generated Data
 
 ```bash
-# View generated QA pairs
-jq . data/generated/document_qa_pairs.json
+# Inspect QA pairs saved in Redis
+redis-cli GET dataset:demo:export:jsonl | head
 
-# Count QA pairs
-jq '.qa_pairs | length' data/generated/document_qa_pairs.json
-
-# View quality metrics
-jq '.metrics' data/cleaned/document_cleaned.json
+# Check the number of generated pairs
+redis-cli LLEN dataset:demo:events
 ```
 
 #### Testing Pipeline Stages Individually
 
 ```bash
 # Test just the parser
-curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf" -d "out=test_output/"
+curl -X POST localhost:8000/ingest -d "path=documents/paper.pdf"
 
 # Test content creation with a small text file
 echo "This is a test document." > test.txt

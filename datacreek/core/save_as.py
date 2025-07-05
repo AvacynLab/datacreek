@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import json
 import os
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import redis
 
 from datacreek.storage import StorageBackend
+
+logger = logging.getLogger(__name__)
 from datacreek.utils.format_converter import (
     to_alpaca,
     to_chatml,
@@ -58,7 +61,6 @@ def _format_pairs(qa_pairs: List[Dict[str, str]], fmt: str) -> Any:
 
 def convert_format(
     input_data: Any,
-    output_path: Optional[str],
     format_type: str,
     config: Optional[Dict[str, Any]] = None,
     storage_format: str = "json",
@@ -70,8 +72,7 @@ def convert_format(
     """Convert data to different formats
 
     Args:
-        input_path: Path to the input file
-        output_path: Path to save the output
+        input_path: Path to the input file or JSON string
         format_type: Output format (jsonl, alpaca, ft, chatml)
         config: Configuration dictionary
         storage_format: Storage format, either "json" or "hf" (Hugging Face dataset)
@@ -79,8 +80,7 @@ def convert_format(
         redis_key: Key used when storing the result in Redis
 
     Returns:
-        Path to the output file or directory, or the Redis key when using
-        ``redis_client``
+        The formatted data or the Redis key when using ``redis_client``
     """
     if format_type not in FORMAT_DISPATCH:
         raise ValueError(f"Unknown format type: {format_type}")
@@ -116,36 +116,29 @@ def convert_format(
         else:
             raise ValueError("Unrecognized data format - expected QA pairs or conversations")
 
-    if output_path:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
     # When using HF dataset storage format
     if storage_format == "hf":
         formatted_pairs = (
             qa_pairs if format_type == "jsonl" else json.loads(_format_pairs(qa_pairs, format_type))
         )
-        if output_path:
-            return to_hf_dataset(formatted_pairs, output_path)
-        raise ValueError("HF dataset export requires output path")
+        if backend is not None and redis_key is not None:
+            return to_hf_dataset(formatted_pairs, redis_key)
+        raise ValueError("HF dataset export requires a storage backend and redis_key")
 
     # Standard JSON file storage format
     formatted = _format_pairs(qa_pairs, format_type)
-
-    if output_path:
-        handler = FORMAT_DISPATCH.get(format_type)
-        if handler:
-            return handler(qa_pairs, output_path)
 
     if backend is not None and redis_key is not None:
         try:
             return backend.save(redis_key, formatted)
         except Exception:
-            pass
+            logger.exception("Failed to save formatted data via backend")
+            raise
     if redis_client and redis_key:
         try:
             redis_client.set(redis_key, formatted)
             return redis_key
         except Exception:
-            pass
-
+            logger.exception("Failed to save formatted data to Redis")
+            raise
     return formatted

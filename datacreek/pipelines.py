@@ -663,7 +663,7 @@ async def _run_generation_pipeline_impl(
 
     async def _save(d: Any) -> Any:
         format_type = fmt or fmt_cfg.default
-        return await asyncio.to_thread(convert_format, _serialize(d), None, format_type, cfg)
+        return await asyncio.to_thread(convert_format, _serialize(d), format_type, cfg)
 
     async def _generate(ct: ContentType, text: str) -> Any:
         if use_async_handlers:

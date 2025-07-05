@@ -95,9 +95,6 @@ def test_curate_resume(monkeypatch, tmp_path):
         "metrics": {"total": 1, "filtered": 1, "retention_rate": 1.0, "avg_score": 10},
         "rated_pairs": [{"question": "q1", "answer": "a1", "rating": 10}],
     }
-    out = tmp_path / "cur.json"
-    out.write_text(json.dumps(existing))
-
     data = {
         "summary": "",
         "qa_pairs": [
@@ -107,7 +104,11 @@ def test_curate_resume(monkeypatch, tmp_path):
     }
 
     res = curate.curate_qa_pairs(
-        data, output_path=str(out), batch_size=1, inference_batch=1, resume=True
+        data,
+        batch_size=1,
+        inference_batch=1,
+        resume=True,
+        previous_result=existing,
     )
     assert len(res["qa_pairs"]) == 2
 
