@@ -116,31 +116,6 @@ class FormatSettingsModel(BaseModel):
 
 
 @dataclass
-class OutputPaths:
-    """Configuration for generated output locations."""
-
-    parsed: str = "data/output"
-    generated: str = "data/generated"
-    cleaned: str = "data/cleaned"
-    final: str = "data/final"
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "OutputPaths":
-        defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
-
-
-class OutputPathsModel(BaseModel):
-    parsed: str = "data/output"
-    generated: str = "data/generated"
-    cleaned: str = "data/cleaned"
-    final: str = "data/final"
-
-    def to_settings(self) -> OutputPaths:
-        return OutputPaths.from_dict(self.model_dump())
-
-
-@dataclass
 class VLLMSettings:
     """Configuration for vLLM server connection."""
 

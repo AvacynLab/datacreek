@@ -10,7 +10,6 @@ import asyncio
 import json
 import logging
 import os
-from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -20,7 +19,7 @@ from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
 from datacreek.models.llm_client import LLMClient
 from datacreek.storage import StorageBackend
-from datacreek.utils.config import get_generation_config, get_output_paths, load_config
+from datacreek.utils.config import get_generation_config, load_config
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +28,6 @@ def load_document_text(file_path: str) -> str:
     """Return the raw text from ``file_path``."""
     with open(file_path, "r", encoding="utf-8") as f:
         return f.read()
-
-
-def resolve_output_dir(config_path: Optional[Path]) -> str:
-    """Return the default generated output directory from config."""
-    cfg = load_config(config_path)
-    paths = get_output_paths(cfg)
-    return paths.generated
 
 
 def init_llm_client(
@@ -60,20 +52,8 @@ def _base_name(file_path: Optional[str]) -> str:
     return os.path.splitext(os.path.basename(file_path))[0] if file_path else "input"
 
 
-def _write_json(data: Any, output_path: str) -> str:
-    """Write ``data`` to ``output_path`` as formatted JSON."""
-
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    if is_dataclass(data):
-        data = asdict(data)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    return output_path
-
-
 def process_file(
     file_path: Optional[str],
-    output_dir: Optional[str],
     config_path: Optional[Path] = None,
     api_base: Optional[str] = None,
     model: Optional[str] = None,
@@ -96,7 +76,6 @@ def process_file(
 
     Args:
         file_path: Path to the text file to process
-        output_dir: Directory to save generated content
         config_path: Path to configuration file
         api_base: VLLM API base URL
         model: Model to use
@@ -113,13 +92,8 @@ def process_file(
         backend: Optional storage backend overriding ``redis_client``
 
     Returns:
-        Path to the output file or the backend key when persistence is used
+        The generated result or the backend key when persistence is used
     """
-    save_to_file = output_dir is not None
-    if save_to_file:
-        output_dir = output_dir or resolve_output_dir(config_path)
-        os.makedirs(output_dir, exist_ok=True)
-
     client = init_llm_client(
         config_path,
         provider=provider,
@@ -129,9 +103,6 @@ def process_file(
     )
 
     logger.info("Using %s provider", client.provider)
-
-    # Generate base filename for output
-    base_name = _base_name(file_path)
 
     ct = ContentType(content_type)
 
@@ -166,15 +137,6 @@ def process_file(
                 verbose=verbose,
             )
 
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_qa_pairs.json")
-            logger.info("Saving result to %s", output_path)
-            try:
-                _write_json(gen_result.to_dict(), output_path)
-                logger.info("Successfully wrote result to %s", output_path)
-            except Exception as e:
-                logger.error("Error writing result file: %s", e)
-            return output_path
         return gen_result.to_dict()
 
     def _generate_summary() -> Any:
@@ -186,10 +148,6 @@ def process_file(
 
         summary = generator.generate_summary(document_text, verbose=verbose)
 
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_summary.json")
-            _write_json({"summary": summary}, output_path)
-            return output_path
         return {"summary": summary}
 
     def _generate_cot() -> Any:
@@ -214,18 +172,6 @@ def process_file(
             include_simple_steps=verbose,
         )
 
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_cot_examples.json")
-            _write_json(cot_result.to_dict(), output_path)
-            if verbose and cot_result.cot_examples:
-                first_example = cot_result.cot_examples[0]
-                logger.debug(
-                    "First CoT Example:\nQuestion: %s\nReasoning: %s...\nAnswer: %s",
-                    first_example.question,
-                    first_example.reasoning[:100],
-                    first_example.answer,
-                )
-            return output_path
         return cot_result.to_dict()
 
     def _cot_enhance() -> Any:
@@ -343,18 +289,6 @@ def process_file(
                     # Not the expected format, just keep original
                     enhanced_conversations.append(conversation)
 
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_enhanced.json")
-            data = (
-                enhanced_conversations[0]
-                if is_single_conversation and len(enhanced_conversations) == 1
-                else enhanced_conversations
-            )
-            _write_json(data, output_path)
-            if verbose:
-                logger.debug("Enhanced %d conversation(s)", len(enhanced_conversations))
-            return output_path
-
         if is_single_conversation and len(enhanced_conversations) == 1:
             return enhanced_conversations[0]
         return enhanced_conversations
@@ -366,7 +300,6 @@ def process_file(
 
         return generator.process_dataset(
             dataset_source=file_path,
-            output_dir=output_dir if save_to_file else None,
             num_examples=num_pairs,
             verbose=verbose,
         )
@@ -387,10 +320,6 @@ def process_file(
             multi_answer=multi_answer,
         )
 
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_kg_pairs.json")
-            _write_json(result, output_path)
-            return output_path
         return result
 
     def _tool_call() -> Any:
@@ -402,10 +331,6 @@ def process_file(
 
         generator = ToolCallGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
         result = generator.process_document(document_text, verbose=verbose)
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_tool.json")
-            _write_json(result, output_path)
-            return output_path
         return result
 
     def _conversation() -> Any:
@@ -419,10 +344,6 @@ def process_file(
             client, config_path, kg=kg, config_overrides=config_overrides
         )
         result = generator.process_document(document_text, verbose=verbose)
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_conversation.json")
-            _write_json(result, output_path)
-            return output_path
         return result
 
     def _multi_tool() -> Any:
@@ -436,10 +357,6 @@ def process_file(
             client, config_path, kg=kg, config_overrides=config_overrides
         )
         result = generator.process_document(document_text, verbose=verbose)
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_multi_tool.json")
-            _write_json(result, output_path)
-            return output_path
         return result
 
     def _pref_pair() -> Any:
@@ -451,10 +368,6 @@ def process_file(
 
         generator = PrefPairGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
         result = generator.process_document(document_text, verbose=verbose)
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_pref_pair.json")
-            _write_json(result, output_path)
-            return output_path
         return result
 
     def _pref_list() -> Any:
@@ -466,10 +379,6 @@ def process_file(
 
         generator = PrefListGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
         result = generator.process_document(document_text, verbose=verbose)
-        if save_to_file:
-            output_path = os.path.join(output_dir, f"{base_name}_pref_list.json")
-            _write_json(result, output_path)
-            return output_path
         return result
 
     handlers = {
@@ -490,23 +399,24 @@ def process_file(
         raise ValueError(f"Unknown content type: {content_type}")
 
     result = handlers[ct]()
-    if not save_to_file and backend is not None and redis_key:
+    if backend is not None and redis_key:
         try:
             return backend.save(redis_key, json.dumps(result))
         except Exception:
-            pass
-    if not save_to_file and redis_client and redis_key:
+            logger.exception("Failed to save generated data via backend")
+            raise
+    if redis_client and redis_key:
         try:
             redis_client.set(redis_key, json.dumps(result))
             return redis_key
         except Exception:
-            pass
+            logger.exception("Failed to save generated data to Redis")
+            raise
     return result
 
 
 async def process_file_async(
     file_path: Optional[str],
-    output_dir: Optional[str],
     config_path: Optional[Path] = None,
     api_base: Optional[str] = None,
     model: Optional[str] = None,
@@ -527,7 +437,6 @@ async def process_file_async(
         return await asyncio.to_thread(
             process_file,
             file_path,
-            output_dir,
             config_path,
             api_base,
             model,
@@ -565,11 +474,5 @@ async def process_file_async(
         num_pairs=num_pairs,
         verbose=verbose,
     )
-
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"{_base_name(file_path)}_qa_pairs.json")
-        _write_json(result.to_dict(), output_path)
-        return output_path
 
     return result.to_dict()

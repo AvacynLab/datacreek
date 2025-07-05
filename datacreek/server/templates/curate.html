@@ -17,21 +17,7 @@
                     
                     <div class="mb-3">
                         <label for="input_file" class="form-label">{{ form.input_file.label }}</label>
-                        {% if json_files %}
-                        <div class="input-group">
-                            {{ form.input_file(class="form-control", placeholder="Path to input JSON file") }}
-                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                Available Files
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                {% for file in json_files %}
-                                <li><a class="dropdown-item file-select" href="#" data-file="{{ file }}">{{ file }}</a></li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        {% else %}
                         {{ form.input_file(class="form-control", placeholder="Path to input JSON file") }}
-                        {% endif %}
                         {% if form.input_file.errors %}
                         <div class="invalid-feedback d-block">
                             {% for error in form.input_file.errors %}

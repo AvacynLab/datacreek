@@ -921,20 +921,6 @@ class DatasetBuilder:
         ds.stage = DatasetStage(int(data.get("stage", 0)))
         return ds
 
-    def to_json(self, path: str) -> str:
-        """Save this dataset to ``path`` in JSON format."""
-
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(self.to_dict(), f, indent=2)
-        return path
-
-    @classmethod
-    def from_json(cls, path: str) -> "DatasetBuilder":
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return cls.from_dict(data)
-
     # ------------------------------------------------------------------
     # Redis helpers
     # ------------------------------------------------------------------
@@ -1196,6 +1182,19 @@ class DatasetBuilder:
 
         self.stage = max(self.stage, DatasetStage.EXPORTED)
         self._record_event("export_dataset", "Dataset exported")
+
+    @persist_after
+    def delete_version(self, index: int) -> None:
+        """Remove a stored generation version."""
+
+        if index < 1 or index > len(self.versions):
+            raise IndexError("version index out of range")
+        removed = self.versions.pop(index - 1)
+        self._record_event(
+            "delete_version",
+            f"Removed version {index}",
+            params={"version": removed.get("time")},
+        )
 
     # ------------------------------------------------------------------
     # Neo4j helpers

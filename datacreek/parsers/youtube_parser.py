@@ -5,7 +5,6 @@
 # the root directory of this source tree.
 # Download and save the transcript
 
-import os
 from typing import Any, Dict
 
 from .base import BaseParser
@@ -55,13 +54,5 @@ class YouTubeParser(BaseParser):
 
         return metadata + "\n".join(combined_text)
 
-    def save(self, content: str, output_path: str) -> None:
-        """Save the transcript to a file
-
-        Args:
-            content: Transcript content
-            output_path: Path to save the text
-        """
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(content)
+    def save(self, content: str, output_path: str) -> None:  # pragma: no cover - legacy
+        super().save(content, output_path)

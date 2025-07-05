@@ -82,7 +82,7 @@ def test_run_generation_pipeline(monkeypatch):
         calls.append("curate")
         return {"qa_pairs": data["qa_pairs"], "summary": ""}
 
-    def fake_save(data, output_path, fmt, cfg, storage_format="json"):
+    def fake_save(data, fmt, cfg, storage_format="json"):
         calls.append("save")
         assert fmt == "jsonl"
         return "done"
@@ -120,7 +120,7 @@ def test_run_generation_pipeline_cot(monkeypatch):
         calls.append("curate")
         return {"qa_pairs": [{"question": "q", "answer": "a"}], "summary": ""}
 
-    def fake_save(data, output_path, fmt, cfg, storage_format="json"):
+    def fake_save(data, fmt, cfg, storage_format="json"):
         calls.append("save")
         return "done"
 
@@ -177,7 +177,7 @@ def test_run_generation_pipeline_vqa(monkeypatch):
         calls.append("curate")
         return {"qa_pairs": data["qa_pairs"], "summary": ""}
 
-    def fake_save(data, output_path, fmt, cfg, storage_format="json"):
+    def fake_save(data, fmt, cfg, storage_format="json"):
         calls.append("save")
         return "done"
 

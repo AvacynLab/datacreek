@@ -4,7 +4,6 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # TXT parsering logic, probably the most minimal
-import os
 from typing import Any, Dict
 
 from .base import BaseParser
@@ -25,13 +24,5 @@ class TXTParser(BaseParser):
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
 
-    def save(self, content: str, output_path: str) -> None:
-        """Save the text to a file
-
-        Args:
-            content: Text content
-            output_path: Path to save the text
-        """
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(content)
+    def save(self, content: str, output_path: str) -> None:  # pragma: no cover - legacy
+        super().save(content, output_path)

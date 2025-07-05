@@ -5,7 +5,7 @@ from pathlib import Path
 
 import fakeredis
 
-from datacreek.core.create import _base_name, load_document_text, process_file, resolve_output_dir
+from datacreek.core.create import _base_name, load_document_text, process_file
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.storage import RedisStorage
 from datacreek.utils import load_config
@@ -22,13 +22,6 @@ def test_load_document_text(tmp_path):
     assert load_document_text(str(p)) == "hello"
 
 
-def test_resolve_output_dir(tmp_path):
-    cfg_path = Path("configs/config.yaml")
-    cfg = load_config(str(cfg_path))
-    out_dir = resolve_output_dir(cfg_path)
-    assert out_dir == cfg["paths"]["output"]["generated"]
-
-
 def test_process_file_no_output(monkeypatch, tmp_path):
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"x")
@@ -42,11 +35,6 @@ def test_process_file_no_output(monkeypatch, tmp_path):
     class DummyParser:
         def parse(self, file_path, **kwargs):
             return "ok"
-
-        def save(self, content, output_path):
-            raise AssertionError("should not save")
-
-    monkeypatch.setattr("datacreek.core.create.resolve_output_dir", fake_resolve)
 
     class DummyGenerator:
         def __init__(self, *a, **k):
@@ -64,7 +52,6 @@ def test_process_file_no_output(monkeypatch, tmp_path):
 
     text = process_file(
         str(pdf),
-        output_dir=None,
         kg=KnowledgeGraph(),
     )
 
@@ -79,9 +66,6 @@ def test_process_file_redis_output(monkeypatch, tmp_path):
     class DummyParser:
         def parse(self, file_path, **kwargs):
             return "ok"
-
-        def save(self, content, output_path):
-            raise AssertionError("should not save")
 
     class DummyGenerator:
         def __init__(self, *a, **k):
@@ -102,7 +86,6 @@ def test_process_file_redis_output(monkeypatch, tmp_path):
     key = "out:data"
     result = process_file(
         str(pdf),
-        output_dir=None,
         kg=KnowledgeGraph(),
         redis_client=client,
         redis_key=key,
@@ -125,9 +108,6 @@ def test_process_file_backend(monkeypatch, tmp_path):
         def parse(self, file_path, **kwargs):
             return "ok"
 
-        def save(self, content, output_path):
-            raise AssertionError("should not save")
-
     class DummyGenerator:
         def __init__(self, *a, **k):
             pass
@@ -147,7 +127,6 @@ def test_process_file_backend(monkeypatch, tmp_path):
     key = "out:data"
     result = process_file(
         str(pdf),
-        output_dir=None,
         kg=KnowledgeGraph(),
         backend=backend,
         redis_key=key,

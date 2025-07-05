@@ -34,7 +34,6 @@ from datacreek.utils.llm_processing import convert_to_conversation_format, parse
 
 async def _curate_qa_pairs_impl(
     input_data: str | Dict[str, Any],
-    output_path: Optional[str],
     threshold: Optional[float],
     api_base: Optional[str],
     model: Optional[str],
@@ -47,6 +46,7 @@ async def _curate_qa_pairs_impl(
     keep_ratings: bool,
     temperature: float | None,
     resume: bool,
+    previous_result: str | Dict[str, Any] | None,
     as_dataclass: bool,
     *,
     use_async_handlers: bool,
@@ -75,9 +75,12 @@ async def _curate_qa_pairs_impl(
     qa_pairs = data.get("qa_pairs", [])
     summary = data.get("summary", "")
     existing_rated: List[QAPair] = []
-    if resume and output_path and os.path.exists(output_path):
+    if resume and previous_result is not None:
         try:
-            prev = json.loads(Path(output_path).read_text())
+            if isinstance(previous_result, str):
+                prev = json.loads(previous_result)
+            else:
+                prev = previous_result
             for p in prev.get("rated_pairs", []):
                 existing_rated.append(QAPair(**p))
         except Exception:
@@ -233,12 +236,6 @@ async def _curate_qa_pairs_impl(
         rated_pairs=rated_pairs if keep_ratings else None,
     )
 
-    if output_path:
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        await asyncio.to_thread(
-            Path(output_path).write_text, json.dumps(result.to_dict(), indent=2)
-        )
-
     if as_dataclass:
         return result
     return result.to_dict()
@@ -246,7 +243,6 @@ async def _curate_qa_pairs_impl(
 
 def curate_qa_pairs(
     input_data: str | Dict[str, Any],
-    output_path: Optional[str] = None,
     threshold: Optional[float] = None,
     api_base: Optional[str] = None,
     model: Optional[str] = None,
@@ -260,13 +256,13 @@ def curate_qa_pairs(
     keep_ratings: bool = False,
     temperature: float | None = None,
     resume: bool = False,
+    previous_result: str | Dict[str, Any] | None = None,
     as_dataclass: bool = False,
 ) -> Any:
     """Clean and filter QA pairs based on quality ratings
 
     Args:
         input_path: Path to the input file with QA pairs
-        output_path: Path to save the cleaned output
         threshold: Quality threshold (1-10)
         api_base: VLLM API base URL
         model: Model to use
@@ -277,12 +273,11 @@ def curate_qa_pairs(
     as_dataclass: Return a :class:`CurationResult` instead of a dict
 
     Returns:
-        Path to the cleaned output file
+        Cleaned pairs and metrics as a dictionary or dataclass
     """
     return asyncio.run(
         _curate_qa_pairs_impl(
             input_data,
-            output_path,
             threshold,
             api_base,
             model,
@@ -295,6 +290,7 @@ def curate_qa_pairs(
             keep_ratings,
             temperature,
             resume,
+            previous_result,
             as_dataclass,
             use_async_handlers=async_mode,
         )
@@ -303,7 +299,6 @@ def curate_qa_pairs(
 
 async def curate_qa_pairs_async(
     input_data: str | Dict[str, Any],
-    output_path: Optional[str] = None,
     threshold: Optional[float] = None,
     api_base: Optional[str] = None,
     model: Optional[str] = None,
@@ -316,6 +311,7 @@ async def curate_qa_pairs_async(
     keep_ratings: bool = False,
     temperature: float | None = None,
     resume: bool = False,
+    previous_result: str | Dict[str, Any] | None = None,
     as_dataclass: bool = False,
 ) -> Any:
     """Asynchronous version of :func:`curate_qa_pairs`.
@@ -328,7 +324,6 @@ async def curate_qa_pairs_async(
 
     return await _curate_qa_pairs_impl(
         input_data,
-        output_path,
         threshold,
         api_base,
         model,
@@ -341,6 +336,7 @@ async def curate_qa_pairs_async(
         keep_ratings,
         temperature,
         resume,
+        previous_result,
         as_dataclass,
         use_async_handlers=True,
     )

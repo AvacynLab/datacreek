@@ -11,7 +11,10 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import redis
+
 from datacreek.models.llm_client import LLMClient
+from datacreek.storage import StorageBackend
 from datacreek.utils.config import get_generation_config, load_config
 
 logger = logging.getLogger(__name__)
@@ -144,24 +147,25 @@ class VQAGenerator:
     def process_dataset(
         self,
         dataset_source,
-        output_dir: str,
         num_examples: Optional[int] = None,
         input_split: Optional[str] = None,
-        output_split: Optional[str] = None,
         verbose: bool = False,
-    ) -> str:
+        *,
+        redis_client: "redis.Redis" | None = None,
+        redis_key: str | None = None,
+        backend: "StorageBackend" | None = None,
+    ) -> str | "datasets.Dataset":
         """Process a dataset to add reasoning to VQA data
 
         Args:
             dataset_source: Dataset source (path or HuggingFace dataset ID)
-            output_dir: Directory to save the processed dataset
             num_examples: Maximum number of examples to process
             input_split: Dataset split to use as input
-            output_split: Dataset split to use for output
             verbose: Whether to print verbose output
 
         Returns:
-            Path to the output dataset
+            The processed :class:`datasets.Dataset` or the Redis/backend key if
+            persistence is used.
         """
         verbose = logger.isEnabledFor(logging.DEBUG)
 
@@ -198,60 +202,48 @@ class VQAGenerator:
             if input_split is None:
                 input_split = self.config.get("input_split", None)
 
-            # Get output split from config if not provided
-            if output_split is None:
-                output_split = self.config.get("output_split", None)
-
             # Use the specified split if provided
             if input_split is not None:
                 dataset = dataset[input_split]
 
-            # Get max_examples from args or config
-            max_examples = num_examples
-            if max_examples is not None and max_examples > 0:
-                # Limit the dataset size
-                dataset = dataset.select(range(min(max_examples, len(dataset))))
+                # Get max_examples from args or config
+                max_examples = num_examples
+                if max_examples is not None and max_examples > 0:
+                    # Limit the dataset size
+                    dataset = dataset.select(range(min(max_examples, len(dataset))))
 
-            if verbose:
-                logger.info("Processing %d examples from dataset", len(dataset))
+                if verbose:
+                    logger.info("Processing %d examples from dataset", len(dataset))
 
-            # Get batch size from config
-            batch_size = self.generation_config.batch_size
+                # Get batch size from config
+                batch_size = self.generation_config.batch_size
 
-            if verbose:
-                logger.info("Using batch size of %d for dataset processing", batch_size)
+                if verbose:
+                    logger.info("Using batch size of %d for dataset processing", batch_size)
 
-            # Process the dataset
-            ds = dataset.map(
-                self.transform,
-                batch_size=batch_size,
-                batched=True,
-            )
+                # Process the dataset
+                ds = dataset.map(
+                    self.transform,
+                    batch_size=batch_size,
+                    batched=True,
+                )
 
-            # Create output directory if it doesn't exist
-            os.makedirs(output_dir, exist_ok=True)
+                if backend is not None and redis_key is not None:
+                    try:
+                        return backend.save(redis_key, json.dumps(ds.to_dict()))
+                    except Exception:
+                        logger.exception("Failed to save VQA data via backend")
+                        raise
 
-            # Save the processed dataset
-            if output_split is not None:
-                # Create the split directory
-                os.makedirs(f"{output_dir}/{output_split}", exist_ok=True)
+                if redis_client is not None and redis_key is not None:
+                    try:
+                        redis_client.set(redis_key, json.dumps(ds.to_dict()))
+                        return redis_key
+                    except Exception:
+                        logger.exception("Failed to save VQA data to Redis")
+                        raise
 
-                # Write output that can be loaded back in with load_dataset
-                ds.to_parquet(f"{output_dir}/{output_split}/data.parquet")
-                meta_data = {"splits": [output_split]}
-                with open(f"{output_dir}/dataset_dict.json", "w") as f:
-                    f.write(json.dumps(meta_data, indent=4))
-
-                output_path = f"{output_dir}/{output_split}/data.parquet"
-            else:
-                # Just dump it in a parquet file
-                ds.to_parquet(f"{output_dir}/data.parquet")
-                output_path = f"{output_dir}/data.parquet"
-
-            if verbose:
-                logger.info("Saved processed dataset to %s", output_path)
-
-            return output_path
+                return ds
 
         except Exception as e:
             logger.error("Error processing dataset: %s", e)

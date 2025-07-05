@@ -4,7 +4,6 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # DOCX parasers
-import os
 from typing import Any, Dict
 
 from .base import BaseParser
@@ -35,13 +34,5 @@ class DOCXParser(BaseParser):
         except Exception as exc:  # pragma: no cover - unexpected failures
             raise RuntimeError("Failed to parse DOCX with unstructured") from exc
 
-    def save(self, content: str, output_path: str) -> None:
-        """Save the extracted text to a file
-
-        Args:
-            content: Extracted text content
-            output_path: Path to save the text
-        """
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(content)
+    def save(self, content: str, output_path: str) -> None:  # pragma: no cover - legacy
+        super().save(content, output_path)

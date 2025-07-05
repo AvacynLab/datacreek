@@ -17,7 +17,6 @@ from datacreek.config_models import (
     GenerationSettings,
     LLMSettings,
     OpenAISettings,
-    OutputPaths,
     VLLMSettings,
 )
 
@@ -72,26 +71,6 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         logger.info("Config does not have LLM provider set")
 
     return config
-
-
-def get_path_config(config: Dict[str, Any], path_type: str, file_type: Optional[str] = None) -> str:
-    """Get path from configuration based on type and optionally file type"""
-    paths = config.get("paths", {})
-
-    if path_type == "input":
-        input_paths = paths.get("input", {})
-        if file_type and file_type in input_paths:
-            return input_paths[file_type]
-        return input_paths.get("default", "data/input")
-
-    elif path_type == "output":
-        output_paths = paths.get("output", {})
-        if file_type and file_type in output_paths:
-            return output_paths[file_type]
-        return output_paths.get("default", "data/output")
-
-    else:
-        raise ValueError(f"Unknown path type: {path_type}")
 
 
 def get_llm_provider(config: Dict[str, Any]) -> str:
@@ -244,14 +223,6 @@ def get_format_settings(config: Dict[str, Any]) -> FormatSettings:
     for field_name in FormatSettings.__dataclass_fields__:
         defaults.setdefault(field_name, getattr(FormatSettings(), field_name))
     return FormatSettings.from_dict(defaults)
-
-
-def get_output_paths(config: Dict[str, Any]) -> OutputPaths:
-    """Return output path settings as :class:`OutputPaths`."""
-    defaults = config.get("paths", {}).get("output", {}).copy()
-    for field_name in OutputPaths.__dataclass_fields__:
-        defaults.setdefault(field_name, getattr(OutputPaths(), field_name))
-    return OutputPaths.from_dict(defaults)
 
 
 def get_format_config(config: Dict[str, Any]) -> Dict[str, Any]:

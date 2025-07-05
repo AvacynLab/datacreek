@@ -14,6 +14,7 @@ from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import IngestOptions
 from datacreek.core.ingest import process_file as ingest_file
+from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.save_as import convert_format
 from datacreek.db import Dataset, SessionLocal, SourceData
 from datacreek.models.export_format import ExportFormat
@@ -23,7 +24,7 @@ from datacreek.schemas import DatasetName
 from datacreek.services import create_dataset, create_source
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
-from datacreek.utils import get_path_config, load_config
+from datacreek.utils import load_config
 from datacreek.utils.config import get_neo4j_config, get_redis_config, load_config_with_overrides
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
@@ -78,7 +79,7 @@ def _update_status(
             client.hset(key, "progress", progress)
         client.rpush(f"{key}:history", json.dumps(entry))
     except Exception:
-        pass
+        logger.exception("Failed to update task status for %s", key)
 
 
 def _record_error(client: redis.Redis, key: str, exc: Exception) -> None:
@@ -92,7 +93,7 @@ def _record_error(client: redis.Redis, key: str, exc: Exception) -> None:
         client.hset(key, mapping={"error": str(exc), "status": TaskStatus.FAILED.value})
         client.rpush(f"{key}:history", json.dumps(entry))
     except Exception:
-        pass
+        logger.exception("Failed to record error for %s", key)
 
 
 @celery_app.task
@@ -152,7 +153,6 @@ def generate_task(
         load_config_with_overrides(load_path, load_overrides)
         out = generate_data(
             None,
-            None,
             Path(config_path) if config_path else None,
             api_base,
             model,
@@ -161,6 +161,7 @@ def generate_task(
             False,
             provider=provider,
             profile=profile,
+            kg=KnowledgeGraph(),
             document_text=src.content,
             config_overrides=overrides if overrides else None,
         )
@@ -175,7 +176,7 @@ def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
         if not ds or ds.owner_id != user_id:
             raise RuntimeError("Dataset not found")
         data = json.loads(ds.content or "{}")
-        result = curate_qa_pairs(data, None, threshold, None, None, None, False, async_mode=False)
+        result = curate_qa_pairs(data, threshold, None, None, None, False, async_mode=False)
         ds.content = json.dumps(result)
         db.commit()
         db.refresh(ds)
@@ -191,7 +192,7 @@ def save_task(user_id: int, ds_id: int, fmt: ExportFormat) -> dict:
         data = json.loads(ds.content or "{}")
         if isinstance(fmt, str):
             fmt = ExportFormat(fmt)
-        out = convert_format(data, None, fmt.value, {}, "json")
+        out = convert_format(data, fmt.value, {}, "json")
         ds.content = out if isinstance(out, str) else json.dumps(out)
         db.commit()
         db.refresh(ds)
@@ -331,7 +332,7 @@ def dataset_export_task(
     try:
         if ds.versions and ds.versions[-1].get("result") is not None:
             data = ds.versions[-1]["result"]
-            formatted = convert_format(data, None, fmt.value, {}, "json")
+            formatted = convert_format(data, fmt.value, {}, "json")
             _update_status(client, progress_key, TaskStatus.EXPORTING, 0.5)
             key = f"dataset:{name}:export:{fmt.value}"
             client.set(key, formatted if isinstance(formatted, str) else json.dumps(formatted))
