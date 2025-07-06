@@ -1,9 +1,11 @@
 from pathlib import Path
 
 import fakeredis
+import networkx as nx
 import pytest
 import requests
 
+from datacreek.analysis import bottleneck_distance
 from datacreek.core import dataset
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import IngestOptions
@@ -771,6 +773,176 @@ def test_graph_embeddings_wrapper():
     assert len(ds.graph.graph.nodes["e1"]["embedding"]) == 8
 
 
+def test_graphwave_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_graphwave_embeddings(scales=[0.5], num_points=4)
+    assert len(ds.graph.graph.nodes["e1"]["graphwave_embedding"]) == 8
+
+
+def test_poincare_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_poincare_embeddings(dim=2, negative=2, epochs=5)
+    assert len(ds.graph.graph.nodes["e1"]["poincare_embedding"]) == 2
+
+
+def test_graphsage_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_graphsage_embeddings(dimensions=8, num_layers=1)
+    assert len(ds.graph.graph.nodes["e1"]["graphsage_embedding"]) == 8
+    assert any(e.operation == "compute_graphsage_embeddings" for e in ds.events)
+
+
+def test_transe_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.graph.graph.add_edge("c1", "c2", relation="related")
+    ds.compute_transe_embeddings(dimensions=8)
+    assert len(ds.graph.graph.edges["c1", "c2"]["transe_embedding"]) == 8
+    assert any(e.operation == "compute_transe_embeddings" for e in ds.events)
+
+
+def test_fractal_dimension_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    dim, counts = ds.fractal_dimension([1])
+    assert dim >= 0
+    assert counts and counts[0][0] == 1
+
+
+def test_fractalize_level_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    coarse, mapping = ds.fractalize_level(1)
+    assert coarse.number_of_nodes() >= 1
+    assert {"d", "c1", "c2"}.issubset(mapping)
+
+
+def test_fractalize_optimal_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    coarse, mapping, r = ds.fractalize_optimal([1, 2])
+    assert coarse.number_of_nodes() >= 1
+    assert "d" in mapping
+    assert r in {1, 2}
+
+
+def test_optimize_topology_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.graph.graph.add_edge("c1", "c2", relation="perception_link")
+
+    target = nx.cycle_graph(3)
+    mapping = {i: n for i, n in enumerate(["c1", "c2", "d"])}
+    target = nx.relabel_nodes(target, mapping)
+
+    before = bottleneck_distance(ds.graph.graph.to_undirected(), target)
+    dist = ds.optimize_topology(target, max_iter=5, seed=0)
+    after = bottleneck_distance(ds.graph.graph.to_undirected(), target)
+    assert after <= before
+    assert dist == pytest.approx(after, rel=1e-9)
+
+
+def test_persistence_diagrams_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    diags = ds.persistence_diagrams(max_dim=1)
+    assert 0 in diags
+    assert diags[0].shape[1] == 2
+
+
+def test_spectral_dimension_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    dim, traces = ds.spectral_dimension([0.1, 0.2])
+    assert dim >= 0
+    assert traces
+
+
+def test_spectral_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ent = ds.spectral_entropy()
+    assert ent >= 0
+    assert any(e.operation == "spectral_entropy" for e in ds.events)
+
+
+def test_spectral_gap_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    gap = ds.spectral_gap()
+    assert gap >= 0
+    assert any(e.operation == "spectral_gap" for e in ds.events)
+
+
+def test_laplacian_energy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    energy = ds.laplacian_energy()
+    assert energy >= 0
+    assert any(e.operation == "laplacian_energy" for e in ds.events)
+
+
+def test_laplacian_spectrum_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    evals = ds.laplacian_spectrum()
+    assert len(evals) == ds.graph.graph.number_of_nodes()
+    assert any(e.operation == "laplacian_spectrum" for e in ds.events)
+
+
+def test_spectral_density_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    hist, edges = ds.spectral_density(bins=3)
+    assert len(hist) == 3
+    assert len(edges) == 4
+    assert any(e.operation == "spectral_density" for e in ds.events)
+
+
 def test_predict_links_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_entity("e1", "Beethoven")
@@ -787,6 +959,28 @@ def test_predict_links_wrapper():
     ds2.compute_graph_embeddings(dimensions=8, walk_length=4, num_walks=5, seed=42, workers=1)
     ds2.predict_links(threshold=0.1, use_graph_embeddings=True)
     assert "embedding" in ds2.graph.graph.nodes["a1"]
+
+
+def test_gds_quality_check_wrapper(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT, name="qc")
+    fake_driver = object()
+    ds.neo4j_driver = fake_driver
+    called = {}
+
+    def fake_qc(self, driver, *, dataset=None, min_component_size=2, similarity_threshold=0.95):
+        called["driver"] = driver
+        called["dataset"] = dataset
+        return {"removed_nodes": [1]}
+
+    monkeypatch.setattr(ds.graph.__class__, "gds_quality_check", fake_qc, raising=False)
+
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    res = ds.gds_quality_check(driver=fake_driver)
+    assert res == {"removed_nodes": [1]}
+    assert called["driver"] is fake_driver
+    assert called["dataset"] == "qc"
+    assert any(e.operation == "gds_quality_check" for e in ds.events)
 
 
 def test_consolidate_schema_wrapper():
@@ -1067,8 +1261,31 @@ def test_run_post_kg_pipeline_uses_redis(monkeypatch):
     assert received["client"] is client
 
 
+def test_atom_and_molecule_wrappers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_atom("d", "a1", "hello", "NarrativeText")
+    ds.add_atom("d", "a2", "world", "NarrativeText")
+    ds.add_molecule("d", "m1", ["a1", "a2"])
+    assert ds.get_atoms_for_document("d") == ["a1", "a2"]
+    assert ds.get_molecules_for_document("d") == ["m1"]
+    assert ds.graph.graph.has_edge("m1", "a1")
+
+
 def test_mark_exported_records_event():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.mark_exported()
     assert ds.stage == DatasetStage.EXPORTED
     assert ds.events[-1].operation == "export_dataset"
+
+
+def test_graph_information_bottleneck_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(4):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+    ds.compute_graph_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    labels = {f"a{i}": i % 2 for i in range(4)}
+    loss = ds.graph_information_bottleneck(labels, beta=0.5)
+    assert loss > 0
+    assert ds.events[-1].operation == "graph_information_bottleneck"

@@ -11,7 +11,10 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
+
+import networkx as nx
+import numpy as np
 
 if TYPE_CHECKING:
     from .ingest import IngestOptions
@@ -212,11 +215,54 @@ class DatasetBuilder:
         path: str,
         *,
         page: int | None = None,
+        alt_text: str | None = None,
     ) -> None:
         """Insert an image node in the dataset graph."""
 
-        self.graph.add_image(doc_id, image_id, path, page=page)
+        self.graph.add_image(doc_id, image_id, path, page=page, alt_text=alt_text)
         self._record_event("add_image", f"Added image {image_id} to {doc_id}")
+
+    def add_atom(
+        self,
+        doc_id: str,
+        atom_id: str,
+        text: str,
+        element_type: str,
+        source: Optional[str] = None,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an atom node."""
+
+        self.graph.add_atom(
+            doc_id,
+            atom_id,
+            text,
+            element_type,
+            source,
+            page=page,
+        )
+        self._record_event(
+            "add_atom",
+            f"Added atom {atom_id} to {doc_id}",
+            source=source,
+        )
+
+    def add_molecule(
+        self,
+        doc_id: str,
+        molecule_id: str,
+        atom_ids: Iterable[str],
+        source: Optional[str] = None,
+    ) -> None:
+        """Insert a molecule node made of existing atoms."""
+
+        self.graph.add_molecule(doc_id, molecule_id, atom_ids, source=source)
+        self._record_event(
+            "add_molecule",
+            f"Added molecule {molecule_id} to {doc_id}",
+            source=source,
+        )
 
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
@@ -638,6 +684,269 @@ class DatasetBuilder:
             seed=seed,
         )
 
+    def compute_graphwave_embeddings(self, scales: Iterable[float], num_points: int = 10) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_graphwave_embeddings`."""
+
+        self.graph.compute_graphwave_embeddings(scales=scales, num_points=num_points)
+        self._record_event(
+            "compute_graphwave_embeddings",
+            "GraphWave embeddings computed",
+            scales=list(scales),
+            num_points=num_points,
+        )
+
+    def compute_poincare_embeddings(
+        self,
+        dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_poincare_embeddings`."""
+
+        self.graph.compute_poincare_embeddings(
+            dim=dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        self._record_event(
+            "compute_poincare_embeddings",
+            "Poincaré embeddings computed",
+            dim=dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+
+    def compute_graphsage_embeddings(
+        self,
+        *,
+        dimensions: int = 64,
+        num_layers: int = 2,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_graphsage_embeddings`."""
+
+        self.graph.compute_graphsage_embeddings(dimensions=dimensions, num_layers=num_layers)
+        self._record_event(
+            "compute_graphsage_embeddings",
+            "GraphSAGE embeddings computed",
+            dimensions=dimensions,
+            num_layers=num_layers,
+        )
+
+    def compute_transe_embeddings(
+        self,
+        *,
+        dimensions: int = 64,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_transe_embeddings`."""
+
+        self.graph.compute_transe_embeddings(dimensions=dimensions)
+        self._record_event(
+            "compute_transe_embeddings",
+            "TransE relation embeddings computed",
+            dimensions=dimensions,
+        )
+
+    def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+        """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
+
+        dim, counts = self.graph.box_counting_dimension(radii)
+        self._record_event(
+            "fractal_dimension",
+            "Fractal dimension computed",
+            radii=list(radii),
+        )
+        return dim, counts
+
+    def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
+        """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
+
+        dim, traces = self.graph.spectral_dimension(times)
+        self._record_event(
+            "spectral_dimension",
+            "Spectral dimension computed",
+            times=list(times),
+        )
+        return dim, traces
+
+    def spectral_entropy(self, normed: bool = True) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.spectral_entropy`."""
+
+        ent = self.graph.spectral_entropy(normed=normed)
+        self._record_event(
+            "spectral_entropy",
+            "Spectral entropy computed",
+            normed=normed,
+        )
+        return ent
+
+    def spectral_gap(self, normed: bool = True) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.spectral_gap`."""
+
+        gap = self.graph.spectral_gap(normed=normed)
+        self._record_event(
+            "spectral_gap",
+            "Spectral gap computed",
+            normed=normed,
+        )
+        return gap
+
+    def laplacian_energy(self, normed: bool = True) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.laplacian_energy`."""
+
+        energy = self.graph.laplacian_energy(normed=normed)
+        self._record_event(
+            "laplacian_energy",
+            "Laplacian energy computed",
+            normed=normed,
+        )
+        return energy
+
+    def graph_information_bottleneck(
+        self,
+        labels: Dict[str, int],
+        *,
+        beta: float = 1.0,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.graph_information_bottleneck`."""
+
+        loss = self.graph.graph_information_bottleneck(labels, beta=beta)
+        self._record_event(
+            "graph_information_bottleneck",
+            "Information bottleneck computed",
+            beta=beta,
+        )
+        return loss
+
+    def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.laplacian_spectrum`."""
+
+        evals = self.graph.laplacian_spectrum(normed=normed)
+        self._record_event(
+            "laplacian_spectrum",
+            "Laplacian spectrum computed",
+            normed=normed,
+        )
+        return evals
+
+    def spectral_density(
+        self, bins: int = 50, *, normed: bool = True
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Wrapper for :meth:`KnowledgeGraph.spectral_density`."""
+
+        hist, edges = self.graph.spectral_density(bins=bins, normed=normed)
+        self._record_event(
+            "spectral_density",
+            "Spectral density computed",
+            bins=bins,
+            normed=normed,
+        )
+        return hist, edges
+
+    def persistence_entropy(self, dimension: int = 0) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.persistence_entropy`."""
+
+        ent = self.graph.persistence_entropy(dimension)
+        self._record_event(
+            "persistence_entropy",
+            "Persistence entropy computed",
+            dimension=dimension,
+        )
+        return ent
+
+    def persistence_diagrams(self, max_dim: int = 2) -> Dict[int, np.ndarray]:
+        """Wrapper for :meth:`KnowledgeGraph.persistence_diagrams`."""
+
+        diags = self.graph.persistence_diagrams(max_dim)
+        self._record_event(
+            "persistence_diagrams",
+            "Persistence diagrams computed",
+            max_dim=max_dim,
+        )
+        return diags
+
+    def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
+        """Wrapper for :meth:`KnowledgeGraph.fractalize_level`."""
+
+        coarse, mapping = self.graph.fractalize_level(radius)
+        self._record_event(
+            "fractalize_level",
+            "Graph coarse-grained via box covering",
+            radius=radius,
+        )
+        return coarse, mapping
+
+    def fractalize_optimal(self, radii: Iterable[int]) -> tuple[nx.Graph, Dict[str, int], int]:
+        """Wrapper for :meth:`KnowledgeGraph.fractalize_optimal`."""
+
+        coarse, mapping, radius = self.graph.fractalize_optimal(radii)
+        self._record_event(
+            "fractalize_optimal",
+            "Graph coarse-grained at optimal radius",
+            radii=list(radii),
+            chosen_radius=radius,
+        )
+        return coarse, mapping, radius
+
+    def optimize_topology(
+        self,
+        target: nx.Graph,
+        *,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        max_iter: int = 100,
+        seed: int | None = None,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.optimize_topology`."""
+
+        dist = self.graph.optimize_topology(
+            target,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+            seed=seed,
+        )
+        self._record_event(
+            "optimize_topology",
+            "Topology adjusted via bottleneck minimization",
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+        )
+        return dist
+
+    def gds_quality_check(
+        self,
+        *,
+        min_component_size: int = 2,
+        similarity_threshold: float = 0.95,
+        driver: Driver | None = None,
+    ) -> Dict[str, Any]:
+        """Run Neo4j GDS quality checks via :class:`KnowledgeGraph`."""
+
+        driver = driver or self.neo4j_driver
+        if not driver:
+            raise ValueError("Neo4j driver required")
+
+        result = self.graph.gds_quality_check(
+            driver,
+            dataset=self.name,
+            min_component_size=min_component_size,
+            similarity_threshold=similarity_threshold,
+        )
+        self._record_event(
+            "gds_quality_check",
+            "Neo4j GDS quality check performed",
+            min_component_size=min_component_size,
+            similarity_threshold=similarity_threshold,
+        )
+        return result
+
     def update_embeddings(self, node_type: str = "chunk") -> None:
         """Materialize embeddings for nodes of ``node_type``."""
 
@@ -724,6 +1033,12 @@ class DatasetBuilder:
 
     def get_images_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_images_for_document(doc_id)
+
+    def get_atoms_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_atoms_for_document(doc_id)
+
+    def get_molecules_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_molecules_for_document(doc_id)
 
     def get_sections_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_sections_for_document(doc_id)

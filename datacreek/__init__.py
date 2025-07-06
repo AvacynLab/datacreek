@@ -30,9 +30,51 @@ __all__: list[str] = [
     "curate_qa_pairs_async",
     "filter_rated_pairs",
     "apply_curation_threshold",
+    "box_cover",
+    "box_counting_dimension",
+    "persistence_entropy",
+    "graphwave_embedding",
+    "minimize_bottleneck_distance",
+    "bottleneck_distance",
+    "mdl_optimal_radius",
+    "persistence_diagrams",
+    "spectral_dimension",
+    "laplacian_spectrum",
+    "spectral_entropy",
+    "spectral_gap",
+    "laplacian_energy",
+    "poincare_embedding",
+    "spectral_density",
+    "graph_fourier_transform",
+    "inverse_graph_fourier_transform",
+    "graph_information_bottleneck",
+    "caption_image",
+    "fractalize_graph",
+    "fractalize_optimal",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
+    from .analysis.fractal import (
+        bottleneck_distance,
+        box_counting_dimension,
+        box_cover,
+        fractalize_graph,
+        fractalize_optimal,
+        graph_fourier_transform,
+        graphwave_embedding,
+        inverse_graph_fourier_transform,
+        laplacian_energy,
+        laplacian_spectrum,
+        mdl_optimal_radius,
+        minimize_bottleneck_distance,
+        persistence_diagrams,
+        persistence_entropy,
+        poincare_embedding,
+        spectral_density,
+        spectral_dimension,
+        spectral_entropy,
+        spectral_gap,
+    )
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
     from .core.ingest import ingest_into_dataset
@@ -52,6 +94,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         run_generation_pipeline_async,
     )
     from .utils.fact_extraction import extract_facts
+    from .utils.image_captioning import caption_image
 
 
 def __getattr__(name: str):
@@ -134,4 +177,88 @@ def __getattr__(name: str):
             "filter_rated_pairs": _frp,
             "apply_curation_threshold": _act,
         }[name]
+    if name == "box_cover":
+        from .analysis.fractal import box_cover as _bc
+
+        return _bc
+    if name == "box_counting_dimension":
+        from .analysis.fractal import box_counting_dimension as _bcd
+
+        return _bcd
+    if name == "persistence_entropy":
+        from .analysis.fractal import persistence_entropy as _pe
+
+        return _pe
+    if name == "graphwave_embedding":
+        from .analysis.fractal import graphwave_embedding as _ge
+
+        return _ge
+    if name == "minimize_bottleneck_distance":
+        from .analysis.fractal import minimize_bottleneck_distance as _mbd
+
+        return _mbd
+    if name == "bottleneck_distance":
+        from .analysis.fractal import bottleneck_distance as _bd
+
+        return _bd
+    if name == "mdl_optimal_radius":
+        from .analysis.fractal import mdl_optimal_radius as _mr
+
+        return _mr
+    if name == "persistence_diagrams":
+        from .analysis.fractal import persistence_diagrams as _pd
+
+        return _pd
+    if name == "spectral_dimension":
+        from .analysis.fractal import spectral_dimension as _sd
+
+        return _sd
+    if name == "laplacian_spectrum":
+        from .analysis.fractal import laplacian_spectrum as _ls
+
+        return _ls
+    if name == "spectral_entropy":
+        from .analysis.fractal import spectral_entropy as _se
+
+        return _se
+    if name == "spectral_gap":
+        from .analysis.fractal import spectral_gap as _sg
+
+        return _sg
+    if name == "laplacian_energy":
+        from .analysis.fractal import laplacian_energy as _le
+
+        return _le
+    if name == "spectral_density":
+        from .analysis.fractal import spectral_density as _sdn
+
+        return _sdn
+    if name == "graph_fourier_transform":
+        from .analysis.fractal import graph_fourier_transform as _gft
+
+        return _gft
+    if name == "inverse_graph_fourier_transform":
+        from .analysis.fractal import inverse_graph_fourier_transform as _igft
+
+        return _igft
+    if name == "graph_information_bottleneck":
+        from .analysis.information import graph_information_bottleneck as _gib
+
+        return _gib
+    if name == "poincare_embedding":
+        from .analysis.fractal import poincare_embedding as _peb
+
+        return _peb
+    if name == "fractalize_graph":
+        from .analysis.fractal import fractalize_graph as _fg
+
+        return _fg
+    if name == "fractalize_optimal":
+        from .analysis.fractal import fractalize_optimal as _fo
+
+        return _fo
+    if name == "caption_image":
+        from .utils.image_captioning import caption_image as _ci
+
+        return _ci
     raise AttributeError(name)

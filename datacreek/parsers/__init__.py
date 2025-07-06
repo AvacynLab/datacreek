@@ -12,6 +12,7 @@ from .image_parser import ImageParser
 from .pdf_parser import PDFParser
 from .ppt_parser import PPTParser
 from .txt_parser import TXTParser
+from .whisper_audio_parser import WhisperAudioParser
 from .youtube_parser import YouTubeParser
 
 # Mapping of file extensions to parser classes
@@ -27,9 +28,9 @@ _PARSER_REGISTRY = {
     ".jpeg": ImageParser,
     ".gif": ImageParser,
     ".bmp": ImageParser,
-    ".wav": AudioParser,
-    ".mp3": AudioParser,
-    ".ogg": AudioParser,
+    ".wav": WhisperAudioParser,
+    ".mp3": WhisperAudioParser,
+    ".ogg": WhisperAudioParser,
 }
 
 
@@ -53,6 +54,7 @@ __all__ = [
     "TXTParser",
     "ImageParser",
     "AudioParser",
+    "WhisperAudioParser",
     "register_parser",
     "get_parser_for_extension",
 ]

@@ -1,4 +1,4 @@
-from datacreek.parsers import AudioParser, ImageParser, get_parser_for_extension
+from datacreek.parsers import ImageParser, WhisperAudioParser, get_parser_for_extension
 
 
 def test_image_parser_registry():
@@ -8,4 +8,4 @@ def test_image_parser_registry():
 
 def test_audio_parser_registry():
     parser = get_parser_for_extension(".wav")
-    assert isinstance(parser, AudioParser)
+    assert isinstance(parser, WhisperAudioParser)

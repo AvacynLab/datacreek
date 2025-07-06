@@ -36,7 +36,10 @@ dependencies = [
     "unstructured>=0.18.1",
     "SpeechRecognition>=3.14.0",
     "pocketsphinx>=5.0",
+    "openai-whisper>=20231117",
     "node2vec>=0.4.6",
+    "gensim>=4.3.0",
+    "gudhi>=3.9.0",
     "fakeredis>=2.30.0",
     "beautifulsoup4>=4.12.2",
 ]
