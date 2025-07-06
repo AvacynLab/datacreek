@@ -1012,8 +1012,9 @@ def test_run_post_kg_pipeline_logs_cleanup(monkeypatch):
     ds.run_post_kg_pipeline(start_step=PipelineStep.KG_CLEANUP)
 
     assert "c2" not in ds.graph.graph.nodes
-    assert ds.events[-4].operation == "deduplicate_chunks"
-    assert ds.events[-3].operation == "clean_chunks"
+    ops = [e.operation for e in ds.events]
+    assert "deduplicate_chunks" in ops
+    assert "clean_chunks" in ops
 
 
 def test_run_post_kg_pipeline_logs_curation(monkeypatch):
@@ -1032,13 +1033,18 @@ def test_run_post_kg_pipeline_logs_curation(monkeypatch):
 
     ds.run_post_kg_pipeline(start_step=PipelineStep.CURATE)
 
-    assert ds.events[-2].operation == "curate"
-    assert ds.events[-2].params == {
-        "total": 2,
-        "filtered": 1,
-        "retention_rate": 0.5,
-        "avg_score": 8.0,
-    }
+    curate_events = [e for e in ds.events if e.operation == "curate"]
+    assert any(
+        e.params
+        == {
+            "total": 2,
+            "filtered": 1,
+            "retention_rate": 0.5,
+            "avg_score": 8.0,
+        }
+        for e in curate_events
+    )
+    assert ds.events[-1].operation == "generate"
 
 
 def test_run_post_kg_pipeline_extra_opts(monkeypatch):

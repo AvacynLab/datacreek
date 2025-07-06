@@ -25,6 +25,7 @@ from datacreek.schemas import (
     UserWithKey,
 )
 from datacreek.services import (
+    _cache_dataset,
     create_dataset,
     create_user,
     create_user_with_generated_key,
@@ -235,13 +236,19 @@ def update_dataset(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ds = get_dataset_by_id(db, ds_id)
-    if not ds or ds.owner_id != current_user.id:
+    record = get_dataset_by_id(db, ds_id)
+    if not record or record.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Dataset not found")
+
+    ds = db.get(Dataset, ds_id)
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
     if payload.path:
         ds.path = payload.path
     db.commit()
     db.refresh(ds)
+    _cache_dataset(ds)
     return ds
 
 
