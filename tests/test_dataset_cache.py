@@ -1,9 +1,16 @@
+import importlib
 import os
+import sys
 
 import fakeredis
 
-os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
-
+os.environ["DATABASE_URL"] = "sqlite:///test.db"
+if "datacreek.db" in sys.modules:
+    importlib.reload(sys.modules["datacreek.db"])
+else:
+    import datacreek.db  # pragma: no cover
+if "datacreek.services" in sys.modules:
+    importlib.reload(sys.modules["datacreek.services"])
 from datacreek.db import SessionLocal
 from datacreek.services import create_dataset, get_dataset_by_id
 
