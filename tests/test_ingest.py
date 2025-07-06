@@ -1,3 +1,4 @@
+import sys
 import types
 
 import pytest
@@ -5,7 +6,7 @@ import pytest
 import datacreek.parsers
 from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 from datacreek.core.ingest import ingest_into_dataset, process_file
-from datacreek.parsers import AudioParser, ImageParser
+from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
 
 
@@ -45,7 +46,7 @@ def test_to_kg_with_pages(tmp_path):
     assert ds.get_page_for_chunk("doc1_chunk_1") == 2
 
 
-def test_to_kg_with_elements(tmp_path):
+def test_to_kg_with_elements(tmp_path, monkeypatch):
     class El:
         def __init__(self, text=None, image_path=None, page_number=1):
             self.text = text
@@ -59,9 +60,16 @@ def test_to_kg_with_elements(tmp_path):
     ]
 
     ds = DatasetBuilder(DatasetType.TEXT)
-    to_kg("Hello\nWorld", ds, "doc1", elements=elements)
+    with monkeypatch.context() as m:
+        m.setitem(
+            sys.modules,
+            "datacreek.utils.image_captioning",
+            types.SimpleNamespace(caption_image=lambda p: "cap"),
+        )
+        to_kg("Hello\nWorld", ds, "doc1", elements=elements)
 
     assert ds.get_images_for_document("doc1") == ["doc1_image_0"]
+    assert ds.graph.graph.nodes["doc1_image_0"].get("alt_text") == "cap"
     assert len(ds.get_chunks_for_document("doc1")) == 2
 
 
@@ -110,8 +118,8 @@ def test_ingest_image_and_audio(monkeypatch, tmp_path):
 
     monkeypatch.setattr(ImageParser, "parse", lambda self, p: "img text")
     monkeypatch.setattr(ImageParser, "save", lambda self, c, o: None)
-    monkeypatch.setattr(AudioParser, "parse", lambda self, p: "audio text")
-    monkeypatch.setattr(AudioParser, "save", lambda self, c, o: None)
+    monkeypatch.setattr(WhisperAudioParser, "parse", lambda self, p: "audio text")
+    monkeypatch.setattr(WhisperAudioParser, "save", lambda self, c, o: None)
 
     ds = DatasetBuilder(DatasetType.TEXT)
     ingest_into_dataset(str(img), ds)

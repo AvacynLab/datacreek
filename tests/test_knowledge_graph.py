@@ -1,6 +1,10 @@
+from typing import Any
+
+import networkx as nx
 import pytest
 import requests
 
+from datacreek.analysis import bottleneck_distance
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -563,6 +567,148 @@ def test_compute_node2vec_embeddings():
     assert len(kg.graph.nodes["e1"]["embedding"]) == 8
 
 
+def test_compute_graphwave_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.add_entity("e1", "A")
+    kg.add_entity("e2", "B")
+    kg.link_entity("c1", "e1")
+    kg.link_entity("c2", "e2")
+    kg.compute_graphwave_embeddings(scales=[0.5], num_points=4)
+    vec = kg.graph.nodes["e1"].get("graphwave_embedding")
+    assert isinstance(vec, list)
+    assert len(vec) == 8
+
+
+def test_compute_poincare_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.add_entity("e1", "A")
+    kg.add_entity("e2", "B")
+    kg.link_entity("c1", "e1")
+    kg.link_entity("c2", "e2")
+    kg.compute_poincare_embeddings(dim=2, negative=2, epochs=5)
+    vec = kg.graph.nodes["e1"].get("poincare_embedding")
+    assert isinstance(vec, list)
+    assert len(vec) == 2
+
+
+def test_compute_graphsage_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.add_entity("e1", "A")
+    kg.add_entity("e2", "B")
+    kg.link_entity("c1", "e1")
+    kg.link_entity("c2", "e2")
+    kg.compute_graphsage_embeddings(dimensions=8, num_layers=1)
+    vec = kg.graph.nodes["e1"].get("graphsage_embedding")
+    assert isinstance(vec, list)
+    assert len(vec) == 8
+
+
+def test_compute_transe_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.graph.add_edge("c1", "c2", relation="related")
+    kg.compute_transe_embeddings(dimensions=8)
+    emb = kg.graph.edges["c1", "c2"].get("transe_embedding")
+    assert isinstance(emb, list)
+    assert len(emb) == 8
+
+
+def test_box_counting_dimension_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    dim, counts = kg.box_counting_dimension([1])
+    assert dim >= 0
+    assert counts and counts[0][0] == 1
+
+
+def test_persistence_diagrams_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    diagrams = kg.persistence_diagrams(max_dim=1)
+    assert 0 in diagrams
+    assert diagrams[0].shape[1] == 2
+
+
+def test_spectral_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    ent = kg.spectral_entropy()
+    assert ent >= 0
+
+
+def test_spectral_gap_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    gap = kg.spectral_gap()
+    assert gap >= 0
+
+
+def test_laplacian_energy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    energy = kg.laplacian_energy()
+    assert energy >= 0
+
+
+def test_fractalize_level_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    coarse, mapping = kg.fractalize_level(1)
+    assert coarse.number_of_nodes() >= 1
+    assert "d" in mapping
+
+
+def test_fractalize_optimal_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    coarse, mapping, radius = kg.fractalize_optimal([1, 2])
+    assert coarse.number_of_nodes() >= 1
+    assert "d" in mapping
+    assert radius in {1, 2}
+
+
+def test_optimize_topology_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    kg.graph.add_edge("c1", "c2", relation="perception_link")
+
+    target = nx.cycle_graph(3)
+    mapping = {i: n for i, n in enumerate(["c1", "c2", "d"])}
+    target = nx.relabel_nodes(target, mapping)
+
+    before = bottleneck_distance(kg.graph.to_undirected(), target)
+    dist = kg.optimize_topology(target, max_iter=5, seed=0)
+    after = bottleneck_distance(kg.graph.to_undirected(), target)
+    assert after <= before
+    assert dist == pytest.approx(after, rel=1e-9)
+
+
 def test_predict_links():
     kg = KnowledgeGraph()
     kg.add_entity("e1", "Beethoven")
@@ -803,3 +949,71 @@ def test_deduplicate_chunks_similarity():
     removed = kg.deduplicate_chunks(similarity=0.9)
     assert removed == 1
     assert "c2" not in kg.graph.nodes or "c1" not in kg.graph.nodes
+
+
+class _DummySession:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def run(self, query: str, **params: Any):
+        self.queries.append(query)
+        if "wcc.stream" in query:
+            return [
+                {"nodeId": 0, "componentId": 0},
+                {"nodeId": 1, "componentId": 1},
+            ]
+        if "nodeSimilarity.stream" in query:
+            return [{"node1": 0, "node2": 1, "similarity": 0.96}]
+        if "adamicAdar.stream" in query:
+            return [{"sourceNodeId": 0, "targetNodeId": 2, "score": 2.0}]
+        if "degree.stream" in query:
+            return [{"nodeId": 0, "score": 5}, {"nodeId": 1, "score": 1}]
+        if "betweenness.stream" in query:
+            return [{"nodeId": 0, "score": 0.8}, {"nodeId": 1, "score": 0.1}]
+        return []
+
+    def __enter__(self) -> "_DummySession":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        pass
+
+
+class _DummyDriver:
+    def session(self) -> _DummySession:
+        return _DummySession()
+
+
+def test_gds_quality_check_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+
+    res = kg.gds_quality_check(_DummyDriver())
+    assert set(res["removed_nodes"]) == {0, 1}
+    assert res["duplicates"]
+    assert res["suggested_links"]
+    assert 0 in res["hubs"]
+
+
+def test_atom_and_molecule_methods():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_atom("d", "a1", "hello", "NarrativeText")
+    kg.add_atom("d", "a2", "world", "NarrativeText")
+    kg.add_molecule("d", "m1", ["a1", "a2"])
+    assert kg.get_atoms_for_document("d") == ["a1", "a2"]
+    assert kg.get_molecules_for_document("d") == ["m1"]
+    assert kg.graph.has_edge("m1", "a1")
+
+
+def test_graph_information_bottleneck():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(4):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    labels = {f"a{i}": i % 2 for i in range(4)}
+    loss = kg.graph_information_bottleneck(labels, beta=0.5)
+    assert loss > 0

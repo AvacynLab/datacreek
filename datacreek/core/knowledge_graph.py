@@ -4,7 +4,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import networkx as nx
 import numpy as np
@@ -19,10 +19,12 @@ except Exception:  # pragma: no cover - optional dependency for tests
 
 try:
     from sklearn.cluster import KMeans
+    from sklearn.decomposition import PCA
     from sklearn.metrics.pairwise import cosine_similarity
 except Exception:  # pragma: no cover - optional dependency for tests
     KMeans = None
     cosine_similarity = None
+    PCA = None
 
 from ..utils.retrieval import EmbeddingIndex
 
@@ -232,6 +234,7 @@ class KnowledgeGraph:
         source: Optional[str] = None,
         *,
         page: int | None = None,
+        alt_text: str | None = None,
     ) -> None:
         """Insert an image node linked to ``doc_id``."""
 
@@ -245,7 +248,15 @@ class KnowledgeGraph:
         if page is None:
             page = 1
 
-        self.graph.add_node(image_id, type="image", path=path, source=source, page=page)
+        self.graph.add_node(
+            image_id,
+            type="image",
+            path=path,
+            source=source,
+            page=page,
+        )
+        if alt_text:
+            self.graph.nodes[image_id]["alt_text"] = alt_text
         self.graph.add_edge(
             doc_id,
             image_id,
@@ -253,6 +264,88 @@ class KnowledgeGraph:
             sequence=sequence,
             provenance=source,
         )
+
+    # ------------------------------------------------------------------
+    # Atom/molecule hierarchy
+    # ------------------------------------------------------------------
+
+    def add_atom(
+        self,
+        doc_id: str,
+        atom_id: str,
+        text: str,
+        element_type: str,
+        source: str | None = None,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an atom node linked to ``doc_id``."""
+
+        if source is None:
+            source = self.graph.nodes[doc_id].get("source")
+        if self.graph.has_node(atom_id):
+            raise ValueError(f"Atom already exists: {atom_id}")
+
+        atoms = self.get_atoms_for_document(doc_id)
+        sequence = len(atoms)
+        if page is None:
+            page = 1
+
+        self.graph.add_node(
+            atom_id,
+            type="atom",
+            text=text,
+            element_type=element_type,
+            source=source,
+            page=page,
+        )
+        self.graph.add_edge(
+            doc_id,
+            atom_id,
+            relation="has_atom",
+            sequence=sequence,
+            provenance=source,
+        )
+        if atoms:
+            prev = atoms[-1]
+            self.graph.add_edge(prev, atom_id, relation="next_atom")
+
+    def add_molecule(
+        self,
+        doc_id: str,
+        molecule_id: str,
+        atom_ids: Iterable[str],
+        source: str | None = None,
+    ) -> None:
+        """Insert a molecule node composed of ``atom_ids``."""
+
+        if source is None:
+            source = self.graph.nodes[doc_id].get("source")
+        if self.graph.has_node(molecule_id):
+            raise ValueError(f"Molecule already exists: {molecule_id}")
+
+        molecules = self.get_molecules_for_document(doc_id)
+        sequence = len(molecules)
+
+        self.graph.add_node(molecule_id, type="molecule", source=source)
+        self.graph.add_edge(
+            doc_id,
+            molecule_id,
+            relation="has_molecule",
+            sequence=sequence,
+            provenance=source,
+        )
+        if molecules:
+            prev = molecules[-1]
+            self.graph.add_edge(prev, molecule_id, relation="next_molecule")
+        for idx, aid in enumerate(atom_ids):
+            self.graph.add_edge(
+                molecule_id,
+                aid,
+                relation="inside",
+                sequence=idx,
+                provenance=source,
+            )
 
     def _renumber_chunks(self, doc_id: str) -> None:
         """Update sequence numbers and next_chunk links for ``doc_id``."""
@@ -1241,6 +1334,338 @@ class KnowledgeGraph:
             vec = model.wv[str(node)]
             self.graph.nodes[node]["embedding"] = vec.tolist()
 
+    def compute_graphwave_embeddings(self, scales: Iterable[float], num_points: int = 10) -> None:
+        """Compute GraphWave embeddings for all nodes.
+
+        Parameters
+        ----------
+        scales:
+            Diffusion scales used for the wavelets.
+        num_points:
+            Number of sample points for the characteristic function.
+        """
+
+        from ..analysis.fractal import graphwave_embedding
+
+        emb = graphwave_embedding(self.graph.to_undirected(), scales, num_points)
+        for node, vec in emb.items():
+            self.graph.nodes[node]["graphwave_embedding"] = vec.tolist()
+
+    def compute_poincare_embeddings(
+        self,
+        dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> None:
+        """Compute hyperbolic Poincaré embeddings for nodes.
+
+        Parameters
+        ----------
+        dim:
+            Dimension of the embedding space.
+        negative:
+            Number of negative samples.
+        epochs:
+            Number of training epochs.
+        learning_rate:
+            Learning rate for optimization.
+        burn_in:
+            Burn-in epochs before negative sampling.
+        """
+
+        from ..analysis.fractal import poincare_embedding
+
+        emb = poincare_embedding(
+            self.graph,
+            dim=dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        for node, vec in emb.items():
+            self.graph.nodes[node]["poincare_embedding"] = vec.tolist()
+
+    def compute_graphsage_embeddings(
+        self,
+        *,
+        dimensions: int = 64,
+        num_layers: int = 2,
+    ) -> None:
+        """Compute GraphSAGE-style embeddings for all nodes.
+
+        This implementation performs mean aggregation over node neighborhoods
+        using existing Node2Vec embeddings as initial features. The aggregated
+        representations are reduced back to ``dimensions`` using PCA.
+
+        Parameters
+        ----------
+        dimensions:
+            Dimensionality of the final embeddings. Node2Vec embeddings are
+            generated with the same size if missing.
+        num_layers:
+            Number of neighborhood aggregation rounds.
+        """
+
+        if not all(
+            "embedding" in self.graph.nodes[n]
+            and len(self.graph.nodes[n]["embedding"]) == dimensions
+            for n in self.graph.nodes
+        ):
+            self.compute_node2vec_embeddings(
+                dimensions=dimensions,
+                walk_length=10,
+                num_walks=50,
+                workers=1,
+                seed=0,
+            )
+
+        feats = {
+            n: np.asarray(self.graph.nodes[n]["embedding"], dtype=float) for n in self.graph.nodes
+        }
+
+        for _ in range(max(1, num_layers)):
+            new_feats: Dict[str, np.ndarray] = {}
+            for node in self.graph.nodes:
+                neigh_vecs = [feats[n] for n in self.graph.neighbors(node) if n in feats]
+                if neigh_vecs:
+                    neigh_mean = np.mean(neigh_vecs, axis=0)
+                else:
+                    neigh_mean = np.zeros_like(feats[node])
+                new_feats[node] = np.concatenate([feats[node], neigh_mean])
+            feats = new_feats
+
+        matrix = np.stack([feats[n] for n in self.graph.nodes])
+        n_components = min(dimensions, matrix.shape[0], matrix.shape[1])
+        pca = PCA(n_components=n_components, random_state=0)
+        reduced = pca.fit_transform(matrix)
+        if n_components < dimensions:
+            pad_width = dimensions - n_components
+            reduced = np.pad(reduced, ((0, 0), (0, pad_width)))
+        for node, vec in zip(self.graph.nodes, reduced):
+            self.graph.nodes[node]["graphsage_embedding"] = vec.astype(float).tolist()
+
+    def compute_transe_embeddings(
+        self,
+        *,
+        dimensions: int = 64,
+    ) -> None:
+        """Compute simple TransE-style relation embeddings.
+
+        This method assumes node embeddings exist under the ``"embedding"``
+        attribute. If missing, they are generated with
+        :meth:`compute_node2vec_embeddings` using ``dimensions``.
+
+        Parameters
+        ----------
+        dimensions:
+            Dimensionality of the node embeddings. Relation vectors share the
+            same size.
+        """
+
+        if not all(
+            "embedding" in self.graph.nodes[n]
+            and len(self.graph.nodes[n]["embedding"]) == dimensions
+            for n in self.graph.nodes
+        ):
+            self.compute_node2vec_embeddings(
+                dimensions=dimensions,
+                walk_length=10,
+                num_walks=50,
+                workers=1,
+                seed=0,
+            )
+
+        rel_vectors: Dict[str, List[np.ndarray]] = {}
+        for u, v, data in self.graph.edges(data=True):
+            rel = data.get("relation")
+            if rel is None:
+                continue
+            head = np.asarray(self.graph.nodes[u]["embedding"], dtype=float)
+            tail = np.asarray(self.graph.nodes[v]["embedding"], dtype=float)
+            rel_vectors.setdefault(rel, []).append(tail - head)
+
+        rel_means = {
+            rel: np.mean(vectors, axis=0) if vectors else np.zeros(dimensions)
+            for rel, vectors in rel_vectors.items()
+        }
+
+        for u, v, data in self.graph.edges(data=True):
+            rel = data.get("relation")
+            if rel and rel in rel_means:
+                data["transe_embedding"] = rel_means[rel].astype(float).tolist()
+
+    # ------------------------------------------------------------------
+    # Fractal and topological metrics
+    # ------------------------------------------------------------------
+
+    def box_counting_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+        """Estimate fractal dimension via box covering.
+
+        Parameters
+        ----------
+        radii:
+            Iterable of box radii used for the covering.
+
+        Returns
+        -------
+        tuple[float, list[tuple[int, int]]]
+            Estimated dimension and the ``(radius, count)`` pairs.
+        """
+
+        from ..analysis.fractal import box_counting_dimension as _bcd
+
+        return _bcd(self.graph.to_undirected(), radii)
+
+    def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
+        """Estimate spectral dimension from heat trace scaling."""
+
+        from ..analysis.fractal import spectral_dimension as _sd
+
+        return _sd(self.graph.to_undirected(), times)
+
+    def spectral_entropy(self, normed: bool = True) -> float:
+        """Return the Shannon entropy of the Laplacian spectrum."""
+
+        from ..analysis.fractal import spectral_entropy as _se
+
+        return _se(self.graph.to_undirected(), normed=normed)
+
+    def spectral_gap(self, normed: bool = True) -> float:
+        """Return the spectral gap of the graph."""
+
+        from ..analysis.fractal import spectral_gap as _sg
+
+        return _sg(self.graph.to_undirected(), normed=normed)
+
+    def laplacian_energy(self, normed: bool = True) -> float:
+        """Return the Laplacian energy of the graph."""
+
+        from ..analysis.fractal import laplacian_energy as _le
+
+        return _le(self.graph.to_undirected(), normed=normed)
+
+    def graph_information_bottleneck(
+        self,
+        labels: Dict[str, int],
+        *,
+        beta: float = 1.0,
+    ) -> float:
+        """Return the Graph Information Bottleneck loss for node embeddings."""
+
+        from ..analysis.information import graph_information_bottleneck as _gib
+
+        feats = {
+            n: np.asarray(self.graph.nodes[n]["embedding"], dtype=float)
+            for n in self.graph.nodes
+            if "embedding" in self.graph.nodes[n]
+        }
+        return _gib(feats, labels, beta=beta)
+
+    def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
+        """Return the Laplacian eigenvalues of the graph."""
+
+        from ..analysis.fractal import laplacian_spectrum as _ls
+
+        return _ls(self.graph.to_undirected(), normed=normed)
+
+    def spectral_density(
+        self, bins: int = 50, *, normed: bool = True
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Return histogram of Laplacian eigenvalues."""
+
+        from ..analysis.fractal import spectral_density as _sd
+
+        return _sd(self.graph.to_undirected(), bins=bins, normed=normed)
+
+    def persistence_entropy(self, dimension: int = 0) -> float:
+        """Return persistence entropy of the graph."""
+
+        from ..analysis.fractal import persistence_entropy as _pe
+
+        g = nx.convert_node_labels_to_integers(self.graph.to_undirected())
+        return _pe(g, dimension)
+
+    def persistence_diagrams(self, max_dim: int = 2) -> Dict[int, np.ndarray]:
+        """Return persistence diagrams up to ``max_dim``."""
+
+        from ..analysis.fractal import persistence_diagrams as _pd
+
+        g = nx.convert_node_labels_to_integers(self.graph.to_undirected())
+        return _pd(g, max_dim)
+
+    def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
+        """Return a coarse-grained graph via box covering."""
+
+        from ..analysis.fractal import fractalize_graph as _fg
+
+        coarse, mapping = _fg(self.graph.to_undirected(), radius)
+        str_mapping = {str(node): idx for node, idx in mapping.items()}
+        return coarse, str_mapping
+
+    def fractalize_optimal(self, radii: Iterable[int]) -> tuple[nx.Graph, Dict[str, int], int]:
+        """Coarse-grain the graph using the MDL-optimal radius.
+
+        Parameters
+        ----------
+        radii:
+            Candidate radii for box covering.
+
+        Returns
+        -------
+        tuple[nx.Graph, Dict[str, int], int]
+            The coarse-grained graph, node-to-box mapping, and the radius
+            chosen via :func:`mdl_optimal_radius`.
+        """
+
+        from ..analysis.fractal import fractalize_optimal as _fo
+
+        coarse, mapping, radius = _fo(self.graph.to_undirected(), radii)
+        str_mapping = {str(node): box for node, box in mapping.items()}
+        return coarse, str_mapping, radius
+
+    def optimize_topology(
+        self,
+        target: nx.Graph,
+        *,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        max_iter: int = 100,
+        seed: int | None = None,
+    ) -> float:
+        """Edit ``perception_link`` edges to approach ``target`` topology."""
+
+        from ..analysis.fractal import minimize_bottleneck_distance
+
+        skeleton = nx.Graph()
+        skeleton.add_nodes_from(self.graph.nodes())
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("relation") == "perception_link":
+                skeleton.add_edge(u, v)
+
+        optimized, dist = minimize_bottleneck_distance(
+            skeleton,
+            target,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+            seed=seed,
+        )
+
+        self.graph.remove_edges_from(
+            [
+                (u, v)
+                for u, v, d in self.graph.edges(data=True)
+                if d.get("relation") == "perception_link"
+            ]
+        )
+        for u, v in optimized.edges():
+            self.graph.add_edge(u, v, relation="perception_link")
+
+        return dist
+
     # ------------------------------------------------------------------
     # Structure helpers
     # ------------------------------------------------------------------
@@ -1377,6 +1802,28 @@ class KnowledgeGraph:
             (data.get("sequence", i), tgt)
             for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
             if data.get("relation") == "has_image"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
+    def get_atoms_for_document(self, doc_id: str) -> list[str]:
+        """Return atom IDs that belong to ``doc_id``."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
+            if data.get("relation") == "has_atom"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
+    def get_molecules_for_document(self, doc_id: str) -> list[str]:
+        """Return molecule IDs that belong to ``doc_id``."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
+            if data.get("relation") == "has_molecule"
         ]
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
@@ -1877,3 +2324,106 @@ class KnowledgeGraph:
             session.execute_read(_read)
         kg.index.build()
         return kg
+
+    def gds_quality_check(
+        self,
+        driver: Driver,
+        *,
+        dataset: str | None = None,
+        min_component_size: int = 2,
+        similarity_threshold: float = 0.95,
+    ) -> Dict[str, Any]:
+        """Run Neo4j GDS quality checks and cleanup.
+
+        Parameters
+        ----------
+        driver:
+            Neo4j driver instance.
+        dataset:
+            Optional dataset label used to filter nodes.
+        min_component_size:
+            Components smaller than this size are removed.
+        similarity_threshold:
+            Cosine similarity above which nodes are flagged as duplicates.
+
+        Returns
+        -------
+        dict
+            Summary dictionary with lists of removed nodes, duplicate pairs,
+            suggested links and hub nodes.
+        """
+
+        node_query = (
+            "MATCH (n" + (" {dataset:$dataset}" if dataset else "") + ") RETURN id(n) AS id"
+        )
+        rel_query = (
+            "MATCH (n"
+            + (" {dataset:$dataset}" if dataset else "")
+            + ")-[r]->(m"
+            + (" {dataset:$dataset}" if dataset else "")
+            + ") RETURN id(n) AS source, id(m) AS target"
+        )
+        params = {"dataset": dataset} if dataset else {}
+
+        with driver.session() as session:
+            session.run("CALL gds.graph.drop('kg_qc', false)")
+            session.run(
+                "CALL gds.graph.project.cypher('kg_qc', $nodeQuery, $relQuery)",
+                nodeQuery=node_query,
+                relQuery=rel_query,
+                **params,
+            )
+
+            comps = session.run("CALL gds.wcc.stream('kg_qc') YIELD nodeId, componentId")
+            groups: Dict[int, List[int]] = {}
+            for rec in comps:
+                groups.setdefault(rec["componentId"], []).append(rec["nodeId"])
+            removed: List[int] = []
+            for nodes in groups.values():
+                if len(nodes) < min_component_size:
+                    for n in nodes:
+                        session.run("MATCH (n) WHERE id(n)=$id DETACH DELETE n", id=n)
+                        removed.append(n)
+
+            duplicates = []
+            sim = session.run(
+                "CALL gds.nodeSimilarity.stream('kg_qc') YIELD node1, node2, similarity"
+            )
+            for rec in sim:
+                if rec["similarity"] >= similarity_threshold:
+                    duplicates.append((rec["node1"], rec["node2"], rec["similarity"]))
+
+            links = session.run(
+                "CALL gds.alpha.linkprediction.adamicAdar.stream('kg_qc') "
+                "YIELD sourceNodeId, targetNodeId, score ORDER BY score DESC LIMIT 5"
+            )
+            suggestions = [
+                (rec["sourceNodeId"], rec["targetNodeId"], rec["score"]) for rec in links
+            ]
+
+            deg_records = list(session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score"))
+            bet_records = list(
+                session.run("CALL gds.betweenness.stream('kg_qc') YIELD nodeId, score")
+            )
+            deg_scores = sorted(r["score"] for r in deg_records)
+            bet_scores = sorted(r["score"] for r in bet_records)
+            hubs: List[int] = []
+            if deg_scores:
+                thresh = deg_scores[int(0.9 * len(deg_scores))]
+                hubs.extend(r["nodeId"] for r in deg_records if r["score"] >= thresh)
+            if bet_scores:
+                thresh = bet_scores[int(0.9 * len(bet_scores))]
+                hubs.extend(
+                    r["nodeId"]
+                    for r in bet_records
+                    if r["score"] >= thresh and r["nodeId"] not in hubs
+                )
+
+            session.run("CALL gds.graph.drop('kg_qc')")
+
+        return {
+            "removed_nodes": removed,
+            "duplicates": duplicates,
+            "suggested_links": suggestions,
+            "hubs": hubs,
+        }

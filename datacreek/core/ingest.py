@@ -176,7 +176,13 @@ def to_kg(
             )
             if path:
                 img_id = f"{doc_id}_image_{img_idx}"
-                dataset.add_image(doc_id, img_id, path, page=page)
+                try:
+                    from datacreek.utils.image_captioning import caption_image
+                except Exception:  # pragma: no cover - optional dep failure
+                    alt = ""
+                else:
+                    alt = caption_image(path)
+                dataset.add_image(doc_id, img_id, path, page=page, alt_text=alt)
                 img_idx += 1
                 continue
             text_el = getattr(el, "text", None)
