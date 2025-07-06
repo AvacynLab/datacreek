@@ -7,15 +7,18 @@ import os
 import time
 import traceback
 from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import redis
+from pydantic import BaseModel, ConfigDict, field_validator
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from datacreek.core.dataset import DatasetBuilder
 
+from datacreek.backends import get_redis_client as backend_get_redis_client
 from datacreek.core.cleanup import cleanup_knowledge_graph
 from datacreek.core.create import process_file, process_file_async
 from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
@@ -39,12 +42,9 @@ logger = logging.getLogger(__name__)
 
 
 def get_redis_client() -> redis.Redis | None:
-    """Return a Redis client from config or environment variables."""
-    cfg = get_redis_config(load_config_with_overrides(None))
-    host = os.getenv("REDIS_HOST", cfg.get("host"))
-    port = int(os.getenv("REDIS_PORT", cfg.get("port", 6379)))
+    """Return a Redis client from backend configuration."""
     try:
-        client = redis.Redis(host=host, port=port, decode_responses=True)
+        client = backend_get_redis_client()
         client.ping()
         return client
     except Exception:
@@ -132,6 +132,74 @@ class ProcessOptions:
     curation_temperature: float | None = None
     curation_threshold: float | None = None
     resume_curation: bool = False
+
+
+@dataclass
+class GenerationOptions:
+    """Validated parameters for ``DatasetBuilder.run_post_kg_pipeline``."""
+
+    config_path: Path | None = None
+    provider: str | None = None
+    profile: str | None = None
+    api_base: str | None = None
+    model: str | None = None
+    num_pairs: int | None = None
+    threshold: float | None = None
+    fmt: str | None = None
+    overrides: Dict[str, Any] | None = None
+    verbose: bool = False
+    async_mode: bool = False
+    multi_answer: bool = False
+    batch_size: int | None = None
+    inference_batch: int | None = None
+    start_step: PipelineStep | None = None
+    pipeline_config_path: Path | None = None
+    dedup_similarity: float = 1.0
+    keep_ratings: bool = False
+
+
+class GenerationOptionsModel(BaseModel):
+    """Pydantic model for :class:`GenerationOptions`."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    config_path: str | None = None
+    provider: str | None = None
+    profile: str | None = None
+    api_base: str | None = None
+    model: str | None = None
+    num_pairs: int | None = None
+    threshold: float | None = None
+    fmt: str | None = None
+    overrides: Dict[str, Any] | None = None
+    verbose: bool = False
+    async_mode: bool = False
+    multi_answer: bool = False
+    batch_size: int | None = None
+    inference_batch: int | None = None
+    start_step: PipelineStep | None = None
+    pipeline_config_path: str | None = None
+    dedup_similarity: float = 1.0
+    keep_ratings: bool = False
+
+    @field_validator("start_step", mode="before")
+    def _parse_step(cls, v: Any) -> PipelineStep | None:
+        if v is None:
+            return None
+        if isinstance(v, PipelineStep):
+            return v
+        try:
+            return PipelineStep(v.lower())
+        except Exception:
+            raise ValueError(f"Invalid pipeline step: {v}") from None
+
+    def to_options(self) -> GenerationOptions:
+        data = self.model_dump()
+        if data.get("config_path"):
+            data["config_path"] = Path(data["config_path"])
+        if data.get("pipeline_config_path"):
+            data["pipeline_config_path"] = Path(data["pipeline_config_path"])
+        return GenerationOptions(**data)
 
 
 # Expected dataclass types for generation results
@@ -344,7 +412,23 @@ def load_pipelines_from_file(path: Path) -> Dict[DatasetType, GenerationPipeline
     return pipelines
 
 
-PIPELINES: Dict[DatasetType, GenerationPipeline] = {
+DEFAULT_PIPELINES_PATH = Path(__file__).resolve().parents[1] / "configs" / "pipelines.yaml"
+PIPELINE_CONFIG_ENV = "DATACREEK_PIPELINES_CONFIG"
+
+
+def load_pipelines(path: str | None = None) -> Dict[DatasetType, GenerationPipeline]:
+    """Return pipeline definitions from ``path`` or default locations."""
+
+    final_path = Path(path or os.getenv(PIPELINE_CONFIG_ENV, DEFAULT_PIPELINES_PATH))
+    if final_path.exists():
+        try:
+            return load_pipelines_from_file(final_path)
+        except Exception:
+            logger.exception("Failed to load pipelines from %s", final_path)
+    return DEFAULT_PIPELINES
+
+
+DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     DatasetType.QA: GenerationPipeline(
         dataset_type=DatasetType.QA,
         steps=[
@@ -527,13 +611,16 @@ PIPELINES: Dict[DatasetType, GenerationPipeline] = {
     ),
 }
 
+PIPELINES = load_pipelines()
+
 
 def get_pipeline(dataset_type: DatasetType) -> GenerationPipeline:
     """Return pipeline information for a dataset type."""
 
-    if dataset_type not in PIPELINES:
+    pipelines = load_pipelines()
+    if dataset_type not in pipelines:
         raise KeyError(f"Unknown dataset type: {dataset_type}")
-    return PIPELINES[dataset_type]
+    return pipelines[dataset_type]
 
 
 def get_trainings_for_dataset(dataset_type: DatasetType) -> List[TrainingGoal]:
@@ -547,7 +634,7 @@ def get_dataset_types_for_training(goal: TrainingGoal) -> List[DatasetType]:
 
     return [
         pipeline.dataset_type
-        for pipeline in PIPELINES.values()
+        for pipeline in load_pipelines().values()
         if goal in pipeline.compatible_trainings
     ]
 
@@ -555,7 +642,9 @@ def get_dataset_types_for_training(goal: TrainingGoal) -> List[DatasetType]:
 def get_pipelines_for_training(goal: TrainingGoal) -> List[GenerationPipeline]:
     """Return generation pipelines compatible with the given training goal."""
 
-    return [pipeline for pipeline in PIPELINES.values() if goal in pipeline.compatible_trainings]
+    return [
+        pipeline for pipeline in load_pipelines().values() if goal in pipeline.compatible_trainings
+    ]
 
 
 async def _run_generation_pipeline_impl(
@@ -596,7 +685,7 @@ async def _run_generation_pipeline_impl(
             pipelines = load_pipelines_from_file(pipeline_config_path)
             pipeline = pipelines[dataset_type]
         else:
-            pipeline = get_pipeline(dataset_type)
+            pipeline = load_pipelines().get(dataset_type) or get_pipeline(dataset_type)
     except KeyError as exc:
         raise ValueError(str(exc)) from exc
 
@@ -839,13 +928,19 @@ async def _run_generation_pipeline_impl(
         progress.start()
 
     try:
-        for step in exec_steps:
+        for idx, step in enumerate(exec_steps):
             if step in {PipelineStep.INGEST, PipelineStep.TO_KG}:
                 continue
             if verbose:
                 logger.info("Running step %s", step.value)
             handler = handlers.get(step)
             if handler:
+                if cp_key:
+                    redis_client.hset(
+                        cp_key,
+                        f"{step.value}_start",
+                        datetime.now(timezone.utc).isoformat(),
+                    )
                 start = time.perf_counter()
                 try:
                     result = await handler(data)
@@ -864,10 +959,26 @@ async def _run_generation_pipeline_impl(
                         f"{step.value}_duration",
                         f"{duration:.2f}",
                     )
+                    progress_val = round((idx + 1) / len(exec_steps), 3)
+                    redis_client.hset(cp_key, "progress", progress_val)
+                    redis_client.hset(
+                        cp_key,
+                        f"{step.value}_finish",
+                        datetime.now(timezone.utc).isoformat(),
+                    )
                 if verbose:
                     logger.info("Finished %s in %.2fs", step.value, duration)
                 if progress:
                     progress.update(task, advance=1)
+                if dataset_builder is not None:
+                    try:
+                        dataset_builder._record_event(
+                            step.value,
+                            f"{step.value} completed",
+                            duration=f"{duration:.2f}s",
+                        )
+                    except Exception:
+                        logger.exception("Failed to record event for %s", step.value)
                 if isinstance(data, dict) or is_dataclass(data):
                     info = asdict(data) if is_dataclass(data) else data
                     if "qa_pairs" in info:

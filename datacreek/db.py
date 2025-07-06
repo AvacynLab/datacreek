@@ -14,9 +14,9 @@ def get_database_url() -> str:
         return env_url
     try:
         cfg = load_config()
-        return cfg.get("database", {}).get("url", "sqlite:///./datacreek.db")
+        return cfg.get("database", {}).get("url", "sqlite:////tmp/datacreek.db")
     except Exception:
-        return "sqlite:///./datacreek.db"
+        return "sqlite:////tmp/datacreek.db"
 
 
 DATABASE_URL = get_database_url()

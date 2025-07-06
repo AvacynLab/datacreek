@@ -130,8 +130,9 @@ pre-commit install
 ### 1. Tool Setup
 
 The application persists all state in Redis and Neo4j so no local data
-directories are required. Ensure both services are running and accessible
-via the configuration file. If you plan to use the bundled vLLM helpers
+directories are required. User and dataset records are cached in Redis for
+quick access. Ensure both services are running and accessible via the
+configuration file. If you plan to use the bundled vLLM helpers
 start the server as shown below:
 
 ```bash
@@ -341,6 +342,17 @@ Most options can also be overridden with environment variables. For example set
 | `GEN_SUMMARY_TEMPERATURE` | Temperature for summaries |
 | `GEN_SUMMARY_MAX_TOKENS` | Max tokens for summaries |
 | `SDK_VERBOSE` | Enable detailed logs |
+| `DATACREEK_CONFIG` | Path to YAML configuration file |
+| `DATACREEK_PIPELINES_CONFIG` | Path to pipeline definitions |
+| `REDIS_HOST` | Redis hostname |
+| `REDIS_PORT` | Redis port |
+| `S3_BUCKET` | Upload dataset exports to this bucket |
+| `S3_PREFIX` | Optional prefix for uploaded objects |
+| `S3_ENDPOINT_URL` | Custom S3-compatible endpoint |
+| `AWS_ACCESS_KEY_ID` | AWS credential for S3 uploads |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret for S3 uploads |
+| `USE_REDIS_GRAPH` | Enable RedisGraph integration |
+| `DATASET_MAX_VERSIONS` | Maximum versions kept per dataset |
 | `SDK_DEBUG` | Log full model responses |
 
 ### Model Profiles
