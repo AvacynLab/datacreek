@@ -1,3 +1,5 @@
+import asyncio
+import json
 from pathlib import Path
 
 import fakeredis
@@ -160,6 +162,17 @@ def test_events_persisted_roundtrip():
     assert client.llen("dataset:evt:events") == len(loaded.events)
 
 
+def test_events_logged_globally():
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="glob")
+    ds.redis_client = client
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hi")
+
+    events = [json.loads(e) for e in client.lrange("dataset:events", 0, -1)]
+    assert any(e["dataset"] == "glob" and e["operation"] == "add_chunk" for e in events)
+
+
 def test_ingest_file_method(tmp_path):
     f = tmp_path / "doc.txt"
     f.write_text("hello world")
@@ -175,6 +188,21 @@ def test_ingest_file_method(tmp_path):
     assert list(ds.ingested_docs) == ["doc"]
     info = ds.ingested_docs["doc"]
     assert info["path"] == str(f)
+    loaded = DatasetBuilder.from_redis(client, "dataset:demo")
+    assert loaded.ingested_docs == ds.ingested_docs
+
+
+def test_ingest_file_async(tmp_path):
+    f = tmp_path / "doc.txt"
+    f.write_text("hello async")
+    client = fakeredis.FakeStrictRedis()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.redis_client = client
+
+    asyncio.run(ds.ingest_file_async(str(f), options=IngestOptions()))
+
+    assert ds.stage == DatasetStage.INGESTED
+    assert list(ds.ingested_docs) == ["doc"]
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert loaded.ingested_docs == ds.ingested_docs
 
@@ -1178,8 +1206,9 @@ def test_run_post_kg_pipeline_logs_cleanup(monkeypatch):
     ds.run_post_kg_pipeline(start_step=PipelineStep.KG_CLEANUP)
 
     assert "c2" not in ds.graph.graph.nodes
-    assert ds.events[-4].operation == "deduplicate_chunks"
-    assert ds.events[-3].operation == "clean_chunks"
+    ops = [e.operation for e in ds.events]
+    assert "deduplicate_chunks" in ops
+    assert "clean_chunks" in ops
 
 
 def test_run_post_kg_pipeline_logs_curation(monkeypatch):
@@ -1198,13 +1227,18 @@ def test_run_post_kg_pipeline_logs_curation(monkeypatch):
 
     ds.run_post_kg_pipeline(start_step=PipelineStep.CURATE)
 
-    assert ds.events[-2].operation == "curate"
-    assert ds.events[-2].params == {
-        "total": 2,
-        "filtered": 1,
-        "retention_rate": 0.5,
-        "avg_score": 8.0,
-    }
+    curate_events = [e for e in ds.events if e.operation == "curate"]
+    assert any(
+        e.params
+        == {
+            "total": 2,
+            "filtered": 1,
+            "retention_rate": 0.5,
+            "avg_score": 8.0,
+        }
+        for e in curate_events
+    )
+    assert ds.events[-1].operation == "generate"
 
 
 def test_run_post_kg_pipeline_extra_opts(monkeypatch):

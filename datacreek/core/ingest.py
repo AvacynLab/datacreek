@@ -7,11 +7,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
+
+from pydantic import BaseModel
 
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
@@ -20,6 +23,23 @@ from datacreek.utils.config import get_generation_config, load_config
 from datacreek.utils.text import clean_text, split_into_chunks
 
 logger = logging.getLogger(__name__)
+
+# Directory containing user uploads. When set, ingestion is restricted to this
+# path to avoid reading arbitrary files from the host machine.
+UPLOAD_ROOT = os.getenv("DATACREEK_UPLOAD_DIR")
+
+
+def validate_file_path(path: str) -> None:
+    """Ensure ``path`` resides inside :data:`UPLOAD_ROOT` when configured."""
+
+    if path.startswith(("http://", "https://")):
+        return
+    if not UPLOAD_ROOT:
+        return
+    abs_path = os.path.abspath(path)
+    root = os.path.abspath(UPLOAD_ROOT)
+    if not abs_path.startswith(root):
+        raise ValueError(f"Access to {path} is not allowed")
 
 
 @dataclass
@@ -32,6 +52,21 @@ class IngestOptions:
     use_unstructured: bool | None = None
     extract_entities: bool = False
     extract_facts: bool = False
+
+
+class IngestOptionsModel(BaseModel):
+    """Pydantic validation model for :class:`IngestOptions`."""
+
+    config: Optional[Dict[str, Any]] = None
+    high_res: bool = False
+    ocr: bool = False
+    use_unstructured: bool | None = None
+    extract_entities: bool = False
+    extract_facts: bool = False
+
+    def to_options(self) -> IngestOptions:
+        """Convert to :class:`IngestOptions`."""
+        return IngestOptions(**self.model_dump())
 
 
 def determine_parser(file_path: str, config: Dict[str, Any]):
@@ -109,6 +144,7 @@ def to_kg(
     pages: list[str] | None = None,
     elements: list[Any] | None = None,
     source: str | None = None,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
 
@@ -164,6 +200,8 @@ def to_kg(
                 cid = f"{doc_id}_chunk_{chunk_idx}"
                 dataset.add_chunk(doc_id, cid, chunk, page=page)
                 chunk_idx += 1
+                if progress_callback:
+                    progress_callback(chunk_idx)
     elif cleaned_pages:
         chunk_idx = 0
         for page_num, page_text in enumerate(cleaned_pages, start=1):
@@ -178,6 +216,8 @@ def to_kg(
                 cid = f"{doc_id}_chunk_{chunk_idx}"
                 dataset.add_chunk(doc_id, cid, chunk, page=page_num)
                 chunk_idx += 1
+                if progress_callback:
+                    progress_callback(chunk_idx)
     else:
         chunks = split_into_chunks(
             cleaned_text,
@@ -189,6 +229,8 @@ def to_kg(
         for i, chunk in enumerate(chunks):
             cid = f"{doc_id}_chunk_{i}"
             dataset.add_chunk(doc_id, cid, chunk)
+            if progress_callback:
+                progress_callback(i + 1)
 
     if build_index:
         dataset.graph.index.build()
@@ -207,6 +249,7 @@ def ingest_into_dataset(
     extract_facts: bool = False,
     client: "LLMClient" | None = None,
     options: IngestOptions | None = None,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> str:
     """Parse ``file_path`` and populate ``dataset`` with its content.
 
@@ -229,6 +272,8 @@ def ingest_into_dataset(
         use_unstructured = options.use_unstructured
         extract_entities = options.extract_entities
         extract_facts = options.extract_facts
+
+    validate_file_path(file_path)
 
     try:
         result = process_file(
@@ -266,6 +311,7 @@ def ingest_into_dataset(
             pages=pages,
             elements=elements,
             source=file_path,
+            progress_callback=progress_callback,
         )
     except Exception:
         logger.exception("Failed to build knowledge graph for %s", file_path)
@@ -285,3 +331,37 @@ def ingest_into_dataset(
             raise
         dataset.history.append("Facts extracted on ingest")
     return doc_id
+
+
+async def ingest_into_dataset_async(
+    file_path: str,
+    dataset: DatasetBuilder,
+    doc_id: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+    *,
+    high_res: bool = False,
+    ocr: bool = False,
+    use_unstructured: bool | None = None,
+    extract_entities: bool = False,
+    extract_facts: bool = False,
+    client: "LLMClient" | None = None,
+    options: IngestOptions | None = None,
+    progress_callback: Callable[[int], None] | None = None,
+) -> str:
+    """Asynchronous wrapper around :func:`ingest_into_dataset`."""
+
+    return await asyncio.to_thread(
+        ingest_into_dataset,
+        file_path,
+        dataset,
+        doc_id,
+        config,
+        high_res=high_res,
+        ocr=ocr,
+        use_unstructured=use_unstructured,
+        extract_entities=extract_entities,
+        extract_facts=extract_facts,
+        client=client,
+        options=options,
+        progress_callback=progress_callback,
+    )

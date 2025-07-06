@@ -34,12 +34,21 @@ PACKAGE_CONFIG_PATH = os.path.abspath(
 
 # Use internal package path as default
 DEFAULT_CONFIG_PATH = PACKAGE_CONFIG_PATH
+# Environment variable pointing to a config file location
+CONFIG_PATH_ENV = "DATACREEK_CONFIG"
 
 logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
-    """Load YAML configuration file"""
+    """Load YAML configuration file.
+
+    When ``config_path`` is not provided, the :data:`DATACREEK_CONFIG` environment
+    variable is consulted before falling back to the built-in defaults.
+    """
+    if config_path is None:
+        config_path = os.getenv(CONFIG_PATH_ENV)
+
     if config_path is None:
         # Try each path in order until one exists
         for path in [PACKAGE_CONFIG_PATH, ORIGINAL_CONFIG_PATH]:

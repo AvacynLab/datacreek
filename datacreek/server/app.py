@@ -10,17 +10,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
-import redis
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from flask_wtf import FlaskForm
-from neo4j import GraphDatabase
 from werkzeug.security import check_password_hash, generate_password_hash
 from wtforms import FileField, IntegerField, PasswordField, SelectField, StringField, SubmitField
 from wtforms.validators import DataRequired
 
 logger = logging.getLogger(__name__)
 
+from datacreek.backends import get_neo4j_driver as backend_get_neo4j_driver
+from datacreek.backends import get_redis_client as backend_get_redis_client
 from datacreek.core.create import process_file
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.dataset import DatasetBuilder
@@ -48,7 +48,7 @@ from datacreek.tasks import (
     graph_load_neo4j_task,
     graph_save_neo4j_task,
 )
-from datacreek.utils.config import get_llm_provider, get_neo4j_config, get_redis_config, load_config
+from datacreek.utils.config import get_llm_provider, load_config
 
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
@@ -70,16 +70,13 @@ init_db()
 
 
 def get_redis_client():
-    """Return a Redis client using config or environment variables."""
-    cfg = get_redis_config(config)
-    host = os.getenv("REDIS_HOST", cfg.get("host"))
-    port = int(os.getenv("REDIS_PORT", cfg.get("port", 6379)))
+    """Return a Redis client using backend helpers."""
     try:
-        client = redis.Redis(host=host, port=port, decode_responses=True)
+        client = backend_get_redis_client()
         client.ping()
         return client
     except Exception:
-        logger.exception("Failed to connect to Redis at %s:%s", host, port)
+        logger.exception("Failed to connect to Redis")
         return None
 
 
@@ -130,14 +127,8 @@ def load_user(user_id: str) -> User | None:
 
 
 def get_neo4j_driver():
-    """Return a Neo4j driver using config or environment variables."""
-    cfg = get_neo4j_config(config)
-    uri = os.getenv("NEO4J_URI", cfg.get("uri"))
-    user = os.getenv("NEO4J_USER", cfg.get("user"))
-    password = os.getenv("NEO4J_PASSWORD", cfg.get("password"))
-    if not uri or not user or not password:
-        return None
-    return GraphDatabase.driver(uri, auth=(user, password))
+    """Return a Neo4j driver using backend helpers."""
+    return backend_get_neo4j_driver()
 
 
 # In-memory store of datasets being built

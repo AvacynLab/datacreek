@@ -22,6 +22,17 @@ if TYPE_CHECKING:
 import redis
 from neo4j import Driver
 
+from ..backends import get_redis_graph
+
+try:  # optional redisgraph dependency
+    from redisgraph import Edge as RGEdge
+    from redisgraph import Graph as RGGraph
+    from redisgraph import Node as RGNode
+except Exception:  # pragma: no cover - optional
+    RGGraph = None
+    RGNode = None
+    RGEdge = None
+
 from ..models.stage import DatasetStage
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
@@ -56,6 +67,7 @@ class DatasetBuilder:
     events: List[HistoryEvent] = field(default_factory=list)
     versions: List[Dict[str, Any]] = field(default_factory=list)
     ingested_docs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    accessed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     stage: DatasetStage = DatasetStage.CREATED
     redis_client: redis.Redis | None = field(default=None, repr=False)
     neo4j_driver: Driver | None = field(default=None, repr=False, compare=False)
@@ -90,10 +102,12 @@ class DatasetBuilder:
         if self.redis_client and self.name:
             key = self.redis_key or f"dataset:{self.name}"
             try:
-                self.to_redis(self.redis_client, key)
-                self.redis_client.sadd("datasets", self.name)
+                pipe = self.redis_client.pipeline()
+                self.to_redis(pipe, key)
+                pipe.sadd("datasets", self.name)
                 if self.owner_id is not None:
-                    self.redis_client.sadd(f"user:{self.owner_id}:datasets", self.name)
+                    pipe.sadd(f"user:{self.owner_id}:datasets", self.name)
+                pipe.execute()
             except Exception:
                 logger.exception("Failed to persist dataset %s", self.name)
         if self.neo4j_driver and self.name:
@@ -104,6 +118,22 @@ class DatasetBuilder:
                 )
             except Exception:
                 logger.exception("Failed to persist graph %s to Neo4j", self.name)
+        graph = get_redis_graph(self.name)
+        if graph is not None:
+            try:
+                DatasetBuilder.save_redis_graph.__wrapped__(self, graph)
+            except Exception:
+                logger.exception("Failed to persist graph %s to RedisGraph", self.name)
+
+    def _touch(self) -> None:
+        """Update the ``accessed_at`` timestamp in Redis."""
+
+        if self.redis_client and self.redis_key:
+            self.accessed_at = datetime.now(timezone.utc)
+            try:
+                self.redis_client.set(self.redis_key, json.dumps(self.to_dict()))
+            except Exception:
+                logger.exception("Failed to update access time for %s", self.name)
 
     # ------------------------------------------------------------------
     # Decorators
@@ -130,18 +160,16 @@ class DatasetBuilder:
         logger.info(message)
         if self.redis_client and self.name:
             key = f"dataset:{self.name}"
+            data = {
+                "operation": event.operation,
+                "message": event.message,
+                "timestamp": event.timestamp.isoformat(),
+                "params": event.params,
+            }
             try:
-                self.redis_client.rpush(
-                    f"{key}:events",
-                    json.dumps(
-                        {
-                            "operation": event.operation,
-                            "message": event.message,
-                            "timestamp": event.timestamp.isoformat(),
-                            "params": event.params,
-                        }
-                    ),
-                )
+                self.redis_client.rpush(f"{key}:events", json.dumps(data))
+                log = data | {"dataset": self.name}
+                self.redis_client.rpush("dataset:events", json.dumps(log))
             except Exception:
                 logger.exception("Failed to persist event %s", self.name)
 
@@ -1197,6 +1225,7 @@ class DatasetBuilder:
             "name": self.name,
             "owner_id": self.owner_id,
             "created_at": self.created_at.isoformat(),
+            "accessed_at": self.accessed_at.isoformat(),
             "history": self.history,
             "versions": self.versions,
             "ingested_docs": self.ingested_docs,
@@ -1215,6 +1244,8 @@ class DatasetBuilder:
             ds.id = data["id"]
         if ts := data.get("created_at"):
             ds.created_at = datetime.fromisoformat(ts)
+        if ts := data.get("accessed_at"):
+            ds.accessed_at = datetime.fromisoformat(ts)
         ds.owner_id = data.get("owner_id")
         ds.history = list(data.get("history", []))
         ds.versions = list(data.get("versions", []))
@@ -1240,18 +1271,19 @@ class DatasetBuilder:
     # Redis helpers
     # ------------------------------------------------------------------
 
-    def to_redis(self, client: redis.Redis, key: str | None = None) -> str:
+    def to_redis(self, client: redis.Redis | redis.client.Pipeline, key: str | None = None) -> str:
         """Persist the dataset in Redis under ``key``."""
 
         key = key or (self.name or "dataset")
         self.redis_key = key
         if self.name:
             self.validate_name(self.name)
-        client.set(key, json.dumps(self.to_dict()))
+        pipe = client.pipeline() if not isinstance(client, redis.client.Pipeline) else client
+        pipe.set(key, json.dumps(self.to_dict()))
         events_key = f"{key}:events"
-        client.delete(events_key)
+        pipe.delete(events_key)
         if self.events:
-            client.rpush(
+            pipe.rpush(
                 events_key,
                 *[
                     json.dumps(
@@ -1265,6 +1297,8 @@ class DatasetBuilder:
                     for ev in self.events
                 ],
             )
+        if pipe is not client:
+            pipe.execute()
         return key
 
     @classmethod
@@ -1285,6 +1319,12 @@ class DatasetBuilder:
         require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
         if require and driver is None:
             raise ValueError("Neo4j driver required")
+        graph = get_redis_graph(ds.name)
+        if graph is not None:
+            try:
+                DatasetBuilder.load_redis_graph.__wrapped__(ds, graph)
+            except Exception:
+                logger.exception("Failed to load graph %s from RedisGraph", ds.name)
         events_key = f"{key}:events"
         raw_events = client.lrange(events_key, 0, -1)
         if raw_events:
@@ -1296,6 +1336,7 @@ class DatasetBuilder:
                     ev["timestamp"] = datetime.fromisoformat(ts)
                 ds.events.append(HistoryEvent(**ev))
             ds.history = [ev.message for ev in ds.events]
+        ds._touch()
         return ds
 
     @persist_after
@@ -1312,6 +1353,7 @@ class DatasetBuilder:
         extract_facts: bool = False,
         client: "LLMClient" | None = None,
         options: "IngestOptions" | None = None,
+        progress_callback: Callable[[int], None] | None = None,
     ) -> str:
         """Parse ``path`` and ingest its content into the dataset."""
 
@@ -1337,6 +1379,7 @@ class DatasetBuilder:
             extract_facts=extract_facts,
             client=client,
             options=None,
+            progress_callback=progress_callback,
         )
         self.ingested_docs[doc] = {
             "path": path,
@@ -1358,6 +1401,70 @@ class DatasetBuilder:
             extract_entities=extract_entities,
             extract_facts=extract_facts,
         )
+        return doc
+
+    async def ingest_file_async(
+        self,
+        path: str,
+        doc_id: str | None = None,
+        *,
+        config: dict[str, Any] | None = None,
+        high_res: bool = False,
+        ocr: bool = False,
+        use_unstructured: bool | None = None,
+        extract_entities: bool = False,
+        extract_facts: bool = False,
+        client: "LLMClient" | None = None,
+        options: "IngestOptions" | None = None,
+        progress_callback: Callable[[int], None] | None = None,
+    ) -> str:
+        """Asynchronous counterpart to :meth:`ingest_file`."""
+
+        from .ingest import ingest_into_dataset_async
+
+        if options is not None:
+            config = options.config
+            high_res = options.high_res
+            ocr = options.ocr
+            use_unstructured = options.use_unstructured
+            extract_entities = options.extract_entities
+            extract_facts = options.extract_facts
+
+        doc = await ingest_into_dataset_async(
+            path,
+            self,
+            doc_id=doc_id,
+            config=config,
+            high_res=high_res,
+            ocr=ocr,
+            use_unstructured=use_unstructured,
+            extract_entities=extract_entities,
+            extract_facts=extract_facts,
+            client=client,
+            options=None,
+            progress_callback=progress_callback,
+        )
+        self.ingested_docs[doc] = {
+            "path": path,
+            "config": config,
+            "high_res": high_res,
+            "ocr": ocr,
+            "use_unstructured": use_unstructured,
+            "extract_entities": extract_entities,
+            "extract_facts": extract_facts,
+        }
+        self.stage = max(self.stage, DatasetStage.INGESTED)
+        self._record_event(
+            "ingest_document",
+            f"Ingested {doc}",
+            path=path,
+            high_res=high_res,
+            ocr=ocr,
+            use_unstructured=use_unstructured,
+            extract_entities=extract_entities,
+            extract_facts=extract_facts,
+        )
+        self._persist()
         return doc
 
     # ------------------------------------------------------------------
@@ -1489,6 +1596,18 @@ class DatasetBuilder:
         self.stage = max(self.stage, DatasetStage.GENERATED)
         self._record_event("generate", f"Post-KG pipeline run (v{len(self.versions)})")
 
+        env_limit = os.getenv("DATASET_MAX_VERSIONS")
+        if env_limit:
+            try:
+                limit_val = int(env_limit)
+            except Exception:
+                limit_val = None
+            if limit_val and limit_val > 0:
+                try:
+                    self.prune_versions(limit_val)
+                except Exception:
+                    logger.exception("Failed to prune versions for %s", self.name)
+
         return result
 
     @persist_after
@@ -1510,6 +1629,50 @@ class DatasetBuilder:
             f"Removed version {index}",
             params={"version": removed.get("time")},
         )
+
+    @persist_after
+    def restore_version(self, index: int) -> None:
+        """Restore ``index`` as the latest generation result."""
+
+        if index < 1 or index > len(self.versions):
+            raise IndexError("version index out of range")
+        restored = deepcopy(self.versions[index - 1])
+        self.versions.append(restored)
+        self.stage = max(self.stage, DatasetStage.GENERATED)
+        self._record_event(
+            "restore_version",
+            f"Restored version {index}",
+            version=restored.get("time"),
+        )
+
+    @persist_after
+    def prune_versions(self, limit: int | None = None) -> int:
+        """Remove oldest versions beyond ``limit``.
+
+        The default ``limit`` is read from the ``DATASET_MAX_VERSIONS``
+        environment variable if not provided. Returns the number of removed
+        versions.
+        """
+
+        if limit is None:
+            env = os.getenv("DATASET_MAX_VERSIONS")
+            try:
+                limit = int(env) if env else None
+            except Exception:
+                limit = None
+        if not limit or limit < 1:
+            return 0
+        removed = 0
+        while len(self.versions) > limit:
+            self.versions.pop(0)
+            removed += 1
+        if removed:
+            self._record_event(
+                "prune_versions",
+                f"Pruned to {limit} versions",
+                removed=removed,
+            )
+        return removed
 
     # ------------------------------------------------------------------
     # Neo4j helpers
@@ -1534,3 +1697,76 @@ class DatasetBuilder:
             raise ValueError("Neo4j driver required")
         self.graph = self.graph.__class__.from_neo4j(driver, dataset=self.name)
         self._record_event("load_neo4j", "Graph loaded from Neo4j")
+
+    # ------------------------------------------------------------------
+    # RedisGraph helpers
+    # ------------------------------------------------------------------
+
+    @persist_after
+    def save_redis_graph(self, graph: RGGraph | None = None) -> None:
+        """Persist the knowledge graph to RedisGraph."""
+
+        graph = graph or get_redis_graph(self.name)
+        if graph is None:
+            raise ValueError("RedisGraph not configured")
+        try:
+            graph.query("MATCH (n {dataset:$ds}) DETACH DELETE n", {"ds": self.name})
+        except Exception:
+            pass
+        for node_id, attrs in self.graph.graph.nodes(data=True):
+            label = attrs.get("type", "Node")
+            props = {k: v for k, v in attrs.items() if k != "type"}
+            props_str = ", ".join(f"{k}: ${k}_{node_id}" for k in props)
+            params = {f"{k}_{node_id}": v for k, v in props.items()}
+            params.update({"id": node_id, "ds": self.name})
+            q = f"CREATE (:{label} {{id:$id, dataset:$ds{', ' + props_str if props_str else ''}}})"
+            graph.query(q, params)
+        for src, dst, attrs in self.graph.graph.edges(data=True):
+            relation = attrs.get("relation", "REL")
+            props = {k: v for k, v in attrs.items() if k != "relation"}
+            props_str = ", ".join(f"{k}: ${k}_{src}_{dst}" for k in props)
+            params = {f"{k}_{src}_{dst}": v for k, v in props.items()}
+            params.update({"src": src, "dst": dst, "ds": self.name})
+            q = (
+                f"MATCH (a {{id:$src, dataset:$ds}}), (b {{id:$dst, dataset:$ds}}) "
+                f"CREATE (a)-[:{relation} {{dataset:$ds{', ' + props_str if props_str else ''}}}]->(b)"
+            )
+            graph.query(q, params)
+        self._record_event("save_redis_graph", "Graph saved to RedisGraph")
+
+    @persist_after
+    def load_redis_graph(self, graph: RGGraph | None = None) -> None:
+        """Load the knowledge graph from RedisGraph."""
+
+        graph = graph or get_redis_graph(self.name)
+        if graph is None:
+            raise ValueError("RedisGraph not configured")
+        self.graph.graph.clear()
+        res_nodes = graph.query(
+            "MATCH (n {dataset:$ds}) RETURN n.id, labels(n)[0], properties(n)",
+            {"ds": self.name},
+        )
+        for nid, label, props in res_nodes.result_set:
+            if isinstance(props, dict):
+                props.pop("dataset", None)
+            self.graph.graph.add_node(nid, type=label, **props)
+        res_edges = graph.query(
+            "MATCH (a {dataset:$ds})-[r]->(b {dataset:$ds}) RETURN a.id, b.id, type(r), properties(r)",
+            {"ds": self.name},
+        )
+        for src, dst, rel, props in res_edges.result_set:
+            if isinstance(props, dict):
+                props.pop("dataset", None)
+            self.graph.graph.add_edge(src, dst, relation=rel, **props)
+        self._record_event("load_redis_graph", "Graph loaded from RedisGraph")
+
+    def delete_redis_graph(self, graph: RGGraph | None = None) -> None:
+        """Remove the dataset's graph from RedisGraph if configured."""
+
+        graph = graph or get_redis_graph(self.name)
+        if graph is None:
+            return
+        try:
+            graph.query("MATCH (n {dataset:$ds}) DETACH DELETE n", {"ds": self.name})
+        except Exception:
+            logger.exception("Failed to delete graph %s from RedisGraph", self.name)

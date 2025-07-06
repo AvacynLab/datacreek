@@ -23,6 +23,7 @@ from .llm_processing import (
     qa_pairs_to_records,
 )
 from .progress import create_progress, progress_context
+from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, split_into_chunks
 
 
@@ -65,4 +66,5 @@ __all__ = [
     "deduplicate_pairs",
     "extract_facts",
     "extract_entities",
+    "decode_hash",
 ]
