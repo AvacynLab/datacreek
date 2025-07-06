@@ -45,6 +45,7 @@ def test_dataset_ingest_task(tmp_path, monkeypatch):
     ds.redis_client = client
     ds.to_redis(client, "dataset:demo")
     client.sadd("datasets", "demo")
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
     f = tmp_path / "doc.txt"
     f.write_text("hello world")
     dataset_ingest_task.delay(
