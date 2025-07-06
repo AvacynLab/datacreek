@@ -226,10 +226,19 @@ class DatasetBuilder:
         *,
         section_id: str | None = None,
         page: int | None = None,
+        emotion: str | None = None,
     ) -> None:
         """Insert a chunk node in the dataset graph."""
 
-        self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id, page=page)
+        self.graph.add_chunk(
+            doc_id,
+            chunk_id,
+            text,
+            source,
+            section_id=section_id,
+            page=page,
+            emotion=emotion,
+        )
         self._record_event(
             "add_chunk",
             f"Added chunk {chunk_id} to {doc_id}",
@@ -929,6 +938,7 @@ class DatasetBuilder:
         epsilon: float = 0.0,
         max_iter: int = 100,
         seed: int | None = None,
+        use_generator: bool = False,
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.optimize_topology`."""
 
@@ -938,6 +948,7 @@ class DatasetBuilder:
             epsilon=epsilon,
             max_iter=max_iter,
             seed=seed,
+            use_generator=use_generator,
         )
         self._record_event(
             "optimize_topology",
@@ -945,6 +956,7 @@ class DatasetBuilder:
             dimension=dimension,
             epsilon=epsilon,
             max_iter=max_iter,
+            use_generator=use_generator,
         )
         return dist
 

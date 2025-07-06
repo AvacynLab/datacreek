@@ -71,6 +71,11 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
     assert ds.get_images_for_document("doc1") == ["doc1_image_0"]
     assert ds.graph.graph.nodes["doc1_image_0"].get("alt_text") == "cap"
     assert len(ds.get_chunks_for_document("doc1")) == 2
+    assert ds.get_atoms_for_document("doc1") == ["doc1_atom_0", "doc1_atom_1"]
+    assert ds.get_molecules_for_document("doc1") == [
+        "doc1_molecule_0",
+        "doc1_molecule_1",
+    ]
 
 
 def test_determine_parser_errors(tmp_path):

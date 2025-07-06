@@ -180,6 +180,7 @@ class KnowledgeGraph:
         *,
         section_id: str | None = None,
         page: int | None = None,
+        emotion: str | None = None,
     ) -> None:
         if source is None:
             source = self.graph.nodes[doc_id].get("source")
@@ -200,7 +201,15 @@ class KnowledgeGraph:
         if page is None:
             page = 1
 
-        self.graph.add_node(chunk_id, type="chunk", text=text, source=source, page=page)
+        self.graph.add_node(
+            chunk_id,
+            type="chunk",
+            text=text,
+            source=source,
+            page=page,
+        )
+        if emotion:
+            self.graph.nodes[chunk_id]["emotion"] = emotion
         self.graph.add_edge(
             doc_id,
             chunk_id,
@@ -1634,6 +1643,7 @@ class KnowledgeGraph:
         epsilon: float = 0.0,
         max_iter: int = 100,
         seed: int | None = None,
+        use_generator: bool = False,
     ) -> float:
         """Edit ``perception_link`` edges to approach ``target`` topology."""
 
@@ -1653,6 +1663,28 @@ class KnowledgeGraph:
             max_iter=max_iter,
             seed=seed,
         )
+
+        if use_generator and dist > epsilon:
+            from ..analysis.generation import generate_graph_rnn_like
+
+            extra = generate_graph_rnn_like(
+                skeleton.number_of_nodes(), skeleton.number_of_edges()
+            )
+            node_map = {i: n for i, n in enumerate(skeleton.nodes())}
+            for u, v in extra.edges():
+                a, b = node_map.get(u), node_map.get(v)
+                if a is None or b is None:
+                    continue
+                if not optimized.has_edge(a, b):
+                    optimized.add_edge(a, b)
+            dist = minimize_bottleneck_distance(
+                optimized,
+                target,
+                dimension=dimension,
+                epsilon=epsilon,
+                max_iter=max_iter,
+                seed=seed,
+            )[1]
 
         self.graph.remove_edges_from(
             [

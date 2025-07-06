@@ -44,11 +44,13 @@ __all__: list[str] = [
     "spectral_gap",
     "laplacian_energy",
     "poincare_embedding",
+    "generate_graph_rnn_like",
     "spectral_density",
     "graph_fourier_transform",
     "inverse_graph_fourier_transform",
     "graph_information_bottleneck",
     "caption_image",
+    "detect_emotion",
     "fractalize_graph",
     "fractalize_optimal",
 ]
@@ -75,6 +77,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         spectral_entropy,
         spectral_gap,
     )
+    from .analysis.generation import generate_graph_rnn_like
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
     from .core.ingest import ingest_into_dataset
@@ -95,6 +98,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
     )
     from .utils.fact_extraction import extract_facts
     from .utils.image_captioning import caption_image
+    from .utils.emotion import detect_emotion
 
 
 def __getattr__(name: str):
@@ -261,4 +265,12 @@ def __getattr__(name: str):
         from .utils.image_captioning import caption_image as _ci
 
         return _ci
+    if name == "detect_emotion":
+        from .utils.emotion import detect_emotion as _de
+
+        return _de
+    if name == "generate_graph_rnn_like":
+        from .analysis.generation import generate_graph_rnn_like as _gg
+
+        return _gg
     raise AttributeError(name)

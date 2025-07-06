@@ -895,7 +895,7 @@ def test_optimize_topology_wrapper():
     target = nx.relabel_nodes(target, mapping)
 
     before = bottleneck_distance(ds.graph.graph.to_undirected(), target)
-    dist = ds.optimize_topology(target, max_iter=5, seed=0)
+    dist = ds.optimize_topology(target, max_iter=5, seed=0, use_generator=True)
     after = bottleneck_distance(ds.graph.graph.to_undirected(), target)
     assert after <= before
     assert dist == pytest.approx(after, rel=1e-9)

@@ -166,15 +166,28 @@ def to_kg(
 
     if elements:
         chunk_idx = 0
+        atom_idx = 0
+        molecule_idx = 0
+        atoms: list[str] = []
         img_idx = 0
         current_page = 1
         for el in elements:
             page = getattr(getattr(el, "metadata", None), "page_number", None) or current_page
+            if page != current_page and atoms:
+                mol_id = f"{doc_id}_molecule_{molecule_idx}"
+                dataset.add_molecule(doc_id, mol_id, atoms)
+                molecule_idx += 1
+                atoms = []
             current_page = page
             path = getattr(el, "image_path", None) or getattr(
                 getattr(el, "metadata", None), "image_path", None
             )
             if path:
+                if atoms:
+                    mol_id = f"{doc_id}_molecule_{molecule_idx}"
+                    dataset.add_molecule(doc_id, mol_id, atoms)
+                    molecule_idx += 1
+                    atoms = []
                 img_id = f"{doc_id}_image_{img_idx}"
                 try:
                     from datacreek.utils.image_captioning import caption_image
@@ -189,6 +202,16 @@ def to_kg(
             if not text_el:
                 continue
             cleaned_el = clean_text(text_el)
+            atom_id = f"{doc_id}_atom_{atom_idx}"
+            dataset.add_atom(
+                doc_id,
+                atom_id,
+                cleaned_el,
+                el.__class__.__name__,
+                page=page,
+            )
+            atoms.append(atom_id)
+            atom_idx += 1
             chunks = split_into_chunks(
                 cleaned_el,
                 chunk_size=gen_cfg.chunk_size,
@@ -198,10 +221,19 @@ def to_kg(
             )
             for chunk in chunks:
                 cid = f"{doc_id}_chunk_{chunk_idx}"
-                dataset.add_chunk(doc_id, cid, chunk, page=page)
+                try:
+                    from datacreek.utils.emotion import detect_emotion
+
+                    emotion = detect_emotion(chunk)
+                except Exception:
+                    emotion = None
+                dataset.add_chunk(doc_id, cid, chunk, page=page, emotion=emotion)
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
+        if atoms:
+            mol_id = f"{doc_id}_molecule_{molecule_idx}"
+            dataset.add_molecule(doc_id, mol_id, atoms)
     elif cleaned_pages:
         chunk_idx = 0
         for page_num, page_text in enumerate(cleaned_pages, start=1):
@@ -214,7 +246,13 @@ def to_kg(
             )
             for chunk in page_chunks:
                 cid = f"{doc_id}_chunk_{chunk_idx}"
-                dataset.add_chunk(doc_id, cid, chunk, page=page_num)
+                try:
+                    from datacreek.utils.emotion import detect_emotion
+
+                    emotion = detect_emotion(chunk)
+                except Exception:
+                    emotion = None
+                dataset.add_chunk(doc_id, cid, chunk, page=page_num, emotion=emotion)
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
@@ -228,7 +266,13 @@ def to_kg(
         )
         for i, chunk in enumerate(chunks):
             cid = f"{doc_id}_chunk_{i}"
-            dataset.add_chunk(doc_id, cid, chunk)
+            try:
+                from datacreek.utils.emotion import detect_emotion
+
+                emotion = detect_emotion(chunk)
+            except Exception:
+                emotion = None
+            dataset.add_chunk(doc_id, cid, chunk, emotion=emotion)
             if progress_callback:
                 progress_callback(i + 1)
 
