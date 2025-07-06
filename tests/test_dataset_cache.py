@@ -1,4 +1,8 @@
+import os
+
 import fakeredis
+
+os.environ.setdefault("DATABASE_URL", "sqlite:///test.db")
 
 from datacreek.db import SessionLocal
 from datacreek.services import create_dataset, get_dataset_by_id
