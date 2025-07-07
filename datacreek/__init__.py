@@ -54,6 +54,7 @@ __all__: list[str] = [
     "sheaf_laplacian",
     "fractal_information_density",
     "quality_check",
+    "md5_file",
     "caption_image",
     "detect_emotion",
     "detect_modality",
@@ -309,6 +310,10 @@ def __getattr__(name: str):
         from .utils.modality import detect_modality as _dm
 
         return _dm
+    if name == "md5_file":
+        from .utils.checksum import md5_file as _md5
+
+        return _md5
     if name == "generate_graph_rnn_like":
         from .analysis.generation import generate_graph_rnn_like as _gg
 

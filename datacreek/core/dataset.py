@@ -187,6 +187,7 @@ class DatasetBuilder:
         text: str | None = None,
         author: str | None = None,
         organization: str | None = None,
+        checksum: str | None = None,
     ) -> None:
         """Insert a document node in the dataset graph."""
 
@@ -196,6 +197,7 @@ class DatasetBuilder:
             text=text,
             author=author,
             organization=organization,
+            checksum=checksum,
         )
         self._record_event(
             "add_document",

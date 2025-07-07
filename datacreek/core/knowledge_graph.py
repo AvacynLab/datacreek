@@ -48,6 +48,7 @@ class KnowledgeGraph:
         text: str | None = None,
         author: str | None = None,
         organization: str | None = None,
+        checksum: str | None = None,
     ) -> None:
         if self.graph.has_node(doc_id):
             raise ValueError(f"Document already exists: {doc_id}")
@@ -57,6 +58,7 @@ class KnowledgeGraph:
             source=source,
             author=author,
             organization=organization,
+            checksum=checksum,
         )
         if text:
             self.graph.nodes[doc_id]["text"] = text

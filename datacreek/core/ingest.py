@@ -148,6 +148,7 @@ def to_kg(
     pages: list[str] | None = None,
     elements: list[Any] | None = None,
     source: str | None = None,
+    checksum: str | None = None,
     extract_entities: bool = False,
     progress_callback: Callable[[int], None] | None = None,
     emotion_fn: Callable[[str], str] | None = None,
@@ -169,7 +170,9 @@ def to_kg(
     cleaned_text = clean_text(text)
     cleaned_pages = [clean_text(p) for p in pages] if pages else None
 
-    dataset.add_document(doc_id, source=source or doc_id, text=cleaned_text)
+    dataset.add_document(
+        doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum
+    )
 
     if elements:
         chunk_idx = 0
@@ -459,6 +462,13 @@ def ingest_into_dataset(
         text = result
         pages = None
     doc_id = doc_id or Path(file_path).stem
+    checksum = None
+    try:
+        from datacreek.utils.checksum import md5_file
+
+        checksum = md5_file(file_path)
+    except Exception:
+        pass
     try:
         to_kg(
             text,
@@ -469,6 +479,7 @@ def ingest_into_dataset(
             pages=pages,
             elements=elements,
             source=file_path,
+            checksum=checksum,
             extract_entities=extract_entities,
             progress_callback=progress_callback,
             emotion_fn=emotion_fn,
