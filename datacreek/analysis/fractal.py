@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 try:  # optional dependency
     import gudhi as gd
@@ -576,6 +576,40 @@ def inverse_graph_fourier_transform(
     lap = _laplacian(graph, normed=normed)
     _, evecs = eigh(lap)
     return evecs @ np.asarray(coeffs, dtype=float)
+
+
+def fractal_information_metrics(
+    graph: nx.Graph, radii: Iterable[int], *, max_dim: int = 1
+) -> Dict[str, Any]:
+    """Return fractal dimension and persistence entropies.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    radii:
+        Iterable of box radii used for the covering.
+    max_dim:
+        Highest homology dimension for which to compute the entropy.
+
+    Returns
+    -------
+    dict
+        Mapping with keys ``dimension`` and ``entropy`` (per homology dimension).
+    """
+
+    dim, _ = box_counting_dimension(graph, radii)
+    entropies: Dict[int, float] = {}
+    if gd is not None and gr is not None:
+        for d in range(max_dim + 1):
+            try:
+                entropies[d] = persistence_entropy(graph, dimension=d)
+            except Exception:  # pragma: no cover - optional dep failure
+                entropies[d] = float("nan")
+    else:  # pragma: no cover - optional dep missing
+        entropies = {d: float("nan") for d in range(max_dim + 1)}
+
+    return {"dimension": dim, "entropy": entropies}
 
 
 def poincare_embedding(

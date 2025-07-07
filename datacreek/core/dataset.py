@@ -888,6 +888,19 @@ class DatasetBuilder:
         )
         return features
 
+    def fractal_information_metrics(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.fractal_information_metrics`."""
+
+        metrics = self.graph.fractal_information_metrics(radii, max_dim=max_dim)
+        self._record_event(
+            "fractal_information_metrics",
+            "Fractal information metrics computed",
+            radii=list(radii),
+        )
+        return metrics
+
     def dimension_distortion(self, radii: Iterable[int]) -> float:
         """Wrapper for :meth:`KnowledgeGraph.dimension_distortion`."""
 

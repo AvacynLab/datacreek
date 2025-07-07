@@ -1757,6 +1757,15 @@ class KnowledgeGraph:
             "signature": signature,
         }
 
+    def fractal_information_metrics(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> Dict[str, Any]:
+        """Return fractal dimension and persistence entropies."""
+
+        from ..analysis.fractal import fractal_information_metrics as _fim
+
+        return _fim(self.graph.to_undirected(), radii, max_dim=max_dim)
+
     def dimension_distortion(self, radii: Iterable[int]) -> float:
         """Return difference between graph and embedding fractal dimensions."""
 

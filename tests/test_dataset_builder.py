@@ -1469,3 +1469,13 @@ def test_add_hyperedge_wrapper():
     assert ds.graph.graph.nodes["he1"]["type"] == "hyperedge"
     assert ds.graph.graph.has_edge("he1", "c1")
     assert any(e.operation == "add_hyperedge" for e in ds.events)
+
+
+def test_fractal_information_metrics_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    metrics = ds.fractal_information_metrics([1], max_dim=1)
+    assert "dimension" in metrics and "entropy" in metrics
+    assert 0 in metrics["entropy"]
+    assert any(e.operation == "fractal_information_metrics" for e in ds.events)
