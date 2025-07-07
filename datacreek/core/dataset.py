@@ -1013,6 +1013,20 @@ class DatasetBuilder:
         )
         return coarse, mapping, radius
 
+    def build_fractal_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Wrapper for :meth:`KnowledgeGraph.build_fractal_hierarchy`."""
+
+        hierarchy = self.graph.build_fractal_hierarchy(radii, max_levels=max_levels)
+        self._record_event(
+            "build_fractal_hierarchy",
+            "Fractal hierarchy constructed",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+        return hierarchy
+
     def optimize_topology(
         self,
         target: nx.Graph,

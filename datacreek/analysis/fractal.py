@@ -616,6 +616,41 @@ def fractalize_optimal(
     return coarse, mapping, radius
 
 
+def build_fractal_hierarchy(
+    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5
+) -> List[Tuple[nx.Graph, Dict[object, int], int]]:
+    """Return a hierarchy of coarse graphs using MDL-optimal radii.
+
+    Parameters
+    ----------
+    graph:
+        Input graph to coarse-grain recursively.
+    radii:
+        Candidate box radii ``l_B`` used to search for the optimal cover at each
+        level.
+    max_levels:
+        Maximum number of coarse-graining iterations. The process stops early if
+        the graph can no longer be reduced.
+
+    Returns
+    -------
+    list
+        Sequence ``[(G1, mapping1, r1), (G2, mapping2, r2), ...]`` describing
+        the hierarchy from fine to coarse. ``Gi`` is the graph at level ``i`` and
+        ``mappingi`` maps nodes of ``G_{i-1}`` to boxes of ``Gi``.
+    """
+
+    levels: List[Tuple[nx.Graph, Dict[object, int], int]] = []
+    current = graph
+    for _ in range(max_levels):
+        coarse, mapping, radius = fractalize_optimal(current, radii)
+        levels.append((coarse, mapping, radius))
+        if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
+            break
+        current = coarse
+    return levels
+
+
 def minimize_bottleneck_distance(
     graph: nx.Graph,
     target: nx.Graph,

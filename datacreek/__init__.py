@@ -53,6 +53,7 @@ __all__: list[str] = [
     "detect_emotion",
     "fractalize_graph",
     "fractalize_optimal",
+    "build_fractal_hierarchy",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -60,6 +61,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         bottleneck_distance,
         box_counting_dimension,
         box_cover,
+        build_fractal_hierarchy,
         fractalize_graph,
         fractalize_optimal,
         graph_fourier_transform,
@@ -96,9 +98,9 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         run_generation_pipeline,
         run_generation_pipeline_async,
     )
+    from .utils.emotion import detect_emotion
     from .utils.fact_extraction import extract_facts
     from .utils.image_captioning import caption_image
-    from .utils.emotion import detect_emotion
 
 
 def __getattr__(name: str):
@@ -261,6 +263,10 @@ def __getattr__(name: str):
         from .analysis.fractal import fractalize_optimal as _fo
 
         return _fo
+    if name == "build_fractal_hierarchy":
+        from .analysis.fractal import build_fractal_hierarchy as _bfh
+
+        return _bfh
     if name == "caption_image":
         from .utils.image_captioning import caption_image as _ci
 

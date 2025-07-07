@@ -1710,6 +1710,20 @@ class KnowledgeGraph:
         str_mapping = {str(node): box for node, box in mapping.items()}
         return coarse, str_mapping, radius
 
+    def build_fractal_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Return a hierarchy of coarse graphs using MDL-optimal radii."""
+
+        from ..analysis.fractal import build_fractal_hierarchy as _bfh
+
+        hierarchy = _bfh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        converted: list[tuple[nx.Graph, Dict[str, int], int]] = []
+        for g, mapping, r in hierarchy:
+            str_mapping = {str(node): box for node, box in mapping.items()}
+            converted.append((g, str_mapping, r))
+        return converted
+
     def optimize_topology(
         self,
         target: nx.Graph,
