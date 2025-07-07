@@ -51,6 +51,7 @@ __all__: list[str] = [
     "graph_information_bottleneck",
     "caption_image",
     "detect_emotion",
+    "detect_modality",
     "fractalize_graph",
     "fractalize_optimal",
     "build_fractal_hierarchy",
@@ -275,6 +276,10 @@ def __getattr__(name: str):
         from .utils.emotion import detect_emotion as _de
 
         return _de
+    if name == "detect_modality":
+        from .utils.modality import detect_modality as _dm
+
+        return _dm
     if name == "generate_graph_rnn_like":
         from .analysis.generation import generate_graph_rnn_like as _gg
 

@@ -8,6 +8,7 @@ from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 from datacreek.core.ingest import ingest_into_dataset, process_file
 from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
+from datacreek.utils.modality import detect_modality
 
 
 def test_ingest_to_kg(tmp_path):
@@ -76,6 +77,11 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
         "doc1_molecule_0",
         "doc1_molecule_1",
     ]
+    from datacreek.utils.modality import detect_modality
+
+    assert ds.graph.graph.nodes["doc1_atom_0"].get("modality") == detect_modality("Hello")
+    chunk_id = ds.get_chunks_for_document("doc1")[0]
+    assert ds.graph.graph.nodes[chunk_id].get("modality") == detect_modality("Hello")
 
 
 def test_determine_parser_errors(tmp_path):

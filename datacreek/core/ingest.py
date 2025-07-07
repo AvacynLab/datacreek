@@ -20,6 +20,7 @@ from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
 from datacreek.utils.config import get_generation_config, load_config
+from datacreek.utils.modality import detect_modality
 from datacreek.utils.text import clean_text, split_into_chunks
 
 logger = logging.getLogger(__name__)
@@ -203,12 +204,24 @@ def to_kg(
                 continue
             cleaned_el = clean_text(text_el)
             atom_id = f"{doc_id}_atom_{atom_idx}"
+            try:
+                from datacreek.utils.emotion import detect_emotion
+
+                atom_emotion = detect_emotion(cleaned_el)
+            except Exception:
+                atom_emotion = None
+            try:
+                atom_modality = detect_modality(cleaned_el)
+            except Exception:
+                atom_modality = None
             dataset.add_atom(
                 doc_id,
                 atom_id,
                 cleaned_el,
                 el.__class__.__name__,
                 page=page,
+                emotion=atom_emotion,
+                modality=atom_modality,
             )
             atoms.append(atom_id)
             atom_idx += 1
@@ -227,7 +240,11 @@ def to_kg(
                     emotion = detect_emotion(chunk)
                 except Exception:
                     emotion = None
-                dataset.add_chunk(doc_id, cid, chunk, page=page, emotion=emotion)
+                try:
+                    modality = detect_modality(chunk)
+                except Exception:
+                    modality = None
+                dataset.add_chunk(doc_id, cid, chunk, page=page, emotion=emotion, modality=modality)
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
@@ -252,7 +269,13 @@ def to_kg(
                     emotion = detect_emotion(chunk)
                 except Exception:
                     emotion = None
-                dataset.add_chunk(doc_id, cid, chunk, page=page_num, emotion=emotion)
+                try:
+                    modality = detect_modality(chunk)
+                except Exception:
+                    modality = None
+                dataset.add_chunk(
+                    doc_id, cid, chunk, page=page_num, emotion=emotion, modality=modality
+                )
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
@@ -272,7 +295,11 @@ def to_kg(
                 emotion = detect_emotion(chunk)
             except Exception:
                 emotion = None
-            dataset.add_chunk(doc_id, cid, chunk, emotion=emotion)
+            try:
+                modality = detect_modality(chunk)
+            except Exception:
+                modality = None
+            dataset.add_chunk(doc_id, cid, chunk, emotion=emotion, modality=modality)
             if progress_callback:
                 progress_callback(i + 1)
 
