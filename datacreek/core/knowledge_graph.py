@@ -186,6 +186,7 @@ class KnowledgeGraph:
         page: int | None = None,
         emotion: str | None = None,
         modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         if source is None:
             source = self.graph.nodes[doc_id].get("source")
@@ -217,6 +218,8 @@ class KnowledgeGraph:
             self.graph.nodes[chunk_id]["emotion"] = emotion
         if modality:
             self.graph.nodes[chunk_id]["modality"] = modality
+        if entities:
+            self.graph.nodes[chunk_id]["entities"] = entities
         self.graph.add_edge(
             doc_id,
             chunk_id,
@@ -296,6 +299,7 @@ class KnowledgeGraph:
         page: int | None = None,
         emotion: str | None = None,
         modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         """Insert an atom node linked to ``doc_id``."""
 
@@ -321,6 +325,8 @@ class KnowledgeGraph:
             self.graph.nodes[atom_id]["emotion"] = emotion
         if modality:
             self.graph.nodes[atom_id]["modality"] = modality
+        if entities:
+            self.graph.nodes[atom_id]["entities"] = entities
         self.graph.add_edge(
             doc_id,
             atom_id,

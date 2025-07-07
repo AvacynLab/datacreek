@@ -145,6 +145,7 @@ def to_kg(
     pages: list[str] | None = None,
     elements: list[Any] | None = None,
     source: str | None = None,
+    extract_entities: bool = False,
     progress_callback: Callable[[int], None] | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
@@ -214,6 +215,16 @@ def to_kg(
                 atom_modality = detect_modality(cleaned_el)
             except Exception:
                 atom_modality = None
+            atom_entities = None
+            if extract_entities:
+                try:
+                    from datacreek.utils.entity_extraction import (
+                        extract_entities as extract_entities_fn,
+                    )
+
+                    atom_entities = extract_entities_fn(cleaned_el, model=None)
+                except Exception:
+                    atom_entities = None
             dataset.add_atom(
                 doc_id,
                 atom_id,
@@ -222,6 +233,7 @@ def to_kg(
                 page=page,
                 emotion=atom_emotion,
                 modality=atom_modality,
+                entities=atom_entities,
             )
             atoms.append(atom_id)
             atom_idx += 1
@@ -244,7 +256,25 @@ def to_kg(
                     modality = detect_modality(chunk)
                 except Exception:
                     modality = None
-                dataset.add_chunk(doc_id, cid, chunk, page=page, emotion=emotion, modality=modality)
+                entities = None
+                if extract_entities:
+                    try:
+                        from datacreek.utils.entity_extraction import (
+                            extract_entities as extract_entities_fn,
+                        )
+
+                        entities = extract_entities_fn(chunk, model=None)
+                    except Exception:
+                        entities = None
+                dataset.add_chunk(
+                    doc_id,
+                    cid,
+                    chunk,
+                    page=page,
+                    emotion=emotion,
+                    modality=modality,
+                    entities=entities,
+                )
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
@@ -273,8 +303,24 @@ def to_kg(
                     modality = detect_modality(chunk)
                 except Exception:
                     modality = None
+                entities = None
+                if extract_entities:
+                    try:
+                        from datacreek.utils.entity_extraction import (
+                            extract_entities as extract_entities_fn,
+                        )
+
+                        entities = extract_entities_fn(chunk, model=None)
+                    except Exception:
+                        entities = None
                 dataset.add_chunk(
-                    doc_id, cid, chunk, page=page_num, emotion=emotion, modality=modality
+                    doc_id,
+                    cid,
+                    chunk,
+                    page=page_num,
+                    emotion=emotion,
+                    modality=modality,
+                    entities=entities,
                 )
                 chunk_idx += 1
                 if progress_callback:
@@ -299,7 +345,24 @@ def to_kg(
                 modality = detect_modality(chunk)
             except Exception:
                 modality = None
-            dataset.add_chunk(doc_id, cid, chunk, emotion=emotion, modality=modality)
+            entities = None
+            if extract_entities:
+                try:
+                    from datacreek.utils.entity_extraction import (
+                        extract_entities as extract_entities_fn,
+                    )
+
+                    entities = extract_entities_fn(chunk, model=None)
+                except Exception:
+                    entities = None
+            dataset.add_chunk(
+                doc_id,
+                cid,
+                chunk,
+                emotion=emotion,
+                modality=modality,
+                entities=entities,
+            )
             if progress_callback:
                 progress_callback(i + 1)
 
@@ -382,6 +445,7 @@ def ingest_into_dataset(
             pages=pages,
             elements=elements,
             source=file_path,
+            extract_entities=extract_entities,
             progress_callback=progress_callback,
         )
     except Exception:

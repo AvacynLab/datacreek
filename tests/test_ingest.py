@@ -84,6 +84,27 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
     assert ds.graph.graph.nodes[chunk_id].get("modality") == detect_modality("Hello")
 
 
+def test_to_kg_extract_entities(tmp_path, monkeypatch):
+    class El:
+        def __init__(self, text=None, page_number=1):
+            self.text = text
+            self.metadata = types.SimpleNamespace(page_number=page_number)
+
+    elements = [El("Paris is nice", page_number=1)]
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    with monkeypatch.context() as m:
+        m.setitem(
+            sys.modules,
+            "datacreek.utils.image_captioning",
+            types.SimpleNamespace(caption_image=lambda p: "cap"),
+        )
+        to_kg("Paris is nice", ds, "doc2", elements=elements, extract_entities=True)
+
+    chunk_id = ds.get_chunks_for_document("doc2")[0]
+    assert "Paris" in ds.graph.graph.nodes[chunk_id].get("entities", [])
+
+
 def test_determine_parser_errors(tmp_path):
     with pytest.raises(FileNotFoundError):
         ingest_file(str(tmp_path / "missing.txt"))

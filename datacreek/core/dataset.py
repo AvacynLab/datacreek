@@ -232,6 +232,7 @@ class DatasetBuilder:
         page: int | None = None,
         emotion: str | None = None,
         modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         """Insert a chunk node in the dataset graph."""
 
@@ -244,6 +245,7 @@ class DatasetBuilder:
             page=page,
             emotion=emotion,
             modality=modality,
+            entities=entities,
         )
         self._record_event(
             "add_chunk",
@@ -276,6 +278,7 @@ class DatasetBuilder:
         page: int | None = None,
         emotion: str | None = None,
         modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         """Insert an atom node."""
 
@@ -288,6 +291,7 @@ class DatasetBuilder:
             page=page,
             emotion=emotion,
             modality=modality,
+            entities=entities,
         )
         self._record_event(
             "add_atom",
