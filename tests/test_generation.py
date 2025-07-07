@@ -1,4 +1,5 @@
 import networkx as nx
+
 from datacreek.analysis.generation import generate_graph_rnn_like
 
 
