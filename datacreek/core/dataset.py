@@ -61,6 +61,7 @@ class DatasetBuilder:
     id: str = field(default_factory=lambda: secrets.token_hex(8))
     name: Optional[str] = None
     graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)
+    use_hnsw: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     owner_id: int | None = None
     history: List[str] = field(default_factory=list)
@@ -88,6 +89,9 @@ class DatasetBuilder:
         """Ensure persistence backends are configured when required."""
         if self.name:
             self.validate_name(self.name)
+        if self.graph.use_hnsw != self.use_hnsw:
+            self.graph.use_hnsw = self.use_hnsw
+            self.graph.__post_init__()
         require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
         if require and (self.redis_client is None or self.neo4j_driver is None):
             raise ValueError("Redis and Neo4j must be configured")
@@ -183,6 +187,7 @@ class DatasetBuilder:
         text: str | None = None,
         author: str | None = None,
         organization: str | None = None,
+        checksum: str | None = None,
     ) -> None:
         """Insert a document node in the dataset graph."""
 
@@ -192,6 +197,7 @@ class DatasetBuilder:
             text=text,
             author=author,
             organization=organization,
+            checksum=checksum,
         )
         self._record_event(
             "add_document",
@@ -226,10 +232,23 @@ class DatasetBuilder:
         *,
         section_id: str | None = None,
         page: int | None = None,
+        emotion: str | None = None,
+        modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         """Insert a chunk node in the dataset graph."""
 
-        self.graph.add_chunk(doc_id, chunk_id, text, source, section_id=section_id, page=page)
+        self.graph.add_chunk(
+            doc_id,
+            chunk_id,
+            text,
+            source,
+            section_id=section_id,
+            page=page,
+            emotion=emotion,
+            modality=modality,
+            entities=entities,
+        )
         self._record_event(
             "add_chunk",
             f"Added chunk {chunk_id} to {doc_id}",
@@ -250,6 +269,19 @@ class DatasetBuilder:
         self.graph.add_image(doc_id, image_id, path, page=page, alt_text=alt_text)
         self._record_event("add_image", f"Added image {image_id} to {doc_id}")
 
+    def add_audio(
+        self,
+        doc_id: str,
+        audio_id: str,
+        path: str,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an audio node in the dataset graph."""
+
+        self.graph.add_audio(doc_id, audio_id, path, page=page)
+        self._record_event("add_audio", f"Added audio {audio_id} to {doc_id}")
+
     def add_atom(
         self,
         doc_id: str,
@@ -259,6 +291,9 @@ class DatasetBuilder:
         source: Optional[str] = None,
         *,
         page: int | None = None,
+        emotion: str | None = None,
+        modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         """Insert an atom node."""
 
@@ -269,6 +304,9 @@ class DatasetBuilder:
             element_type,
             source,
             page=page,
+            emotion=emotion,
+            modality=modality,
+            entities=entities,
         )
         self._record_event(
             "add_atom",
@@ -289,6 +327,45 @@ class DatasetBuilder:
         self._record_event(
             "add_molecule",
             f"Added molecule {molecule_id} to {doc_id}",
+            source=source,
+        )
+
+    def add_hyperedge(
+        self,
+        edge_id: str,
+        node_ids: Iterable[str],
+        *,
+        relation: str = "member",
+        source: str | None = None,
+    ) -> None:
+        """Insert a hyperedge node connecting ``node_ids``."""
+
+        self.graph.add_hyperedge(
+            edge_id,
+            node_ids,
+            relation=relation,
+            source=source,
+        )
+        self._record_event(
+            "add_hyperedge",
+            f"Added hyperedge {edge_id}",
+            relation=relation,
+            source=source,
+        )
+
+    def add_simplex(
+        self,
+        simplex_id: str,
+        node_ids: Iterable[str],
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Insert a simplex node made of existing vertices."""
+
+        self.graph.add_simplex(simplex_id, node_ids, source=source)
+        self._record_event(
+            "add_simplex",
+            f"Added simplex {simplex_id}",
             source=source,
         )
 
@@ -322,6 +399,20 @@ class DatasetBuilder:
 
     def search_chunks(self, query: str) -> list[str]:
         return self.graph.search_chunks(query)
+
+    def chunks_by_emotion(self, emotion: str) -> list[str]:
+        """Return chunk IDs with a specific emotion label."""
+
+        ids = self.graph.chunks_by_emotion(emotion)
+        self._record_event("chunks_by_emotion", "Chunks filtered by emotion", emotion=emotion)
+        return ids
+
+    def chunks_by_modality(self, modality: str) -> list[str]:
+        """Return chunk IDs with a specific modality label."""
+
+        ids = self.graph.chunks_by_modality(modality)
+        self._record_event("chunks_by_modality", "Chunks filtered by modality", modality=modality)
+        return ids
 
     def search(self, query: str, node_type: str = "chunk") -> list[str]:
         return self.graph.search(query, node_type=node_type)
@@ -692,6 +783,9 @@ class DatasetBuilder:
         num_walks: int = 50,
         seed: int = 0,
         workers: int = 1,
+        *,
+        p: float = 1.0,
+        q: float = 1.0,
     ) -> None:
         """Generate Node2Vec embeddings for all nodes."""
 
@@ -701,6 +795,8 @@ class DatasetBuilder:
             num_walks=num_walks,
             workers=workers,
             seed=seed,
+            p=p,
+            q=q,
         )
         self._record_event(
             "compute_graph_embeddings",
@@ -780,6 +876,58 @@ class DatasetBuilder:
             dimensions=dimensions,
         )
 
+    def compute_multigeometric_embeddings(
+        self,
+        *,
+        node2vec_dim: int = 64,
+        graphwave_scales: Iterable[float] | None = None,
+        graphwave_points: int = 10,
+        poincare_dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+        node2vec_p: float = 1.0,
+        node2vec_q: float = 1.0,
+    ) -> None:
+        """Compute Node2Vec, GraphWave, Poincar\u00e9 and GraphSAGE embeddings."""
+
+        self.compute_graph_embeddings(
+            dimensions=node2vec_dim,
+            walk_length=10,
+            num_walks=50,
+            workers=1,
+            seed=0,
+            p=node2vec_p,
+            q=node2vec_q,
+        )
+        self.compute_graphwave_embeddings(
+            scales=graphwave_scales or [0.5, 1.0],
+            num_points=graphwave_points,
+        )
+        self.compute_poincare_embeddings(
+            dim=poincare_dim,
+            negative=min(negative, max(1, len(self.graph.graph.nodes) - 2)),
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        self.compute_graphsage_embeddings(dimensions=node2vec_dim, num_layers=2)
+        self._record_event(
+            "compute_multigeometric_embeddings",
+            "Multi-geometry embeddings computed",
+            node2vec_dim=node2vec_dim,
+            graphwave_scales=list(graphwave_scales or [0.5, 1.0]),
+            graphwave_points=graphwave_points,
+            poincare_dim=poincare_dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+            node2vec_p=node2vec_p,
+            node2vec_q=node2vec_q,
+        )
+
     def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
 
@@ -790,6 +938,55 @@ class DatasetBuilder:
             radii=list(radii),
         )
         return dim, counts
+
+    def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
+        """Compute fractal metrics and record the event."""
+
+        features = self.graph.compute_fractal_features(radii, max_dim=max_dim)
+        self._record_event(
+            "compute_fractal_features",
+            "Fractal features computed",
+            radii=list(radii),
+            dimension=features["dimension"],
+            radius=features["radius"],
+        )
+        return features
+
+    def fractal_information_metrics(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.fractal_information_metrics`."""
+
+        metrics = self.graph.fractal_information_metrics(radii, max_dim=max_dim)
+        self._record_event(
+            "fractal_information_metrics",
+            "Fractal information metrics computed",
+            radii=list(radii),
+        )
+        return metrics
+
+    def dimension_distortion(self, radii: Iterable[int]) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.dimension_distortion`."""
+
+        dist = self.graph.dimension_distortion(radii)
+        self._record_event(
+            "dimension_distortion",
+            "Fractal dimension distortion computed",
+            radii=list(radii),
+            distortion=dist,
+        )
+        return dist
+
+    def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.fractal_information_density`."""
+
+        val = self.graph.fractal_information_density(radii, max_dim=max_dim)
+        self._record_event(
+            "fractal_information_density",
+            "Fractal information density computed",
+            radii=list(radii),
+        )
+        return val
 
     def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
         """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
@@ -835,6 +1032,28 @@ class DatasetBuilder:
         )
         return energy
 
+    def lacunarity(self, radius: int = 1) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.lacunarity`."""
+
+        lac = self.graph.lacunarity(radius=radius)
+        self._record_event(
+            "lacunarity",
+            "Graph lacunarity computed",
+            radius=radius,
+        )
+        return lac
+
+    def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_laplacian`."""
+
+        L = self.graph.sheaf_laplacian(edge_attr=edge_attr)
+        self._record_event(
+            "sheaf_laplacian",
+            "Sheaf Laplacian computed",
+            edge_attr=edge_attr,
+        )
+        return L
+
     def graph_information_bottleneck(
         self,
         labels: Dict[str, int],
@@ -850,6 +1069,24 @@ class DatasetBuilder:
             beta=beta,
         )
         return loss
+
+    def prototype_subgraph(
+        self,
+        labels: Dict[str, int],
+        class_id: int,
+        *,
+        radius: int = 1,
+    ) -> nx.Graph:
+        """Wrapper for :meth:`KnowledgeGraph.prototype_subgraph`."""
+
+        sub = self.graph.prototype_subgraph(labels, class_id, radius=radius)
+        self._record_event(
+            "prototype_subgraph",
+            "Prototype subgraph extracted",
+            class_id=class_id,
+            radius=radius,
+        )
+        return sub
 
     def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
         """Wrapper for :meth:`KnowledgeGraph.laplacian_spectrum`."""
@@ -876,6 +1113,32 @@ class DatasetBuilder:
         )
         return hist, edges
 
+    def graph_fourier_transform(
+        self, signal: Dict[str, float] | np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.graph_fourier_transform`."""
+
+        coeffs = self.graph.graph_fourier_transform(signal, normed=normed)
+        self._record_event(
+            "graph_fourier_transform",
+            "Graph Fourier transform computed",
+            normed=normed,
+        )
+        return coeffs
+
+    def inverse_graph_fourier_transform(
+        self, coeffs: np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.inverse_graph_fourier_transform`."""
+
+        signal = self.graph.inverse_graph_fourier_transform(coeffs, normed=normed)
+        self._record_event(
+            "inverse_graph_fourier_transform",
+            "Inverse graph Fourier transform computed",
+            normed=normed,
+        )
+        return signal
+
     def persistence_entropy(self, dimension: int = 0) -> float:
         """Wrapper for :meth:`KnowledgeGraph.persistence_entropy`."""
 
@@ -897,6 +1160,17 @@ class DatasetBuilder:
             max_dim=max_dim,
         )
         return diags
+
+    def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.topological_signature`."""
+
+        sig = self.graph.topological_signature(max_dim=max_dim)
+        self._record_event(
+            "topological_signature",
+            "Topological signature computed",
+            max_dim=max_dim,
+        )
+        return sig
 
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Wrapper for :meth:`KnowledgeGraph.fractalize_level`."""
@@ -921,6 +1195,45 @@ class DatasetBuilder:
         )
         return coarse, mapping, radius
 
+    def build_fractal_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Wrapper for :meth:`KnowledgeGraph.build_fractal_hierarchy`."""
+
+        hierarchy = self.graph.build_fractal_hierarchy(radii, max_levels=max_levels)
+        self._record_event(
+            "build_fractal_hierarchy",
+            "Fractal hierarchy constructed",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+        return hierarchy
+
+    def build_mdl_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Wrapper for :meth:`KnowledgeGraph.build_mdl_hierarchy`."""
+
+        hierarchy = self.graph.build_mdl_hierarchy(radii, max_levels=max_levels)
+        self._record_event(
+            "build_mdl_hierarchy",
+            "MDL hierarchy constructed",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+        return hierarchy
+
+    def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.annotate_fractal_levels`."""
+
+        self.graph.annotate_fractal_levels(radii, max_levels=max_levels)
+        self._record_event(
+            "annotate_fractal_levels",
+            "Fractal levels annotated",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+
     def optimize_topology(
         self,
         target: nx.Graph,
@@ -929,6 +1242,7 @@ class DatasetBuilder:
         epsilon: float = 0.0,
         max_iter: int = 100,
         seed: int | None = None,
+        use_generator: bool = False,
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.optimize_topology`."""
 
@@ -938,6 +1252,7 @@ class DatasetBuilder:
             epsilon=epsilon,
             max_iter=max_iter,
             seed=seed,
+            use_generator=use_generator,
         )
         self._record_event(
             "optimize_topology",
@@ -945,8 +1260,33 @@ class DatasetBuilder:
             dimension=dimension,
             epsilon=epsilon,
             max_iter=max_iter,
+            use_generator=use_generator,
         )
         return dist
+
+    def apply_perception(
+        self,
+        node_id: str,
+        new_text: str,
+        *,
+        perception_id: str | None = None,
+        strength: float | None = None,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.apply_perception`."""
+
+        self.graph.apply_perception(
+            node_id,
+            new_text,
+            perception_id=perception_id,
+            strength=strength,
+        )
+        self._record_event(
+            "apply_perception",
+            "Node perception applied",
+            node_id=node_id,
+            perception_id=perception_id,
+            strength=strength,
+        )
 
     def gds_quality_check(
         self,
@@ -972,6 +1312,29 @@ class DatasetBuilder:
             "Neo4j GDS quality check performed",
             min_component_size=min_component_size,
             similarity_threshold=similarity_threshold,
+        )
+        return result
+
+    def quality_check(
+        self,
+        *,
+        min_component_size: int = 2,
+        triangle_threshold: int = 1,
+        similarity: float = 0.95,
+        link_threshold: float = 0.0,
+    ) -> Dict[str, int]:
+        """Run lightweight quality checks without Neo4j."""
+
+        result = self.graph.quality_check(
+            min_component_size=min_component_size,
+            triangle_threshold=triangle_threshold,
+            similarity=similarity,
+            link_threshold=link_threshold,
+        )
+        self._record_event(
+            "quality_check",
+            "Graph quality check performed",
+            **result,
         )
         return result
 
@@ -1062,11 +1425,21 @@ class DatasetBuilder:
     def get_images_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_images_for_document(doc_id)
 
+    def get_audios_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_audios_for_document(doc_id)
+
     def get_atoms_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_atoms_for_document(doc_id)
 
     def get_molecules_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_molecules_for_document(doc_id)
+
+    def get_atoms_for_molecule(self, molecule_id: str) -> list[str]:
+        """Return atom IDs contained in ``molecule_id``."""
+
+        atoms = self.graph.get_atoms_for_molecule(molecule_id)
+        self._record_event("get_atoms_for_molecule", molecule_id)
+        return atoms
 
     def get_sections_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_sections_for_document(doc_id)
@@ -1209,7 +1582,12 @@ class DatasetBuilder:
         """Return a deep copy of this dataset with a new optional name."""
         if name is not None:
             self.validate_name(name)
-        clone = DatasetBuilder(self.dataset_type, name=name, graph=deepcopy(self.graph))
+        clone = DatasetBuilder(
+            self.dataset_type,
+            name=name,
+            graph=deepcopy(self.graph),
+            use_hnsw=self.use_hnsw,
+        )
         clone.owner_id = self.owner_id
         clone.history = self.history.copy()
         clone.versions = deepcopy(self.versions)
@@ -1232,6 +1610,7 @@ class DatasetBuilder:
             "events": [{**asdict(e), "timestamp": e.timestamp.isoformat()} for e in self.events],
             "graph": self.graph.to_dict(),
             "stage": int(self.stage),
+            "use_hnsw": self.use_hnsw,
         }
 
     @classmethod
@@ -1239,7 +1618,11 @@ class DatasetBuilder:
         name = data.get("name")
         if name is not None:
             cls.validate_name(name)
-        ds = cls(DatasetType(data["dataset_type"]), name=name)
+        ds = cls(
+            DatasetType(data["dataset_type"]),
+            name=name,
+            use_hnsw=bool(data.get("use_hnsw", False)),
+        )
         if "id" in data:
             ds.id = data["id"]
         if ts := data.get("created_at"):
@@ -1616,6 +1999,24 @@ class DatasetBuilder:
 
         self.stage = max(self.stage, DatasetStage.EXPORTED)
         self._record_event("export_dataset", "Dataset exported")
+
+    def export_prompts(self) -> List[Dict[str, Any]]:
+        """Return prompt records with fractal and perception metadata."""
+
+        signature = self.graph.topological_signature(max_dim=1)
+        data: List[Dict[str, Any]] = []
+        for node, attrs in self.graph.graph.nodes(data=True):
+            if attrs.get("type") != "chunk":
+                continue
+            record = {
+                "prompt": attrs.get("text", ""),
+                "fractal_level": attrs.get("fractal_level"),
+                "perception_id": attrs.get("perception_id"),
+                "topo_signature": signature,
+            }
+            data.append(record)
+        self._record_event("export_prompts", "Prompt data exported")
+        return data
 
     @persist_after
     def delete_version(self, index: int) -> None:

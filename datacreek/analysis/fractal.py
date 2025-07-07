@@ -1,13 +1,40 @@
 import math
 import random
-from typing import Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
-import gudhi as gd
-import gudhi.representations as gr
+try:  # optional dependency
+    import gudhi as gd
+    import gudhi.representations as gr
+except Exception:  # pragma: no cover - optional dependency missing
+    gd = None  # type: ignore
+    gr = None  # type: ignore
 import networkx as nx
 import numpy as np
-from scipy.linalg import eigh
-from scipy.sparse import csgraph
+
+try:
+    from scipy.linalg import eigh  # type: ignore
+    from scipy.sparse import csgraph  # type: ignore
+except Exception:  # pragma: no cover - optional dependency missing
+    from numpy.linalg import eigh  # type: ignore
+
+    csgraph = None  # type: ignore
+
+
+def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
+    """Return Laplacian matrix of ``graph``."""
+
+    if csgraph is not None:
+        a = nx.to_scipy_sparse_array(graph)
+        return csgraph.laplacian(a, normed=normed).toarray()
+    a = nx.to_numpy_array(graph)
+    deg = a.sum(axis=1)
+    lap = np.diag(deg) - a
+    if normed:
+        with np.errstate(divide="ignore"):
+            inv_sqrt = 1.0 / np.sqrt(deg)
+        inv_sqrt[~np.isfinite(inv_sqrt)] = 0.0
+        lap = (inv_sqrt[:, None] * lap) * inv_sqrt
+    return lap
 
 
 def box_cover(graph: nx.Graph, radius: int) -> List[set[int]]:
@@ -94,6 +121,12 @@ def persistence_entropy(graph: nx.Graph, dimension: int = 0) -> float:
         no finite intervals are present.
     """
 
+    if gd is None or gr is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
+
+    if gd is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
+
     st = gd.SimplexTree()
     for node in graph.nodes():
         st.insert([node], filtration=0.0)
@@ -112,7 +145,7 @@ def persistence_entropy(graph: nx.Graph, dimension: int = 0) -> float:
 
 
 def persistence_diagrams(graph: nx.Graph, max_dim: int = 2) -> Dict[int, np.ndarray]:
-    """Return persistence diagrams of ``graph`` up to ``max_dim``.
+    """Return persistence diagrams of ``graph`` up to ``max_dim`` using the clique complex.
 
     Parameters
     ----------
@@ -130,8 +163,13 @@ def persistence_diagrams(graph: nx.Graph, max_dim: int = 2) -> Dict[int, np.ndar
     st = gd.SimplexTree()
     for node in graph.nodes():
         st.insert([node], filtration=0.0)
-    for u, v in graph.edges():
-        st.insert([u, v], filtration=1.0)
+
+    # Insert all cliques up to size ``max_dim + 1`` to build the clique complex
+    for clique in nx.enumerate_all_cliques(graph):
+        dim = len(clique) - 1
+        if dim == 0 or dim > max_dim:
+            continue
+        st.insert(clique, filtration=float(dim))
 
     st.compute_persistence(persistence_dim_max=True)
     diags: Dict[int, np.ndarray] = {}
@@ -164,7 +202,7 @@ def graphwave_embedding(
 
     nodes = list(graph.nodes())
     a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=False)
+    lap = _laplacian(graph, normed=False)
     evals, evecs = eigh(lap)
     ts = np.linspace(0, 2 * np.pi, num_points)
     emb: Dict[int, List[float]] = {n: [] for n in nodes}
@@ -201,6 +239,9 @@ def bottleneck_distance(
         Bottleneck distance between the diagrams of ``g1`` and ``g2`` in the
         chosen dimension.
     """
+
+    if gd is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
 
     def _diagram(graph: nx.Graph) -> np.ndarray:
         st = gd.SimplexTree()
@@ -258,6 +299,22 @@ def mdl_optimal_radius(counts: List[Tuple[int, int]]) -> int:
     return best
 
 
+def mdl_value(counts: List[Tuple[int, int]]) -> float:
+    """Return MDL value for a sequence of ``(radius, box_count)`` pairs."""
+
+    if len(counts) < 2:
+        return 0.0
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    slope, intercept = np.polyfit(xs, ys, 1)
+    pred = [slope * x + intercept for x in xs]
+    rss = sum((y - p) ** 2 for y, p in zip(ys, pred))
+    n = len(xs)
+    k = 2  # slope and intercept
+    return float(n * math.log(rss / n + 1e-12) + k * math.log(n))
+
+
 def spectral_dimension(
     graph: nx.Graph, times: Iterable[float]
 ) -> Tuple[float, List[Tuple[float, float]]]:
@@ -287,7 +344,7 @@ def spectral_dimension(
 
     nodes = list(graph.nodes())
     a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=False)
+    lap = _laplacian(graph, normed=False)
     evals, _ = eigh(lap)
 
     traces: List[Tuple[float, float]] = []
@@ -302,6 +359,48 @@ def spectral_dimension(
     slope, _ = np.polyfit(xs, ys, 1)
     dim = -2 * slope
     return float(dim), traces
+
+
+def embedding_box_counting_dimension(
+    coords: Dict[object, Iterable[float]], radii: Iterable[float]
+) -> Tuple[float, List[Tuple[float, int]]]:
+    """Estimate fractal dimension from point coordinates.
+
+    Parameters
+    ----------
+    coords:
+        Mapping of node IDs to embedding vectors.
+    radii:
+        Iterable of ball radii. Larger radii correspond to coarser covers.
+
+    Returns
+    -------
+    float
+        Estimated fractal dimension based on the slope of ``log(N_B)`` vs
+        ``log(1/r)``.
+    list[tuple[float, int]]
+        ``(radius, count)`` pairs used for the estimation.
+    """
+
+    pts = np.asarray(list(coords.values()), dtype=float)
+    counts: List[Tuple[float, int]] = []
+    for r in radii:
+        remaining = set(range(len(pts)))
+        boxes = 0
+        while remaining:
+            i = remaining.pop()
+            dists = np.linalg.norm(pts[list(remaining | {i})] - pts[i], axis=1)
+            cover = {j for j, d in zip(list(remaining | {i}), dists) if d <= r}
+            remaining.difference_update(cover)
+            boxes += 1
+        counts.append((float(r), boxes))
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    if len(xs) < 2:
+        return 0.0, counts
+    slope, _ = np.polyfit(xs, ys, 1)
+    return float(slope), counts
 
 
 def laplacian_spectrum(graph: nx.Graph, *, normed: bool = True) -> np.ndarray:
@@ -321,7 +420,7 @@ def laplacian_spectrum(graph: nx.Graph, *, normed: bool = True) -> np.ndarray:
     """
 
     a = nx.to_numpy_array(graph, nodelist=list(graph.nodes()))
-    lap = csgraph.laplacian(a, normed=normed)
+    lap = _laplacian(graph, normed=normed)
     evals = eigh(lap, eigvals_only=True)
     return np.sort(evals)
 
@@ -438,6 +537,28 @@ def spectral_density(
     return hist.astype(float), edges.astype(float)
 
 
+def graph_lacunarity(graph: nx.Graph, radius: int = 1) -> float:
+    """Return lacunarity of ``graph`` for neighborhood radius ``radius``.
+
+    The lacunarity measures the heterogeneity of mass distribution
+    at a given scale. For each node we count the number of nodes
+    within ``radius`` hops and compute
+
+    .. math:: \Lambda = \frac{\mathrm{Var}(M)}{\mathrm{E}[M]^2} + 1,
+
+    where :math:`M` denotes the local mass.
+    """
+
+    masses = [nx.ego_graph(graph, n, radius=radius).number_of_nodes() for n in graph.nodes()]
+    if not masses:
+        return 0.0
+    arr = np.asarray(masses, dtype=float)
+    mean = arr.mean()
+    if mean == 0:
+        return 0.0
+    return float(arr.var() / (mean * mean) + 1.0)
+
+
 def graph_fourier_transform(
     graph: nx.Graph, signal: Dict[int, float] | np.ndarray, *, normed: bool = True
 ) -> np.ndarray:
@@ -459,8 +580,7 @@ def graph_fourier_transform(
     """
 
     nodes = list(graph.nodes())
-    a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=normed)
+    lap = _laplacian(graph, normed=normed)
     evals, evecs = eigh(lap)
     if isinstance(signal, dict):
         vec = np.array([signal[n] for n in nodes], dtype=float)
@@ -475,10 +595,59 @@ def inverse_graph_fourier_transform(
     """Return the inverse graph Fourier transform of ``coeffs``."""
 
     nodes = list(graph.nodes())
-    a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=normed)
+    lap = _laplacian(graph, normed=normed)
     _, evecs = eigh(lap)
     return evecs @ np.asarray(coeffs, dtype=float)
+
+
+def fractal_information_metrics(
+    graph: nx.Graph, radii: Iterable[int], *, max_dim: int = 1
+) -> Dict[str, Any]:
+    """Return fractal dimension and persistence entropies.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    radii:
+        Iterable of box radii used for the covering.
+    max_dim:
+        Highest homology dimension for which to compute the entropy.
+
+    Returns
+    -------
+    dict
+        Mapping with keys ``dimension`` and ``entropy`` (per homology dimension).
+    """
+
+    dim, _ = box_counting_dimension(graph, radii)
+    entropies: Dict[int, float] = {}
+    if gd is not None and gr is not None:
+        for d in range(max_dim + 1):
+            try:
+                entropies[d] = persistence_entropy(graph, dimension=d)
+            except Exception:  # pragma: no cover - optional dep failure
+                entropies[d] = float("nan")
+    else:  # pragma: no cover - optional dep missing
+        entropies = {d: float("nan") for d in range(max_dim + 1)}
+
+    return {"dimension": dim, "entropy": entropies}
+
+
+def fractal_information_density(
+    graph: nx.Graph, radii: Iterable[int], *, max_dim: int = 1
+) -> float:
+    """Return a simple information density from fractal dimension and entropy.
+
+    The density is defined as ``dimension / (1 + sum(entropies))`` so that
+    higher entropies lower the returned value. It is meant as a lightweight
+    indicator of how much structural information is carried per fractal degree.
+    """
+
+    metrics = fractal_information_metrics(graph, radii, max_dim=max_dim)
+    dim = metrics["dimension"]
+    ent_sum = float(sum(metrics["entropy"].values()))
+    return dim / (1.0 + ent_sum)
 
 
 def poincare_embedding(
@@ -596,6 +765,67 @@ def fractalize_optimal(
     radius = counts[idx][0]
     coarse, mapping = fractalize_graph(graph, radius)
     return coarse, mapping, radius
+
+
+def build_fractal_hierarchy(
+    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5
+) -> List[Tuple[nx.Graph, Dict[object, int], int]]:
+    """Return a hierarchy of coarse graphs using MDL-optimal radii.
+
+    Parameters
+    ----------
+    graph:
+        Input graph to coarse-grain recursively.
+    radii:
+        Candidate box radii ``l_B`` used to search for the optimal cover at each
+        level.
+    max_levels:
+        Maximum number of coarse-graining iterations. The process stops early if
+        the graph can no longer be reduced.
+
+    Returns
+    -------
+    list
+        Sequence ``[(G1, mapping1, r1), (G2, mapping2, r2), ...]`` describing
+        the hierarchy from fine to coarse. ``Gi`` is the graph at level ``i`` and
+        ``mappingi`` maps nodes of ``G_{i-1}`` to boxes of ``Gi``.
+    """
+
+    levels: List[Tuple[nx.Graph, Dict[object, int], int]] = []
+    current = graph
+    for _ in range(max_levels):
+        coarse, mapping, radius = fractalize_optimal(current, radii)
+        levels.append((coarse, mapping, radius))
+        if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
+            break
+        current = coarse
+    return levels
+
+
+def build_mdl_hierarchy(
+    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5
+) -> List[Tuple[nx.Graph, Dict[object, int], int]]:
+    """Return a hierarchy using MDL to stop when description length grows."""
+
+    levels: List[Tuple[nx.Graph, Dict[object, int], int]] = []
+    current = graph
+    prev_mdl = float("inf")
+    for _ in range(max_levels):
+        dim, counts = box_counting_dimension(current, radii)
+        if not counts:
+            break
+        idx = mdl_optimal_radius(counts)
+        mdl_curr = mdl_value(counts[: idx + 1])
+        if mdl_curr >= prev_mdl:
+            break
+        prev_mdl = mdl_curr
+        radius = counts[idx][0]
+        coarse, mapping = fractalize_graph(current, radius)
+        levels.append((coarse, mapping, radius))
+        if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
+            break
+        current = coarse
+    return levels
 
 
 def minimize_bottleneck_distance(

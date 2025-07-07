@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Dict, List, Optional
 
 try:
+    import hnswlib  # type: ignore
     import numpy as np
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.neighbors import NearestNeighbors
@@ -12,17 +14,20 @@ except Exception:  # pragma: no cover - optional dependency
     np = None
     TfidfVectorizer = None
     NearestNeighbors = None
+    hnswlib = None  # type: ignore
 
 
 class EmbeddingIndex:
     """Maintain a simple in-memory retrieval index."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, use_hnsw: bool = False) -> None:
         self.texts: List[str] = []
         self.ids: List[str] = []
         self._vectorizer: Optional[TfidfVectorizer] = None
         self._matrix: Optional[np.ndarray] = None
         self._nn: Optional[NearestNeighbors] = None
+        self._hnsw: Optional["hnswlib.Index"] = None
+        self.use_hnsw = use_hnsw and hnswlib is not None
 
     def add(self, chunk_id: str, text: str) -> None:
         self.ids.append(chunk_id)
@@ -38,20 +43,65 @@ class EmbeddingIndex:
         self._vectorizer = None
         self._matrix = None
         self._nn = None
+        self._hnsw = None
 
     def build(self) -> None:
         if not self.texts:
             return
+        global TfidfVectorizer, NearestNeighbors, np
         if TfidfVectorizer is None or NearestNeighbors is None or np is None:
-            raise ImportError("scikit-learn and numpy are required for EmbeddingIndex")
-        self._vectorizer = TfidfVectorizer().fit(self.texts)
-        self._matrix = self._vectorizer.transform(self.texts)
-        self._nn = NearestNeighbors(metric="cosine")
-        self._nn.fit(self._matrix)
+            try:
+                import numpy as _np
+
+                np = _np
+            except Exception as exc:
+                raise ImportError("numpy is required for EmbeddingIndex") from exc
+            # basic count vectors as fallback
+            vocab = sorted({w for t in self.texts for w in t.lower().split()})
+            vectors = []
+            for txt in self.texts:
+                counts = Counter(txt.lower().split())
+                vectors.append([counts.get(w, 0) for w in vocab])
+            self._matrix = np.array(vectors, dtype=float)
+            self._vectorizer = None
+            self._nn = None
+            if NearestNeighbors is not None:
+                self._nn = NearestNeighbors(metric="cosine")
+                self._nn.fit(self._matrix)
+        else:
+            self._vectorizer = TfidfVectorizer().fit(self.texts)
+            self._matrix = self._vectorizer.transform(self.texts)
+            if self.use_hnsw:
+                self._hnsw = hnswlib.Index(space="cosine", dim=self._matrix.shape[1])
+                self._hnsw.init_index(max_elements=len(self.ids), ef_construction=100, M=16)
+                self._hnsw.add_items(self._matrix.toarray(), list(range(len(self.ids))))
+                self._hnsw.set_ef(50)
+                self._nn = None
+            else:
+                self._nn = NearestNeighbors(metric="cosine")
+                self._nn.fit(self._matrix)
+                self._hnsw = None
+            return
+        if self.use_hnsw and self._matrix is not None:
+            self._hnsw = hnswlib.Index(space="cosine", dim=self._matrix.shape[1])
+            self._hnsw.init_index(max_elements=len(self.ids), ef_construction=100, M=16)
+            self._hnsw.add_items(
+                self._matrix if isinstance(self._matrix, np.ndarray) else self._matrix.toarray(),
+                list(range(len(self.ids))),
+            )
+            self._hnsw.set_ef(50)
+            self._nn = None
+        elif self._matrix is not None and self._nn is not None:
+            self._nn.fit(self._matrix)
+            self._hnsw = None
 
     def _ensure_index(self) -> None:
         """Build the index if it has not been constructed yet."""
-        if self._vectorizer is None or self._matrix is None or self._nn is None:
+        if self._vectorizer is None or self._matrix is None:
+            self.build()
+        elif self.use_hnsw and self._hnsw is None:
+            self.build()
+        elif not self.use_hnsw and self._nn is None:
             self.build()
 
     def nearest_neighbors(
@@ -72,9 +122,14 @@ class EmbeddingIndex:
         if not self.texts or self._matrix is None:
             return {}
 
-        distances, indices = self._nn.kneighbors(
-            self._matrix, n_neighbors=min(k + 1, len(self.ids))
-        )
+        if self.use_hnsw and self._hnsw is not None:
+            indices, distances = self._hnsw.knn_query(self._matrix.toarray(), k + 1)
+            distances = distances.tolist()
+            indices = indices.tolist()
+        else:
+            distances, indices = self._nn.kneighbors(
+                self._matrix, n_neighbors=min(k + 1, len(self.ids))
+            )
         neighbors: Dict[str, List[tuple[str, float]] | List[str]] = {}
         for idx, (dist_row, neigh_row) in enumerate(zip(distances, indices)):
             items: List[tuple[str, float]] | List[str] = []
@@ -96,6 +151,9 @@ class EmbeddingIndex:
         if self._vectorizer is None:
             self.build()
         query_vec = self._vectorizer.transform([query])
+        if self.use_hnsw and self._hnsw is not None:
+            indices, _ = self._hnsw.knn_query(query_vec.toarray(), k)
+            return indices[0].tolist()
         distances, indices = self._nn.kneighbors(query_vec, n_neighbors=min(k, len(self.ids)))
         return indices[0].tolist()
 

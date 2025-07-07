@@ -643,6 +643,18 @@ def test_persistence_diagrams_method():
     assert diagrams[0].shape[1] == 2
 
 
+def test_graph_fourier_transform_methods():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    signal = {n: i for i, n in enumerate(kg.graph.nodes)}
+    coeffs = kg.graph_fourier_transform(signal)
+    recon = kg.inverse_graph_fourier_transform(coeffs)
+    for val, node in zip(recon, kg.graph.nodes):
+        assert pytest.approx(val, rel=1e-6) == signal[node]
+
+
 def test_spectral_entropy_method():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -668,6 +680,14 @@ def test_laplacian_energy_method():
     kg.add_chunk("d", "c2", "world")
     energy = kg.laplacian_energy()
     assert energy >= 0
+
+
+def test_sheaf_laplacian_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=-1)
+    L = kg.sheaf_laplacian()
+    assert L.shape == (2, 2)
+    assert L[0, 1] == 1
 
 
 def test_fractalize_level_method():
@@ -997,6 +1017,15 @@ def test_gds_quality_check_method():
     assert 0 in res["hubs"]
 
 
+def test_quality_check_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.graph.add_node("iso")
+    res = kg.quality_check(min_component_size=2)
+    assert res["removed_nodes"] == 1
+
+
 def test_atom_and_molecule_methods():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -1017,3 +1046,14 @@ def test_graph_information_bottleneck():
     labels = {f"a{i}": i % 2 for i in range(4)}
     loss = kg.graph_information_bottleneck(labels, beta=0.5)
     assert loss > 0
+
+
+def test_prototype_subgraph():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(4):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    labels = {f"a{i}": i % 2 for i in range(4)}
+    sub = kg.prototype_subgraph(labels, 1, radius=1)
+    assert isinstance(sub, nx.Graph)

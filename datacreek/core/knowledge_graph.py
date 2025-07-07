@@ -34,7 +34,11 @@ class KnowledgeGraph:
     """Simple wrapper storing documents and chunks with source info."""
 
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
-    index: EmbeddingIndex = field(default_factory=EmbeddingIndex)
+    use_hnsw: bool = False
+    index: EmbeddingIndex = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
 
     def add_document(
         self,
@@ -44,6 +48,7 @@ class KnowledgeGraph:
         text: str | None = None,
         author: str | None = None,
         organization: str | None = None,
+        checksum: str | None = None,
     ) -> None:
         if self.graph.has_node(doc_id):
             raise ValueError(f"Document already exists: {doc_id}")
@@ -53,6 +58,7 @@ class KnowledgeGraph:
             source=source,
             author=author,
             organization=organization,
+            checksum=checksum,
         )
         if text:
             self.graph.nodes[doc_id]["text"] = text
@@ -131,6 +137,21 @@ class KnowledgeGraph:
             provenance = self.graph.nodes[node_id].get("source")
         self.graph.add_edge(node_id, entity_id, relation=relation, provenance=provenance)
 
+    def link_transcript(
+        self,
+        chunk_id: str,
+        audio_id: str,
+        *,
+        provenance: str | None = None,
+    ) -> None:
+        """Connect a chunk to its audio with a ``transcript_of`` relation."""
+
+        if not self.graph.has_node(chunk_id) or not self.graph.has_node(audio_id):
+            raise ValueError("Unknown node")
+        if provenance is None:
+            provenance = self.graph.nodes[chunk_id].get("source")
+        self.graph.add_edge(chunk_id, audio_id, relation="transcript_of", provenance=provenance)
+
     def add_section(
         self,
         doc_id: str,
@@ -180,6 +201,9 @@ class KnowledgeGraph:
         *,
         section_id: str | None = None,
         page: int | None = None,
+        emotion: str | None = None,
+        modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         if source is None:
             source = self.graph.nodes[doc_id].get("source")
@@ -200,7 +224,19 @@ class KnowledgeGraph:
         if page is None:
             page = 1
 
-        self.graph.add_node(chunk_id, type="chunk", text=text, source=source, page=page)
+        self.graph.add_node(
+            chunk_id,
+            type="chunk",
+            text=text,
+            source=source,
+            page=page,
+        )
+        if emotion:
+            self.graph.nodes[chunk_id]["emotion"] = emotion
+        if modality:
+            self.graph.nodes[chunk_id]["modality"] = modality
+        if entities:
+            self.graph.nodes[chunk_id]["entities"] = entities
         self.graph.add_edge(
             doc_id,
             chunk_id,
@@ -265,6 +301,42 @@ class KnowledgeGraph:
             provenance=source,
         )
 
+    def add_audio(
+        self,
+        doc_id: str,
+        audio_id: str,
+        path: str,
+        source: str | None = None,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an audio node linked to ``doc_id``."""
+
+        if source is None:
+            source = self.graph.nodes[doc_id].get("source")
+        if self.graph.has_node(audio_id):
+            raise ValueError(f"Audio already exists: {audio_id}")
+
+        audios = self.get_audios_for_document(doc_id)
+        sequence = len(audios)
+        if page is None:
+            page = 1
+
+        self.graph.add_node(
+            audio_id,
+            type="audio",
+            path=path,
+            source=source,
+            page=page,
+        )
+        self.graph.add_edge(
+            doc_id,
+            audio_id,
+            relation="has_audio",
+            sequence=sequence,
+            provenance=source,
+        )
+
     # ------------------------------------------------------------------
     # Atom/molecule hierarchy
     # ------------------------------------------------------------------
@@ -278,6 +350,9 @@ class KnowledgeGraph:
         source: str | None = None,
         *,
         page: int | None = None,
+        emotion: str | None = None,
+        modality: str | None = None,
+        entities: list[str] | None = None,
     ) -> None:
         """Insert an atom node linked to ``doc_id``."""
 
@@ -299,6 +374,12 @@ class KnowledgeGraph:
             source=source,
             page=page,
         )
+        if emotion:
+            self.graph.nodes[atom_id]["emotion"] = emotion
+        if modality:
+            self.graph.nodes[atom_id]["modality"] = modality
+        if entities:
+            self.graph.nodes[atom_id]["entities"] = entities
         self.graph.add_edge(
             doc_id,
             atom_id,
@@ -343,6 +424,68 @@ class KnowledgeGraph:
                 molecule_id,
                 aid,
                 relation="inside",
+                sequence=idx,
+                provenance=source,
+            )
+
+    def add_hyperedge(
+        self,
+        edge_id: str,
+        node_ids: Iterable[str],
+        *,
+        relation: str = "member",
+        source: str | None = None,
+    ) -> None:
+        """Insert a hyperedge connecting ``node_ids``."""
+
+        if self.graph.has_node(edge_id):
+            raise ValueError(f"Hyperedge already exists: {edge_id}")
+
+        self.graph.add_node(edge_id, type="hyperedge", source=source)
+
+        for idx, nid in enumerate(node_ids):
+            if not self.graph.has_node(nid):
+                raise ValueError(f"Unknown node: {nid}")
+            self.graph.add_edge(
+                edge_id,
+                nid,
+                relation=relation,
+                sequence=idx,
+                provenance=source,
+            )
+
+    def add_simplex(
+        self,
+        simplex_id: str,
+        node_ids: Iterable[str],
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Insert a simplex node linked to ``node_ids``.
+
+        Parameters
+        ----------
+        simplex_id:
+            Identifier for the simplex node.
+        node_ids:
+            Vertices forming this simplex.
+        source:
+            Optional provenance information.
+        """
+
+        if self.graph.has_node(simplex_id):
+            raise ValueError(f"Simplex already exists: {simplex_id}")
+
+        dim = len(list(node_ids)) - 1
+        self.graph.add_node(simplex_id, type="simplex", dimension=dim, source=source)
+
+        for idx, nid in enumerate(node_ids):
+            if not self.graph.has_node(nid):
+                raise ValueError(f"Unknown node: {nid}")
+            self.graph.add_edge(
+                simplex_id,
+                nid,
+                relation="face",
                 sequence=idx,
                 provenance=source,
             )
@@ -590,6 +733,24 @@ class KnowledgeGraph:
                 }
             )
         return out
+
+    def chunks_by_emotion(self, emotion: str) -> list[str]:
+        """Return chunk IDs tagged with ``emotion``."""
+
+        return [
+            n
+            for n, d in self.graph.nodes(data=True)
+            if d.get("type") == "chunk" and d.get("emotion") == emotion
+        ]
+
+    def chunks_by_modality(self, modality: str) -> list[str]:
+        """Return chunk IDs tagged with ``modality``."""
+
+        return [
+            n
+            for n, d in self.graph.nodes(data=True)
+            if d.get("type") == "chunk" and d.get("modality") == modality
+        ]
 
     def link_similar_chunks(self, k: int = 3) -> None:
         """Add ``similar_to`` edges between semantically close chunks."""
@@ -1046,7 +1207,7 @@ class KnowledgeGraph:
                     used.add(j)
                     merged += 1
         if merged:
-            self.index = EmbeddingIndex()
+            self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
             for n, d in self.graph.nodes(data=True):
                 if d.get("type") in {"chunk", "entity"} and "text" in d:
                     self.index.add(n, d["text"])
@@ -1313,6 +1474,9 @@ class KnowledgeGraph:
         num_walks: int = 50,
         workers: int = 1,
         seed: int = 0,
+        *,
+        p: float = 1.0,
+        q: float = 1.0,
     ) -> None:
         """Compute Node2Vec embeddings for all nodes and store them on the nodes."""
 
@@ -1328,6 +1492,8 @@ class KnowledgeGraph:
             num_walks=num_walks,
             workers=workers,
             seed=seed,
+            p=p,
+            q=q,
         )
         model = n2v.fit()
         for node in self.graph.nodes:
@@ -1497,6 +1663,43 @@ class KnowledgeGraph:
             if rel and rel in rel_means:
                 data["transe_embedding"] = rel_means[rel].astype(float).tolist()
 
+    def compute_multigeometric_embeddings(
+        self,
+        *,
+        node2vec_dim: int = 64,
+        graphwave_scales: Iterable[float] | None = None,
+        graphwave_points: int = 10,
+        poincare_dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> None:
+        """Compute Node2Vec, GraphWave and Poincar\u00e9 embeddings."""
+
+        if graphwave_scales is None:
+            graphwave_scales = [0.5, 1.0]
+
+        self.compute_node2vec_embeddings(
+            dimensions=node2vec_dim,
+            walk_length=10,
+            num_walks=50,
+            workers=1,
+            seed=0,
+        )
+        self.compute_graphwave_embeddings(
+            scales=graphwave_scales,
+            num_points=graphwave_points,
+        )
+        max_neg = max(1, len(self.graph.nodes) - 2)
+        self.compute_poincare_embeddings(
+            dim=poincare_dim,
+            negative=min(negative, max_neg),
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+
     # ------------------------------------------------------------------
     # Fractal and topological metrics
     # ------------------------------------------------------------------
@@ -1547,6 +1750,20 @@ class KnowledgeGraph:
 
         return _le(self.graph.to_undirected(), normed=normed)
 
+    def lacunarity(self, radius: int = 1) -> float:
+        """Return lacunarity of the graph for ``radius``."""
+
+        from ..analysis.fractal import graph_lacunarity as _gl
+
+        return _gl(self.graph.to_undirected(), radius=radius)
+
+    def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:
+        """Return the sheaf Laplacian matrix using ``edge_attr`` for signs."""
+
+        from ..analysis.sheaf import sheaf_laplacian as _sl
+
+        return _sl(self.graph, edge_attr=edge_attr)
+
     def graph_information_bottleneck(
         self,
         labels: Dict[str, int],
@@ -1564,6 +1781,25 @@ class KnowledgeGraph:
         }
         return _gib(feats, labels, beta=beta)
 
+    def prototype_subgraph(
+        self,
+        labels: Dict[str, int],
+        class_id: int,
+        *,
+        radius: int = 1,
+    ) -> nx.Graph:
+        """Return a prototype subgraph for ``class_id`` using embeddings."""
+
+        from ..analysis.information import prototype_subgraph as _ps
+
+        feats = {
+            n: np.asarray(self.graph.nodes[n]["embedding"], dtype=float)
+            for n in self.graph.nodes
+            if "embedding" in self.graph.nodes[n]
+        }
+        sub = _ps(self.graph.to_undirected(), feats, labels, class_id, radius=radius)
+        return sub
+
     def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
         """Return the Laplacian eigenvalues of the graph."""
 
@@ -1580,6 +1816,24 @@ class KnowledgeGraph:
 
         return _sd(self.graph.to_undirected(), bins=bins, normed=normed)
 
+    def graph_fourier_transform(
+        self, signal: Dict[str, float] | np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Return the graph Fourier transform of ``signal``."""
+
+        from ..analysis.fractal import graph_fourier_transform as _gft
+
+        return _gft(self.graph.to_undirected(), signal, normed=normed)
+
+    def inverse_graph_fourier_transform(
+        self, coeffs: np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Return the inverse graph Fourier transform of ``coeffs``."""
+
+        from ..analysis.fractal import inverse_graph_fourier_transform as _igft
+
+        return _igft(self.graph.to_undirected(), coeffs, normed=normed)
+
     def persistence_entropy(self, dimension: int = 0) -> float:
         """Return persistence entropy of the graph."""
 
@@ -1595,6 +1849,74 @@ class KnowledgeGraph:
 
         g = nx.convert_node_labels_to_integers(self.graph.to_undirected())
         return _pd(g, max_dim)
+
+    def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:
+        """Return persistence diagrams and entropies for ``max_dim``."""
+        try:
+            diags = self.persistence_diagrams(max_dim=max_dim)
+        except (RuntimeError, AttributeError):
+            diags = {}
+
+        entropies: Dict[int, float] = {}
+        for dim in range(max_dim + 1):
+            try:
+                ent = self.persistence_entropy(dimension=dim)
+            except RuntimeError:
+                ent = 0.0
+            entropies[dim] = ent
+
+        return {
+            "diagrams": {d: diag.tolist() for d, diag in diags.items()},
+            "entropy": entropies,
+        }
+
+    def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
+        """Return fractal dimension, optimal radius and topological signature."""
+
+        dim, counts = self.box_counting_dimension(radii)
+        from ..analysis.fractal import mdl_optimal_radius
+
+        idx = mdl_optimal_radius(counts)
+        radius = counts[idx][0] if counts else 1
+        signature = self.topological_signature(max_dim=max_dim)
+        return {
+            "dimension": dim,
+            "radius": radius,
+            "counts": counts,
+            "signature": signature,
+        }
+
+    def fractal_information_metrics(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> Dict[str, Any]:
+        """Return fractal dimension and persistence entropies."""
+
+        from ..analysis.fractal import fractal_information_metrics as _fim
+
+        return _fim(self.graph.to_undirected(), radii, max_dim=max_dim)
+
+    def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
+        """Return fractal information density for ``radii``."""
+
+        from ..analysis.fractal import fractal_information_density as _fid
+
+        return _fid(self.graph.to_undirected(), radii, max_dim=max_dim)
+
+    def dimension_distortion(self, radii: Iterable[int]) -> float:
+        """Return difference between graph and embedding fractal dimensions."""
+
+        graph_dim, _ = self.box_counting_dimension(radii)
+        coords = {
+            n: self.graph.nodes[n].get("poincare_embedding")
+            for n in self.graph.nodes
+            if self.graph.nodes[n].get("poincare_embedding") is not None
+        }
+        if not coords:
+            return float("nan")
+        from ..analysis.fractal import embedding_box_counting_dimension
+
+        emb_dim, _ = embedding_box_counting_dimension(coords, radii)
+        return abs(graph_dim - emb_dim)
 
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Return a coarse-grained graph via box covering."""
@@ -1626,6 +1948,116 @@ class KnowledgeGraph:
         str_mapping = {str(node): box for node, box in mapping.items()}
         return coarse, str_mapping, radius
 
+    def build_fractal_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Return a hierarchy of coarse graphs using MDL-optimal radii."""
+
+        from ..analysis.fractal import build_fractal_hierarchy as _bfh
+
+        hierarchy = _bfh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        converted: list[tuple[nx.Graph, Dict[str, int], int]] = []
+        for g, mapping, r in hierarchy:
+            str_mapping = {str(node): box for node, box in mapping.items()}
+            converted.append((g, str_mapping, r))
+        return converted
+
+    def build_mdl_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Return a hierarchy stopping when MDL increases."""
+
+        from ..analysis.fractal import build_mdl_hierarchy as _bmh
+
+        hierarchy = _bmh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        converted: list[tuple[nx.Graph, Dict[str, int], int]] = []
+        for g, mapping, r in hierarchy:
+            str_mapping = {str(node): box for node, box in mapping.items()}
+            converted.append((g, str_mapping, r))
+        return converted
+
+    def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+        """Annotate nodes with their fractal level using box covering."""
+        from ..analysis.fractal import build_fractal_hierarchy as _bfh
+
+        hierarchy = _bfh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        current_map = {n: n for n in self.graph.nodes()}
+        for level, (_, mapping, _radius) in enumerate(hierarchy, start=1):
+            for node, box in list(current_map.items()):
+                if box in mapping:
+                    current_map[node] = mapping[box]
+                    self.graph.nodes[node]["fractal_level"] = level
+
+    # ------------------------------------------------------------------
+    # Quality checks inspired by Neo4j GDS
+    # ------------------------------------------------------------------
+
+    def quality_check(
+        self,
+        *,
+        min_component_size: int = 2,
+        triangle_threshold: int = 1,
+        similarity: float = 0.95,
+        link_threshold: float = 0.0,
+    ) -> dict[str, int]:
+        """Clean the graph using lightweight GDS‑like heuristics."""
+
+        import networkx as nx
+
+        removed_nodes = 0
+        removed_edges = 0
+        merged_nodes = 0
+        added_edges = 0
+
+        # Remove small components
+        ug = self.graph.to_undirected()
+        for comp in list(nx.connected_components(ug)):
+            if len(comp) < min_component_size:
+                self.graph.remove_nodes_from(comp)
+                removed_nodes += len(comp)
+
+        # Triangle-based edge pruning
+        tri = nx.triangles(self.graph.to_undirected())
+        for u, v in list(self.graph.edges()):
+            if tri.get(u, 0) < triangle_threshold or tri.get(v, 0) < triangle_threshold:
+                self.graph.remove_edge(u, v)
+                removed_edges += 1
+
+        # Deduplicate similar nodes via Jaccard
+        nodes = list(self.graph.nodes())
+        for i, u in enumerate(nodes):
+            if not self.graph.has_node(u):
+                continue
+            nu = set(self.graph.neighbors(u))
+            for v in nodes[i + 1 :]:
+                if not self.graph.has_node(v):
+                    continue
+                nv = set(self.graph.neighbors(v))
+                union = nu | nv
+                if not union:
+                    continue
+                jac = len(nu & nv) / len(union)
+                if jac > similarity:
+                    for w in nv:
+                        if w != u:
+                            self.graph.add_edge(u, w)
+                    self.graph.remove_node(v)
+                    merged_nodes += 1
+
+        # Simple link prediction via Adamic‑Adar
+        preds = nx.adamic_adar_index(self.graph.to_undirected())
+        for u, v, score in preds:
+            if score > link_threshold and not self.graph.has_edge(u, v):
+                self.graph.add_edge(u, v, relation="suggested")
+                added_edges += 1
+
+        return {
+            "removed_nodes": removed_nodes,
+            "removed_edges": removed_edges,
+            "merged_nodes": merged_nodes,
+            "added_edges": added_edges,
+        }
+
     def optimize_topology(
         self,
         target: nx.Graph,
@@ -1634,6 +2066,7 @@ class KnowledgeGraph:
         epsilon: float = 0.0,
         max_iter: int = 100,
         seed: int | None = None,
+        use_generator: bool = False,
     ) -> float:
         """Edit ``perception_link`` edges to approach ``target`` topology."""
 
@@ -1654,6 +2087,26 @@ class KnowledgeGraph:
             seed=seed,
         )
 
+        if use_generator and dist > epsilon:
+            from ..analysis.generation import generate_graph_rnn_like
+
+            extra = generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
+            node_map = {i: n for i, n in enumerate(skeleton.nodes())}
+            for u, v in extra.edges():
+                a, b = node_map.get(u), node_map.get(v)
+                if a is None or b is None:
+                    continue
+                if not optimized.has_edge(a, b):
+                    optimized.add_edge(a, b)
+            dist = minimize_bottleneck_distance(
+                optimized,
+                target,
+                dimension=dimension,
+                epsilon=epsilon,
+                max_iter=max_iter,
+                seed=seed,
+            )[1]
+
         self.graph.remove_edges_from(
             [
                 (u, v)
@@ -1665,6 +2118,33 @@ class KnowledgeGraph:
             self.graph.add_edge(u, v, relation="perception_link")
 
         return dist
+
+    # ------------------------------------------------------------------
+    # Perception helpers
+    # ------------------------------------------------------------------
+
+    def apply_perception(
+        self,
+        node_id: str,
+        new_text: str,
+        *,
+        perception_id: str | None = None,
+        strength: float | None = None,
+    ) -> None:
+        """Update ``node_id`` text and embedding with perception metadata."""
+
+        if not self.graph.has_node(node_id):
+            raise ValueError(f"Unknown node: {node_id}")
+
+        self.graph.nodes[node_id]["text"] = new_text
+        if perception_id is not None:
+            self.graph.nodes[node_id]["perception_id"] = perception_id
+        if strength is not None:
+            self.graph.nodes[node_id]["perception_strength"] = float(strength)
+
+        vec = self.index.embed(new_text)
+        if vec.size:
+            self.graph.nodes[node_id]["embedding"] = vec.tolist()
 
     # ------------------------------------------------------------------
     # Structure helpers
@@ -1806,6 +2286,17 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
+    def get_audios_for_document(self, doc_id: str) -> list[str]:
+        """Return audio IDs associated with ``doc_id`` ordered by sequence."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
+            if data.get("relation") == "has_audio"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
     def get_atoms_for_document(self, doc_id: str) -> list[str]:
         """Return atom IDs that belong to ``doc_id``."""
 
@@ -1824,6 +2315,17 @@ class KnowledgeGraph:
             (data.get("sequence", i), tgt)
             for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
             if data.get("relation") == "has_molecule"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
+    def get_atoms_for_molecule(self, molecule_id: str) -> list[str]:
+        """Return atom IDs contained in ``molecule_id``."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(molecule_id, data=True))
+            if data.get("relation") == "inside"
         ]
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]

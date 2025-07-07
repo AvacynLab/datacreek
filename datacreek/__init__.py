@@ -43,14 +43,25 @@ __all__: list[str] = [
     "spectral_entropy",
     "spectral_gap",
     "laplacian_energy",
+    "lacunarity",
     "poincare_embedding",
+    "generate_graph_rnn_like",
     "spectral_density",
     "graph_fourier_transform",
     "inverse_graph_fourier_transform",
     "graph_information_bottleneck",
+    "prototype_subgraph",
+    "sheaf_laplacian",
+    "fractal_information_density",
+    "quality_check",
+    "md5_file",
     "caption_image",
+    "detect_emotion",
+    "detect_modality",
     "fractalize_graph",
     "fractalize_optimal",
+    "build_fractal_hierarchy",
+    "build_mdl_hierarchy",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -58,9 +69,13 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         bottleneck_distance,
         box_counting_dimension,
         box_cover,
+        build_fractal_hierarchy,
+        build_mdl_hierarchy,
+        fractal_information_density,
         fractalize_graph,
         fractalize_optimal,
         graph_fourier_transform,
+        graph_lacunarity,
         graphwave_embedding,
         inverse_graph_fourier_transform,
         laplacian_energy,
@@ -75,6 +90,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         spectral_entropy,
         spectral_gap,
     )
+    from .analysis.generation import generate_graph_rnn_like
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
     from .core.ingest import ingest_into_dataset
@@ -93,6 +109,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         run_generation_pipeline,
         run_generation_pipeline_async,
     )
+    from .utils.emotion import detect_emotion
     from .utils.fact_extraction import extract_facts
     from .utils.image_captioning import caption_image
 
@@ -229,6 +246,10 @@ def __getattr__(name: str):
         from .analysis.fractal import laplacian_energy as _le
 
         return _le
+    if name == "lacunarity":
+        from .analysis.fractal import graph_lacunarity as _gl
+
+        return _gl
     if name == "spectral_density":
         from .analysis.fractal import spectral_density as _sdn
 
@@ -245,6 +266,18 @@ def __getattr__(name: str):
         from .analysis.information import graph_information_bottleneck as _gib
 
         return _gib
+    if name == "prototype_subgraph":
+        from .analysis.information import prototype_subgraph as _ps
+
+        return _ps
+    if name == "sheaf_laplacian":
+        from .analysis.sheaf import sheaf_laplacian as _sl
+
+        return _sl
+    if name == "quality_check":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.quality_check
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 
@@ -257,8 +290,36 @@ def __getattr__(name: str):
         from .analysis.fractal import fractalize_optimal as _fo
 
         return _fo
+    if name == "build_fractal_hierarchy":
+        from .analysis.fractal import build_fractal_hierarchy as _bfh
+
+        return _bfh
+    if name == "build_mdl_hierarchy":
+        from .analysis.fractal import build_mdl_hierarchy as _bmh
+
+        return _bmh
     if name == "caption_image":
         from .utils.image_captioning import caption_image as _ci
 
         return _ci
+    if name == "detect_emotion":
+        from .utils.emotion import detect_emotion as _de
+
+        return _de
+    if name == "detect_modality":
+        from .utils.modality import detect_modality as _dm
+
+        return _dm
+    if name == "md5_file":
+        from .utils.checksum import md5_file as _md5
+
+        return _md5
+    if name == "generate_graph_rnn_like":
+        from .analysis.generation import generate_graph_rnn_like as _gg
+
+        return _gg
+    if name == "fractal_information_density":
+        from .analysis.fractal import fractal_information_density as _fid
+
+        return _fid
     raise AttributeError(name)

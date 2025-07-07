@@ -6,6 +6,7 @@
 # Document parsers for different file formats
 from .audio_parser import AudioParser
 from .base import BaseParser
+from .code_parser import CodeParser
 from .docx_parser import DOCXParser
 from .html_parser import HTMLParser
 from .image_parser import ImageParser
@@ -31,6 +32,10 @@ _PARSER_REGISTRY = {
     ".wav": WhisperAudioParser,
     ".mp3": WhisperAudioParser,
     ".ogg": WhisperAudioParser,
+    ".py": CodeParser,
+    ".js": CodeParser,
+    ".ts": CodeParser,
+    ".java": CodeParser,
 }
 
 
@@ -55,6 +60,7 @@ __all__ = [
     "ImageParser",
     "AudioParser",
     "WhisperAudioParser",
+    "CodeParser",
     "register_parser",
     "get_parser_for_extension",
 ]

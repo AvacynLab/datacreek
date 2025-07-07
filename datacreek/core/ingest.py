@@ -20,6 +20,7 @@ from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
 from datacreek.utils.config import get_generation_config, load_config
+from datacreek.utils.modality import detect_modality
 from datacreek.utils.text import clean_text, split_into_chunks
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,9 @@ class IngestOptions:
     use_unstructured: bool | None = None
     extract_entities: bool = False
     extract_facts: bool = False
+    compute_metrics: bool = False
+    emotion_fn: Callable[[str], str] | None = None
+    modality_fn: Callable[[str], str] | None = None
 
 
 class IngestOptionsModel(BaseModel):
@@ -144,7 +148,11 @@ def to_kg(
     pages: list[str] | None = None,
     elements: list[Any] | None = None,
     source: str | None = None,
+    checksum: str | None = None,
+    extract_entities: bool = False,
     progress_callback: Callable[[int], None] | None = None,
+    emotion_fn: Callable[[str], str] | None = None,
+    modality_fn: Callable[[str], str] | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
 
@@ -162,19 +170,32 @@ def to_kg(
     cleaned_text = clean_text(text)
     cleaned_pages = [clean_text(p) for p in pages] if pages else None
 
-    dataset.add_document(doc_id, source=source or doc_id, text=cleaned_text)
+    dataset.add_document(doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum)
 
     if elements:
         chunk_idx = 0
+        atom_idx = 0
+        molecule_idx = 0
+        atoms: list[str] = []
         img_idx = 0
         current_page = 1
         for el in elements:
             page = getattr(getattr(el, "metadata", None), "page_number", None) or current_page
+            if page != current_page and atoms:
+                mol_id = f"{doc_id}_molecule_{molecule_idx}"
+                dataset.add_molecule(doc_id, mol_id, atoms)
+                molecule_idx += 1
+                atoms = []
             current_page = page
             path = getattr(el, "image_path", None) or getattr(
                 getattr(el, "metadata", None), "image_path", None
             )
             if path:
+                if atoms:
+                    mol_id = f"{doc_id}_molecule_{molecule_idx}"
+                    dataset.add_molecule(doc_id, mol_id, atoms)
+                    molecule_idx += 1
+                    atoms = []
                 img_id = f"{doc_id}_image_{img_idx}"
                 try:
                     from datacreek.utils.image_captioning import caption_image
@@ -189,6 +210,43 @@ def to_kg(
             if not text_el:
                 continue
             cleaned_el = clean_text(text_el)
+            atom_id = f"{doc_id}_atom_{atom_idx}"
+            if emotion_fn is None:
+                try:
+                    from datacreek.utils.emotion import detect_emotion as _emo
+                except Exception:
+                    _emo = None
+                emotion_fn = _emo
+            atom_emotion = emotion_fn(cleaned_el) if emotion_fn else None
+            if modality_fn is None:
+                try:
+                    from datacreek.utils.modality import detect_modality as _mod
+                except Exception:
+                    _mod = None
+                modality_fn = _mod
+            atom_modality = modality_fn(cleaned_el) if modality_fn else None
+            atom_entities = None
+            if extract_entities:
+                try:
+                    from datacreek.utils.entity_extraction import (
+                        extract_entities as extract_entities_fn,
+                    )
+
+                    atom_entities = extract_entities_fn(cleaned_el, model=None)
+                except Exception:
+                    atom_entities = None
+            dataset.add_atom(
+                doc_id,
+                atom_id,
+                cleaned_el,
+                el.__class__.__name__,
+                page=page,
+                emotion=atom_emotion,
+                modality=atom_modality,
+                entities=atom_entities,
+            )
+            atoms.append(atom_id)
+            atom_idx += 1
             chunks = split_into_chunks(
                 cleaned_el,
                 chunk_size=gen_cfg.chunk_size,
@@ -198,10 +256,45 @@ def to_kg(
             )
             for chunk in chunks:
                 cid = f"{doc_id}_chunk_{chunk_idx}"
-                dataset.add_chunk(doc_id, cid, chunk, page=page)
+                if emotion_fn is None:
+                    try:
+                        from datacreek.utils.emotion import detect_emotion as _em
+                    except Exception:
+                        _em = None
+                    emotion_fn = _em
+                emotion = emotion_fn(chunk) if emotion_fn else None
+                if modality_fn is None:
+                    try:
+                        from datacreek.utils.modality import detect_modality as _mod
+                    except Exception:
+                        _mod = None
+                    modality_fn = _mod
+                modality = modality_fn(chunk) if modality_fn else None
+                entities = None
+                if extract_entities:
+                    try:
+                        from datacreek.utils.entity_extraction import (
+                            extract_entities as extract_entities_fn,
+                        )
+
+                        entities = extract_entities_fn(chunk, model=None)
+                    except Exception:
+                        entities = None
+                dataset.add_chunk(
+                    doc_id,
+                    cid,
+                    chunk,
+                    page=page,
+                    emotion=emotion,
+                    modality=modality,
+                    entities=entities,
+                )
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
+        if atoms:
+            mol_id = f"{doc_id}_molecule_{molecule_idx}"
+            dataset.add_molecule(doc_id, mol_id, atoms)
     elif cleaned_pages:
         chunk_idx = 0
         for page_num, page_text in enumerate(cleaned_pages, start=1):
@@ -214,7 +307,39 @@ def to_kg(
             )
             for chunk in page_chunks:
                 cid = f"{doc_id}_chunk_{chunk_idx}"
-                dataset.add_chunk(doc_id, cid, chunk, page=page_num)
+                if emotion_fn is None:
+                    try:
+                        from datacreek.utils.emotion import detect_emotion as _em
+                    except Exception:
+                        _em = None
+                    emotion_fn = _em
+                emotion = emotion_fn(chunk) if emotion_fn else None
+                if modality_fn is None:
+                    try:
+                        from datacreek.utils.modality import detect_modality as _mod
+                    except Exception:
+                        _mod = None
+                    modality_fn = _mod
+                modality = modality_fn(chunk) if modality_fn else None
+                entities = None
+                if extract_entities:
+                    try:
+                        from datacreek.utils.entity_extraction import (
+                            extract_entities as extract_entities_fn,
+                        )
+
+                        entities = extract_entities_fn(chunk, model=None)
+                    except Exception:
+                        entities = None
+                dataset.add_chunk(
+                    doc_id,
+                    cid,
+                    chunk,
+                    page=page_num,
+                    emotion=emotion,
+                    modality=modality,
+                    entities=entities,
+                )
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
@@ -228,7 +353,35 @@ def to_kg(
         )
         for i, chunk in enumerate(chunks):
             cid = f"{doc_id}_chunk_{i}"
-            dataset.add_chunk(doc_id, cid, chunk)
+            if emotion_fn is None:
+                try:
+                    from datacreek.utils.emotion import detect_emotion as _em
+                except Exception:
+                    _em = None
+                emotion_fn = _em
+            emotion = emotion_fn(chunk) if emotion_fn else None
+            try:
+                modality = detect_modality(chunk)
+            except Exception:
+                modality = None
+            entities = None
+            if extract_entities:
+                try:
+                    from datacreek.utils.entity_extraction import (
+                        extract_entities as extract_entities_fn,
+                    )
+
+                    entities = extract_entities_fn(chunk, model=None)
+                except Exception:
+                    entities = None
+            dataset.add_chunk(
+                doc_id,
+                cid,
+                chunk,
+                emotion=emotion,
+                modality=modality,
+                entities=entities,
+            )
             if progress_callback:
                 progress_callback(i + 1)
 
@@ -250,6 +403,9 @@ def ingest_into_dataset(
     client: "LLMClient" | None = None,
     options: IngestOptions | None = None,
     progress_callback: Callable[[int], None] | None = None,
+    compute_metrics: bool = False,
+    emotion_fn: Callable[[str], str] | None = None,
+    modality_fn: Callable[[str], str] | None = None,
 ) -> str:
     """Parse ``file_path`` and populate ``dataset`` with its content.
 
@@ -272,6 +428,9 @@ def ingest_into_dataset(
         use_unstructured = options.use_unstructured
         extract_entities = options.extract_entities
         extract_facts = options.extract_facts
+        compute_metrics = options.compute_metrics
+        emotion_fn = options.emotion_fn
+        modality_fn = options.modality_fn
 
     validate_file_path(file_path)
 
@@ -301,6 +460,13 @@ def ingest_into_dataset(
         text = result
         pages = None
     doc_id = doc_id or Path(file_path).stem
+    checksum = None
+    try:
+        from datacreek.utils.checksum import md5_file
+
+        checksum = md5_file(file_path)
+    except Exception:
+        pass
     try:
         to_kg(
             text,
@@ -311,11 +477,27 @@ def ingest_into_dataset(
             pages=pages,
             elements=elements,
             source=file_path,
+            checksum=checksum,
+            extract_entities=extract_entities,
             progress_callback=progress_callback,
+            emotion_fn=emotion_fn,
+            modality_fn=modality_fn,
         )
     except Exception:
         logger.exception("Failed to build knowledge graph for %s", file_path)
         raise
+
+    try:
+        parser = determine_parser(file_path, config or load_config())
+        from datacreek.parsers import WhisperAudioParser, YouTubeParser
+
+        if isinstance(parser, (WhisperAudioParser, YouTubeParser)):
+            audio_id = f"{doc_id}_audio_0"
+            dataset.add_audio(doc_id, audio_id, file_path)
+            for cid in dataset.graph.get_chunks_for_document(doc_id):
+                dataset.graph.link_transcript(cid, audio_id, provenance=file_path)
+    except Exception:  # pragma: no cover - optional deps may be missing
+        pass
 
     if extract_entities:
         try:
@@ -330,6 +512,12 @@ def ingest_into_dataset(
             logger.exception("Failed to extract facts from %s", file_path)
             raise
         dataset.history.append("Facts extracted on ingest")
+    if compute_metrics:
+        try:
+            dataset.fractal_information_metrics([1])
+        except Exception:
+            logger.exception("Failed to compute fractal metrics for %s", file_path)
+    return doc_id
     return doc_id
 
 
@@ -347,6 +535,9 @@ async def ingest_into_dataset_async(
     client: "LLMClient" | None = None,
     options: IngestOptions | None = None,
     progress_callback: Callable[[int], None] | None = None,
+    compute_metrics: bool = False,
+    emotion_fn: Callable[[str], str] | None = None,
+    modality_fn: Callable[[str], str] | None = None,
 ) -> str:
     """Asynchronous wrapper around :func:`ingest_into_dataset`."""
 
@@ -364,4 +555,7 @@ async def ingest_into_dataset_async(
         client=client,
         options=options,
         progress_callback=progress_callback,
+        compute_metrics=compute_metrics,
+        emotion_fn=emotion_fn,
+        modality_fn=modality_fn,
     )

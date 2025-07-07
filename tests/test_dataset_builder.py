@@ -55,6 +55,16 @@ def test_dataset_search_wrappers():
     assert ds.search_hybrid("related", k=1, node_type="fact") == [fid]
 
 
+def test_hnsw_search(tmp_path):
+    ds = DatasetBuilder(DatasetType.QA, use_hnsw=True)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "goodbye world")
+    ds.graph.index.build()
+    res = ds.search_embeddings("hello", k=1, fetch_neighbors=False)
+    assert res and res[0] == "c1"
+
+
 def test_dataset_clone():
     ds = DatasetBuilder(DatasetType.QA, name="orig")
     ds.add_document("d", source="s")
@@ -838,6 +848,24 @@ def test_graphsage_embeddings_wrapper():
     ds.link_entity("c2", "e2")
     ds.compute_graphsage_embeddings(dimensions=8, num_layers=1)
     assert len(ds.graph.graph.nodes["e1"]["graphsage_embedding"]) == 8
+
+
+def test_multigeometric_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_multigeometric_embeddings(
+        node2vec_dim=8, graphwave_scales=[0.5], graphwave_points=4, poincare_dim=2, epochs=5
+    )
+    node = ds.graph.graph.nodes["e1"]
+    assert len(node["embedding"]) == 8
+    assert len(node["graphwave_embedding"]) == 8
+    assert len(node["poincare_embedding"]) == 2
     assert any(e.operation == "compute_graphsage_embeddings" for e in ds.events)
 
 
@@ -862,6 +890,30 @@ def test_fractal_dimension_wrapper():
     assert counts and counts[0][0] == 1
 
 
+def test_compute_fractal_features_and_export():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    feats = ds.compute_fractal_features([1], max_dim=1)
+    assert "dimension" in feats and "signature" in feats
+    records = ds.export_prompts()
+    assert records and "topo_signature" in records[0]
+    assert any(e.operation == "compute_fractal_features" for e in ds.events)
+    assert any(e.operation == "export_prompts" for e in ds.events)
+
+
+def test_dimension_distortion_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.graph.graph.nodes["c1"]["poincare_embedding"] = [0.0, 0.0]
+    ds.graph.graph.nodes["c2"]["poincare_embedding"] = [1.0, 0.0]
+    val = ds.dimension_distortion([1])
+    assert isinstance(val, float)
+    assert any(e.operation == "dimension_distortion" for e in ds.events)
+
+
 def test_fractalize_level_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -883,6 +935,37 @@ def test_fractalize_optimal_wrapper():
     assert r in {1, 2}
 
 
+def test_build_fractal_hierarchy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    hierarchy = ds.build_fractal_hierarchy([1, 2], max_levels=2)
+    assert hierarchy
+    assert any(e.operation == "build_fractal_hierarchy" for e in ds.events)
+
+
+def test_build_mdl_hierarchy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    hierarchy = ds.build_mdl_hierarchy([1, 2], max_levels=2)
+    assert hierarchy
+    assert any(e.operation == "build_mdl_hierarchy" for e in ds.events)
+
+
+def test_annotate_fractal_levels_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.annotate_fractal_levels([1, 2], max_levels=2)
+    assert ds.graph.graph.nodes["c1"].get("fractal_level")
+    assert ds.graph.graph.nodes["c2"].get("fractal_level")
+    assert any(e.operation == "annotate_fractal_levels" for e in ds.events)
+
+
 def test_optimize_topology_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -895,10 +978,24 @@ def test_optimize_topology_wrapper():
     target = nx.relabel_nodes(target, mapping)
 
     before = bottleneck_distance(ds.graph.graph.to_undirected(), target)
-    dist = ds.optimize_topology(target, max_iter=5, seed=0)
+    dist = ds.optimize_topology(target, max_iter=5, seed=0, use_generator=True)
     after = bottleneck_distance(ds.graph.graph.to_undirected(), target)
     assert after <= before
     assert dist == pytest.approx(after, rel=1e-9)
+
+
+def test_apply_perception_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.graph.index.build()
+    ds.apply_perception("c1", "HELLO", perception_id="p1", strength=0.5)
+    node = ds.graph.graph.nodes["c1"]
+    assert node["text"] == "HELLO"
+    assert node.get("perception_id") == "p1"
+    assert node.get("perception_strength") == 0.5
+    assert "embedding" in node
+    assert any(e.operation == "apply_perception" for e in ds.events)
 
 
 def test_persistence_diagrams_wrapper():
@@ -908,6 +1005,17 @@ def test_persistence_diagrams_wrapper():
     diags = ds.persistence_diagrams(max_dim=1)
     assert 0 in diags
     assert diags[0].shape[1] == 2
+
+
+def test_topological_signature_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    sig = ds.topological_signature(max_dim=1)
+    assert "diagrams" in sig
+    assert "entropy" in sig
+    assert 0 in sig["diagrams"]
+    assert any(e.operation == "topological_signature" for e in ds.events)
 
 
 def test_spectral_dimension_wrapper():
@@ -960,6 +1068,17 @@ def test_laplacian_spectrum_wrapper():
     assert any(e.operation == "laplacian_spectrum" for e in ds.events)
 
 
+def test_sheaf_laplacian_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a")
+    ds.graph.graph.add_node("b")
+    ds.graph.graph.add_edge("a", "b", sheaf_sign=-1)
+    L = ds.sheaf_laplacian()
+    assert L.shape == (2, 2)
+    assert L[0, 1] == 1
+    assert any(e.operation == "sheaf_laplacian" for e in ds.events)
+
+
 def test_spectral_density_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -1009,6 +1128,16 @@ def test_gds_quality_check_wrapper(monkeypatch):
     assert called["driver"] is fake_driver
     assert called["dataset"] == "qc"
     assert any(e.operation == "gds_quality_check" for e in ds.events)
+
+
+def test_quality_check_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.graph.graph.add_node("iso")
+    res = ds.quality_check(min_component_size=2)
+    assert res["removed_nodes"] == 1
+    assert any(e.operation == "quality_check" for e in ds.events)
 
 
 def test_consolidate_schema_wrapper():
@@ -1306,6 +1435,17 @@ def test_atom_and_molecule_wrappers():
     assert ds.graph.graph.has_edge("m1", "a1")
 
 
+def test_get_atoms_for_molecule_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_atom("d", "a1", "hello", "text")
+    ds.add_atom("d", "a2", "world", "text")
+    ds.add_molecule("d", "m1", ["a1", "a2"])
+    atoms = ds.get_atoms_for_molecule("m1")
+    assert atoms == ["a1", "a2"]
+    assert ds.events[-1].operation == "get_atoms_for_molecule"
+
+
 def test_mark_exported_records_event():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.mark_exported()
@@ -1323,3 +1463,98 @@ def test_graph_information_bottleneck_wrapper():
     loss = ds.graph_information_bottleneck(labels, beta=0.5)
     assert loss > 0
     assert ds.events[-1].operation == "graph_information_bottleneck"
+
+
+def test_prototype_subgraph_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(4):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+    ds.compute_graph_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    labels = {f"a{i}": i % 2 for i in range(4)}
+    sub = ds.prototype_subgraph(labels, 1, radius=1)
+    assert isinstance(sub, nx.Graph)
+    assert ds.events[-1].operation == "prototype_subgraph"
+
+
+def test_graph_fourier_wrappers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "x")
+    ds.add_chunk("d", "c2", "y")
+    signal = {n: i for i, n in enumerate(ds.graph.graph.nodes)}
+    coeffs = ds.graph_fourier_transform(signal)
+    recon = ds.inverse_graph_fourier_transform(coeffs)
+    for val, node in zip(recon, ds.graph.graph.nodes):
+        assert pytest.approx(val, rel=1e-6) == signal[node]
+    assert any(e.operation == "graph_fourier_transform" for e in ds.events)
+    assert any(e.operation == "inverse_graph_fourier_transform" for e in ds.events)
+
+
+def test_lacunarity_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_chunk("d", f"c{i}", str(i))
+    lac = ds.lacunarity(radius=1)
+    assert lac >= 1.0
+    assert ds.events[-1].operation == "lacunarity"
+
+
+def test_add_hyperedge_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.add_hyperedge("he1", ["c1", "c2"])
+    assert ds.graph.graph.nodes["he1"]["type"] == "hyperedge"
+    assert ds.graph.graph.has_edge("he1", "c1")
+    assert any(e.operation == "add_hyperedge" for e in ds.events)
+
+
+def test_add_simplex_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.add_simplex("sx1", ["c1", "c2"])
+    assert ds.graph.graph.nodes["sx1"]["type"] == "simplex"
+    assert ds.graph.graph.nodes["sx1"]["dimension"] == 1
+    assert any(e.operation == "add_simplex" for e in ds.events)
+
+
+def test_fractal_information_metrics_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    metrics = ds.fractal_information_metrics([1], max_dim=1)
+    assert "dimension" in metrics and "entropy" in metrics
+    assert 0 in metrics["entropy"]
+    assert any(e.operation == "fractal_information_metrics" for e in ds.events)
+
+
+def test_fractal_information_density_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    val = ds.fractal_information_density([1], max_dim=1)
+    assert isinstance(val, float)
+    assert any(e.operation == "fractal_information_density" for e in ds.events)
+
+
+def test_hnsw_search(tmp_path):
+    ds = DatasetBuilder(DatasetType.TEXT, use_hnsw=True)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "goodbye world")
+    ds.graph.index.build()
+    res = ds.search_embeddings("hello", k=1, fetch_neighbors=False)
+    assert res and res[0] == "c1"
+
+
+def test_add_audio_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_audio("d", "a1", "file.wav")
+    assert "a1" in ds.graph.graph
+    assert any(e.operation == "add_audio" for e in ds.events)

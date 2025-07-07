@@ -8,6 +8,7 @@ from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 from datacreek.core.ingest import ingest_into_dataset, process_file
 from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
+from datacreek.utils.modality import detect_modality
 
 
 def test_ingest_to_kg(tmp_path):
@@ -71,6 +72,54 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
     assert ds.get_images_for_document("doc1") == ["doc1_image_0"]
     assert ds.graph.graph.nodes["doc1_image_0"].get("alt_text") == "cap"
     assert len(ds.get_chunks_for_document("doc1")) == 2
+    assert ds.get_atoms_for_document("doc1") == ["doc1_atom_0", "doc1_atom_1"]
+    assert ds.get_molecules_for_document("doc1") == [
+        "doc1_molecule_0",
+        "doc1_molecule_1",
+    ]
+    from datacreek.utils.modality import detect_modality
+
+    assert ds.graph.graph.nodes["doc1_atom_0"].get("modality") == detect_modality("Hello")
+    chunk_id = ds.get_chunks_for_document("doc1")[0]
+    assert ds.graph.graph.nodes[chunk_id].get("modality") == detect_modality("Hello")
+
+
+def test_ingest_audio(tmp_path, monkeypatch):
+    audio_file = tmp_path / "s.wav"
+    audio_file.write_text("fake")
+
+    class DummyParser(datacreek.parsers.WhisperAudioParser):
+        def parse(self, file_path: str) -> str:
+            return "hello world"
+
+    monkeypatch.setattr(datacreek.core.ingest, "determine_parser", lambda f, c: DummyParser())
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ingest_into_dataset(str(audio_file), ds, doc_id="a1")
+
+    assert ds.get_audios_for_document("a1") == ["a1_audio_0"]
+    cid = ds.get_chunks_for_document("a1")[0]
+    assert (cid, "a1_audio_0") in ds.graph.graph.edges
+
+
+def test_to_kg_extract_entities(tmp_path, monkeypatch):
+    class El:
+        def __init__(self, text=None, page_number=1):
+            self.text = text
+            self.metadata = types.SimpleNamespace(page_number=page_number)
+
+    elements = [El("Paris is nice", page_number=1)]
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    with monkeypatch.context() as m:
+        m.setitem(
+            sys.modules,
+            "datacreek.utils.image_captioning",
+            types.SimpleNamespace(caption_image=lambda p: "cap"),
+        )
+        to_kg("Paris is nice", ds, "doc2", elements=elements, extract_entities=True)
+
+    chunk_id = ds.get_chunks_for_document("doc2")[0]
+    assert "Paris" in ds.graph.graph.nodes[chunk_id].get("entities", [])
 
 
 def test_determine_parser_errors(tmp_path):
