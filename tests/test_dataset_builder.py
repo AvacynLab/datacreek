@@ -1435,6 +1435,17 @@ def test_atom_and_molecule_wrappers():
     assert ds.graph.graph.has_edge("m1", "a1")
 
 
+def test_get_atoms_for_molecule_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_atom("d", "a1", "hello", "text")
+    ds.add_atom("d", "a2", "world", "text")
+    ds.add_molecule("d", "m1", ["a1", "a2"])
+    atoms = ds.get_atoms_for_molecule("m1")
+    assert atoms == ["a1", "a2"]
+    assert ds.events[-1].operation == "get_atoms_for_molecule"
+
+
 def test_mark_exported_records_event():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.mark_exported()

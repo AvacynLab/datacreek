@@ -2310,6 +2310,19 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
+    def get_atoms_for_molecule(self, molecule_id: str) -> list[str]:
+        """Return atom IDs contained in ``molecule_id``."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(
+                self.graph.edges(molecule_id, data=True)
+            )
+            if data.get("relation") == "inside"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
     def get_facts_for_entity(self, entity_id: str) -> list[str]:
         """Return IDs of facts linked to ``entity_id``."""
 

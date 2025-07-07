@@ -1421,6 +1421,13 @@ class DatasetBuilder:
     def get_molecules_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_molecules_for_document(doc_id)
 
+    def get_atoms_for_molecule(self, molecule_id: str) -> list[str]:
+        """Return atom IDs contained in ``molecule_id``."""
+
+        atoms = self.graph.get_atoms_for_molecule(molecule_id)
+        self._record_event("get_atoms_for_molecule", molecule_id)
+        return atoms
+
     def get_sections_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_sections_for_document(doc_id)
 
