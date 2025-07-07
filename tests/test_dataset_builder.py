@@ -1533,6 +1533,15 @@ def test_fractal_information_metrics_wrapper():
     assert any(e.operation == "fractal_information_metrics" for e in ds.events)
 
 
+def test_fractal_information_density_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    val = ds.fractal_information_density([1], max_dim=1)
+    assert isinstance(val, float)
+    assert any(e.operation == "fractal_information_density" for e in ds.events)
+
+
 def test_hnsw_search(tmp_path):
     ds = DatasetBuilder(DatasetType.TEXT, use_hnsw=True)
     ds.add_document("d", source="s")

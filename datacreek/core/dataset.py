@@ -975,6 +975,17 @@ class DatasetBuilder:
         )
         return dist
 
+    def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.fractal_information_density`."""
+
+        val = self.graph.fractal_information_density(radii, max_dim=max_dim)
+        self._record_event(
+            "fractal_information_density",
+            "Fractal information density computed",
+            radii=list(radii),
+        )
+        return val
+
     def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
         """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
 

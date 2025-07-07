@@ -24,6 +24,7 @@ __all__ = [
     "graph_information_bottleneck",
     "prototype_subgraph",
     "sheaf_laplacian",
+    "fractal_information_density",
 ]
 
 
@@ -49,6 +50,7 @@ def __getattr__(name: str):
         "spectral_dimension",
         "spectral_entropy",
         "graph_lacunarity",
+        "fractal_information_density",
     }:
         from . import fractal as _f
 

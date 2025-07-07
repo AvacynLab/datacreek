@@ -1893,6 +1893,13 @@ class KnowledgeGraph:
 
         return _fim(self.graph.to_undirected(), radii, max_dim=max_dim)
 
+    def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
+        """Return fractal information density for ``radii``."""
+
+        from ..analysis.fractal import fractal_information_density as _fid
+
+        return _fid(self.graph.to_undirected(), radii, max_dim=max_dim)
+
     def dimension_distortion(self, radii: Iterable[int]) -> float:
         """Return difference between graph and embedding fractal dimensions."""
 
@@ -2315,9 +2322,7 @@ class KnowledgeGraph:
 
         edges = [
             (data.get("sequence", i), tgt)
-            for i, (src, tgt, data) in enumerate(
-                self.graph.edges(molecule_id, data=True)
-            )
+            for i, (src, tgt, data) in enumerate(self.graph.edges(molecule_id, data=True))
             if data.get("relation") == "inside"
         ]
         edges.sort(key=lambda x: x[0])

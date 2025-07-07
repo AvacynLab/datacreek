@@ -52,6 +52,7 @@ __all__: list[str] = [
     "graph_information_bottleneck",
     "prototype_subgraph",
     "sheaf_laplacian",
+    "fractal_information_density",
     "quality_check",
     "caption_image",
     "detect_emotion",
@@ -69,6 +70,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         box_cover,
         build_fractal_hierarchy,
         build_mdl_hierarchy,
+        fractal_information_density,
         fractalize_graph,
         fractalize_optimal,
         graph_fourier_transform,
@@ -311,4 +313,8 @@ def __getattr__(name: str):
         from .analysis.generation import generate_graph_rnn_like as _gg
 
         return _gg
+    if name == "fractal_information_density":
+        from .analysis.fractal import fractal_information_density as _fid
+
+        return _fid
     raise AttributeError(name)

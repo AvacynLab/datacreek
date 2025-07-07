@@ -634,6 +634,22 @@ def fractal_information_metrics(
     return {"dimension": dim, "entropy": entropies}
 
 
+def fractal_information_density(
+    graph: nx.Graph, radii: Iterable[int], *, max_dim: int = 1
+) -> float:
+    """Return a simple information density from fractal dimension and entropy.
+
+    The density is defined as ``dimension / (1 + sum(entropies))`` so that
+    higher entropies lower the returned value. It is meant as a lightweight
+    indicator of how much structural information is carried per fractal degree.
+    """
+
+    metrics = fractal_information_metrics(graph, radii, max_dim=max_dim)
+    dim = metrics["dimension"]
+    ent_sum = float(sum(metrics["entropy"].values()))
+    return dim / (1.0 + ent_sum)
+
+
 def poincare_embedding(
     graph: nx.Graph,
     dim: int = 2,
