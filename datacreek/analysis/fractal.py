@@ -112,7 +112,7 @@ def persistence_entropy(graph: nx.Graph, dimension: int = 0) -> float:
 
 
 def persistence_diagrams(graph: nx.Graph, max_dim: int = 2) -> Dict[int, np.ndarray]:
-    """Return persistence diagrams of ``graph`` up to ``max_dim``.
+    """Return persistence diagrams of ``graph`` up to ``max_dim`` using the clique complex.
 
     Parameters
     ----------
@@ -130,8 +130,13 @@ def persistence_diagrams(graph: nx.Graph, max_dim: int = 2) -> Dict[int, np.ndar
     st = gd.SimplexTree()
     for node in graph.nodes():
         st.insert([node], filtration=0.0)
-    for u, v in graph.edges():
-        st.insert([u, v], filtration=1.0)
+
+    # Insert all cliques up to size ``max_dim + 1`` to build the clique complex
+    for clique in nx.enumerate_all_cliques(graph):
+        dim = len(clique) - 1
+        if dim == 0 or dim > max_dim:
+            continue
+        st.insert(clique, filtration=float(dim))
 
     st.compute_persistence(persistence_dim_max=True)
     diags: Dict[int, np.ndarray] = {}

@@ -1626,6 +1626,24 @@ class KnowledgeGraph:
 
         return _sd(self.graph.to_undirected(), bins=bins, normed=normed)
 
+    def graph_fourier_transform(
+        self, signal: Dict[str, float] | np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Return the graph Fourier transform of ``signal``."""
+
+        from ..analysis.fractal import graph_fourier_transform as _gft
+
+        return _gft(self.graph.to_undirected(), signal, normed=normed)
+
+    def inverse_graph_fourier_transform(
+        self, coeffs: np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Return the inverse graph Fourier transform of ``coeffs``."""
+
+        from ..analysis.fractal import inverse_graph_fourier_transform as _igft
+
+        return _igft(self.graph.to_undirected(), coeffs, normed=normed)
+
     def persistence_entropy(self, dimension: int = 0) -> float:
         """Return persistence entropy of the graph."""
 

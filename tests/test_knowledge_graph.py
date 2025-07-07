@@ -643,6 +643,18 @@ def test_persistence_diagrams_method():
     assert diagrams[0].shape[1] == 2
 
 
+def test_graph_fourier_transform_methods():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    signal = {n: i for i, n in enumerate(kg.graph.nodes)}
+    coeffs = kg.graph_fourier_transform(signal)
+    recon = kg.inverse_graph_fourier_transform(coeffs)
+    for val, node in zip(recon, kg.graph.nodes):
+        assert pytest.approx(val, rel=1e-6) == signal[node]
+
+
 def test_spectral_entropy_method():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")

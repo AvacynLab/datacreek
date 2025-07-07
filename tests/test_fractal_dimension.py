@@ -111,6 +111,13 @@ def test_persistence_diagrams():
         assert diag.shape[1] == 2
 
 
+def test_persistence_diagrams_triangle_clique():
+    g = nx.complete_graph(3)
+    diags = persistence_diagrams(g, max_dim=1)
+    # the 1-simplex is filled, so no 1-dimensional holes
+    assert diags[1].size == 0
+
+
 def test_spectral_density():
     g = nx.path_graph(4)
     hist, edges = spectral_density(g, bins=4)

@@ -1341,3 +1341,17 @@ def test_graph_information_bottleneck_wrapper():
     loss = ds.graph_information_bottleneck(labels, beta=0.5)
     assert loss > 0
     assert ds.events[-1].operation == "graph_information_bottleneck"
+
+
+def test_graph_fourier_wrappers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "x")
+    ds.add_chunk("d", "c2", "y")
+    signal = {n: i for i, n in enumerate(ds.graph.graph.nodes)}
+    coeffs = ds.graph_fourier_transform(signal)
+    recon = ds.inverse_graph_fourier_transform(coeffs)
+    for val, node in zip(recon, ds.graph.graph.nodes):
+        assert pytest.approx(val, rel=1e-6) == signal[node]
+    assert any(e.operation == "graph_fourier_transform" for e in ds.events)
+    assert any(e.operation == "inverse_graph_fourier_transform" for e in ds.events)

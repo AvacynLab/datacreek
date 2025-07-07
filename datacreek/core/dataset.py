@@ -931,6 +931,32 @@ class DatasetBuilder:
         )
         return hist, edges
 
+    def graph_fourier_transform(
+        self, signal: Dict[str, float] | np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.graph_fourier_transform`."""
+
+        coeffs = self.graph.graph_fourier_transform(signal, normed=normed)
+        self._record_event(
+            "graph_fourier_transform",
+            "Graph Fourier transform computed",
+            normed=normed,
+        )
+        return coeffs
+
+    def inverse_graph_fourier_transform(
+        self, coeffs: np.ndarray, *, normed: bool = True
+    ) -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.inverse_graph_fourier_transform`."""
+
+        signal = self.graph.inverse_graph_fourier_transform(coeffs, normed=normed)
+        self._record_event(
+            "inverse_graph_fourier_transform",
+            "Inverse graph Fourier transform computed",
+            normed=normed,
+        )
+        return signal
+
     def persistence_entropy(self, dimension: int = 0) -> float:
         """Wrapper for :meth:`KnowledgeGraph.persistence_entropy`."""
 
