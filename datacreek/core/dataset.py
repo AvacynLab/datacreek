@@ -781,6 +781,9 @@ class DatasetBuilder:
         num_walks: int = 50,
         seed: int = 0,
         workers: int = 1,
+        *,
+        p: float = 1.0,
+        q: float = 1.0,
     ) -> None:
         """Generate Node2Vec embeddings for all nodes."""
 
@@ -790,6 +793,8 @@ class DatasetBuilder:
             num_walks=num_walks,
             workers=workers,
             seed=seed,
+            p=p,
+            q=q,
         )
         self._record_event(
             "compute_graph_embeddings",
@@ -880,6 +885,8 @@ class DatasetBuilder:
         epochs: int = 50,
         learning_rate: float = 0.1,
         burn_in: int = 10,
+        node2vec_p: float = 1.0,
+        node2vec_q: float = 1.0,
     ) -> None:
         """Compute Node2Vec, GraphWave, Poincar\u00e9 and GraphSAGE embeddings."""
 
@@ -889,6 +896,8 @@ class DatasetBuilder:
             num_walks=50,
             workers=1,
             seed=0,
+            p=node2vec_p,
+            q=node2vec_q,
         )
         self.compute_graphwave_embeddings(
             scales=graphwave_scales or [0.5, 1.0],
@@ -913,6 +922,8 @@ class DatasetBuilder:
             epochs=epochs,
             learning_rate=learning_rate,
             burn_in=burn_in,
+            node2vec_p=node2vec_p,
+            node2vec_q=node2vec_q,
         )
 
     def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:

@@ -1472,6 +1472,9 @@ class KnowledgeGraph:
         num_walks: int = 50,
         workers: int = 1,
         seed: int = 0,
+        *,
+        p: float = 1.0,
+        q: float = 1.0,
     ) -> None:
         """Compute Node2Vec embeddings for all nodes and store them on the nodes."""
 
@@ -1487,6 +1490,8 @@ class KnowledgeGraph:
             num_walks=num_walks,
             workers=workers,
             seed=seed,
+            p=p,
+            q=q,
         )
         model = n2v.fit()
         for node in self.graph.nodes:
