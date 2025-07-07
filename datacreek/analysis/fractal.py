@@ -10,8 +10,31 @@ except Exception:  # pragma: no cover - optional dependency missing
     gr = None  # type: ignore
 import networkx as nx
 import numpy as np
-from scipy.linalg import eigh
-from scipy.sparse import csgraph
+
+try:
+    from scipy.linalg import eigh  # type: ignore
+    from scipy.sparse import csgraph  # type: ignore
+except Exception:  # pragma: no cover - optional dependency missing
+    from numpy.linalg import eigh  # type: ignore
+
+    csgraph = None  # type: ignore
+
+
+def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
+    """Return Laplacian matrix of ``graph``."""
+
+    if csgraph is not None:
+        a = nx.to_scipy_sparse_array(graph)
+        return csgraph.laplacian(a, normed=normed).toarray()
+    a = nx.to_numpy_array(graph)
+    deg = a.sum(axis=1)
+    lap = np.diag(deg) - a
+    if normed:
+        with np.errstate(divide="ignore"):
+            inv_sqrt = 1.0 / np.sqrt(deg)
+        inv_sqrt[~np.isfinite(inv_sqrt)] = 0.0
+        lap = (inv_sqrt[:, None] * lap) * inv_sqrt
+    return lap
 
 
 def box_cover(graph: nx.Graph, radius: int) -> List[set[int]]:
@@ -179,7 +202,7 @@ def graphwave_embedding(
 
     nodes = list(graph.nodes())
     a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=False)
+    lap = _laplacian(graph, normed=False)
     evals, evecs = eigh(lap)
     ts = np.linspace(0, 2 * np.pi, num_points)
     emb: Dict[int, List[float]] = {n: [] for n in nodes}
@@ -305,7 +328,7 @@ def spectral_dimension(
 
     nodes = list(graph.nodes())
     a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=False)
+    lap = _laplacian(graph, normed=False)
     evals, _ = eigh(lap)
 
     traces: List[Tuple[float, float]] = []
@@ -339,7 +362,7 @@ def laplacian_spectrum(graph: nx.Graph, *, normed: bool = True) -> np.ndarray:
     """
 
     a = nx.to_numpy_array(graph, nodelist=list(graph.nodes()))
-    lap = csgraph.laplacian(a, normed=normed)
+    lap = _laplacian(graph, normed=normed)
     evals = eigh(lap, eigvals_only=True)
     return np.sort(evals)
 
@@ -477,8 +500,7 @@ def graph_fourier_transform(
     """
 
     nodes = list(graph.nodes())
-    a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=normed)
+    lap = _laplacian(graph, normed=normed)
     evals, evecs = eigh(lap)
     if isinstance(signal, dict):
         vec = np.array([signal[n] for n in nodes], dtype=float)
@@ -493,8 +515,7 @@ def inverse_graph_fourier_transform(
     """Return the inverse graph Fourier transform of ``coeffs``."""
 
     nodes = list(graph.nodes())
-    a = nx.to_numpy_array(graph, nodelist=nodes)
-    lap = csgraph.laplacian(a, normed=normed)
+    lap = _laplacian(graph, normed=normed)
     _, evecs = eigh(lap)
     return evecs @ np.asarray(coeffs, dtype=float)
 

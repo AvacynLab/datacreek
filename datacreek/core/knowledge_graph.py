@@ -365,6 +365,32 @@ class KnowledgeGraph:
                 provenance=source,
             )
 
+    def add_hyperedge(
+        self,
+        edge_id: str,
+        node_ids: Iterable[str],
+        *,
+        relation: str = "member",
+        source: str | None = None,
+    ) -> None:
+        """Insert a hyperedge connecting ``node_ids``."""
+
+        if self.graph.has_node(edge_id):
+            raise ValueError(f"Hyperedge already exists: {edge_id}")
+
+        self.graph.add_node(edge_id, type="hyperedge", source=source)
+
+        for idx, nid in enumerate(node_ids):
+            if not self.graph.has_node(nid):
+                raise ValueError(f"Unknown node: {nid}")
+            self.graph.add_edge(
+                edge_id,
+                nid,
+                relation=relation,
+                sequence=idx,
+                provenance=source,
+            )
+
     def _renumber_chunks(self, doc_id: str) -> None:
         """Update sequence numbers and next_chunk links for ``doc_id``."""
         chunks = self.get_chunks_for_document(doc_id)

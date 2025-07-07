@@ -307,6 +307,29 @@ class DatasetBuilder:
             source=source,
         )
 
+    def add_hyperedge(
+        self,
+        edge_id: str,
+        node_ids: Iterable[str],
+        *,
+        relation: str = "member",
+        source: str | None = None,
+    ) -> None:
+        """Insert a hyperedge node connecting ``node_ids``."""
+
+        self.graph.add_hyperedge(
+            edge_id,
+            node_ids,
+            relation=relation,
+            source=source,
+        )
+        self._record_event(
+            "add_hyperedge",
+            f"Added hyperedge {edge_id}",
+            relation=relation,
+            source=source,
+        )
+
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
 

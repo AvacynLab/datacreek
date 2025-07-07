@@ -1401,3 +1401,14 @@ def test_graph_fourier_wrappers():
         assert pytest.approx(val, rel=1e-6) == signal[node]
     assert any(e.operation == "graph_fourier_transform" for e in ds.events)
     assert any(e.operation == "inverse_graph_fourier_transform" for e in ds.events)
+
+
+def test_add_hyperedge_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.add_hyperedge("he1", ["c1", "c2"])
+    assert ds.graph.graph.nodes["he1"]["type"] == "hyperedge"
+    assert ds.graph.graph.has_edge("he1", "c1")
+    assert any(e.operation == "add_hyperedge" for e in ds.events)
