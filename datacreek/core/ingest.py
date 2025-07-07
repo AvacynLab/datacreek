@@ -170,9 +170,7 @@ def to_kg(
     cleaned_text = clean_text(text)
     cleaned_pages = [clean_text(p) for p in pages] if pages else None
 
-    dataset.add_document(
-        doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum
-    )
+    dataset.add_document(doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum)
 
     if elements:
         chunk_idx = 0
