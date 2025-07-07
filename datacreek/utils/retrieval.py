@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional
+from collections import Counter
 
 try:
     import hnswlib  # type: ignore
@@ -51,23 +52,46 @@ class EmbeddingIndex:
         if TfidfVectorizer is None or NearestNeighbors is None or np is None:
             try:
                 import numpy as _np
-                from sklearn.feature_extraction.text import TfidfVectorizer as _TF
-                from sklearn.neighbors import NearestNeighbors as _NN
-            except Exception as exc:  # pragma: no cover - optional dep missing
-                raise ImportError("scikit-learn and numpy are required for EmbeddingIndex") from exc
-            np = _np
-            TfidfVectorizer = _TF
-            NearestNeighbors = _NN
-        self._vectorizer = TfidfVectorizer().fit(self.texts)
-        self._matrix = self._vectorizer.transform(self.texts)
-        if self.use_hnsw:
+
+                np = _np
+            except Exception as exc:
+                raise ImportError("numpy is required for EmbeddingIndex") from exc
+            # basic count vectors as fallback
+            vocab = sorted({w for t in self.texts for w in t.lower().split()})
+            vectors = []
+            for txt in self.texts:
+                counts = Counter(txt.lower().split())
+                vectors.append([counts.get(w, 0) for w in vocab])
+            self._matrix = np.array(vectors, dtype=float)
+            self._vectorizer = None
+            self._nn = None
+            if NearestNeighbors is not None:
+                self._nn = NearestNeighbors(metric="cosine")
+                self._nn.fit(self._matrix)
+        else:
+            self._vectorizer = TfidfVectorizer().fit(self.texts)
+            self._matrix = self._vectorizer.transform(self.texts)
+            if self.use_hnsw:
+                self._hnsw = hnswlib.Index(space="cosine", dim=self._matrix.shape[1])
+                self._hnsw.init_index(max_elements=len(self.ids), ef_construction=100, M=16)
+                self._hnsw.add_items(self._matrix.toarray(), list(range(len(self.ids))))
+                self._hnsw.set_ef(50)
+                self._nn = None
+            else:
+                self._nn = NearestNeighbors(metric="cosine")
+                self._nn.fit(self._matrix)
+                self._hnsw = None
+            return
+        if self.use_hnsw and self._matrix is not None:
             self._hnsw = hnswlib.Index(space="cosine", dim=self._matrix.shape[1])
             self._hnsw.init_index(max_elements=len(self.ids), ef_construction=100, M=16)
-            self._hnsw.add_items(self._matrix.toarray(), list(range(len(self.ids))))
+            self._hnsw.add_items(
+                self._matrix if isinstance(self._matrix, np.ndarray) else self._matrix.toarray(),
+                list(range(len(self.ids))),
+            )
             self._hnsw.set_ef(50)
             self._nn = None
-        else:
-            self._nn = NearestNeighbors(metric="cosine")
+        elif self._matrix is not None and self._nn is not None:
             self._nn.fit(self._matrix)
             self._hnsw = None
 
