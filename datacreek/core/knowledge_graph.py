@@ -1741,6 +1741,22 @@ class KnowledgeGraph:
             "entropy": entropies,
         }
 
+    def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
+        """Return fractal dimension, optimal radius and topological signature."""
+
+        dim, counts = self.box_counting_dimension(radii)
+        from ..analysis.fractal import mdl_optimal_radius
+
+        idx = mdl_optimal_radius(counts)
+        radius = counts[idx][0] if counts else 1
+        signature = self.topological_signature(max_dim=max_dim)
+        return {
+            "dimension": dim,
+            "radius": radius,
+            "counts": counts,
+            "signature": signature,
+        }
+
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Return a coarse-grained graph via box covering."""
 

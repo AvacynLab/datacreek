@@ -880,6 +880,18 @@ def test_fractal_dimension_wrapper():
     assert counts and counts[0][0] == 1
 
 
+def test_compute_fractal_features_and_export():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    feats = ds.compute_fractal_features([1], max_dim=1)
+    assert "dimension" in feats and "signature" in feats
+    records = ds.export_prompts()
+    assert records and "topo_signature" in records[0]
+    assert any(e.operation == "compute_fractal_features" for e in ds.events)
+    assert any(e.operation == "export_prompts" for e in ds.events)
+
+
 def test_fractalize_level_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

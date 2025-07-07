@@ -875,6 +875,19 @@ class DatasetBuilder:
         )
         return dim, counts
 
+    def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
+        """Compute fractal metrics and record the event."""
+
+        features = self.graph.compute_fractal_features(radii, max_dim=max_dim)
+        self._record_event(
+            "compute_fractal_features",
+            "Fractal features computed",
+            radii=list(radii),
+            dimension=features["dimension"],
+            radius=features["radius"],
+        )
+        return features
+
     def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
         """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
 
@@ -1807,6 +1820,24 @@ class DatasetBuilder:
 
         self.stage = max(self.stage, DatasetStage.EXPORTED)
         self._record_event("export_dataset", "Dataset exported")
+
+    def export_prompts(self) -> List[Dict[str, Any]]:
+        """Return prompt records with fractal and perception metadata."""
+
+        signature = self.graph.topological_signature(max_dim=1)
+        data: List[Dict[str, Any]] = []
+        for node, attrs in self.graph.graph.nodes(data=True):
+            if attrs.get("type") != "chunk":
+                continue
+            record = {
+                "prompt": attrs.get("text", ""),
+                "fractal_level": attrs.get("fractal_level"),
+                "perception_id": attrs.get("perception_id"),
+                "topo_signature": signature,
+            }
+            data.append(record)
+        self._record_event("export_prompts", "Prompt data exported")
+        return data
 
     @persist_after
     def delete_version(self, index: int) -> None:
