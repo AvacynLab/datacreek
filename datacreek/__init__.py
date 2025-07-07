@@ -52,6 +52,7 @@ __all__: list[str] = [
     "graph_information_bottleneck",
     "prototype_subgraph",
     "sheaf_laplacian",
+    "quality_check",
     "caption_image",
     "detect_emotion",
     "detect_modality",
@@ -270,6 +271,10 @@ def __getattr__(name: str):
         from .analysis.sheaf import sheaf_laplacian as _sl
 
         return _sl
+    if name == "quality_check":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.quality_check
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 

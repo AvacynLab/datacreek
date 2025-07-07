@@ -1859,6 +1859,76 @@ class KnowledgeGraph:
                     current_map[node] = mapping[box]
                     self.graph.nodes[node]["fractal_level"] = level
 
+    # ------------------------------------------------------------------
+    # Quality checks inspired by Neo4j GDS
+    # ------------------------------------------------------------------
+
+    def quality_check(
+        self,
+        *,
+        min_component_size: int = 2,
+        triangle_threshold: int = 1,
+        similarity: float = 0.95,
+        link_threshold: float = 0.0,
+    ) -> dict[str, int]:
+        """Clean the graph using lightweight GDS‑like heuristics."""
+
+        import networkx as nx
+
+        removed_nodes = 0
+        removed_edges = 0
+        merged_nodes = 0
+        added_edges = 0
+
+        # Remove small components
+        ug = self.graph.to_undirected()
+        for comp in list(nx.connected_components(ug)):
+            if len(comp) < min_component_size:
+                self.graph.remove_nodes_from(comp)
+                removed_nodes += len(comp)
+
+        # Triangle-based edge pruning
+        tri = nx.triangles(self.graph.to_undirected())
+        for u, v in list(self.graph.edges()):
+            if tri.get(u, 0) < triangle_threshold or tri.get(v, 0) < triangle_threshold:
+                self.graph.remove_edge(u, v)
+                removed_edges += 1
+
+        # Deduplicate similar nodes via Jaccard
+        nodes = list(self.graph.nodes())
+        for i, u in enumerate(nodes):
+            if not self.graph.has_node(u):
+                continue
+            nu = set(self.graph.neighbors(u))
+            for v in nodes[i + 1 :]:
+                if not self.graph.has_node(v):
+                    continue
+                nv = set(self.graph.neighbors(v))
+                union = nu | nv
+                if not union:
+                    continue
+                jac = len(nu & nv) / len(union)
+                if jac > similarity:
+                    for w in nv:
+                        if w != u:
+                            self.graph.add_edge(u, w)
+                    self.graph.remove_node(v)
+                    merged_nodes += 1
+
+        # Simple link prediction via Adamic‑Adar
+        preds = nx.adamic_adar_index(self.graph.to_undirected())
+        for u, v, score in preds:
+            if score > link_threshold and not self.graph.has_edge(u, v):
+                self.graph.add_edge(u, v, relation="suggested")
+                added_edges += 1
+
+        return {
+            "removed_nodes": removed_nodes,
+            "removed_edges": removed_edges,
+            "merged_nodes": merged_nodes,
+            "added_edges": added_edges,
+        }
+
     def optimize_topology(
         self,
         target: nx.Graph,

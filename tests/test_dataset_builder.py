@@ -1120,6 +1120,16 @@ def test_gds_quality_check_wrapper(monkeypatch):
     assert any(e.operation == "gds_quality_check" for e in ds.events)
 
 
+def test_quality_check_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.graph.graph.add_node("iso")
+    res = ds.quality_check(min_component_size=2)
+    assert res["removed_nodes"] == 1
+    assert any(e.operation == "quality_check" for e in ds.events)
+
+
 def test_consolidate_schema_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_entity("e1", "A")

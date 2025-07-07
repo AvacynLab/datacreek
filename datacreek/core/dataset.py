@@ -1240,6 +1240,29 @@ class DatasetBuilder:
         )
         return result
 
+    def quality_check(
+        self,
+        *,
+        min_component_size: int = 2,
+        triangle_threshold: int = 1,
+        similarity: float = 0.95,
+        link_threshold: float = 0.0,
+    ) -> Dict[str, int]:
+        """Run lightweight quality checks without Neo4j."""
+
+        result = self.graph.quality_check(
+            min_component_size=min_component_size,
+            triangle_threshold=triangle_threshold,
+            similarity=similarity,
+            link_threshold=link_threshold,
+        )
+        self._record_event(
+            "quality_check",
+            "Graph quality check performed",
+            **result,
+        )
+        return result
+
     def update_embeddings(self, node_type: str = "chunk") -> None:
         """Materialize embeddings for nodes of ``node_type``."""
 

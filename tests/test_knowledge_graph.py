@@ -1017,6 +1017,15 @@ def test_gds_quality_check_method():
     assert 0 in res["hubs"]
 
 
+def test_quality_check_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.graph.add_node("iso")
+    res = kg.quality_check(min_component_size=2)
+    assert res["removed_nodes"] == 1
+
+
 def test_atom_and_molecule_methods():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
