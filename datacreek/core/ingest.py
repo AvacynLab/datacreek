@@ -53,6 +53,8 @@ class IngestOptions:
     use_unstructured: bool | None = None
     extract_entities: bool = False
     extract_facts: bool = False
+    compute_metrics: bool = False
+    compute_metrics: bool = False
 
 
 class IngestOptionsModel(BaseModel):
@@ -384,6 +386,7 @@ def ingest_into_dataset(
     client: "LLMClient" | None = None,
     options: IngestOptions | None = None,
     progress_callback: Callable[[int], None] | None = None,
+    compute_metrics: bool = False,
 ) -> str:
     """Parse ``file_path`` and populate ``dataset`` with its content.
 
@@ -406,6 +409,7 @@ def ingest_into_dataset(
         use_unstructured = options.use_unstructured
         extract_entities = options.extract_entities
         extract_facts = options.extract_facts
+        compute_metrics = options.compute_metrics
 
     validate_file_path(file_path)
 
@@ -477,6 +481,12 @@ def ingest_into_dataset(
             logger.exception("Failed to extract facts from %s", file_path)
             raise
         dataset.history.append("Facts extracted on ingest")
+    if compute_metrics:
+        try:
+            dataset.fractal_information_metrics([1])
+        except Exception:
+            logger.exception("Failed to compute fractal metrics for %s", file_path)
+    return doc_id
     return doc_id
 
 
@@ -494,6 +504,7 @@ async def ingest_into_dataset_async(
     client: "LLMClient" | None = None,
     options: IngestOptions | None = None,
     progress_callback: Callable[[int], None] | None = None,
+    compute_metrics: bool = False,
 ) -> str:
     """Asynchronous wrapper around :func:`ingest_into_dataset`."""
 
@@ -511,4 +522,5 @@ async def ingest_into_dataset_async(
         client=client,
         options=options,
         progress_callback=progress_callback,
+        compute_metrics=compute_metrics,
     )
