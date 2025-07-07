@@ -365,6 +365,20 @@ class DatasetBuilder:
     def search_chunks(self, query: str) -> list[str]:
         return self.graph.search_chunks(query)
 
+    def chunks_by_emotion(self, emotion: str) -> list[str]:
+        """Return chunk IDs with a specific emotion label."""
+
+        ids = self.graph.chunks_by_emotion(emotion)
+        self._record_event("chunks_by_emotion", "Chunks filtered by emotion", emotion=emotion)
+        return ids
+
+    def chunks_by_modality(self, modality: str) -> list[str]:
+        """Return chunk IDs with a specific modality label."""
+
+        ids = self.graph.chunks_by_modality(modality)
+        self._record_event("chunks_by_modality", "Chunks filtered by modality", modality=modality)
+        return ids
+
     def search(self, query: str, node_type: str = "chunk") -> list[str]:
         return self.graph.search(query, node_type=node_type)
 

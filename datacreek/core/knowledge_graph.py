@@ -639,6 +639,24 @@ class KnowledgeGraph:
             )
         return out
 
+    def chunks_by_emotion(self, emotion: str) -> list[str]:
+        """Return chunk IDs tagged with ``emotion``."""
+
+        return [
+            n
+            for n, d in self.graph.nodes(data=True)
+            if d.get("type") == "chunk" and d.get("emotion") == emotion
+        ]
+
+    def chunks_by_modality(self, modality: str) -> list[str]:
+        """Return chunk IDs tagged with ``modality``."""
+
+        return [
+            n
+            for n, d in self.graph.nodes(data=True)
+            if d.get("type") == "chunk" and d.get("modality") == modality
+        ]
+
     def link_similar_chunks(self, k: int = 3) -> None:
         """Add ``similar_to`` edges between semantically close chunks."""
 
