@@ -1501,6 +1501,17 @@ def test_add_hyperedge_wrapper():
     assert any(e.operation == "add_hyperedge" for e in ds.events)
 
 
+def test_add_simplex_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.add_simplex("sx1", ["c1", "c2"])
+    assert ds.graph.graph.nodes["sx1"]["type"] == "simplex"
+    assert ds.graph.graph.nodes["sx1"]["dimension"] == 1
+    assert any(e.operation == "add_simplex" for e in ds.events)
+
+
 def test_fractal_information_metrics_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

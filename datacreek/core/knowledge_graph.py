@@ -401,6 +401,42 @@ class KnowledgeGraph:
                 provenance=source,
             )
 
+    def add_simplex(
+        self,
+        simplex_id: str,
+        node_ids: Iterable[str],
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Insert a simplex node linked to ``node_ids``.
+
+        Parameters
+        ----------
+        simplex_id:
+            Identifier for the simplex node.
+        node_ids:
+            Vertices forming this simplex.
+        source:
+            Optional provenance information.
+        """
+
+        if self.graph.has_node(simplex_id):
+            raise ValueError(f"Simplex already exists: {simplex_id}")
+
+        dim = len(list(node_ids)) - 1
+        self.graph.add_node(simplex_id, type="simplex", dimension=dim, source=source)
+
+        for idx, nid in enumerate(node_ids):
+            if not self.graph.has_node(nid):
+                raise ValueError(f"Unknown node: {nid}")
+            self.graph.add_edge(
+                simplex_id,
+                nid,
+                relation="face",
+                sequence=idx,
+                provenance=source,
+            )
+
     def _renumber_chunks(self, doc_id: str) -> None:
         """Update sequence numbers and next_chunk links for ``doc_id``."""
         chunks = self.get_chunks_for_document(doc_id)

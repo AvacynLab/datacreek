@@ -338,6 +338,22 @@ class DatasetBuilder:
             source=source,
         )
 
+    def add_simplex(
+        self,
+        simplex_id: str,
+        node_ids: Iterable[str],
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Insert a simplex node made of existing vertices."""
+
+        self.graph.add_simplex(simplex_id, node_ids, source=source)
+        self._record_event(
+            "add_simplex",
+            f"Added simplex {simplex_id}",
+            source=source,
+        )
+
     def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
         """Insert an entity node."""
 
