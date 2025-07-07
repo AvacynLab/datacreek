@@ -84,6 +84,23 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
     assert ds.graph.graph.nodes[chunk_id].get("modality") == detect_modality("Hello")
 
 
+def test_ingest_audio(tmp_path, monkeypatch):
+    audio_file = tmp_path / "s.wav"
+    audio_file.write_text("fake")
+
+    class DummyParser(datacreek.parsers.WhisperAudioParser):
+        def parse(self, file_path: str) -> str:
+            return "hello world"
+
+    monkeypatch.setattr(datacreek.core.ingest, "determine_parser", lambda f, c: DummyParser())
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ingest_into_dataset(str(audio_file), ds, doc_id="a1")
+
+    assert ds.get_audios_for_document("a1") == ["a1_audio_0"]
+    cid = ds.get_chunks_for_document("a1")[0]
+    assert (cid, "a1_audio_0") in ds.graph.graph.edges
+
+
 def test_to_kg_extract_entities(tmp_path, monkeypatch):
     class El:
         def __init__(self, text=None, page_number=1):

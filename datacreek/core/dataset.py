@@ -267,6 +267,19 @@ class DatasetBuilder:
         self.graph.add_image(doc_id, image_id, path, page=page, alt_text=alt_text)
         self._record_event("add_image", f"Added image {image_id} to {doc_id}")
 
+    def add_audio(
+        self,
+        doc_id: str,
+        audio_id: str,
+        path: str,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an audio node in the dataset graph."""
+
+        self.graph.add_audio(doc_id, audio_id, path, page=page)
+        self._record_event("add_audio", f"Added audio {audio_id} to {doc_id}")
+
     def add_atom(
         self,
         doc_id: str,
@@ -1387,6 +1400,9 @@ class DatasetBuilder:
 
     def get_images_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_images_for_document(doc_id)
+
+    def get_audios_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_audios_for_document(doc_id)
 
     def get_atoms_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_atoms_for_document(doc_id)

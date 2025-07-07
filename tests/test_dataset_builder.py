@@ -1530,3 +1530,11 @@ def test_hnsw_search(tmp_path):
     ds.graph.index.build()
     res = ds.search_embeddings("hello", k=1, fetch_neighbors=False)
     assert res and res[0] == "c1"
+
+
+def test_add_audio_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_audio("d", "a1", "file.wav")
+    assert "a1" in ds.graph.graph
+    assert any(e.operation == "add_audio" for e in ds.events)

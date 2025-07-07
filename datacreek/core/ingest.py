@@ -452,6 +452,18 @@ def ingest_into_dataset(
         logger.exception("Failed to build knowledge graph for %s", file_path)
         raise
 
+    try:
+        parser = determine_parser(file_path, config or load_config())
+        from datacreek.parsers import WhisperAudioParser, YouTubeParser
+
+        if isinstance(parser, (WhisperAudioParser, YouTubeParser)):
+            audio_id = f"{doc_id}_audio_0"
+            dataset.add_audio(doc_id, audio_id, file_path)
+            for cid in dataset.graph.get_chunks_for_document(doc_id):
+                dataset.graph.link_transcript(cid, audio_id, provenance=file_path)
+    except Exception:  # pragma: no cover - optional deps may be missing
+        pass
+
     if extract_entities:
         try:
             dataset.extract_entities()

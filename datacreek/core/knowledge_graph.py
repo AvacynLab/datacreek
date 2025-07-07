@@ -135,6 +135,21 @@ class KnowledgeGraph:
             provenance = self.graph.nodes[node_id].get("source")
         self.graph.add_edge(node_id, entity_id, relation=relation, provenance=provenance)
 
+    def link_transcript(
+        self,
+        chunk_id: str,
+        audio_id: str,
+        *,
+        provenance: str | None = None,
+    ) -> None:
+        """Connect a chunk to its audio with a ``transcript_of`` relation."""
+
+        if not self.graph.has_node(chunk_id) or not self.graph.has_node(audio_id):
+            raise ValueError("Unknown node")
+        if provenance is None:
+            provenance = self.graph.nodes[chunk_id].get("source")
+        self.graph.add_edge(chunk_id, audio_id, relation="transcript_of", provenance=provenance)
+
     def add_section(
         self,
         doc_id: str,
@@ -280,6 +295,42 @@ class KnowledgeGraph:
             doc_id,
             image_id,
             relation="has_image",
+            sequence=sequence,
+            provenance=source,
+        )
+
+    def add_audio(
+        self,
+        doc_id: str,
+        audio_id: str,
+        path: str,
+        source: str | None = None,
+        *,
+        page: int | None = None,
+    ) -> None:
+        """Insert an audio node linked to ``doc_id``."""
+
+        if source is None:
+            source = self.graph.nodes[doc_id].get("source")
+        if self.graph.has_node(audio_id):
+            raise ValueError(f"Audio already exists: {audio_id}")
+
+        audios = self.get_audios_for_document(doc_id)
+        sequence = len(audios)
+        if page is None:
+            page = 1
+
+        self.graph.add_node(
+            audio_id,
+            type="audio",
+            path=path,
+            source=source,
+            page=page,
+        )
+        self.graph.add_edge(
+            doc_id,
+            audio_id,
+            relation="has_audio",
             sequence=sequence,
             provenance=source,
         )
@@ -2217,6 +2268,17 @@ class KnowledgeGraph:
             (data.get("sequence", i), tgt)
             for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
             if data.get("relation") == "has_image"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
+    def get_audios_for_document(self, doc_id: str) -> list[str]:
+        """Return audio IDs associated with ``doc_id`` ordered by sequence."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
+            if data.get("relation") == "has_audio"
         ]
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
