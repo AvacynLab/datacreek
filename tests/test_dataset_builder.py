@@ -942,6 +942,17 @@ def test_persistence_diagrams_wrapper():
     assert diags[0].shape[1] == 2
 
 
+def test_topological_signature_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    sig = ds.topological_signature(max_dim=1)
+    assert "diagrams" in sig
+    assert "entropy" in sig
+    assert 0 in sig["diagrams"]
+    assert any(e.operation == "topological_signature" for e in ds.events)
+
+
 def test_spectral_dimension_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

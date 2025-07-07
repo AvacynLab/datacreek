@@ -979,6 +979,17 @@ class DatasetBuilder:
         )
         return diags
 
+    def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.topological_signature`."""
+
+        sig = self.graph.topological_signature(max_dim=max_dim)
+        self._record_event(
+            "topological_signature",
+            "Topological signature computed",
+            max_dim=max_dim,
+        )
+        return sig
+
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Wrapper for :meth:`KnowledgeGraph.fractalize_level`."""
 

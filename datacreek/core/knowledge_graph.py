@@ -1660,6 +1660,26 @@ class KnowledgeGraph:
         g = nx.convert_node_labels_to_integers(self.graph.to_undirected())
         return _pd(g, max_dim)
 
+    def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:
+        """Return persistence diagrams and entropies for ``max_dim``."""
+        try:
+            diags = self.persistence_diagrams(max_dim=max_dim)
+        except (RuntimeError, AttributeError):
+            diags = {}
+
+        entropies: Dict[int, float] = {}
+        for dim in range(max_dim + 1):
+            try:
+                ent = self.persistence_entropy(dimension=dim)
+            except RuntimeError:
+                ent = 0.0
+            entropies[dim] = ent
+
+        return {
+            "diagrams": {d: diag.tolist() for d, diag in diags.items()},
+            "entropy": entropies,
+        }
+
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Return a coarse-grained graph via box covering."""
 
