@@ -892,6 +892,18 @@ def test_compute_fractal_features_and_export():
     assert any(e.operation == "export_prompts" for e in ds.events)
 
 
+def test_dimension_distortion_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.graph.graph.nodes["c1"]["poincare_embedding"] = [0.0, 0.0]
+    ds.graph.graph.nodes["c2"]["poincare_embedding"] = [1.0, 0.0]
+    val = ds.dimension_distortion([1])
+    assert isinstance(val, float)
+    assert any(e.operation == "dimension_distortion" for e in ds.events)
+
+
 def test_fractalize_level_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

@@ -345,6 +345,48 @@ def spectral_dimension(
     return float(dim), traces
 
 
+def embedding_box_counting_dimension(
+    coords: Dict[object, Iterable[float]], radii: Iterable[float]
+) -> Tuple[float, List[Tuple[float, int]]]:
+    """Estimate fractal dimension from point coordinates.
+
+    Parameters
+    ----------
+    coords:
+        Mapping of node IDs to embedding vectors.
+    radii:
+        Iterable of ball radii. Larger radii correspond to coarser covers.
+
+    Returns
+    -------
+    float
+        Estimated fractal dimension based on the slope of ``log(N_B)`` vs
+        ``log(1/r)``.
+    list[tuple[float, int]]
+        ``(radius, count)`` pairs used for the estimation.
+    """
+
+    pts = np.asarray(list(coords.values()), dtype=float)
+    counts: List[Tuple[float, int]] = []
+    for r in radii:
+        remaining = set(range(len(pts)))
+        boxes = 0
+        while remaining:
+            i = remaining.pop()
+            dists = np.linalg.norm(pts[list(remaining | {i})] - pts[i], axis=1)
+            cover = {j for j, d in zip(list(remaining | {i}), dists) if d <= r}
+            remaining.difference_update(cover)
+            boxes += 1
+        counts.append((float(r), boxes))
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    if len(xs) < 2:
+        return 0.0, counts
+    slope, _ = np.polyfit(xs, ys, 1)
+    return float(slope), counts
+
+
 def laplacian_spectrum(graph: nx.Graph, *, normed: bool = True) -> np.ndarray:
     """Return the Laplacian eigenvalues of ``graph``.
 

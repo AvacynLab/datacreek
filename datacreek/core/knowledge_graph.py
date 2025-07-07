@@ -1757,6 +1757,22 @@ class KnowledgeGraph:
             "signature": signature,
         }
 
+    def dimension_distortion(self, radii: Iterable[int]) -> float:
+        """Return difference between graph and embedding fractal dimensions."""
+
+        graph_dim, _ = self.box_counting_dimension(radii)
+        coords = {
+            n: self.graph.nodes[n].get("poincare_embedding")
+            for n in self.graph.nodes
+            if self.graph.nodes[n].get("poincare_embedding") is not None
+        }
+        if not coords:
+            return float("nan")
+        from ..analysis.fractal import embedding_box_counting_dimension
+
+        emb_dim, _ = embedding_box_counting_dimension(coords, radii)
+        return abs(graph_dim - emb_dim)
+
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Return a coarse-grained graph via box covering."""
 

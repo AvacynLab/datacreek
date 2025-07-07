@@ -888,6 +888,18 @@ class DatasetBuilder:
         )
         return features
 
+    def dimension_distortion(self, radii: Iterable[int]) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.dimension_distortion`."""
+
+        dist = self.graph.dimension_distortion(radii)
+        self._record_event(
+            "dimension_distortion",
+            "Fractal dimension distortion computed",
+            radii=list(radii),
+            distortion=dist,
+        )
+        return dist
+
     def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
         """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
 
