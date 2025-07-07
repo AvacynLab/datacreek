@@ -957,6 +957,17 @@ class DatasetBuilder:
         )
         return energy
 
+    def lacunarity(self, radius: int = 1) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.lacunarity`."""
+
+        lac = self.graph.lacunarity(radius=radius)
+        self._record_event(
+            "lacunarity",
+            "Graph lacunarity computed",
+            radius=radius,
+        )
+        return lac
+
     def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:
         """Wrapper for :meth:`KnowledgeGraph.sheaf_laplacian`."""
 

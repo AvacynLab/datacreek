@@ -18,6 +18,7 @@ __all__ = [
     "laplacian_spectrum",
     "spectral_entropy",
     "spectral_density",
+    "graph_lacunarity",
     "graph_fourier_transform",
     "inverse_graph_fourier_transform",
     "graph_information_bottleneck",
@@ -47,6 +48,7 @@ def __getattr__(name: str):
         "spectral_density",
         "spectral_dimension",
         "spectral_entropy",
+        "graph_lacunarity",
     }:
         from . import fractal as _f
 

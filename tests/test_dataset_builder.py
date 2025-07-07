@@ -1460,6 +1460,16 @@ def test_graph_fourier_wrappers():
     assert any(e.operation == "inverse_graph_fourier_transform" for e in ds.events)
 
 
+def test_lacunarity_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_chunk("d", f"c{i}", str(i))
+    lac = ds.lacunarity(radius=1)
+    assert lac >= 1.0
+    assert ds.events[-1].operation == "lacunarity"
+
+
 def test_add_hyperedge_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

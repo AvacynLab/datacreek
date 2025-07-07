@@ -43,6 +43,7 @@ __all__: list[str] = [
     "spectral_entropy",
     "spectral_gap",
     "laplacian_energy",
+    "lacunarity",
     "poincare_embedding",
     "generate_graph_rnn_like",
     "spectral_density",
@@ -70,6 +71,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         fractalize_graph,
         fractalize_optimal,
         graph_fourier_transform,
+        graph_lacunarity,
         graphwave_embedding,
         inverse_graph_fourier_transform,
         laplacian_energy,
@@ -240,6 +242,10 @@ def __getattr__(name: str):
         from .analysis.fractal import laplacian_energy as _le
 
         return _le
+    if name == "lacunarity":
+        from .analysis.fractal import graph_lacunarity as _gl
+
+        return _gl
     if name == "spectral_density":
         from .analysis.fractal import spectral_density as _sdn
 

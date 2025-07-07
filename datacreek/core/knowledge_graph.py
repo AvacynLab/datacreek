@@ -1628,6 +1628,13 @@ class KnowledgeGraph:
 
         return _le(self.graph.to_undirected(), normed=normed)
 
+    def lacunarity(self, radius: int = 1) -> float:
+        """Return lacunarity of the graph for ``radius``."""
+
+        from ..analysis.fractal import graph_lacunarity as _gl
+
+        return _gl(self.graph.to_undirected(), radius=radius)
+
     def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:
         """Return the sheaf Laplacian matrix using ``edge_attr`` for signs."""
 

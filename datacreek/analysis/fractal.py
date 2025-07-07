@@ -537,6 +537,28 @@ def spectral_density(
     return hist.astype(float), edges.astype(float)
 
 
+def graph_lacunarity(graph: nx.Graph, radius: int = 1) -> float:
+    """Return lacunarity of ``graph`` for neighborhood radius ``radius``.
+
+    The lacunarity measures the heterogeneity of mass distribution
+    at a given scale. For each node we count the number of nodes
+    within ``radius`` hops and compute
+
+    .. math:: \Lambda = \frac{\mathrm{Var}(M)}{\mathrm{E}[M]^2} + 1,
+
+    where :math:`M` denotes the local mass.
+    """
+
+    masses = [nx.ego_graph(graph, n, radius=radius).number_of_nodes() for n in graph.nodes()]
+    if not masses:
+        return 0.0
+    arr = np.asarray(masses, dtype=float)
+    mean = arr.mean()
+    if mean == 0:
+        return 0.0
+    return float(arr.var() / (mean * mean) + 1.0)
+
+
 def graph_fourier_transform(
     graph: nx.Graph, signal: Dict[int, float] | np.ndarray, *, normed: bool = True
 ) -> np.ndarray:
