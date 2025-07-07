@@ -1506,6 +1506,43 @@ class KnowledgeGraph:
             if rel and rel in rel_means:
                 data["transe_embedding"] = rel_means[rel].astype(float).tolist()
 
+    def compute_multigeometric_embeddings(
+        self,
+        *,
+        node2vec_dim: int = 64,
+        graphwave_scales: Iterable[float] | None = None,
+        graphwave_points: int = 10,
+        poincare_dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> None:
+        """Compute Node2Vec, GraphWave and Poincar\u00e9 embeddings."""
+
+        if graphwave_scales is None:
+            graphwave_scales = [0.5, 1.0]
+
+        self.compute_node2vec_embeddings(
+            dimensions=node2vec_dim,
+            walk_length=10,
+            num_walks=50,
+            workers=1,
+            seed=0,
+        )
+        self.compute_graphwave_embeddings(
+            scales=graphwave_scales,
+            num_points=graphwave_points,
+        )
+        max_neg = max(1, len(self.graph.nodes) - 2)
+        self.compute_poincare_embeddings(
+            dim=poincare_dim,
+            negative=min(negative, max_neg),
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+
     # ------------------------------------------------------------------
     # Fractal and topological metrics
     # ------------------------------------------------------------------
@@ -1667,9 +1704,7 @@ class KnowledgeGraph:
         if use_generator and dist > epsilon:
             from ..analysis.generation import generate_graph_rnn_like
 
-            extra = generate_graph_rnn_like(
-                skeleton.number_of_nodes(), skeleton.number_of_edges()
-            )
+            extra = generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
             node_map = {i: n for i, n in enumerate(skeleton.nodes())}
             for u, v in extra.edges():
                 a, b = node_map.get(u), node_map.get(v)

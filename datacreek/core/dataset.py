@@ -789,6 +789,52 @@ class DatasetBuilder:
             dimensions=dimensions,
         )
 
+    def compute_multigeometric_embeddings(
+        self,
+        *,
+        node2vec_dim: int = 64,
+        graphwave_scales: Iterable[float] | None = None,
+        graphwave_points: int = 10,
+        poincare_dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> None:
+        """Compute Node2Vec, GraphWave, Poincar\u00e9 and GraphSAGE embeddings."""
+
+        self.compute_graph_embeddings(
+            dimensions=node2vec_dim,
+            walk_length=10,
+            num_walks=50,
+            workers=1,
+            seed=0,
+        )
+        self.compute_graphwave_embeddings(
+            scales=graphwave_scales or [0.5, 1.0],
+            num_points=graphwave_points,
+        )
+        self.compute_poincare_embeddings(
+            dim=poincare_dim,
+            negative=min(negative, max(1, len(self.graph.graph.nodes) - 2)),
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        self.compute_graphsage_embeddings(dimensions=node2vec_dim, num_layers=2)
+        self._record_event(
+            "compute_multigeometric_embeddings",
+            "Multi-geometry embeddings computed",
+            node2vec_dim=node2vec_dim,
+            graphwave_scales=list(graphwave_scales or [0.5, 1.0]),
+            graphwave_points=graphwave_points,
+            poincare_dim=poincare_dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+
     def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
 

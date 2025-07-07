@@ -838,6 +838,24 @@ def test_graphsage_embeddings_wrapper():
     ds.link_entity("c2", "e2")
     ds.compute_graphsage_embeddings(dimensions=8, num_layers=1)
     assert len(ds.graph.graph.nodes["e1"]["graphsage_embedding"]) == 8
+
+
+def test_multigeometric_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.add_entity("e1", "A")
+    ds.add_entity("e2", "B")
+    ds.link_entity("c1", "e1")
+    ds.link_entity("c2", "e2")
+    ds.compute_multigeometric_embeddings(
+        node2vec_dim=8, graphwave_scales=[0.5], graphwave_points=4, poincare_dim=2, epochs=5
+    )
+    node = ds.graph.graph.nodes["e1"]
+    assert len(node["embedding"]) == 8
+    assert len(node["graphwave_embedding"]) == 8
+    assert len(node["poincare_embedding"]) == 2
     assert any(e.operation == "compute_graphsage_embeddings" for e in ds.events)
 
 
