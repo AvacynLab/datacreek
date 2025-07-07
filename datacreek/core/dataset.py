@@ -1110,6 +1110,20 @@ class DatasetBuilder:
         )
         return hierarchy
 
+    def build_mdl_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Wrapper for :meth:`KnowledgeGraph.build_mdl_hierarchy`."""
+
+        hierarchy = self.graph.build_mdl_hierarchy(radii, max_levels=max_levels)
+        self._record_event(
+            "build_mdl_hierarchy",
+            "MDL hierarchy constructed",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+        return hierarchy
+
     def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
         """Wrapper for :meth:`KnowledgeGraph.annotate_fractal_levels`."""
 

@@ -299,6 +299,22 @@ def mdl_optimal_radius(counts: List[Tuple[int, int]]) -> int:
     return best
 
 
+def mdl_value(counts: List[Tuple[int, int]]) -> float:
+    """Return MDL value for a sequence of ``(radius, box_count)`` pairs."""
+
+    if len(counts) < 2:
+        return 0.0
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    slope, intercept = np.polyfit(xs, ys, 1)
+    pred = [slope * x + intercept for x in xs]
+    rss = sum((y - p) ** 2 for y, p in zip(ys, pred))
+    n = len(xs)
+    k = 2  # slope and intercept
+    return float(n * math.log(rss / n + 1e-12) + k * math.log(n))
+
+
 def spectral_dimension(
     graph: nx.Graph, times: Iterable[float]
 ) -> Tuple[float, List[Tuple[float, float]]]:
@@ -707,6 +723,32 @@ def build_fractal_hierarchy(
     current = graph
     for _ in range(max_levels):
         coarse, mapping, radius = fractalize_optimal(current, radii)
+        levels.append((coarse, mapping, radius))
+        if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
+            break
+        current = coarse
+    return levels
+
+
+def build_mdl_hierarchy(
+    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5
+) -> List[Tuple[nx.Graph, Dict[object, int], int]]:
+    """Return a hierarchy using MDL to stop when description length grows."""
+
+    levels: List[Tuple[nx.Graph, Dict[object, int], int]] = []
+    current = graph
+    prev_mdl = float("inf")
+    for _ in range(max_levels):
+        dim, counts = box_counting_dimension(current, radii)
+        if not counts:
+            break
+        idx = mdl_optimal_radius(counts)
+        mdl_curr = mdl_value(counts[: idx + 1])
+        if mdl_curr >= prev_mdl:
+            break
+        prev_mdl = mdl_curr
+        radius = counts[idx][0]
+        coarse, mapping = fractalize_graph(current, radius)
         levels.append((coarse, mapping, radius))
         if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
             break

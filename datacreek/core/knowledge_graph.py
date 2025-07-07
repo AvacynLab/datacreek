@@ -1817,6 +1817,20 @@ class KnowledgeGraph:
             converted.append((g, str_mapping, r))
         return converted
 
+    def build_mdl_hierarchy(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
+        """Return a hierarchy stopping when MDL increases."""
+
+        from ..analysis.fractal import build_mdl_hierarchy as _bmh
+
+        hierarchy = _bmh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        converted: list[tuple[nx.Graph, Dict[str, int], int]] = []
+        for g, mapping, r in hierarchy:
+            str_mapping = {str(node): box for node, box in mapping.items()}
+            converted.append((g, str_mapping, r))
+        return converted
+
     def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
         """Annotate nodes with their fractal level using box covering."""
         from ..analysis.fractal import build_fractal_hierarchy as _bfh

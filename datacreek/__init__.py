@@ -57,6 +57,7 @@ __all__: list[str] = [
     "fractalize_graph",
     "fractalize_optimal",
     "build_fractal_hierarchy",
+    "build_mdl_hierarchy",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -65,6 +66,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         box_counting_dimension,
         box_cover,
         build_fractal_hierarchy,
+        build_mdl_hierarchy,
         fractalize_graph,
         fractalize_optimal,
         graph_fourier_transform,
@@ -278,6 +280,10 @@ def __getattr__(name: str):
         from .analysis.fractal import build_fractal_hierarchy as _bfh
 
         return _bfh
+    if name == "build_mdl_hierarchy":
+        from .analysis.fractal import build_mdl_hierarchy as _bmh
+
+        return _bmh
     if name == "caption_image":
         from .utils.image_captioning import caption_image as _ci
 

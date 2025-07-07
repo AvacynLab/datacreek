@@ -935,6 +935,16 @@ def test_build_fractal_hierarchy_wrapper():
     assert any(e.operation == "build_fractal_hierarchy" for e in ds.events)
 
 
+def test_build_mdl_hierarchy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    hierarchy = ds.build_mdl_hierarchy([1, 2], max_levels=2)
+    assert hierarchy
+    assert any(e.operation == "build_mdl_hierarchy" for e in ds.events)
+
+
 def test_annotate_fractal_levels_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
