@@ -34,7 +34,11 @@ class KnowledgeGraph:
     """Simple wrapper storing documents and chunks with source info."""
 
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
-    index: EmbeddingIndex = field(default_factory=EmbeddingIndex)
+    use_hnsw: bool = False
+    index: EmbeddingIndex = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
 
     def add_document(
         self,
@@ -1090,7 +1094,7 @@ class KnowledgeGraph:
                     used.add(j)
                     merged += 1
         if merged:
-            self.index = EmbeddingIndex()
+            self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
             for n, d in self.graph.nodes(data=True):
                 if d.get("type") in {"chunk", "entity"} and "text" in d:
                     self.index.add(n, d["text"])

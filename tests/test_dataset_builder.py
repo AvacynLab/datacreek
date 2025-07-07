@@ -55,6 +55,16 @@ def test_dataset_search_wrappers():
     assert ds.search_hybrid("related", k=1, node_type="fact") == [fid]
 
 
+def test_hnsw_search(tmp_path):
+    ds = DatasetBuilder(DatasetType.QA, use_hnsw=True)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "goodbye world")
+    ds.graph.index.build()
+    res = ds.search_embeddings("hello", k=1, fetch_neighbors=False)
+    assert res and res[0] == "c1"
+
+
 def test_dataset_clone():
     ds = DatasetBuilder(DatasetType.QA, name="orig")
     ds.add_document("d", source="s")
@@ -1499,3 +1509,13 @@ def test_fractal_information_metrics_wrapper():
     assert "dimension" in metrics and "entropy" in metrics
     assert 0 in metrics["entropy"]
     assert any(e.operation == "fractal_information_metrics" for e in ds.events)
+
+
+def test_hnsw_search(tmp_path):
+    ds = DatasetBuilder(DatasetType.TEXT, use_hnsw=True)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello world")
+    ds.add_chunk("d", "c2", "goodbye world")
+    ds.graph.index.build()
+    res = ds.search_embeddings("hello", k=1, fetch_neighbors=False)
+    assert res and res[0] == "c1"

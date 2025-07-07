@@ -61,6 +61,7 @@ class DatasetBuilder:
     id: str = field(default_factory=lambda: secrets.token_hex(8))
     name: Optional[str] = None
     graph: KnowledgeGraph = field(default_factory=KnowledgeGraph)
+    use_hnsw: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     owner_id: int | None = None
     history: List[str] = field(default_factory=list)
@@ -88,6 +89,9 @@ class DatasetBuilder:
         """Ensure persistence backends are configured when required."""
         if self.name:
             self.validate_name(self.name)
+        if self.graph.use_hnsw != self.use_hnsw:
+            self.graph.use_hnsw = self.use_hnsw
+            self.graph.__post_init__()
         require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
         if require and (self.redis_client is None or self.neo4j_driver is None):
             raise ValueError("Redis and Neo4j must be configured")
@@ -1497,7 +1501,12 @@ class DatasetBuilder:
         """Return a deep copy of this dataset with a new optional name."""
         if name is not None:
             self.validate_name(name)
-        clone = DatasetBuilder(self.dataset_type, name=name, graph=deepcopy(self.graph))
+        clone = DatasetBuilder(
+            self.dataset_type,
+            name=name,
+            graph=deepcopy(self.graph),
+            use_hnsw=self.use_hnsw,
+        )
         clone.owner_id = self.owner_id
         clone.history = self.history.copy()
         clone.versions = deepcopy(self.versions)
@@ -1520,6 +1529,7 @@ class DatasetBuilder:
             "events": [{**asdict(e), "timestamp": e.timestamp.isoformat()} for e in self.events],
             "graph": self.graph.to_dict(),
             "stage": int(self.stage),
+            "use_hnsw": self.use_hnsw,
         }
 
     @classmethod
@@ -1527,7 +1537,11 @@ class DatasetBuilder:
         name = data.get("name")
         if name is not None:
             cls.validate_name(name)
-        ds = cls(DatasetType(data["dataset_type"]), name=name)
+        ds = cls(
+            DatasetType(data["dataset_type"]),
+            name=name,
+            use_hnsw=bool(data.get("use_hnsw", False)),
+        )
         if "id" in data:
             ds.id = data["id"]
         if ts := data.get("created_at"):
