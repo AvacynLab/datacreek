@@ -923,6 +923,17 @@ def test_build_fractal_hierarchy_wrapper():
     assert any(e.operation == "build_fractal_hierarchy" for e in ds.events)
 
 
+def test_annotate_fractal_levels_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.annotate_fractal_levels([1, 2], max_levels=2)
+    assert ds.graph.graph.nodes["c1"].get("fractal_level")
+    assert ds.graph.graph.nodes["c2"].get("fractal_level")
+    assert any(e.operation == "annotate_fractal_levels" for e in ds.events)
+
+
 def test_optimize_topology_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

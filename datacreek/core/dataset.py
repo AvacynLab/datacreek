@@ -1098,6 +1098,17 @@ class DatasetBuilder:
         )
         return hierarchy
 
+    def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.annotate_fractal_levels`."""
+
+        self.graph.annotate_fractal_levels(radii, max_levels=max_levels)
+        self._record_event(
+            "annotate_fractal_levels",
+            "Fractal levels annotated",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+
     def optimize_topology(
         self,
         target: nx.Graph,

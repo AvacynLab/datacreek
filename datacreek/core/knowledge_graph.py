@@ -1801,6 +1801,18 @@ class KnowledgeGraph:
             converted.append((g, str_mapping, r))
         return converted
 
+    def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+        """Annotate nodes with their fractal level using box covering."""
+        from ..analysis.fractal import build_fractal_hierarchy as _bfh
+
+        hierarchy = _bfh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        current_map = {n: n for n in self.graph.nodes()}
+        for level, (_, mapping, _radius) in enumerate(hierarchy, start=1):
+            for node, box in list(current_map.items()):
+                if box in mapping:
+                    current_map[node] = mapping[box]
+                    self.graph.nodes[node]["fractal_level"] = level
+
     def optimize_topology(
         self,
         target: nx.Graph,
