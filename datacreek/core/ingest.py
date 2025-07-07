@@ -54,7 +54,8 @@ class IngestOptions:
     extract_entities: bool = False
     extract_facts: bool = False
     compute_metrics: bool = False
-    compute_metrics: bool = False
+    emotion_fn: Callable[[str], str] | None = None
+    modality_fn: Callable[[str], str] | None = None
 
 
 class IngestOptionsModel(BaseModel):
@@ -149,6 +150,8 @@ def to_kg(
     source: str | None = None,
     extract_entities: bool = False,
     progress_callback: Callable[[int], None] | None = None,
+    emotion_fn: Callable[[str], str] | None = None,
+    modality_fn: Callable[[str], str] | None = None,
 ) -> None:
     """Split ``text`` and populate ``dataset`` with nodes.
 
@@ -207,16 +210,20 @@ def to_kg(
                 continue
             cleaned_el = clean_text(text_el)
             atom_id = f"{doc_id}_atom_{atom_idx}"
-            try:
-                from datacreek.utils.emotion import detect_emotion
-
-                atom_emotion = detect_emotion(cleaned_el)
-            except Exception:
-                atom_emotion = None
-            try:
-                atom_modality = detect_modality(cleaned_el)
-            except Exception:
-                atom_modality = None
+            if emotion_fn is None:
+                try:
+                    from datacreek.utils.emotion import detect_emotion as _emo
+                except Exception:
+                    _emo = None
+                emotion_fn = _emo
+            atom_emotion = emotion_fn(cleaned_el) if emotion_fn else None
+            if modality_fn is None:
+                try:
+                    from datacreek.utils.modality import detect_modality as _mod
+                except Exception:
+                    _mod = None
+                modality_fn = _mod
+            atom_modality = modality_fn(cleaned_el) if modality_fn else None
             atom_entities = None
             if extract_entities:
                 try:
@@ -248,16 +255,20 @@ def to_kg(
             )
             for chunk in chunks:
                 cid = f"{doc_id}_chunk_{chunk_idx}"
-                try:
-                    from datacreek.utils.emotion import detect_emotion
-
-                    emotion = detect_emotion(chunk)
-                except Exception:
-                    emotion = None
-                try:
-                    modality = detect_modality(chunk)
-                except Exception:
-                    modality = None
+                if emotion_fn is None:
+                    try:
+                        from datacreek.utils.emotion import detect_emotion as _em
+                    except Exception:
+                        _em = None
+                    emotion_fn = _em
+                emotion = emotion_fn(chunk) if emotion_fn else None
+                if modality_fn is None:
+                    try:
+                        from datacreek.utils.modality import detect_modality as _mod
+                    except Exception:
+                        _mod = None
+                    modality_fn = _mod
+                modality = modality_fn(chunk) if modality_fn else None
                 entities = None
                 if extract_entities:
                     try:
@@ -295,16 +306,20 @@ def to_kg(
             )
             for chunk in page_chunks:
                 cid = f"{doc_id}_chunk_{chunk_idx}"
-                try:
-                    from datacreek.utils.emotion import detect_emotion
-
-                    emotion = detect_emotion(chunk)
-                except Exception:
-                    emotion = None
-                try:
-                    modality = detect_modality(chunk)
-                except Exception:
-                    modality = None
+                if emotion_fn is None:
+                    try:
+                        from datacreek.utils.emotion import detect_emotion as _em
+                    except Exception:
+                        _em = None
+                    emotion_fn = _em
+                emotion = emotion_fn(chunk) if emotion_fn else None
+                if modality_fn is None:
+                    try:
+                        from datacreek.utils.modality import detect_modality as _mod
+                    except Exception:
+                        _mod = None
+                    modality_fn = _mod
+                modality = modality_fn(chunk) if modality_fn else None
                 entities = None
                 if extract_entities:
                     try:
@@ -337,12 +352,13 @@ def to_kg(
         )
         for i, chunk in enumerate(chunks):
             cid = f"{doc_id}_chunk_{i}"
-            try:
-                from datacreek.utils.emotion import detect_emotion
-
-                emotion = detect_emotion(chunk)
-            except Exception:
-                emotion = None
+            if emotion_fn is None:
+                try:
+                    from datacreek.utils.emotion import detect_emotion as _em
+                except Exception:
+                    _em = None
+                emotion_fn = _em
+            emotion = emotion_fn(chunk) if emotion_fn else None
             try:
                 modality = detect_modality(chunk)
             except Exception:
@@ -387,6 +403,8 @@ def ingest_into_dataset(
     options: IngestOptions | None = None,
     progress_callback: Callable[[int], None] | None = None,
     compute_metrics: bool = False,
+    emotion_fn: Callable[[str], str] | None = None,
+    modality_fn: Callable[[str], str] | None = None,
 ) -> str:
     """Parse ``file_path`` and populate ``dataset`` with its content.
 
@@ -410,6 +428,8 @@ def ingest_into_dataset(
         extract_entities = options.extract_entities
         extract_facts = options.extract_facts
         compute_metrics = options.compute_metrics
+        emotion_fn = options.emotion_fn
+        modality_fn = options.modality_fn
 
     validate_file_path(file_path)
 
@@ -451,6 +471,8 @@ def ingest_into_dataset(
             source=file_path,
             extract_entities=extract_entities,
             progress_callback=progress_callback,
+            emotion_fn=emotion_fn,
+            modality_fn=modality_fn,
         )
     except Exception:
         logger.exception("Failed to build knowledge graph for %s", file_path)
@@ -505,6 +527,8 @@ async def ingest_into_dataset_async(
     options: IngestOptions | None = None,
     progress_callback: Callable[[int], None] | None = None,
     compute_metrics: bool = False,
+    emotion_fn: Callable[[str], str] | None = None,
+    modality_fn: Callable[[str], str] | None = None,
 ) -> str:
     """Asynchronous wrapper around :func:`ingest_into_dataset`."""
 
@@ -523,4 +547,6 @@ async def ingest_into_dataset_async(
         options=options,
         progress_callback=progress_callback,
         compute_metrics=compute_metrics,
+        emotion_fn=emotion_fn,
+        modality_fn=modality_fn,
     )
