@@ -682,6 +682,14 @@ def test_laplacian_energy_method():
     assert energy >= 0
 
 
+def test_sheaf_laplacian_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=-1)
+    L = kg.sheaf_laplacian()
+    assert L.shape == (2, 2)
+    assert L[0, 1] == 1
+
+
 def test_fractalize_level_method():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")

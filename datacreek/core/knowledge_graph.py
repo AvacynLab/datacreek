@@ -1602,6 +1602,13 @@ class KnowledgeGraph:
 
         return _le(self.graph.to_undirected(), normed=normed)
 
+    def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:
+        """Return the sheaf Laplacian matrix using ``edge_attr`` for signs."""
+
+        from ..analysis.sheaf import sheaf_laplacian as _sl
+
+        return _sl(self.graph, edge_attr=edge_attr)
+
     def graph_information_bottleneck(
         self,
         labels: Dict[str, int],

@@ -1,4 +1,5 @@
 import json
+import enum
 from typing import Any, Literal
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Query
@@ -48,7 +49,9 @@ try:  # optional heavy imports
     )
 except Exception:  # pragma: no cover - simplify tests
     Dataset = SessionLocal = User = None  # type: ignore
-    ExportFormat = Any  # type: ignore
+    class ExportFormat(str, enum.Enum):
+        JSONL = "jsonl"
+        PARQUET = "parquet"
     CurateParams = DatasetCreate = DatasetInit = DatasetName = DatasetOut = DatasetUpdate = (
         GenerateParams
     ) = SaveParams = SourceCreate = SourceOut = UserCreate = UserOut = UserWithKey = Any

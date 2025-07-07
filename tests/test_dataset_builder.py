@@ -1013,6 +1013,17 @@ def test_laplacian_spectrum_wrapper():
     assert any(e.operation == "laplacian_spectrum" for e in ds.events)
 
 
+def test_sheaf_laplacian_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a")
+    ds.graph.graph.add_node("b")
+    ds.graph.graph.add_edge("a", "b", sheaf_sign=-1)
+    L = ds.sheaf_laplacian()
+    assert L.shape == (2, 2)
+    assert L[0, 1] == 1
+    assert any(e.operation == "sheaf_laplacian" for e in ds.events)
+
+
 def test_spectral_density_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

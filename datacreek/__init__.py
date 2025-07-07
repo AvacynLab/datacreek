@@ -49,6 +49,7 @@ __all__: list[str] = [
     "graph_fourier_transform",
     "inverse_graph_fourier_transform",
     "graph_information_bottleneck",
+    "sheaf_laplacian",
     "caption_image",
     "detect_emotion",
     "detect_modality",
@@ -252,6 +253,10 @@ def __getattr__(name: str):
         from .analysis.information import graph_information_bottleneck as _gib
 
         return _gib
+    if name == "sheaf_laplacian":
+        from .analysis.sheaf import sheaf_laplacian as _sl
+
+        return _sl
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 

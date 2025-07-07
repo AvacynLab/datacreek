@@ -896,6 +896,17 @@ class DatasetBuilder:
         )
         return energy
 
+    def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_laplacian`."""
+
+        L = self.graph.sheaf_laplacian(edge_attr=edge_attr)
+        self._record_event(
+            "sheaf_laplacian",
+            "Sheaf Laplacian computed",
+            edge_attr=edge_attr,
+        )
+        return L
+
     def graph_information_bottleneck(
         self,
         labels: Dict[str, int],

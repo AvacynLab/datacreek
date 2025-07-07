@@ -20,6 +20,7 @@ from .fractal import (
     spectral_entropy,
 )
 from .information import graph_information_bottleneck
+from .sheaf import sheaf_laplacian
 
 __all__ = [
     "bottleneck_distance",
@@ -40,4 +41,5 @@ __all__ = [
     "graph_fourier_transform",
     "inverse_graph_fourier_transform",
     "graph_information_bottleneck",
+    "sheaf_laplacian",
 ]
