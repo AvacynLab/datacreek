@@ -2,8 +2,12 @@ import math
 import random
 from typing import Dict, Iterable, List, Tuple
 
-import gudhi as gd
-import gudhi.representations as gr
+try:  # optional dependency
+    import gudhi as gd
+    import gudhi.representations as gr
+except Exception:  # pragma: no cover - optional dependency missing
+    gd = None  # type: ignore
+    gr = None  # type: ignore
 import networkx as nx
 import numpy as np
 from scipy.linalg import eigh
@@ -93,6 +97,12 @@ def persistence_entropy(graph: nx.Graph, dimension: int = 0) -> float:
         Persistence entropy of the diagram in ``dimension``. Returns ``0.0`` if
         no finite intervals are present.
     """
+
+    if gd is None or gr is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
+
+    if gd is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
 
     st = gd.SimplexTree()
     for node in graph.nodes():
@@ -206,6 +216,9 @@ def bottleneck_distance(
         Bottleneck distance between the diagrams of ``g1`` and ``g2`` in the
         chosen dimension.
     """
+
+    if gd is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
 
     def _diagram(graph: nx.Graph) -> np.ndarray:
         st = gd.SimplexTree()

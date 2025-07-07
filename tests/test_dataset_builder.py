@@ -919,6 +919,20 @@ def test_optimize_topology_wrapper():
     assert dist == pytest.approx(after, rel=1e-9)
 
 
+def test_apply_perception_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.graph.index.build()
+    ds.apply_perception("c1", "HELLO", perception_id="p1", strength=0.5)
+    node = ds.graph.graph.nodes["c1"]
+    assert node["text"] == "HELLO"
+    assert node.get("perception_id") == "p1"
+    assert node.get("perception_strength") == 0.5
+    assert "embedding" in node
+    assert any(e.operation == "apply_perception" for e in ds.events)
+
+
 def test_persistence_diagrams_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

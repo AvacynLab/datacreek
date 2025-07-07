@@ -1752,6 +1752,33 @@ class KnowledgeGraph:
         return dist
 
     # ------------------------------------------------------------------
+    # Perception helpers
+    # ------------------------------------------------------------------
+
+    def apply_perception(
+        self,
+        node_id: str,
+        new_text: str,
+        *,
+        perception_id: str | None = None,
+        strength: float | None = None,
+    ) -> None:
+        """Update ``node_id`` text and embedding with perception metadata."""
+
+        if not self.graph.has_node(node_id):
+            raise ValueError(f"Unknown node: {node_id}")
+
+        self.graph.nodes[node_id]["text"] = new_text
+        if perception_id is not None:
+            self.graph.nodes[node_id]["perception_id"] = perception_id
+        if strength is not None:
+            self.graph.nodes[node_id]["perception_strength"] = float(strength)
+
+        vec = self.index.embed(new_text)
+        if vec.size:
+            self.graph.nodes[node_id]["embedding"] = vec.tolist()
+
+    # ------------------------------------------------------------------
     # Structure helpers
     # ------------------------------------------------------------------
 

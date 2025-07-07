@@ -1032,6 +1032,30 @@ class DatasetBuilder:
         )
         return dist
 
+    def apply_perception(
+        self,
+        node_id: str,
+        new_text: str,
+        *,
+        perception_id: str | None = None,
+        strength: float | None = None,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.apply_perception`."""
+
+        self.graph.apply_perception(
+            node_id,
+            new_text,
+            perception_id=perception_id,
+            strength=strength,
+        )
+        self._record_event(
+            "apply_perception",
+            "Node perception applied",
+            node_id=node_id,
+            perception_id=perception_id,
+            strength=strength,
+        )
+
     def gds_quality_check(
         self,
         *,
