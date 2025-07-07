@@ -1037,3 +1037,14 @@ def test_graph_information_bottleneck():
     labels = {f"a{i}": i % 2 for i in range(4)}
     loss = kg.graph_information_bottleneck(labels, beta=0.5)
     assert loss > 0
+
+
+def test_prototype_subgraph():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(4):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    labels = {f"a{i}": i % 2 for i in range(4)}
+    sub = kg.prototype_subgraph(labels, 1, radius=1)
+    assert isinstance(sub, nx.Graph)

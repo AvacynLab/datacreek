@@ -1389,6 +1389,18 @@ def test_graph_information_bottleneck_wrapper():
     assert ds.events[-1].operation == "graph_information_bottleneck"
 
 
+def test_prototype_subgraph_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(4):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+    ds.compute_graph_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    labels = {f"a{i}": i % 2 for i in range(4)}
+    sub = ds.prototype_subgraph(labels, 1, radius=1)
+    assert isinstance(sub, nx.Graph)
+    assert ds.events[-1].operation == "prototype_subgraph"
+
+
 def test_graph_fourier_wrappers():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")

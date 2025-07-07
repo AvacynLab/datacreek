@@ -946,6 +946,24 @@ class DatasetBuilder:
         )
         return loss
 
+    def prototype_subgraph(
+        self,
+        labels: Dict[str, int],
+        class_id: int,
+        *,
+        radius: int = 1,
+    ) -> nx.Graph:
+        """Wrapper for :meth:`KnowledgeGraph.prototype_subgraph`."""
+
+        sub = self.graph.prototype_subgraph(labels, class_id, radius=radius)
+        self._record_event(
+            "prototype_subgraph",
+            "Prototype subgraph extracted",
+            class_id=class_id,
+            radius=radius,
+        )
+        return sub
+
     def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
         """Wrapper for :meth:`KnowledgeGraph.laplacian_spectrum`."""
 

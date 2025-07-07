@@ -19,6 +19,7 @@ __all__ = [
     "graph_fourier_transform",
     "inverse_graph_fourier_transform",
     "graph_information_bottleneck",
+    "prototype_subgraph",
     "sheaf_laplacian",
 ]
 
@@ -50,6 +51,10 @@ def __getattr__(name: str):
         from .information import graph_information_bottleneck as _gib
 
         return _gib
+    if name == "prototype_subgraph":
+        from .information import prototype_subgraph as _ps
+
+        return _ps
     if name == "sheaf_laplacian":
         from .sheaf import sheaf_laplacian as _sl
 

@@ -1652,6 +1652,25 @@ class KnowledgeGraph:
         }
         return _gib(feats, labels, beta=beta)
 
+    def prototype_subgraph(
+        self,
+        labels: Dict[str, int],
+        class_id: int,
+        *,
+        radius: int = 1,
+    ) -> nx.Graph:
+        """Return a prototype subgraph for ``class_id`` using embeddings."""
+
+        from ..analysis.information import prototype_subgraph as _ps
+
+        feats = {
+            n: np.asarray(self.graph.nodes[n]["embedding"], dtype=float)
+            for n in self.graph.nodes
+            if "embedding" in self.graph.nodes[n]
+        }
+        sub = _ps(self.graph.to_undirected(), feats, labels, class_id, radius=radius)
+        return sub
+
     def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
         """Return the Laplacian eigenvalues of the graph."""
 
