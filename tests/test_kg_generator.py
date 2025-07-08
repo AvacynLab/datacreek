@@ -46,3 +46,13 @@ def test_kg_generator_select_limit():
     gen = KGGenerator(DummyClient())
     res = gen.process_graph(kg, num_pairs=2)
     assert len(res["qa_pairs"]) == 2
+
+
+def test_kg_generator_confidence():
+    kg = KnowledgeGraph()
+    fid = kg.add_fact("A", "related", "B")
+    gen = KGGenerator(DummyClient())
+    res = gen.process_graph(kg, num_pairs=1)
+    pair = res["qa_pairs"][0]
+    assert pair["facts"] == [fid]
+    assert "confidence" in pair

@@ -110,6 +110,7 @@ class KGGenerator(BaseGenerator):
                 max_tokens=max_tokens,
             ).strip()
 
+            confidence = kg.fact_confidence(fact["subject"], fact["predicate"], fact["object"])
             answers = 2 if multi_answer else 1
             for _ in range(answers):
                 if len(qa_pairs) >= num_pairs:
@@ -121,6 +122,13 @@ class KGGenerator(BaseGenerator):
                         temperature=temperature,
                         max_tokens=max_tokens,
                     ).strip()
-                qa_pairs.append(QAPair(question=question, answer=answer, facts=[fid]))
+                qa_pairs.append(
+                    QAPair(
+                        question=question,
+                        answer=answer,
+                        facts=[fid],
+                        confidence=confidence,
+                    )
+                )
 
         return {"qa_pairs": [p.to_dict() for p in qa_pairs]}

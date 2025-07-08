@@ -960,6 +960,28 @@ def test_find_facts():
     assert set(kg.find_facts(subject="A", predicate="likes")) == {"f1", "f2"}
 
 
+def test_fact_confidence_short_path():
+    kg = KnowledgeGraph()
+    kg.add_fact("X", "related", "Y")
+    conf = kg.fact_confidence("X", "related", "Y")
+    assert conf == 1.0
+
+    kg.add_entity("Z", "Z")
+    kg.graph.add_edge("Y", "Z", relation="other")
+    conf2 = kg.fact_confidence("X", "related", "Z", max_hops=3)
+    assert conf2 < 0.5
+
+
+def test_annotate_mdl_levels_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.annotate_mdl_levels([1, 2], max_levels=2)
+    assert kg.graph.nodes["c1"].get("fractal_level")
+    assert kg.graph.nodes["c2"].get("fractal_level")
+
+
 def test_entity_lookup_helpers():
     kg = KnowledgeGraph()
     kg.add_document("doc", source="s")

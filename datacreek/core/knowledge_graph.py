@@ -2247,6 +2247,25 @@ class KnowledgeGraph:
                     current_map[node] = mapping[box]
                     self.graph.nodes[node]["fractal_level"] = level
 
+    def annotate_mdl_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+        """Annotate nodes with levels from an MDL-guided hierarchy.
+
+        The hierarchy is built using :func:`build_mdl_hierarchy` which stops
+        coarse-graining once the description length starts increasing. Each node
+        receives a ``fractal_level`` attribute corresponding to its depth in the
+        resulting hierarchy.
+        """
+
+        from ..analysis.fractal import build_mdl_hierarchy as _bmh
+
+        hierarchy = _bmh(self.graph.to_undirected(), radii, max_levels=max_levels)
+        current_map = {n: n for n in self.graph.nodes()}
+        for level, (_, mapping, _radius) in enumerate(hierarchy, start=1):
+            for node, box in list(current_map.items()):
+                if box in mapping:
+                    current_map[node] = mapping[box]
+                    self.graph.nodes[node]["fractal_level"] = level
+
     # ------------------------------------------------------------------
     # Quality checks inspired by Neo4j GDS
     # ------------------------------------------------------------------
@@ -3032,6 +3051,40 @@ class KnowledgeGraph:
                 continue
             matches.append(node)
         return matches
+
+    def fact_confidence(
+        self, subject: str, predicate: str, object: str, *, max_hops: int = 3
+    ) -> float:
+        """Return a confidence score for ``subject`` ``predicate`` ``object``.
+
+        The score is ``1.0`` when a direct edge or fact exists. If the entities
+        are connected by a short path (``<= max_hops``) but not directly linked
+        the score is ``0.4`` to indicate indirect evidence. Otherwise ``0.0`` is
+        returned when no connecting path exists.
+        """
+
+        if self.graph.has_edge(subject, object) and (
+            self.graph.edges[subject, object].get("relation") == predicate
+        ):
+            return 1.0
+
+        if self.find_facts(subject=subject, predicate=predicate, object=object):
+            return 1.0
+
+        if not self.graph.has_node(subject) or not self.graph.has_node(object):
+            return 0.0
+
+        ug = self.graph.to_undirected()
+        try:
+            length = nx.shortest_path_length(ug, subject, object)
+        except nx.NetworkXNoPath:
+            return 0.0
+
+        if length == 1:
+            # direct relation exists but with a different predicate
+            return 0.4
+
+        return 0.4 if length <= max_hops else 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the graph to a dictionary."""

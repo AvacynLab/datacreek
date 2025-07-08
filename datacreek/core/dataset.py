@@ -1486,6 +1486,17 @@ class DatasetBuilder:
             max_levels=max_levels,
         )
 
+    def annotate_mdl_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.annotate_mdl_levels`."""
+
+        self.graph.annotate_mdl_levels(radii, max_levels=max_levels)
+        self._record_event(
+            "annotate_mdl_levels",
+            "Fractal levels annotated with MDL stopping",
+            radii=list(radii),
+            max_levels=max_levels,
+        )
+
     def optimize_topology(
         self,
         target: nx.Graph,
@@ -2310,8 +2321,33 @@ class DatasetBuilder:
         self.stage = max(self.stage, DatasetStage.EXPORTED)
         self._record_event("export_dataset", "Dataset exported")
 
-    def export_prompts(self) -> List[Dict[str, Any]]:
-        """Return prompt records with fractal and perception metadata."""
+    def export_prompts(
+        self,
+        *,
+        auto_fractal: bool = True,
+        radii: Iterable[int] = (1, 2, 3),
+        max_levels: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Return prompt records with fractal and perception metadata.
+
+        Parameters
+        ----------
+        auto_fractal:
+            When ``True`` and chunks lack a ``fractal_level`` attribute the
+            method annotates them using :meth:`annotate_mdl_levels` before
+            export. This ensures every prompt carries at least a coarse fractal
+            position.
+        radii:
+            Candidate box radii used if ``auto_fractal`` triggers an annotation.
+        max_levels:
+            Maximum depth for the MDL-guided hierarchy when annotating.
+        """
+
+        if auto_fractal and not any(
+            "fractal_level" in n[1] for n in self.graph.graph.nodes(data=True)
+        ):
+            # annotate nodes in-place so the metadata is available for export
+            self.annotate_mdl_levels(radii, max_levels=max_levels)
 
         signature = self.graph.topological_signature(max_dim=1)
         data: List[Dict[str, Any]] = []

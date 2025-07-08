@@ -88,6 +88,20 @@ Below is a quick overview of the main options and operations exposed at each sta
 - `fmt` – choose the output format
 - `repo` – optionally push to a Hugging Face repo
 
+## Fractal metrics and confidence
+
+Knowledge graph utilities provide MDL-guided box covering to assign `fractal_level` annotations. QA generation records a `confidence` score computed by searching up to three hops between subject and object.
+Useful helpers:
+- `build_mdl_hierarchy` returns successive coarse graphs until the description length increases.
+- `annotate_mdl_levels` tags each node with its fractal level based on that hierarchy.
+- `fact_confidence` searches up to three hops to rate the reliability of a statement.
+- `DatasetBuilder.export_prompts(auto_fractal=True)` automatically annotates
+  nodes with fractal levels using the MDL hierarchy when none are present.
+- Generated QA pairs include a `confidence` field so downstream
+  applications can score factual reliability directly.
+
+
+
 # How does Datacreek offer it?
 
 The toolkit exposes a REST API that mirrors the main data preparation steps. All

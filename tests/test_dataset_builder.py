@@ -927,6 +927,17 @@ def test_compute_fractal_features_and_export():
     assert any(e.operation == "export_prompts" for e in ds.events)
 
 
+def test_export_prompts_auto_fractal():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    records = ds.export_prompts(auto_fractal=True, radii=[1], max_levels=1)
+    levels = {r["fractal_level"] for r in records}
+    assert levels == {1}
+    assert any(e.operation == "annotate_mdl_levels" for e in ds.events)
+
+
 def test_dimension_distortion_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -989,6 +1000,17 @@ def test_annotate_fractal_levels_wrapper():
     assert ds.graph.graph.nodes["c1"].get("fractal_level")
     assert ds.graph.graph.nodes["c2"].get("fractal_level")
     assert any(e.operation == "annotate_fractal_levels" for e in ds.events)
+
+
+def test_annotate_mdl_levels_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.annotate_mdl_levels([1, 2], max_levels=2)
+    assert ds.graph.graph.nodes["c1"].get("fractal_level")
+    assert ds.graph.graph.nodes["c2"].get("fractal_level")
+    assert any(e.operation == "annotate_mdl_levels" for e in ds.events)
 
 
 def test_optimize_topology_wrapper():
