@@ -293,6 +293,29 @@ class KnowledgeGraph:
         )
         if alt_text:
             self.graph.nodes[image_id]["alt_text"] = alt_text
+            caption_id = f"{image_id}_caption"
+            if not self.graph.has_node(caption_id):
+                self.graph.add_node(
+                    caption_id,
+                    type="caption",
+                    text=alt_text,
+                    source=source,
+                    page=page,
+                )
+                captions = self.get_captions_for_document(doc_id)
+                self.graph.add_edge(
+                    doc_id,
+                    caption_id,
+                    relation="has_caption",
+                    sequence=len(captions),
+                    provenance=source,
+                )
+            self.graph.add_edge(
+                caption_id,
+                image_id,
+                relation="caption_of",
+                provenance=source,
+            )
         self.graph.add_edge(
             doc_id,
             image_id,
@@ -644,6 +667,25 @@ class KnowledgeGraph:
             if len(results) >= k:
                 break
         return results
+
+    def cypher_ann_query(
+        self,
+        driver: Driver,
+        query: str,
+        cypher: str,
+        *,
+        k: int = 5,
+        node_type: str = "chunk",
+    ) -> List[Dict[str, Any]]:
+        """Return Cypher query results seeded by ANN search."""
+
+        ids = self.search_embeddings(query, k=k, fetch_neighbors=False, node_type=node_type)
+        if not ids:
+            return []
+
+        with driver.session() as session:
+            records = session.run(cypher, ids=ids)
+            return [dict(r) for r in records]
 
     def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
         """Return chunk IDs related to a query and expand via graph links.
@@ -2161,6 +2203,39 @@ class KnowledgeGraph:
         )
         return [str(n) for n in path]
 
+    def hyperbolic_multi_curvature_reasoning(
+        self,
+        start: str,
+        goal: str,
+        *,
+        curvatures: Iterable[float],
+        weights: Optional[Dict[float, float]] = None,
+        max_steps: int = 5,
+    ) -> List[str]:
+        """Return a greedy path mixing several curvature embeddings."""
+
+        embeddings: Dict[float, Dict[str, Iterable[float]]] = {}
+        for c in curvatures:
+            embs: Dict[str, Iterable[float]] = {}
+            key = f"hyperbolic_embedding_{c}"
+            for n in self.graph.nodes:
+                vec = self.graph.nodes[n].get(key)
+                if vec is not None:
+                    embs[n] = vec
+            if embs:
+                embeddings[c] = embs
+
+        from ..analysis.fractal import hyperbolic_multi_curvature_reasoning as _hmcr
+
+        path = _hmcr(
+            embeddings,
+            start,
+            goal,
+            weights=weights,
+            max_steps=max_steps,
+        )
+        return [str(n) for n in path]
+
     def dimension_distortion(self, radii: Iterable[int]) -> float:
         """Return difference between graph and embedding fractal dimensions."""
 
@@ -2345,6 +2420,7 @@ class KnowledgeGraph:
         max_iter: int = 100,
         seed: int | None = None,
         use_generator: bool = False,
+        use_netgan: bool = False,
     ) -> float:
         """Edit ``perception_link`` edges to approach ``target`` topology."""
 
@@ -2366,9 +2442,16 @@ class KnowledgeGraph:
         )
 
         if use_generator and dist > epsilon:
-            from ..analysis.generation import generate_graph_rnn_like
+            if use_netgan:
+                from ..analysis.generation import generate_netgan_like
+            else:
+                from ..analysis.generation import generate_graph_rnn_like
 
-            extra = generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
+            extra = (
+                generate_netgan_like(skeleton)
+                if use_netgan
+                else generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
+            )
             node_map = {i: n for i, n in enumerate(skeleton.nodes())}
             for u, v in extra.edges():
                 a, b = node_map.get(u), node_map.get(v)
@@ -2408,6 +2491,7 @@ class KnowledgeGraph:
         max_iter: int = 100,
         seed: int | None = None,
         use_generator: bool = False,
+        use_netgan: bool = False,
     ) -> Tuple[float, float]:
         """Edit edges while preserving fractal dimension within ``delta``."""
 
@@ -2427,6 +2511,7 @@ class KnowledgeGraph:
             max_iter=max_iter,
             seed=seed,
             use_generator=use_generator,
+            use_netgan=use_netgan,
         )
 
         dim_after, _ = box_counting_dimension(self.graph.to_undirected(), radii)
@@ -2659,6 +2744,25 @@ class KnowledgeGraph:
         ]
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
+
+    def get_captions_for_document(self, doc_id: str) -> list[str]:
+        """Return caption IDs linked to ``doc_id`` ordered by sequence."""
+
+        edges = [
+            (data.get("sequence", i), tgt)
+            for i, (src, tgt, data) in enumerate(self.graph.edges(doc_id, data=True))
+            if data.get("relation") == "has_caption"
+        ]
+        edges.sort(key=lambda x: x[0])
+        return [t for _, t in edges]
+
+    def get_caption_for_image(self, image_id: str) -> str | None:
+        """Return caption ID describing ``image_id`` if present."""
+
+        for src, tgt, data in self.graph.in_edges(image_id, data=True):
+            if data.get("relation") == "caption_of":
+                return src
+        return None
 
     def get_audios_for_document(self, doc_id: str) -> list[str]:
         """Return audio IDs associated with ``doc_id`` ordered by sequence."""
@@ -3242,6 +3346,7 @@ class KnowledgeGraph:
         dataset: str | None = None,
         min_component_size: int = 2,
         similarity_threshold: float = 0.95,
+        triangle_threshold: int = 1,
     ) -> Dict[str, Any]:
         """Run Neo4j GDS quality checks and cleanup.
 
@@ -3315,8 +3420,12 @@ class KnowledgeGraph:
             bet_records = list(
                 session.run("CALL gds.betweenness.stream('kg_qc') YIELD nodeId, score")
             )
+            tri_records = list(
+                session.run("CALL gds.triangleCount.stream('kg_qc') YIELD nodeId, triangleCount")
+            )
             deg_scores = sorted(r["score"] for r in deg_records)
             bet_scores = sorted(r["score"] for r in bet_records)
+            tri_map = {r["nodeId"]: r["triangleCount"] for r in tri_records}
             hubs: List[int] = []
             if deg_scores:
                 thresh = deg_scores[int(0.9 * len(deg_scores))]
@@ -3329,6 +3438,23 @@ class KnowledgeGraph:
                     if r["score"] >= thresh and r["nodeId"] not in hubs
                 )
 
+            weak_links: List[tuple[int, int]] = []
+            edge_records = session.run(
+                "MATCH (a)-[r]->(b) RETURN id(a) AS src, id(b) AS tgt"
+                + ("" if not dataset else " WHERE a.dataset=$dataset AND b.dataset=$dataset"),
+                **params,
+            )
+            for rec in edge_records:
+                s = rec["src"]
+                t = rec["tgt"]
+                if tri_map.get(s, 0) < triangle_threshold or tri_map.get(t, 0) < triangle_threshold:
+                    session.run(
+                        "MATCH (a)-[r]->(b) WHERE id(a)=$s AND id(b)=$t DELETE r",
+                        s=s,
+                        t=t,
+                    )
+                    weak_links.append((s, t))
+
             session.run("CALL gds.graph.drop('kg_qc')")
 
         return {
@@ -3336,4 +3462,5 @@ class KnowledgeGraph:
             "duplicates": duplicates,
             "suggested_links": suggestions,
             "hubs": hubs,
+            "weak_links": weak_links,
         }

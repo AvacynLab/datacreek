@@ -1023,3 +1023,50 @@ def hyperbolic_hypergraph_reasoning(
         path.append(next_node)
         current = next_node
     return path
+
+
+def hyperbolic_multi_curvature_reasoning(
+    embeddings: Dict[float, Dict[object, Iterable[float]]],
+    start: object,
+    goal: object,
+    *,
+    weights: Optional[Dict[float, float]] = None,
+    max_steps: int = 5,
+) -> List[object]:
+    """Return a greedy path combining several hyperbolic curvatures."""
+
+    if not embeddings:
+        return []
+    base_key = next(iter(embeddings))
+    nodes = set(embeddings[base_key])
+    if start not in nodes or goal not in nodes:
+        raise ValueError("start or goal missing from embeddings")
+
+    weights = weights or {c: 1.0 for c in embeddings}
+    vecs = {
+        c: {n: np.asarray(v, dtype=float) for n, v in embs.items()}
+        for c, embs in embeddings.items()
+    }
+
+    def _dist(u: object, v: object) -> float:
+        return sum(
+            weights.get(c, 1.0) * hyperbolic_distance(vecs[c][u], vecs[c][v])
+            for c in vecs
+            if u in vecs[c] and v in vecs[c]
+        )
+
+    current = start
+    path = [current]
+    for _ in range(max_steps):
+        if current == goal:
+            break
+        candidates = [n for n in nodes if n != current]
+        if not candidates:
+            break
+        next_node = min(candidates, key=lambda n: _dist(current, n) + _dist(n, goal))
+        if next_node == current or next_node in path:
+            break
+        path.append(next_node)
+        current = next_node
+
+    return path
