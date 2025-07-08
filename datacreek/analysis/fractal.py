@@ -650,6 +650,35 @@ def fractal_information_density(
     return dim / (1.0 + ent_sum)
 
 
+def diversification_score(
+    global_graph: nx.Graph,
+    batch_graph: nx.Graph,
+    radii: Iterable[int],
+    *,
+    max_dim: int = 1,
+    dimension: int = 0,
+) -> float:
+    """Return a diversification score mixing MDL and bottleneck distance.
+
+    The score is the sum of the MDL difference between ``global_graph`` and
+    ``batch_graph`` and the bottleneck distance of their persistence diagrams in
+    ``dimension``. Lower scores indicate higher redundancy of ``batch_graph``
+    with respect to ``global_graph``.
+    """
+
+    _, global_counts = box_counting_dimension(global_graph, radii)
+    _, batch_counts = box_counting_dimension(batch_graph, radii)
+    mdl_global = mdl_value(global_counts)
+    mdl_batch = mdl_value(batch_counts)
+
+    try:
+        dist = bottleneck_distance(global_graph, batch_graph, dimension=dimension)
+    except Exception:
+        dist = float("nan")
+
+    return float((mdl_global - mdl_batch) + dist)
+
+
 def poincare_embedding(
     graph: nx.Graph,
     dim: int = 2,
@@ -890,3 +919,107 @@ def minimize_bottleneck_distance(
             break
 
     return best, float(best_dist)
+
+
+def hyperbolic_distance(x: np.ndarray, y: np.ndarray) -> float:
+    """Return the Poincar\u00e9 distance between ``x`` and ``y``."""
+
+    x2 = np.dot(x, x)
+    y2 = np.dot(y, y)
+    diff = np.linalg.norm(x - y) ** 2
+    denom = (1 - x2) * (1 - y2)
+    if denom <= 0:
+        return float("inf")
+    cosh = 1 + 2 * diff / denom
+    return float(np.arccosh(max(1.0, cosh)))
+
+
+def hyperbolic_nearest_neighbors(
+    embeddings: Dict[object, Iterable[float]], k: int = 5
+) -> Dict[object, List[tuple[object, float]]]:
+    """Return ``k`` nearest neighbors for each node in hyperbolic space."""
+
+    vecs = {n: np.asarray(v, dtype=float) for n, v in embeddings.items()}
+    neighbors: Dict[object, List[tuple[object, float]]] = {}
+    for u, vec_u in vecs.items():
+        dists = []
+        for v, vec_v in vecs.items():
+            if u == v:
+                continue
+            dist = hyperbolic_distance(vec_u, vec_v)
+            dists.append((v, dist))
+        dists.sort(key=lambda t: t[1])
+        neighbors[u] = dists[:k]
+    return neighbors
+
+
+def hyperbolic_reasoning(
+    embeddings: Dict[object, Iterable[float]],
+    start: object,
+    goal: object,
+    *,
+    max_steps: int = 5,
+) -> List[object]:
+    """Return a greedy path from ``start`` to ``goal`` in hyperbolic space."""
+
+    vecs = {n: np.asarray(v, dtype=float) for n, v in embeddings.items()}
+    if start not in vecs or goal not in vecs:
+        raise ValueError("start or goal missing from embeddings")
+
+    current = start
+    path = [current]
+    for _ in range(max_steps):
+        if current == goal:
+            break
+
+        candidates = [n for n in vecs if n != current]
+        if not candidates:
+            break
+        next_node = min(
+            candidates,
+            key=lambda n: hyperbolic_distance(vecs[current], vecs[n])
+            + hyperbolic_distance(vecs[n], vecs[goal]),
+        )
+        if next_node == current or next_node in path:
+            break
+        path.append(next_node)
+        current = next_node
+    return path
+
+
+def hyperbolic_hypergraph_reasoning(
+    embeddings: Dict[object, Iterable[float]],
+    hyperedges: Iterable[object],
+    start: object,
+    goal: object,
+    *,
+    penalty: float = 1.0,
+    max_steps: int = 5,
+) -> List[object]:
+    """Return a greedy path in hyperbolic space considering hyperedges."""
+
+    vecs = {n: np.asarray(v, dtype=float) for n, v in embeddings.items()}
+    if start not in vecs or goal not in vecs:
+        raise ValueError("start or goal missing from embeddings")
+    hyper_set = set(hyperedges)
+
+    current = start
+    path = [current]
+    for _ in range(max_steps):
+        if current == goal:
+            break
+
+        candidates = [n for n in vecs if n != current]
+        if not candidates:
+            break
+        next_node = min(
+            candidates,
+            key=lambda n: hyperbolic_distance(vecs[current], vecs[n])
+            + hyperbolic_distance(vecs[n], vecs[goal])
+            + (penalty if n in hyper_set else 0.0),
+        )
+        if next_node == current or next_node in path:
+            break
+        path.append(next_node)
+        current = next_node
+    return path

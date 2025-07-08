@@ -52,20 +52,29 @@ class EmbeddingIndex:
         if TfidfVectorizer is None or NearestNeighbors is None or np is None:
             try:
                 import numpy as _np
+                from sklearn.feature_extraction.text import TfidfVectorizer as _TF
+                from sklearn.neighbors import NearestNeighbors as _NN
 
                 np = _np
+                TfidfVectorizer = _TF
+                NearestNeighbors = _NN
             except Exception as exc:
-                raise ImportError("numpy is required for EmbeddingIndex") from exc
-            # basic count vectors as fallback
-            vocab = sorted({w for t in self.texts for w in t.lower().split()})
-            vectors = []
-            for txt in self.texts:
-                counts = Counter(txt.lower().split())
-                vectors.append([counts.get(w, 0) for w in vocab])
-            self._matrix = np.array(vectors, dtype=float)
-            self._vectorizer = None
-            self._nn = None
-            if NearestNeighbors is not None:
+                # Fall back to simple count vectors if scikit-learn is missing
+                np = _np  # type: ignore[name-defined]
+                vocab = sorted({w for t in self.texts for w in t.lower().split()})
+                vectors = []
+                for txt in self.texts:
+                    counts = Counter(txt.lower().split())
+                    vectors.append([counts.get(w, 0) for w in vocab])
+                self._matrix = np.array(vectors, dtype=float)
+                self._vectorizer = None
+                self._nn = None
+                if NearestNeighbors is not None:
+                    self._nn = NearestNeighbors(metric="cosine")
+                    self._nn.fit(self._matrix)
+            else:
+                self._vectorizer = TfidfVectorizer().fit(self.texts)
+                self._matrix = self._vectorizer.transform(self.texts)
                 self._nn = NearestNeighbors(metric="cosine")
                 self._nn.fit(self._matrix)
         else:

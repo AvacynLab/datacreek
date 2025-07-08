@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional
 
 import networkx as nx
 import numpy as np
@@ -846,6 +846,34 @@ class DatasetBuilder:
             burn_in=burn_in,
         )
 
+    def compute_hyperbolic_hypergraph_embeddings(
+        self,
+        dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.compute_hyperbolic_hypergraph_embeddings`."""
+
+        result = self.graph.compute_hyperbolic_hypergraph_embeddings(
+            dim=dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        self._record_event(
+            "compute_hyperbolic_hypergraph_embeddings",
+            "Hyperbolic hypergraph embeddings computed",
+            dim=dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        return result
+
     def compute_graphsage_embeddings(
         self,
         *,
@@ -873,6 +901,20 @@ class DatasetBuilder:
         self._record_event(
             "compute_transe_embeddings",
             "TransE relation embeddings computed",
+            dimensions=dimensions,
+        )
+
+    def compute_distmult_embeddings(
+        self,
+        *,
+        dimensions: int = 64,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_distmult_embeddings`."""
+
+        self.graph.compute_distmult_embeddings(dimensions=dimensions)
+        self._record_event(
+            "compute_distmult_embeddings",
+            "DistMult relation embeddings computed",
             dimensions=dimensions,
         )
 
@@ -977,6 +1019,61 @@ class DatasetBuilder:
         )
         return dist
 
+    def optimize_topology_constrained(
+        self,
+        target: nx.Graph,
+        radii: Iterable[int],
+        *,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        delta: float = 0.1,
+        max_iter: int = 100,
+        seed: int | None = None,
+        use_generator: bool = False,
+    ) -> Tuple[float, float]:
+        """Wrapper for :meth:`KnowledgeGraph.optimize_topology_constrained`."""
+
+        dist, diff = self.graph.optimize_topology_constrained(
+            target,
+            radii,
+            dimension=dimension,
+            epsilon=epsilon,
+            delta=delta,
+            max_iter=max_iter,
+            seed=seed,
+            use_generator=use_generator,
+        )
+        self._record_event(
+            "optimize_topology_constrained",
+            "Topology adjusted with fractal constraint",
+            dimension=dimension,
+            epsilon=epsilon,
+            delta=delta,
+            max_iter=max_iter,
+            use_generator=use_generator,
+            dimension_diff=diff,
+        )
+        return dist, diff
+
+    def validate_topology(
+        self,
+        target: nx.Graph,
+        radii: Iterable[int],
+        *,
+        dimension: int = 1,
+    ) -> Tuple[float, float]:
+        """Wrapper for :meth:`KnowledgeGraph.validate_topology`."""
+
+        dist, diff = self.graph.validate_topology(target, radii, dimension=dimension)
+        self._record_event(
+            "validate_topology",
+            "Topology compared to target",
+            dimension=dimension,
+            distance=dist,
+            dimension_diff=diff,
+        )
+        return dist, diff
+
     def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
         """Wrapper for :meth:`KnowledgeGraph.fractal_information_density`."""
 
@@ -987,6 +1084,75 @@ class DatasetBuilder:
             radii=list(radii),
         )
         return val
+
+    def diversification_score(
+        self,
+        nodes: Iterable,
+        radii: Iterable[int],
+        *,
+        max_dim: int = 1,
+        dimension: int = 0,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.diversification_score`."""
+
+        val = self.graph.diversification_score(nodes, radii, max_dim=max_dim, dimension=dimension)
+        self._record_event(
+            "diversification_score",
+            "Diversification score computed",
+            nodes=list(nodes),
+        )
+        return val
+
+    def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
+        """Wrapper for :meth:`KnowledgeGraph.hyperbolic_neighbors`."""
+
+        neighs = self.graph.hyperbolic_neighbors(node_id, k=k)
+        self._record_event(
+            "hyperbolic_neighbors",
+            "Hyperbolic nearest neighbors computed",
+            node=node_id,
+            k=k,
+        )
+        return neighs
+
+    def hyperbolic_reasoning(self, start: str, goal: str, *, max_steps: int = 5) -> List[str]:
+        """Wrapper for :meth:`KnowledgeGraph.hyperbolic_reasoning`."""
+
+        path = self.graph.hyperbolic_reasoning(start, goal, max_steps=max_steps)
+        self._record_event(
+            "hyperbolic_reasoning",
+            "Hyperbolic reasoning path computed",
+            start=start,
+            goal=goal,
+            max_steps=max_steps,
+        )
+        return path
+
+    def hyperbolic_hypergraph_reasoning(
+        self,
+        start: str,
+        goal: str,
+        *,
+        penalty: float = 1.0,
+        max_steps: int = 5,
+    ) -> List[str]:
+        """Wrapper for :meth:`KnowledgeGraph.hyperbolic_hypergraph_reasoning`."""
+
+        path = self.graph.hyperbolic_hypergraph_reasoning(
+            start,
+            goal,
+            penalty=penalty,
+            max_steps=max_steps,
+        )
+        self._record_event(
+            "hyperbolic_hypergraph_reasoning",
+            "Hyperbolic hypergraph path computed",
+            start=start,
+            goal=goal,
+            penalty=penalty,
+            max_steps=max_steps,
+        )
+        return path
 
     def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
         """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
@@ -1053,6 +1219,92 @@ class DatasetBuilder:
             edge_attr=edge_attr,
         )
         return L
+
+    def sheaf_convolution(
+        self,
+        features: Dict[str, Iterable[float]],
+        *,
+        edge_attr: str = "sheaf_sign",
+        alpha: float = 0.1,
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_convolution`."""
+
+        result = self.graph.sheaf_convolution(features, edge_attr=edge_attr, alpha=alpha)
+        self._record_event(
+            "sheaf_convolution",
+            "Sheaf convolution applied",
+            edge_attr=edge_attr,
+            alpha=alpha,
+        )
+        return result
+
+    def sheaf_neural_network(
+        self,
+        features: Dict[str, Iterable[float]],
+        *,
+        layers: int = 2,
+        alpha: float = 0.1,
+        edge_attr: str = "sheaf_sign",
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_neural_network`."""
+
+        result = self.graph.sheaf_neural_network(
+            features,
+            layers=layers,
+            alpha=alpha,
+            edge_attr=edge_attr,
+        )
+        self._record_event(
+            "sheaf_neural_network",
+            "Sheaf neural network applied",
+            layers=layers,
+            alpha=alpha,
+            edge_attr=edge_attr,
+        )
+        return result
+
+    def path_to_text(self, path: Iterable) -> str:
+        """Wrapper for :meth:`KnowledgeGraph.path_to_text`."""
+
+        text = self.graph.path_to_text(path)
+        self._record_event(
+            "path_to_text",
+            "Converted graph path to text",
+            path=list(path),
+        )
+        return text
+
+    def neighborhood_to_sentence(self, path: Iterable) -> str:
+        """Wrapper for :meth:`KnowledgeGraph.neighborhood_to_sentence`."""
+
+        text = self.graph.neighborhood_to_sentence(path)
+        self._record_event(
+            "neighborhood_to_sentence",
+            "Converted graph path to text",
+            path=list(path),
+        )
+        return text
+
+    def subgraph_to_text(self, nodes: Iterable) -> str:
+        """Wrapper for :meth:`KnowledgeGraph.subgraph_to_text`."""
+
+        text = self.graph.subgraph_to_text(nodes)
+        self._record_event(
+            "subgraph_to_text",
+            "Converted graph subgraph to text",
+            nodes=list(nodes),
+        )
+        return text
+
+    def graph_to_text(self) -> str:
+        """Wrapper for :meth:`KnowledgeGraph.graph_to_text`."""
+
+        text = self.graph.graph_to_text()
+        self._record_event(
+            "graph_to_text",
+            "Converted entire graph to text",
+        )
+        return text
 
     def graph_information_bottleneck(
         self,
@@ -1245,7 +1497,7 @@ class DatasetBuilder:
         use_generator: bool = False,
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.optimize_topology`."""
-
+        before = self.graph.topological_signature(max_dim=dimension)
         dist = self.graph.optimize_topology(
             target,
             dimension=dimension,
@@ -1254,6 +1506,7 @@ class DatasetBuilder:
             seed=seed,
             use_generator=use_generator,
         )
+        after = self.graph.topological_signature(max_dim=dimension)
         self._record_event(
             "optimize_topology",
             "Topology adjusted via bottleneck minimization",
@@ -1261,6 +1514,8 @@ class DatasetBuilder:
             epsilon=epsilon,
             max_iter=max_iter,
             use_generator=use_generator,
+            before_entropy=before.get("entropy"),
+            after_entropy=after.get("entropy"),
         )
         return dist
 
@@ -1287,6 +1542,61 @@ class DatasetBuilder:
             perception_id=perception_id,
             strength=strength,
         )
+
+    def apply_perception_all_nodes(
+        self,
+        transform: Callable[[str], str],
+        *,
+        perception_id: str | None = None,
+        strength: float | None = None,
+    ) -> Dict[object, str]:
+        """Apply ``transform`` to text of every node."""
+
+        updated = self.graph.apply_perception_all(
+            transform,
+            perception_id=perception_id,
+            strength=strength,
+        )
+        self._record_event(
+            "apply_perception_all_nodes",
+            "Perception applied to all nodes",
+            perception_id=perception_id,
+            strength=strength,
+            count=len(updated),
+        )
+        return updated
+
+    def auto_tool_calls(self, text: str, tools: Iterable[tuple[str, str]]) -> str:
+        """Insert simple tool call placeholders into ``text``."""
+
+        from ..utils import insert_tool_calls
+
+        out = insert_tool_calls(text, tools)
+        self._record_event("auto_tool_calls", "Tool calls inserted", tools=list(tools))
+        return out
+
+    def auto_tool_calls_node(self, node_id: str, tools: Iterable[tuple[str, str]]) -> str:
+        """Insert tool call placeholders into a graph node's text."""
+
+        updated = self.graph.auto_tool_calls(node_id, tools)
+        self._record_event(
+            "auto_tool_calls_node",
+            "Tool calls inserted on node",
+            node_id=node_id,
+            tools=list(tools),
+        )
+        return updated
+
+    def auto_tool_calls_all_nodes(self, tools: Iterable[tuple[str, str]]) -> Dict[object, str]:
+        """Insert tool calls into every node in the graph."""
+
+        updated = self.graph.auto_tool_calls_all(tools)
+        self._record_event(
+            "auto_tool_calls_all_nodes",
+            "Tool calls inserted on all nodes",
+            tools=list(tools),
+        )
+        return updated
 
     def gds_quality_check(
         self,

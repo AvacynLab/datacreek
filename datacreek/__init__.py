@@ -48,12 +48,26 @@ __all__: list[str] = [
     "generate_graph_rnn_like",
     "spectral_density",
     "graph_fourier_transform",
+    "compute_hyperbolic_hypergraph_embeddings",
     "inverse_graph_fourier_transform",
+    "generate_graph_rnn_stateful",
+    "generate_graph_rnn_sequential",
     "graph_information_bottleneck",
     "prototype_subgraph",
     "sheaf_laplacian",
+    "sheaf_convolution",
+    "sheaf_neural_network",
     "fractal_information_density",
+    "diversification_score",
+    "hyperbolic_neighbors",
+    "compute_distmult_embeddings",
+    "hyperbolic_reasoning",
+    "hyperbolic_hypergraph_reasoning",
+    "neighborhood_to_sentence",
+    "subgraph_to_text",
+    "graph_to_text",
     "quality_check",
+    "validate_topology",
     "md5_file",
     "caption_image",
     "detect_emotion",
@@ -90,7 +104,11 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         spectral_entropy,
         spectral_gap,
     )
-    from .analysis.generation import generate_graph_rnn_like
+    from .analysis.generation import (
+        generate_graph_rnn_like,
+        generate_graph_rnn_sequential,
+        generate_graph_rnn_stateful,
+    )
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
     from .core.ingest import ingest_into_dataset
@@ -274,14 +292,30 @@ def __getattr__(name: str):
         from .analysis.sheaf import sheaf_laplacian as _sl
 
         return _sl
+    if name == "sheaf_convolution":
+        from .analysis.sheaf import sheaf_convolution as _sc
+
+        return _sc
+    if name == "sheaf_neural_network":
+        from .analysis.sheaf import sheaf_neural_network as _snn
+
+        return _snn
     if name == "quality_check":
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.quality_check
+    if name == "validate_topology":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.validate_topology
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 
         return _peb
+    if name == "compute_hyperbolic_hypergraph_embeddings":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.compute_hyperbolic_hypergraph_embeddings
     if name == "fractalize_graph":
         from .analysis.fractal import fractalize_graph as _fg
 
@@ -318,8 +352,48 @@ def __getattr__(name: str):
         from .analysis.generation import generate_graph_rnn_like as _gg
 
         return _gg
+    if name == "generate_graph_rnn_stateful":
+        from .analysis.generation import generate_graph_rnn_stateful as _grs
+
+        return _grs
+    if name == "generate_graph_rnn_sequential":
+        from .analysis.generation import generate_graph_rnn_sequential as _grs2
+
+        return _grs2
     if name == "fractal_information_density":
         from .analysis.fractal import fractal_information_density as _fid
 
         return _fid
+    if name == "diversification_score":
+        from .analysis.fractal import diversification_score as _ds
+
+        return _ds
+    if name == "hyperbolic_neighbors":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.hyperbolic_neighbors
+    if name == "hyperbolic_reasoning":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.hyperbolic_reasoning
+    if name == "hyperbolic_hypergraph_reasoning":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.hyperbolic_hypergraph_reasoning
+    if name == "compute_distmult_embeddings":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.compute_distmult_embeddings
+    if name == "neighborhood_to_sentence":
+        from .utils.graph_text import neighborhood_to_sentence as _nts
+
+        return _nts
+    if name == "subgraph_to_text":
+        from .utils.graph_text import subgraph_to_text as _st
+
+        return _st
+    if name == "graph_to_text":
+        from .utils.graph_text import graph_to_text as _gt
+
+        return _gt
     raise AttributeError(name)
