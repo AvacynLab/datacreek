@@ -1297,7 +1297,15 @@ def test_gds_quality_check_wrapper(monkeypatch):
     ds.neo4j_driver = fake_driver
     called = {}
 
-    def fake_qc(self, driver, *, dataset=None, min_component_size=2, similarity_threshold=0.95, triangle_threshold=1):
+    def fake_qc(
+        self,
+        driver,
+        *,
+        dataset=None,
+        min_component_size=2,
+        similarity_threshold=0.95,
+        triangle_threshold=1,
+    ):
         called["driver"] = driver
         called["dataset"] = dataset
         return {"removed_nodes": [1]}
@@ -1798,9 +1806,13 @@ def test_hyperbolic_hypergraph_reasoning_wrapper():
 def test_hyperbolic_multi_curvature_reasoning_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     for n in ["a", "b", "c"]:
-        ds.graph.graph.add_node(n, **{"hyperbolic_embedding_-1": [0.1 * (ord(n) - 96), 0.0], "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01]})
-    path = ds.hyperbolic_multi_curvature_reasoning(
-        "a", "c", curvatures=[-1, -0.5], max_steps=3
-    )
+        ds.graph.graph.add_node(
+            n,
+            **{
+                "hyperbolic_embedding_-1": [0.1 * (ord(n) - 96), 0.0],
+                "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01],
+            },
+        )
+    path = ds.hyperbolic_multi_curvature_reasoning("a", "c", curvatures=[-1, -0.5], max_steps=3)
     assert path[0] == "a" and path[-1] == "c"
     assert any(e.operation == "hyperbolic_multi_curvature_reasoning" for e in ds.events)

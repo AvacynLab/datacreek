@@ -679,9 +679,8 @@ class KnowledgeGraph:
     ) -> List[Dict[str, Any]]:
         """Return Cypher query results seeded by ANN search."""
 
-        ids = self.search_embeddings(
-            query, k=k, fetch_neighbors=False, node_type=node_type
-        )
+        ids = self.search_embeddings(query, k=k, fetch_neighbors=False, node_type=node_type)
+
         if not ids:
             return []
 
@@ -2449,9 +2448,10 @@ class KnowledgeGraph:
             else:
                 from ..analysis.generation import generate_graph_rnn_like
 
-            extra = generate_netgan_like(skeleton) if use_netgan else generate_graph_rnn_like(
-                skeleton.number_of_nodes(), skeleton.number_of_edges()
-            )
+            extra = (
+                generate_netgan_like(skeleton)
+                if use_netgan
+                else generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
             node_map = {i: n for i, n in enumerate(skeleton.nodes())}
             for u, v in extra.edges():
                 a, b = node_map.get(u), node_map.get(v)

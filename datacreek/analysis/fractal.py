@@ -1050,8 +1050,7 @@ def hyperbolic_multi_curvature_reasoning(
 
     def _dist(u: object, v: object) -> float:
         return sum(
-            weights.get(c, 1.0)
-            * hyperbolic_distance(vecs[c][u], vecs[c][v])
+            weights.get(c, 1.0) * hyperbolic_distance(vecs[c][u], vecs[c][v])
             for c in vecs
             if u in vecs[c] and v in vecs[c]
         )
