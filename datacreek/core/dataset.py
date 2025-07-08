@@ -398,6 +398,8 @@ class DatasetBuilder:
         )
 
     def search_chunks(self, query: str) -> list[str]:
+        """Return chunk IDs whose text matches ``query``."""
+
         return self.graph.search_chunks(query)
 
     def chunks_by_emotion(self, emotion: str) -> list[str]:
@@ -415,9 +417,13 @@ class DatasetBuilder:
         return ids
 
     def search(self, query: str, node_type: str = "chunk") -> list[str]:
+        """Return node IDs of ``node_type`` matching ``query``."""
+
         return self.graph.search(query, node_type=node_type)
 
     def search_documents(self, query: str) -> list[str]:
+        """Return document IDs with an ID or source matching ``query``."""
+
         return self.graph.search_documents(query)
 
     def search_entities(self, query: str) -> list[str]:
@@ -1590,8 +1596,28 @@ class DatasetBuilder:
         *,
         perception_id: str | None = None,
         strength: float | None = None,
+        threshold: float = 0.95,
     ) -> None:
-        """Wrapper for :meth:`KnowledgeGraph.apply_perception`."""
+        """Update ``node_id`` with ``new_text`` and check for duplicates.
+
+        The modified text is persisted when Neo4j is configured, then a
+        ``gds.nodeSimilarity`` query validates that no near-duplicates exist.
+        Any matches above ``threshold`` are logged via a ``node_similarity_check``
+        event for auditing purposes.
+
+        Parameters
+        ----------
+        node_id:
+            Identifier of the node to update.
+        new_text:
+            Replacement text to store on the node.
+        perception_id:
+            Optional label describing the semantic transformation.
+        strength:
+            Optional magnitude of the transformation.
+        threshold:
+            Minimum similarity required to flag matches.
+        """
 
         self.graph.apply_perception(
             node_id,
@@ -1607,14 +1633,48 @@ class DatasetBuilder:
             strength=strength,
         )
 
+        if self.neo4j_driver and self.name:
+            matches = self.graph.node_similarity(
+                self.neo4j_driver,
+                node_id,
+                dataset=self.name,
+                threshold=threshold,
+            )
+            if matches:
+                self._record_event(
+                    "node_similarity_check",
+                    "Similarity check after perception",
+                    node_id=node_id,
+                    matches=matches,
+                )
+
     def apply_perception_all_nodes(
         self,
         transform: Callable[[str], str],
         *,
         perception_id: str | None = None,
         strength: float | None = None,
+        threshold: float = 0.95,
     ) -> Dict[object, str]:
-        """Apply ``transform`` to text of every node."""
+        """Apply ``transform`` to every node then verify uniqueness.
+
+        The transformation function is executed for each node's text and the
+        result persisted. After all updates a ``gds.nodeSimilarity`` query runs
+        for every node to detect possible duplicates. Matches are aggregated and
+        recorded in a ``node_similarity_check`` event.
+
+        Parameters
+        ----------
+        transform:
+            Callable that receives the current text and returns the modified
+            version.
+        perception_id:
+            Optional semantic label for the transformation applied.
+        strength:
+            Optional magnitude of the semantic change.
+        threshold:
+            Minimum similarity required to record a match.
+        """
 
         updated = self.graph.apply_perception_all(
             transform,
@@ -1628,7 +1688,67 @@ class DatasetBuilder:
             strength=strength,
             count=len(updated),
         )
+
+        if self.neo4j_driver and self.name:
+            all_matches: Dict[str, List[tuple[str, float]]] = {}
+            for nid in updated:
+                matches = self.graph.node_similarity(
+                    self.neo4j_driver,
+                    nid,
+                    dataset=self.name,
+                    threshold=threshold,
+                )
+                if matches:
+                    all_matches[nid] = matches
+            if all_matches:
+                self._record_event(
+                    "node_similarity_check",
+                    "Similarity check after bulk perception",
+                    matches=all_matches,
+                )
         return updated
+
+    def node_similarity(
+        self,
+        node_id: str,
+        *,
+        threshold: float = 0.95,
+        driver: Driver | None = None,
+    ) -> List[tuple[str, float]]:
+        """List nodes similar to ``node_id`` via Neo4j GDS.
+
+        Each call emits a ``node_similarity_query`` event so that similarity
+        lookups can be audited.  Provide a custom ``driver`` to query a
+        different Neo4j instance.
+
+        Parameters
+        ----------
+        node_id:
+            Identifier of the node to compare with others.
+        threshold:
+            Minimum similarity score for results.
+        driver:
+            Optional Neo4j driver. Defaults to ``self.neo4j_driver``.
+        """
+
+        driver = driver or self.neo4j_driver
+        if not driver:
+            raise ValueError("Neo4j driver required")
+
+        matches = self.graph.node_similarity(
+            driver,
+            node_id,
+            dataset=self.name,
+            threshold=threshold,
+        )
+        self._record_event(
+            "node_similarity_query",
+            "Similar nodes retrieved",
+            node_id=node_id,
+            threshold=threshold,
+            count=len(matches),
+        )
+        return matches
 
     def auto_tool_calls(self, text: str, tools: Iterable[tuple[str, str]]) -> str:
         """Insert simple tool call placeholders into ``text``."""
@@ -1998,6 +2118,8 @@ class DatasetBuilder:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DatasetBuilder":
+        """Rebuild a dataset from serialized ``data``."""
+
         name = data.get("name")
         if name is not None:
             cls.validate_name(name)
@@ -2071,6 +2193,8 @@ class DatasetBuilder:
     def from_redis(
         cls, client: redis.Redis | None, key: str, driver: Driver | None = None
     ) -> "DatasetBuilder":
+        """Load a dataset from Redis and optionally Neo4j."""
+
         if client is None:
             raise ValueError("Redis client required")
         data = client.get(key)

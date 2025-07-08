@@ -38,6 +38,8 @@ class KnowledgeGraph:
     index: EmbeddingIndex = field(init=False)
 
     def __post_init__(self) -> None:
+        """Initialize the internal embedding index."""
+
         self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
 
     def add_document(
@@ -50,6 +52,7 @@ class KnowledgeGraph:
         organization: str | None = None,
         checksum: str | None = None,
     ) -> None:
+        """Insert a document node in the graph."""
         if self.graph.has_node(doc_id):
             raise ValueError(f"Document already exists: {doc_id}")
         self.graph.add_node(
@@ -205,6 +208,7 @@ class KnowledgeGraph:
         modality: str | None = None,
         entities: list[str] | None = None,
     ) -> None:
+        """Insert a chunk node linked to ``doc_id``."""
         if source is None:
             source = self.graph.nodes[doc_id].get("source")
         if self.graph.has_node(chunk_id):
@@ -1378,6 +1382,8 @@ class KnowledgeGraph:
                 data["relation"] = str(data["relation"]).lower()
 
     def _node_embedding(self, node: str) -> Optional[np.ndarray]:
+        """Return or compute the embedding vector for ``node``."""
+
         data = self.graph.nodes[node]
         if "embedding" in data:
             emb = np.array(data["embedding"], dtype=float)
@@ -2452,6 +2458,7 @@ class KnowledgeGraph:
                 generate_netgan_like(skeleton)
                 if use_netgan
                 else generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
+            )
             node_map = {i: n for i, n in enumerate(skeleton.nodes())}
             for u, v in extra.edges():
                 a, b = node_map.get(u), node_map.get(v)
@@ -3202,6 +3209,8 @@ class KnowledgeGraph:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "KnowledgeGraph":
+        """Rebuild a :class:`KnowledgeGraph` from ``data``."""
+
         kg = cls()
         for node in data.get("nodes", []):
             node_id = node.pop("id")
@@ -3299,6 +3308,8 @@ class KnowledgeGraph:
         *,
         dataset: str | None = None,
     ) -> "KnowledgeGraph":
+        """Load a :class:`KnowledgeGraph` from a Neo4j database."""
+
         kg = cls()
 
         def _read(tx):
@@ -3464,3 +3475,85 @@ class KnowledgeGraph:
             "hubs": hubs,
             "weak_links": weak_links,
         }
+
+    def node_similarity(
+        self,
+        driver: Driver,
+        node_id: str,
+        *,
+        dataset: str | None = None,
+        threshold: float = 0.95,
+    ) -> List[tuple[str, float]]:
+        """Return nodes similar to ``node_id`` using Neo4j GDS.
+
+        Parameters
+        ----------
+        driver:
+            Active Neo4j :class:`Driver` instance used for queries.
+        node_id:
+            Identifier of the node whose neighbours are sought.
+        dataset:
+            Optional dataset label to scope the projection; when ``None`` all
+            nodes in the database are considered.
+        threshold:
+            Minimum cosine/Jaccard similarity for a result to be returned.
+
+        The method creates a temporary graph projection of the dataset and runs
+        ``gds.nodeSimilarity``. Only pairs involving ``node_id`` with similarity
+        greater than ``threshold`` are collected and returned.
+        """
+
+        node_query = (
+            "MATCH (n" + (" {dataset:$dataset}" if dataset else "") + ") "
+            "RETURN id(n) AS id, n.id AS name"
+        )
+        rel_query = (
+            "MATCH (n"
+            + (" {dataset:$dataset}" if dataset else "")
+            + ")-[r]->(m"
+            + (" {dataset:$dataset}" if dataset else "")
+            + ") RETURN id(n) AS source, id(m) AS target"
+        )
+        params = {"dataset": dataset} if dataset else {}
+
+        with driver.session() as session:
+            session.run("CALL gds.graph.drop('kg_sim', false)")
+            session.run(
+                "CALL gds.graph.project.cypher('kg_sim', $nQuery, $rQuery)",
+                nQuery=node_query,
+                rQuery=rel_query,
+                **params,
+            )
+
+            rec = session.run(
+                "MATCH (n {id:$node_id" + (", dataset:$dataset" if dataset else "") + "}) "
+                "RETURN id(n) AS nid",
+                node_id=node_id,
+                **params,
+            ).single()
+            if not rec:
+                session.run("CALL gds.graph.drop('kg_sim')")
+                return []
+            nid = rec["nid"]
+
+            results = session.run(
+                "CALL gds.nodeSimilarity.stream('kg_sim') "
+                "YIELD node1, node2, similarity "
+                "WHERE (node1=$nid OR node2=$nid) AND similarity >= $thres "
+                "RETURN node1, node2, similarity",
+                nid=nid,
+                thres=threshold,
+            )
+            matches: List[tuple[str, float]] = []
+            for r in results:
+                other = r["node2"] if r["node1"] == nid else r["node1"]
+                node_rec = session.run(
+                    "MATCH (n) WHERE id(n)=$id RETURN n.id AS name",
+                    id=other,
+                ).single()
+                if node_rec:
+                    matches.append((node_rec["name"], r["similarity"]))
+
+            session.run("CALL gds.graph.drop('kg_sim')")
+
+        return matches

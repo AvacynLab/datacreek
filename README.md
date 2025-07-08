@@ -91,6 +91,33 @@ Below is a quick overview of the main options and operations exposed at each sta
 - `fmt` – choose the output format
 - `repo` – optionally push to a Hugging Face repo
 
+### SaaS Pipeline Summary
+
+Below is a concise walkthrough of the SaaS flow and which helpers implement each
+step:
+
+1. **Multimodal ingestion** – functions in `ingest.py` rely on
+   `unstructured` to partition documents and on BLIP/Whisper to caption images
+   and transcribe audio (`partition_pdf`, `partition_html`, `caption_image`,
+   `transcribe_audio`).
+2. **Atomic splitting** – `molecule_from_atoms()` groups contiguous elements and
+   preserves relations such as `NEXT` or `CAPTION_OF`.
+3. **Knowledge graph build** – `KnowledgeGraph.add_document()` and
+   `add_chunk()` insert nodes and edges, while linking helpers (e.g.
+   `link_chunks_by_entity`) establish semantics.
+4. **Neo4j quality checks** – `DatasetBuilder.gds_quality_check()` runs
+   `wcc`, `triangleCount` and `nodeSimilarity` to remove duplicates and weak
+   links.
+5. **Fractalization & embeddings** – `build_mdl_hierarchy()` performs box
+   covering and `compute_graph_embeddings()` materializes Node2Vec vectors.
+6. **Topological Perception Layer** – `optimize_topology()` minimizes
+   bottleneck distance and can inject NetGAN/GraphRNN edges when needed.
+7. **Semantic perception** – `apply_perception()` modifies node text and now
+   automatically triggers `node_similarity()` to flag near duplicates.
+8. **Export & datasets** – `run_generation_pipeline()` produces QA pairs or
+   other dataset types which are curated via `curate.py` and saved through
+   `save_as.py`.
+
 ## Fractal metrics and confidence
 
 Knowledge graph utilities provide MDL-guided box covering to assign `fractal_level` annotations. QA generation records a `confidence` score computed by searching up to three hops between subject and object.
@@ -677,8 +704,28 @@ with a few helper methods:
 - `predict_links(use_graph_embeddings=True)` infers relations using graph embeddings
 - `mark_conflicting_facts()` flags edges when multiple objects disagree
 - `validate_coherence()` marks logically impossible relations like a parent born after a child
+- `apply_perception()` updates a node and automatically runs Neo4j `gds.nodeSimilarity` to flag near duplicates
+- `apply_perception_all_nodes()` transforms every node and performs the same similarity check
+- `node_similarity(id, threshold=0.95)` returns nodes similar to a given ID using Neo4j GDS
 - `enrich_entity_wikidata(id)` fetches label and description from Wikidata
 - `enrich_entity_dbpedia(id)` fetches additional info from DBpedia
+
+Example:
+
+```python
+builder.apply_perception(
+    "chunk_1",
+    "Shortened text.",
+    perception_id="summary",
+    strength=0.7,
+    threshold=0.9,
+)
+
+similar = builder.node_similarity("chunk_1", threshold=0.95)
+print(similar)
+```
+
+Each similarity query is stored as a `node_similarity_check` event when matches are found, and every call to `node_similarity()` emits a `node_similarity_query` event for traceability.
 
 These utilities are exposed through both the REST API and the web interface.
 
