@@ -9,6 +9,7 @@ class QAPair:
     question: str
     answer: str
     rating: Optional[float] = None
+    confidence: Optional[float] = None
     chunk: Optional[str] = None
     source: Optional[str] = None
     facts: Optional[list[str]] = None
@@ -17,6 +18,8 @@ class QAPair:
         data = {"question": self.question, "answer": self.answer}
         if self.rating is not None:
             data["rating"] = self.rating
+        if self.confidence is not None:
+            data["confidence"] = self.confidence
         if self.chunk is not None:
             data["chunk"] = self.chunk
         if self.source is not None:
