@@ -2555,6 +2555,32 @@ class KnowledgeGraph:
 
         return dist
 
+    def optimize_topology_iterative(
+        self,
+        target: nx.Graph,
+        *,
+        loops: int = 8,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        max_iter: int = 100,
+        seed: int | None = None,
+    ) -> float:
+        """Repeatedly call :meth:`optimize_topology` until convergence."""
+
+        dist = float("inf")
+        for _ in range(max(1, loops)):
+            dist = self.optimize_topology(
+                target,
+                dimension=dimension,
+                epsilon=epsilon,
+                max_iter=max_iter,
+                seed=seed,
+                use_generator=True,
+            )
+            if dist <= epsilon:
+                break
+        return dist
+
     def optimize_topology_constrained(
         self,
         target: nx.Graph,
@@ -3439,6 +3465,7 @@ class KnowledgeGraph:
         min_component_size: int = 2,
         similarity_threshold: float = 0.95,
         triangle_threshold: int = 1,
+        link_threshold: float = 0.0,
     ) -> Dict[str, Any]:
         """Run Neo4j GDS quality checks and cleanup.
 
@@ -3452,6 +3479,9 @@ class KnowledgeGraph:
             Components smaller than this size are removed.
         similarity_threshold:
             Cosine similarity above which nodes are flagged as duplicates.
+        link_threshold:
+            Minimum score for a suggested link to be added to the in-memory
+            graph.
 
         Returns
         -------
@@ -3504,9 +3534,43 @@ class KnowledgeGraph:
                 "CALL gds.alpha.linkprediction.adamicAdar.stream('kg_qc') "
                 "YIELD sourceNodeId, targetNodeId, score ORDER BY score DESC LIMIT 5"
             )
-            suggestions = [
-                (rec["sourceNodeId"], rec["targetNodeId"], rec["score"]) for rec in links
-            ]
+            id_cache: Dict[int, str] = {}
+
+            def _name(nid: int) -> str | None:
+                if nid not in id_cache:
+                    rec = session.run(
+                        "MATCH (n) WHERE id(n)=$id RETURN n.id AS name",
+                        id=nid,
+                    ).single()
+                    id_cache[nid] = rec["name"] if rec else None
+                return id_cache[nid]
+
+            suggestions = []
+            for rec in links:
+                src = rec["sourceNodeId"]
+                tgt = rec["targetNodeId"]
+                score = float(rec["score"])
+                suggestions.append((src, tgt, score))
+                if score >= link_threshold:
+                    u = _name(src)
+                    v = _name(tgt)
+                    if u and v and not self.graph.has_edge(u, v):
+                        self.graph.add_edge(u, v, relation="suggested", score=score)
+
+            pa_links = session.run(
+                "CALL gds.alpha.linkprediction.preferentialAttachment.stream('kg_qc') "
+                "YIELD sourceNodeId, targetNodeId, score ORDER BY score DESC LIMIT 5"
+            )
+            for rec in pa_links:
+                src = rec["sourceNodeId"]
+                tgt = rec["targetNodeId"]
+                score = float(rec["score"])
+                suggestions.append((src, tgt, score))
+                if score >= link_threshold:
+                    u = _name(src)
+                    v = _name(tgt)
+                    if u and v and not self.graph.has_edge(u, v):
+                        self.graph.add_edge(u, v, relation="suggested", score=score)
 
             deg_records = list(session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score"))
             bet_records = list(
