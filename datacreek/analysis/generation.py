@@ -2,9 +2,10 @@ from __future__ import annotations
 
 """Graph generation utilities."""
 
-import networkx as nx
-import random
 import math
+import random
+
+import networkx as nx
 import numpy as np
 
 

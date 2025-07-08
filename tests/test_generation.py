@@ -1,16 +1,12 @@
 import networkx as nx
 
 from datacreek.analysis.generation import (
-    generate_graph_rnn_like,
     generate_graph_rnn,
-    generate_graph_rnn_stateful,
+    generate_graph_rnn_like,
     generate_graph_rnn_sequential,
+    generate_graph_rnn_stateful,
 )
-from datacreek.utils.graph_text import (
-    neighborhood_to_sentence,
-    subgraph_to_text,
-    graph_to_text,
-)
+from datacreek.utils.graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
 from datacreek.utils.toolformer import insert_tool_calls
 
 
@@ -92,4 +88,3 @@ def test_graph_to_text():
     g.add_edge("a", "b", relation="rel")
     txt = graph_to_text(g)
     assert "A" in txt and "B" in txt and "rel" in txt
-

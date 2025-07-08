@@ -3,6 +3,7 @@ from __future__ import annotations
 """Utilities for converting graph neighborhoods to text."""
 
 from typing import Iterable, List
+
 import networkx as nx
 
 

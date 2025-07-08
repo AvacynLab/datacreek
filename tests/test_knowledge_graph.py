@@ -855,9 +855,14 @@ def test_optimize_topology_constrained_method():
 
 
 def test_validate_topology_method():
-    from datacreek.analysis import bottleneck_distance
     import pytest
-    if bottleneck_distance.__module__ == "datacreek.analysis.fractal" and getattr(__import__('datacreek.analysis.fractal', fromlist=['gd']), 'gd') is None:
+
+    from datacreek.analysis import bottleneck_distance
+
+    if (
+        bottleneck_distance.__module__ == "datacreek.analysis.fractal"
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+    ):
         pytest.skip("gudhi not available")
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")

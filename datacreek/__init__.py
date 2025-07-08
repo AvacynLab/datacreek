@@ -104,9 +104,11 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         spectral_entropy,
         spectral_gap,
     )
-    from .analysis.generation import generate_graph_rnn_like
-    from .analysis.generation import generate_graph_rnn_stateful
-    from .analysis.generation import generate_graph_rnn_sequential
+    from .analysis.generation import (
+        generate_graph_rnn_like,
+        generate_graph_rnn_sequential,
+        generate_graph_rnn_stateful,
+    )
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
     from .core.ingest import ingest_into_dataset
@@ -379,9 +381,7 @@ def __getattr__(name: str):
 
         return _KG.hyperbolic_hypergraph_reasoning
     if name == "compute_distmult_embeddings":
-        from .core.knowledge_graph import (
-            KnowledgeGraph as _KG,
-        )
+        from .core.knowledge_graph import KnowledgeGraph as _KG
 
         return _KG.compute_distmult_embeddings
     if name == "neighborhood_to_sentence":

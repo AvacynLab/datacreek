@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional
 
 import networkx as nx
 import numpy as np
@@ -1095,9 +1095,7 @@ class DatasetBuilder:
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.diversification_score`."""
 
-        val = self.graph.diversification_score(
-            nodes, radii, max_dim=max_dim, dimension=dimension
-        )
+        val = self.graph.diversification_score(nodes, radii, max_dim=max_dim, dimension=dimension)
         self._record_event(
             "diversification_score",
             "Diversification score computed",
@@ -1117,9 +1115,7 @@ class DatasetBuilder:
         )
         return neighs
 
-    def hyperbolic_reasoning(
-        self, start: str, goal: str, *, max_steps: int = 5
-    ) -> List[str]:
+    def hyperbolic_reasoning(self, start: str, goal: str, *, max_steps: int = 5) -> List[str]:
         """Wrapper for :meth:`KnowledgeGraph.hyperbolic_reasoning`."""
 
         path = self.graph.hyperbolic_reasoning(start, goal, max_steps=max_steps)

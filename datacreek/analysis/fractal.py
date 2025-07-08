@@ -672,9 +672,7 @@ def diversification_score(
     mdl_batch = mdl_value(batch_counts)
 
     try:
-        dist = bottleneck_distance(
-            global_graph, batch_graph, dimension=dimension
-        )
+        dist = bottleneck_distance(global_graph, batch_graph, dimension=dimension)
     except Exception:
         dist = float("nan")
 

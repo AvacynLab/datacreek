@@ -4,7 +4,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Callable
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import networkx as nx
 import numpy as np
@@ -1570,6 +1570,7 @@ class KnowledgeGraph:
         """
 
         import networkx as nx
+
         from ..analysis.fractal import poincare_embedding
 
         g = nx.Graph()
@@ -2119,9 +2120,7 @@ class KnowledgeGraph:
         neighs = hyperbolic_nearest_neighbors(emb, k=k).get(node_id, [])
         return [(str(n), float(d)) for n, d in neighs]
 
-    def hyperbolic_reasoning(
-        self, start: str, goal: str, *, max_steps: int = 5
-    ) -> List[str]:
+    def hyperbolic_reasoning(self, start: str, goal: str, *, max_steps: int = 5) -> List[str]:
         """Return a greedy path from ``start`` to ``goal`` in hyperbolic space."""
 
         emb = {
@@ -2149,9 +2148,7 @@ class KnowledgeGraph:
             for n in self.graph.nodes
             if "hyperbolic_embedding" in self.graph.nodes[n]
         }
-        hyperedges = [
-            n for n in self.graph.nodes if self.graph.nodes[n].get("type") == "hyperedge"
-        ]
+        hyperedges = [n for n in self.graph.nodes if self.graph.nodes[n].get("type") == "hyperedge"]
         from ..analysis.fractal import hyperbolic_hypergraph_reasoning as _hhr
 
         path = _hhr(
@@ -2439,10 +2436,7 @@ class KnowledgeGraph:
     ) -> Tuple[float, float]:
         """Return bottleneck and fractal dimension differences to ``target``."""
 
-        from ..analysis.fractal import (
-            bottleneck_distance,
-            box_counting_dimension,
-        )
+        from ..analysis.fractal import bottleneck_distance, box_counting_dimension
 
         skeleton = nx.Graph()
         skeleton.add_nodes_from(self.graph.nodes())

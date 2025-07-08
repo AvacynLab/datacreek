@@ -16,6 +16,7 @@ from .config import (
     merge_configs,
 )
 from .dataset_cleanup import deduplicate_pairs
+from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
 from .llm_processing import (
     convert_to_conversation_format,
     parse_qa_pairs,
@@ -25,7 +26,6 @@ from .llm_processing import (
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, split_into_chunks
-from .graph_text import neighborhood_to_sentence, subgraph_to_text, graph_to_text
 from .toolformer import insert_tool_calls
 
 
