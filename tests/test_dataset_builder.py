@@ -11,6 +11,7 @@ from datacreek.analysis import bottleneck_distance
 from datacreek.core import dataset
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import IngestOptions
+from datacreek.models.qa import QAPair
 from datacreek.models.stage import DatasetStage
 from datacreek.pipelines import DatasetType, PipelineStep
 
@@ -1816,3 +1817,26 @@ def test_hyperbolic_multi_curvature_reasoning_wrapper():
     path = ds.hyperbolic_multi_curvature_reasoning("a", "c", curvatures=[-1, -0.5], max_steps=3)
     assert path[0] == "a" and path[-1] == "c"
     assert any(e.operation == "hyperbolic_multi_curvature_reasoning" for e in ds.events)
+
+
+def test_verify_answer_and_pairs():
+    ds = DatasetBuilder(DatasetType.QA)
+    ds.graph.add_fact("Paris", "is", "capital of France", fact_id="f1")
+    score = ds.verify_answer("Paris is the capital of France.")
+    assert score == 1.0
+    pair = QAPair(question="q", answer="Paris is the capital of France.")
+    verified = ds.verify_qa_pairs([pair])
+    assert verified[0].confidence == 1.0
+    assert any(e.operation == "verify_qa_pairs" for e in ds.events)
+
+
+def test_sample_diverse_chunks():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_chunk("d", f"c{i}", str(i))
+    ds.graph.graph.add_edge("c0", "c1")
+    ds.graph.graph.add_edge("c1", "c2")
+    result = ds.sample_diverse_chunks(2, [1])
+    assert len(result) >= 1
+    assert any(e.operation == "sample_diverse_chunks" for e in ds.events)

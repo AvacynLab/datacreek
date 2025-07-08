@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -66,6 +67,9 @@ class DatasetBuilder:
     owner_id: int | None = None
     history: List[str] = field(default_factory=list)
     events: List[HistoryEvent] = field(default_factory=list)
+    feedback: List[Dict[str, Any]] = field(default_factory=list)
+    # track how often specific edges are traversed during generation
+    edge_usage: Dict[str, int] = field(default_factory=dict)
     versions: List[Dict[str, Any]] = field(default_factory=list)
     ingested_docs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     accessed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -482,18 +486,30 @@ class DatasetBuilder:
             node_type=node_type,
         )
 
-    def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
+    def search_with_links(
+        self, query: str, k: int = 5, hops: int = 1, *, fractal_level: int | None = None
+    ) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_with_links`."""
 
-        return self.graph.search_with_links(query, k=k, hops=hops)
+        return self.graph.search_with_links(query, k=k, hops=hops, fractal_level=fractal_level)
 
-    def search_with_links_data(self, query: str, k: int = 5, hops: int = 1) -> List[Dict[str, Any]]:
+    def search_with_links_data(
+        self, query: str, k: int = 5, hops: int = 1, *, fractal_level: int | None = None
+    ) -> List[Dict[str, Any]]:
         """Wrapper for :meth:`KnowledgeGraph.search_with_links_data`.
 
         Returns detailed chunk information, hop depth and traversal path.
         """
 
-        return self.graph.search_with_links_data(query, k=k, hops=hops)
+        results = self.graph.search_with_links_data(
+            query, k=k, hops=hops, fractal_level=fractal_level
+        )
+        for item in results:
+            path = item.get("path")
+            if not path:
+                continue
+            self._update_edge_usage(path)
+        return results
 
     def link_similar_chunks(self, k: int = 3) -> None:
         """Create similarity edges between chunks using embeddings."""
@@ -1131,6 +1147,38 @@ class DatasetBuilder:
         )
         return val
 
+    def select_diverse_nodes(
+        self, candidates: Iterable[str], count: int, radii: Iterable[int]
+    ) -> list[str]:
+        """Wrapper for :meth:`KnowledgeGraph.select_diverse_nodes`."""
+
+        selected = self.graph.select_diverse_nodes(candidates, count, radii)
+        self._record_event(
+            "select_diverse_nodes",
+            "Diversification filter applied",
+            count=count,
+            selected=selected,
+        )
+        return selected
+
+    def sample_diverse_chunks(self, count: int, radii: Iterable[int]) -> list[str]:
+        """Return ``count`` chunk IDs that best cover unexplored graph regions.
+
+        The helper computes diversification scores using ``radii`` and
+        returns chunk IDs that maximize the score so subsequent prompts
+        sample from novel subgraphs.
+        """
+
+        candidates = [n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "chunk"]
+        selected = self.select_diverse_nodes(candidates, count, radii)
+        self._record_event(
+            "sample_diverse_chunks",
+            "Diverse chunks selected",
+            count=count,
+            selected=selected,
+        )
+        return selected
+
     def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
         """Wrapper for :meth:`KnowledgeGraph.hyperbolic_neighbors`."""
 
@@ -1502,6 +1550,110 @@ class DatasetBuilder:
             chosen_radius=radius,
         )
         return coarse, mapping, radius
+
+    def record_feedback(self, record_id: str, comment: str) -> None:
+        """Store user feedback linked to a dataset record."""
+
+        entry = {
+            "record_id": record_id,
+            "comment": comment,
+            "time": datetime.now(timezone.utc).isoformat(),
+        }
+        self.feedback.append(entry)
+        self._record_event("record_feedback", "Feedback recorded", record_id=record_id)
+
+    def verify_statements(
+        self, statements: Iterable[tuple[str, str, str]], *, max_hops: int = 3
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.verify_statements`."""
+
+        stmts = list(statements)
+        score = self.graph.verify_statements(stmts, max_hops=max_hops)
+        self._record_event(
+            "verify_statements",
+            "Statements verified",
+            count=len(stmts),
+            score=score,
+        )
+        return score
+
+    def verify_answer(self, answer: str, *, max_hops: int = 3) -> float:
+        """Return confidence score for ``answer`` based on graph facts.
+
+        The text is parsed with :func:`extract_facts` to obtain triples which are
+        then passed to :meth:`verify_statements`. The average confidence is
+        returned and also recorded in the dataset history.
+        """
+
+        from ..utils.fact_extraction import extract_facts
+
+        facts = extract_facts(answer)
+        triples = [(f["subject"], f["predicate"], f["object"]) for f in facts]
+        score = self.verify_statements(triples, max_hops=max_hops) if triples else 0.0
+        self._record_event(
+            "verify_answer",
+            "Answer verified",
+            score=score,
+            facts=len(triples),
+        )
+        return score
+
+    def verify_qa_pairs(self, pairs: Iterable["QAPair"], *, max_hops: int = 3) -> list["QAPair"]:
+        """Annotate ``pairs`` with a confidence score using graph verification."""
+
+        from datacreek.models.qa import QAPair
+
+        verified: list[QAPair] = []
+        for p in pairs:
+            score = self.verify_answer(p.answer, max_hops=max_hops)
+            p.confidence = score
+            verified.append(p)
+        self._record_event(
+            "verify_qa_pairs",
+            "QA pairs verified",
+            count=len(verified),
+        )
+        return verified
+
+    def _update_edge_usage(self, path: Iterable[str]) -> None:
+        """Increment counters for edges appearing in ``path``."""
+
+        nodes = list(path)
+        for u, v in zip(nodes[:-1], nodes[1:]):
+            key = f"{u}->{v}"
+            self.edge_usage[key] = self.edge_usage.get(key, 0) + 1
+
+    def coverage_stats(self) -> Dict[str, float]:
+        """Return coverage statistics based on traversed edges.
+
+        ``edge_coverage`` measures the ratio of unique edges encountered during
+        generation versus the total number present in the graph. ``betti_coverage``
+        applies the Betti-1 formula on the subgraph induced by those edges to
+        indicate how much of the global cycle structure was explored.
+        """
+
+        total = self.graph.graph.number_of_edges()
+        used_pairs = {tuple(k.split("->", 1)) for k in self.edge_usage}
+        sub = nx.Graph()
+        sub.add_nodes_from(self.graph.graph.nodes())
+        sub.add_edges_from(used_pairs)
+        betti_total = (
+            self.graph.graph.number_of_edges()
+            - self.graph.graph.number_of_nodes()
+            + nx.number_connected_components(self.graph.graph)
+        )
+        betti_sub = (
+            sub.number_of_edges() - sub.number_of_nodes() + nx.number_connected_components(sub)
+        )
+        edge_cov = len(used_pairs) / total if total else 0.0
+        betti_cov = betti_sub / betti_total if betti_total else 0.0
+        self._record_event(
+            "coverage_stats",
+            "Coverage computed",
+            edge_coverage=edge_cov,
+            betti_coverage=betti_cov,
+        )
+        return {"edge_coverage": edge_cov, "betti_coverage": betti_cov}
 
     def build_fractal_hierarchy(
         self, radii: Iterable[int], *, max_levels: int = 5
@@ -2460,6 +2612,24 @@ class DatasetBuilder:
                 redis_client=redis_client,
             )
 
+        if self.dataset_type == DatasetType.QA:
+            try:
+                from datacreek.models.qa import QAPair
+                from datacreek.models.results import CurationResult, QAGenerationResult
+
+                if isinstance(result, CurationResult):
+                    result.qa_pairs = self.verify_qa_pairs(result.qa_pairs)
+                    if result.rated_pairs:
+                        result.rated_pairs = self.verify_qa_pairs(result.rated_pairs)
+                elif isinstance(result, QAGenerationResult):
+                    result.qa_pairs = self.verify_qa_pairs(result.qa_pairs)
+                elif isinstance(result, dict) and "qa_pairs" in result:
+                    pairs = [QAPair(**p) if isinstance(p, dict) else p for p in result["qa_pairs"]]
+                    verified = self.verify_qa_pairs(pairs)
+                    result["qa_pairs"] = [p.to_dict() for p in verified]
+            except Exception:
+                logger.exception("Failed to verify QA pairs")
+
         params = {
             "provider": provider,
             "profile": profile,
@@ -2536,15 +2706,19 @@ class DatasetBuilder:
             self.annotate_mdl_levels(radii, max_levels=max_levels)
 
         signature = self.graph.topological_signature(max_dim=1)
+        sig_hash = hashlib.md5(json.dumps(signature, sort_keys=True).encode()).hexdigest()
         data: List[Dict[str, Any]] = []
         for node, attrs in self.graph.graph.nodes(data=True):
             if attrs.get("type") != "chunk":
                 continue
+            prompt_text = attrs.get("text", "")
             record = {
-                "prompt": attrs.get("text", ""),
+                "prompt": prompt_text,
                 "fractal_level": attrs.get("fractal_level"),
                 "perception_id": attrs.get("perception_id"),
                 "topo_signature": signature,
+                "signature_hash": sig_hash,
+                "prompt_hash": hashlib.md5(prompt_text.encode()).hexdigest(),
             }
             data.append(record)
         self._record_event("export_prompts", "Prompt data exported")

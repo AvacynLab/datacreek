@@ -78,6 +78,11 @@ __all__: list[str] = [
     "fractalize_optimal",
     "build_fractal_hierarchy",
     "build_mdl_hierarchy",
+    "PromptTemplate",
+    "get_template",
+    "validate_output",
+    "betti_number",
+    "coverage_stats",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -407,4 +412,18 @@ def __getattr__(name: str):
         from .utils.graph_text import graph_to_text as _gt
 
         return _gt
+    if name == "betti_number":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.betti_number
+    if name == "coverage_stats":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.coverage_stats
+    if name == "get_template" or name == "PromptTemplate" or name == "validate_output":
+        from .templates.library import PromptTemplate as _PT
+        from .templates.library import get_template as _gtmpl
+        from .templates.library import validate_output as _vo
+
+        return {"get_template": _gtmpl, "PromptTemplate": _PT, "validate_output": _vo}[name]
     raise AttributeError(name)

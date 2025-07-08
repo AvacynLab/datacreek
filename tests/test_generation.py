@@ -7,7 +7,7 @@ from datacreek.analysis.generation import (
     generate_graph_rnn_stateful,
 )
 from datacreek.utils.graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
-from datacreek.utils.toolformer import insert_tool_calls
+from datacreek.utils.toolformer import execute_tool_calls, generate_with_tools, insert_tool_calls
 
 
 def test_generate_graph_rnn_like():
@@ -70,6 +70,35 @@ def test_insert_tool_calls():
     )
     assert out.count("[TOOL:search") == 1
     assert "[TOOL:filter" in out
+
+
+def test_execute_tool_calls():
+    text = "[TOOL:echo(hi)] and [TOOL:upper(world)]"
+
+    def echo(x: str) -> str:
+        return x
+
+    def upper(x: str) -> str:
+        return x.upper()
+
+    out = execute_tool_calls(text, {"echo": echo, "upper": upper})
+    assert out == "hi and WORLD"
+
+
+def test_generate_with_tools():
+    def llm_call(prompt: str) -> str:
+        return prompt
+
+    def echo(arg: str) -> str:
+        return arg
+
+    result = generate_with_tools(
+        llm_call,
+        "say hello",
+        {"echo": echo},
+        insert_patterns=[("echo", r"hello")],
+    )
+    assert result == "say hello"
 
 
 def test_subgraph_to_text():

@@ -692,7 +692,14 @@ class KnowledgeGraph:
             records = session.run(cypher, ids=ids)
             return [dict(r) for r in records]
 
-    def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
+    def search_with_links(
+        self,
+        query: str,
+        k: int = 5,
+        hops: int = 1,
+        *,
+        fractal_level: int | None = None,
+    ) -> list[str]:
         """Return chunk IDs related to a query and expand via graph links.
 
         Parameters
@@ -707,6 +714,10 @@ class KnowledgeGraph:
         """
 
         seeds = self.search_hybrid(query, k)
+        if fractal_level is not None:
+            seeds = [
+                s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
+            ]
         seen = set(seeds)
         results = list(seeds)
         queue = [(cid, 0) for cid in seeds]
@@ -727,13 +738,25 @@ class KnowledgeGraph:
                     continue
                 if neighbor in seen:
                     continue
+                if (
+                    fractal_level is not None
+                    and self.graph.nodes[neighbor].get("fractal_level", 0) > fractal_level
+                ):
+                    continue
                 seen.add(neighbor)
                 results.append(neighbor)
                 queue.append((neighbor, depth + 1))
 
         return results
 
-    def search_with_links_data(self, query: str, k: int = 5, hops: int = 1) -> List[Dict[str, Any]]:
+    def search_with_links_data(
+        self,
+        query: str,
+        k: int = 5,
+        hops: int = 1,
+        *,
+        fractal_level: int | None = None,
+    ) -> List[Dict[str, Any]]:
         """Return enriched search results expanding through graph links.
 
         Each item contains the chunk ``id``, its ``text``, owning ``document``
@@ -742,6 +765,10 @@ class KnowledgeGraph:
         """
 
         seeds = self.search_hybrid(query, k)
+        if fractal_level is not None:
+            seeds = [
+                s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
+            ]
         seen = set(seeds)
         queue: List[tuple[str, int, List[str]]] = [(cid, 0, [cid]) for cid in seeds]
         results: List[tuple[str, int, List[str]]] = queue.copy()
@@ -755,6 +782,11 @@ class KnowledgeGraph:
                 if not rel or rel.get("relation") not in {"next_chunk", "similar_to"}:
                     continue
                 if nb in seen:
+                    continue
+                if (
+                    fractal_level is not None
+                    and self.graph.nodes[nb].get("fractal_level", 0) > fractal_level
+                ):
                     continue
                 seen.add(nb)
                 new_path = path + [nb]
@@ -2097,6 +2129,27 @@ class KnowledgeGraph:
             "entropy": entropies,
         }
 
+    def betti_number(self, dimension: int = 1) -> int:
+        """Return Betti number of ``dimension`` for the graph."""
+
+        if dimension == 0:
+            return nx.number_connected_components(self.graph)
+        if dimension == 1:
+            return (
+                self.graph.number_of_edges()
+                - self.graph.number_of_nodes()
+                + nx.number_connected_components(self.graph)
+            )
+        # fallback to persistence diagrams for higher dimensions
+        try:
+            diags = self.persistence_diagrams(max_dim=dimension)
+            diag = diags.get(dimension)
+        except Exception:
+            diag = None
+        if diag is None:
+            return 0
+        return int(sum(np.isinf(diag[:, 1]) == False))
+
     def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
         """Return fractal dimension, optimal radius and topological signature."""
 
@@ -2149,6 +2202,21 @@ class KnowledgeGraph:
             max_dim=max_dim,
             dimension=dimension,
         )
+
+    def select_diverse_nodes(
+        self, candidates: Iterable[str], count: int, radii: Iterable[int]
+    ) -> list[str]:
+        """Return ``count`` nodes maximizing the diversification score."""
+
+        chosen: list[str] = []
+        for cand in candidates:
+            if len(chosen) >= count:
+                break
+            new_set = chosen + [cand]
+            score = self.diversification_score(new_set, radii)
+            if not chosen or score > self.diversification_score(chosen, radii):
+                chosen.append(cand)
+        return chosen
 
     def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
         """Return ``k`` nearest neighbors in hyperbolic space."""
@@ -3196,6 +3264,19 @@ class KnowledgeGraph:
             return 0.4
 
         return 0.4 if length <= max_hops else 0.0
+
+    def verify_statements(
+        self, statements: Iterable[tuple[str, str, str]], *, max_hops: int = 3
+    ) -> float:
+        """Return average confidence over ``statements``.
+
+        Each statement is a ``(subject, predicate, object)`` triple. The method
+        calls :meth:`fact_confidence` for every triple and returns the mean
+        confidence score. ``0.0`` is returned when no statements are supplied.
+        """
+
+        scores = [self.fact_confidence(s, p, o, max_hops=max_hops) for s, p, o in statements]
+        return float(sum(scores) / len(scores)) if scores else 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the graph to a dictionary."""

@@ -42,6 +42,7 @@ dependencies = [
     "gudhi>=3.9.0",
     "fakeredis>=2.30.0",
     "beautifulsoup4>=4.12.2",
+    "jsonschema>=4.0.0",
 ]
 
 # These fields appear in pip show
