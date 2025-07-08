@@ -1,4 +1,5 @@
 """Simple helpers implementing a Self-Instruct style loop."""
+
 from __future__ import annotations
 
 import json
