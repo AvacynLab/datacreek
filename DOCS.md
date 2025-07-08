@@ -502,6 +502,12 @@ graph TD
     CleanText --> InsertGraph[Insert into Graph]
 ```
 
+Images encountered during ingestion are captioned with a BLIP model and stored
+alongside their caption as ``alt_text``. Audio files are transcribed with
+Whisper and linked back to the corresponding chunks in the graph. When
+``quantulum3`` and ``pint`` are available, detected quantities are converted to
+SI units during the cleaning step.
+
 #### Parser Selection Logic
 
 The toolkit selects the appropriate parser based on the file extension or URL pattern:
@@ -856,7 +862,11 @@ def split_into_chunks(text: str, chunk_size: int = 4000, overlap: int = 200) -> 
     """Split text into chunks with optional overlap"""
 
 def clean_text(text: str) -> str:
-    """Normalize text using ``unstructured`` cleaners"""
+    """Normalize text using ``unstructured`` cleaners."""
+
+def normalize_units(text: str) -> str:
+    """Convert detected quantities in ``text`` to SI units when `quantulum3` and
+    `pint` are available."""
 # LLM Output Processing
 def parse_qa_pairs(text: str) -> List[Dict[str, str]]:
     """Parse QA pairs from LLM output"""

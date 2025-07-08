@@ -25,7 +25,7 @@ from .llm_processing import (
 )
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
-from .text import clean_text, extract_json_from_text, split_into_chunks
+from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
 from .toolformer import insert_tool_calls
 
 
@@ -59,6 +59,7 @@ __all__ = [
     "split_into_chunks",
     "extract_json_from_text",
     "clean_text",
+    "normalize_units",
     "parse_qa_pairs",
     "parse_ratings",
     "create_progress",

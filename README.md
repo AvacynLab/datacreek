@@ -22,6 +22,9 @@ This toolkit simplifies the journey of:
 - `unstructured` is used to parse PDF, DOCX, PPTX, HTML and image files, ensuring consistent handling across formats
 - Files are partitioned with `unstructured` so text and images become individual elements linked in the graph
 - Text is cleaned with `unstructured` before being inserted into the knowledge graph
+- Images are captioned with BLIP and stored with the caption as `alt_text`
+- Audio files are transcribed via Whisper and linked back to the originating chunk
+- Quantities are converted to SI units when `quantulum3` and `pint` are installed
 - Optionally extracting named entities and standalone facts during ingestion
 - Advanced chunking options including semantic, contextual and summarized splitting
 - Creating synthetic datasets
@@ -129,6 +132,13 @@ conda create -n synthetic-data python=3.10
 conda activate synthetic-data
 
 pip install datacreek
+```
+
+Optional helpers such as quantity normalization during text cleanup require
+additional packages:
+
+```bash
+pip install quantulum3 pint
 ```
 
 #### (Alternatively) From Source

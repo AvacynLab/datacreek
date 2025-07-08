@@ -8,6 +8,14 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+try:  # optional dependency
+    from pint import UnitRegistry as _UnitRegistry
+    from quantulum3 import parser as _qty_parser
+
+    _PINT_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency missing
+    _PINT_AVAILABLE = False
+
 try:
     from unstructured.cleaners.core import clean as _clean
 
@@ -61,6 +69,34 @@ def split_into_chunks(
     return chunks
 
 
+def normalize_units(text: str) -> str:
+    """Convert quantities in ``text`` to their SI representations."""
+
+    if not _PINT_AVAILABLE:
+        return text
+
+    ureg = _UnitRegistry()
+    try:
+        quantities = _qty_parser.parse(text)
+    except Exception:  # pragma: no cover - runtime issues
+        return text
+
+    offset = 0
+    for q in quantities:
+        if not hasattr(q, "span"):
+            continue
+        start, end = q.span
+        try:
+            qty = q.value * ureg(q.unit.name)
+            qty_si = qty.to_base_units()
+            replacement = f"{qty_si.magnitude:g} {qty_si.units}"
+        except Exception:  # pragma: no cover - conversion failure
+            continue
+        text = text[: start + offset] + replacement + text[end + offset :]
+        offset += len(replacement) - (end - start)
+    return text
+
+
 def extract_json_from_text(text: str) -> Dict[str, Any]:
     """Extract JSON from text that might contain markdown or other content"""
     text = text.strip()
@@ -97,8 +133,9 @@ def clean_text(text: str) -> str:
     """Normalize ``text`` using ``unstructured`` when available."""
 
     if _UNSTRUCTURED:
-        return _clean(text, extra_whitespace=True, dashes=True, bullets=True)
+        cleaned = _clean(text, extra_whitespace=True, dashes=True, bullets=True)
+    else:
+        # Fallback basic cleaning if ``unstructured`` isn't installed
+        cleaned = re.sub(r"\s+", " ", text).strip()
 
-    # Fallback basic cleaning if ``unstructured`` isn't installed
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    return normalize_units(cleaned)
