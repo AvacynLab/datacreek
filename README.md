@@ -773,6 +773,31 @@ npm run dev  # start the Vite dev server
 Point your browser to `http://localhost:5173` while the Flask API runs on
 `http://localhost:8000`.
 
+## SaaS Pipeline Logic
+
+The service orchestrates several stages to turn raw content into fine‑tuning
+records.
+
+1. **Template selection** – `get_template()` loads a prompt template definition
+   with schema constraints and maximum length. Responses are validated with
+   `validate_output()` before being accepted.
+2. **Hybrid search** – `search_with_links()` combines lexical lookup with
+   embedding neighbors. The optional `fractal_level` parameter restricts
+   traversal depth for coarse or fine context.
+3. **Graph‑to‑text encoding** – `neighborhood_to_sentence()` transforms graph
+   paths into sentences, recursively summarizing neighbors for richer prompts.
+4. **Self‑Instruct generation** – `generate_with_self_instruct()` repeatedly
+   queries the LLM until the template validation succeeds. Tool call examples can
+   be inserted via `auto_tool_calls()`.
+5. **Fact verification** – `verify_statements()` checks generated triples against
+   the knowledge graph using shortest paths to assign a confidence score.
+6. **Diversification** – `select_diverse_nodes()` picks nodes that maximize the
+   `diversification_score()` ensuring coverage of new graph regions.
+7. **Prompt export** – `export_prompts()` attaches a MD5 `signature_hash` of the
+   topological signature and a `prompt_hash` so duplicates can be detected. User
+   feedback can be recorded with `record_feedback()` for continuous
+   improvements. Edge traversal is tracked for statistics via `coverage_stats()`.
+
 ## License
 
 Read more about the [License](./LICENSE)

@@ -7,26 +7,45 @@ from typing import Iterable, List
 import networkx as nx
 
 
-def neighborhood_to_sentence(graph: nx.Graph, path: Iterable) -> str:
-    """Return a simple textual description for a path in ``graph``.
+def neighborhood_to_sentence(graph: nx.Graph, path: Iterable, depth: int = 0) -> str:
+    """Return a textual description for ``path`` including neighbor context.
 
-    Each node should have a ``"text"`` attribute describing its content.
-    Edges may carry a ``"relation"`` attribute used when joining nodes.
-    Nodes without text fallback to their ID.
+    The algorithm recursively summarizes neighbors around each node up to
+    ``depth``. Relations connecting nodes in ``path`` are inserted between the
+    main elements so the resulting sentence can be fed to a language model for
+    fine-tuning.
     """
 
     nodes = list(path)
     if not nodes:
         return ""
 
+    visited = set(nodes)
+
+    def describe(node: str, lvl: int) -> str:
+        """Return text for ``node`` plus recursively described neighbors."""
+
+        text = str(graph.nodes[node].get("text", node))
+        if lvl <= 0:
+            return text
+
+        parts = []
+        for nb in graph.neighbors(node):
+            if nb in visited:
+                continue
+            visited.add(nb)
+            rel = graph[node][nb].get("relation", "related to")
+            parts.append(f"{rel} {describe(nb, lvl - 1)}")
+        if parts:
+            text += " (" + ", ".join(parts) + ")"
+        return text
+
     parts: List[str] = []
     for u, v in zip(nodes[:-1], nodes[1:]):
-        u_text = str(graph.nodes[u].get("text", u))
+        parts.append(describe(u, depth))
         rel = graph[u][v].get("relation", "->") if graph.has_edge(u, v) else "->"
-        parts.append(u_text)
         parts.append(rel)
-    last_text = str(graph.nodes[nodes[-1]].get("text", nodes[-1]))
-    parts.append(last_text)
+    parts.append(describe(nodes[-1], depth))
     sent = " ".join(parts)
     if not sent.endswith("."):
         sent += "."

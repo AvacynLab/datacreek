@@ -26,7 +26,7 @@ from .llm_processing import (
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
-from .toolformer import insert_tool_calls
+from .toolformer import execute_tool_calls, insert_tool_calls
 
 
 def __getattr__(name: str):
@@ -74,4 +74,5 @@ __all__ = [
     "subgraph_to_text",
     "graph_to_text",
     "insert_tool_calls",
+    "execute_tool_calls",
 ]
