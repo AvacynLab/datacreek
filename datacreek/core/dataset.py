@@ -1162,7 +1162,12 @@ class DatasetBuilder:
         return selected
 
     def sample_diverse_chunks(self, count: int, radii: Iterable[int]) -> list[str]:
-        """Return ``count`` chunk IDs maximizing diversification."""
+        """Return ``count`` chunk IDs that best cover unexplored graph regions.
+
+        The helper computes diversification scores using ``radii`` and
+        returns chunk IDs that maximize the score so subsequent prompts
+        sample from novel subgraphs.
+        """
 
         candidates = [n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "chunk"]
         selected = self.select_diverse_nodes(candidates, count, radii)
@@ -1619,7 +1624,13 @@ class DatasetBuilder:
             self.edge_usage[key] = self.edge_usage.get(key, 0) + 1
 
     def coverage_stats(self) -> Dict[str, float]:
-        """Return coverage statistics based on traversed edges."""
+        """Return coverage statistics based on traversed edges.
+
+        ``edge_coverage`` measures the ratio of unique edges encountered during
+        generation versus the total number present in the graph. ``betti_coverage``
+        applies the Betti-1 formula on the subgraph induced by those edges to
+        indicate how much of the global cycle structure was explored.
+        """
 
         total = self.graph.graph.number_of_edges()
         used_pairs = {tuple(k.split("->", 1)) for k in self.edge_usage}

@@ -793,10 +793,11 @@ records.
    the knowledge graph using shortest paths to assign a confidence score.
 6. **Diversification** – `select_diverse_nodes()` picks nodes that maximize the
    `diversification_score()` ensuring coverage of new graph regions.
-7. **Prompt export** – `export_prompts()` attaches a MD5 `signature_hash` of the
-   topological signature and a `prompt_hash` so duplicates can be detected. User
-   feedback can be recorded with `record_feedback()` for continuous
-   improvements. Edge traversal is tracked for statistics via `coverage_stats()`.
+7. **Prompt export & coverage** – `export_prompts()` attaches a MD5
+   `signature_hash` of the topological signature and a `prompt_hash` so
+   duplicates can be detected. Edge traversal is recorded so
+   `coverage_stats()` can report how much of the graph has been explored. User
+   feedback is stored via `record_feedback()` for continuous improvements.
 
 ## License
 
