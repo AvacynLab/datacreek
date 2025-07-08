@@ -612,6 +612,20 @@ def test_compute_graphsage_embeddings():
     assert len(vec) == 8
 
 
+def test_compute_hyperbolic_hypergraph_embeddings_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    kg.add_hyperedge("he1", ["c1", "c2"])
+    try:
+        res = kg.compute_hyperbolic_hypergraph_embeddings(dim=2, negative=2, epochs=5)
+    except RuntimeError:
+        pytest.skip("gensim not installed")
+    assert set(res) == {"c1", "c2"}
+    assert "hyperbolic_embedding" in kg.graph.nodes["c1"]
+
+
 def test_compute_transe_embeddings():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -620,6 +634,18 @@ def test_compute_transe_embeddings():
     kg.graph.add_edge("c1", "c2", relation="related")
     kg.compute_transe_embeddings(dimensions=8)
     emb = kg.graph.edges["c1", "c2"].get("transe_embedding")
+    assert isinstance(emb, list)
+    assert len(emb) == 8
+
+
+def test_compute_distmult_embeddings():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    kg.add_chunk("d", "c2", "world")
+    kg.graph.add_edge("c1", "c2", relation="related")
+    kg.compute_distmult_embeddings(dimensions=8)
+    emb = kg.graph.edges["c1", "c2"].get("distmult_embedding")
     assert isinstance(emb, list)
     assert len(emb) == 8
 
@@ -690,6 +716,86 @@ def test_sheaf_laplacian_method():
     assert L[0, 1] == 1
 
 
+def test_sheaf_convolution_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=-1)
+    features = {"a": [1.0], "b": [0.0]}
+    out = kg.sheaf_convolution(features, alpha=0.5)
+    assert set(out) == {"a", "b"}
+
+
+def test_sheaf_neural_network_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=-1)
+    feats = {"a": [1.0], "b": [0.0]}
+    out = kg.sheaf_neural_network(feats, layers=2, alpha=0.5)
+    assert set(out) == {"a", "b"}
+
+
+def test_path_to_text_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="A")
+    kg.graph.add_node("b", text="B")
+    kg.graph.add_edge("a", "b", relation="rel")
+    sent = kg.path_to_text(["a", "b"])
+    assert "A" in sent and "B" in sent
+
+
+def test_neighborhood_to_sentence_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="A")
+    kg.graph.add_node("b", text="B")
+    kg.graph.add_edge("a", "b", relation="rel")
+    sent = kg.neighborhood_to_sentence(["a", "b"])
+    assert "A" in sent and "B" in sent
+
+
+def test_subgraph_to_text_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="A")
+    kg.graph.add_node("b", text="B")
+    kg.graph.add_edge("a", "b", relation="rel")
+    txt = kg.subgraph_to_text(["a", "b"])
+    assert "A" in txt and "B" in txt
+
+
+def test_graph_to_text_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="A")
+    kg.graph.add_node("b", text="B")
+    kg.graph.add_edge("a", "b", relation="rel")
+    txt = kg.graph_to_text()
+    assert "A" in txt and "B" in txt
+
+
+def test_auto_tool_calls_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="search cats")
+    out = kg.auto_tool_calls("a", [("search", r"search\s+\w+")])
+    assert "[TOOL:search" in out
+    assert kg.graph.nodes["a"]["text"] == out
+
+
+def test_auto_tool_calls_all_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="search cats")
+    kg.graph.add_node("b", text="search dogs")
+    result = kg.auto_tool_calls_all([("search", r"search\s+\w+")])
+    assert set(result) == {"a", "b"}
+    for text in result.values():
+        assert "[TOOL:search" in text
+
+
+def test_apply_perception_all_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", text="hello")
+    kg.graph.add_node("b", text="world")
+    updated = kg.apply_perception_all(lambda t: t.upper(), perception_id="p")
+    assert set(updated) == {"a", "b"}
+    assert kg.graph.nodes["a"]["text"] == "HELLO"
+    assert kg.graph.nodes["b"]["text"] == "WORLD"
+
+
 def test_fractalize_level_method():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -727,6 +833,45 @@ def test_optimize_topology_method():
     after = bottleneck_distance(kg.graph.to_undirected(), target)
     assert after <= before
     assert dist == pytest.approx(after, rel=1e-9)
+
+
+def test_optimize_topology_constrained_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    kg.graph.add_edge("c1", "c2", relation="perception_link")
+
+    target = nx.cycle_graph(3)
+    mapping = {i: n for i, n in enumerate(["c1", "c2", "d"])}
+    target = nx.relabel_nodes(target, mapping)
+
+    before = bottleneck_distance(kg.graph.to_undirected(), target)
+    dist, diff = kg.optimize_topology_constrained(target, [1, 2], max_iter=5, seed=0, delta=1.0)
+    after = bottleneck_distance(kg.graph.to_undirected(), target)
+    assert after <= before
+    assert dist == pytest.approx(after, rel=1e-9)
+    assert diff >= 0
+
+
+def test_validate_topology_method():
+    from datacreek.analysis import bottleneck_distance
+    import pytest
+    if bottleneck_distance.__module__ == "datacreek.analysis.fractal" and getattr(__import__('datacreek.analysis.fractal', fromlist=['gd']), 'gd') is None:
+        pytest.skip("gudhi not available")
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    kg.graph.add_edge("c1", "c2", relation="perception_link")
+
+    target = nx.cycle_graph(3)
+    mapping = {i: n for i, n in enumerate(["c1", "c2", "d"])}
+    target = nx.relabel_nodes(target, mapping)
+
+    dist, diff = kg.validate_topology(target, [1, 2])
+    assert dist >= 0
+    assert diff >= 0
 
 
 def test_predict_links():
@@ -1057,3 +1202,43 @@ def test_prototype_subgraph():
     labels = {f"a{i}": i % 2 for i in range(4)}
     sub = kg.prototype_subgraph(labels, 1, radius=1)
     assert isinstance(sub, nx.Graph)
+
+
+def test_diversification_score_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_atom("d", "a1", "x", "text")
+    kg.add_atom("d", "a2", "y", "text")
+    score = kg.diversification_score(["a1"], [1])
+    assert isinstance(score, float)
+
+
+def test_hyperbolic_neighbors_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", hyperbolic_embedding=[0.1, 0.0])
+    kg.graph.add_node("b", hyperbolic_embedding=[0.2, 0.05])
+    kg.graph.add_node("c", hyperbolic_embedding=[0.9, 0.1])
+    neighs = kg.hyperbolic_neighbors("a", k=1)
+    assert neighs and neighs[0][0] == "b"
+
+
+def test_hyperbolic_reasoning_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", hyperbolic_embedding=[0.1, 0.0])
+    kg.graph.add_node("b", hyperbolic_embedding=[0.2, 0.05])
+    kg.graph.add_node("c", hyperbolic_embedding=[0.3, 0.06])
+    path = kg.hyperbolic_reasoning("a", "c", max_steps=3)
+    assert path[0] == "a" and path[-1] == "c"
+
+
+def test_hyperbolic_hypergraph_reasoning_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", hyperbolic_embedding=[0.1, 0.0])
+    kg.graph.add_node("b", hyperbolic_embedding=[0.2, 0.05])
+    kg.graph.add_node("c", hyperbolic_embedding=[0.3, 0.06])
+    kg.graph.add_node("h", type="hyperedge", hyperbolic_embedding=[0.5, 0.1])
+    kg.graph.add_edge("a", "h")
+    kg.graph.add_edge("b", "h")
+    kg.graph.add_edge("c", "h")
+    path = kg.hyperbolic_hypergraph_reasoning("a", "c", max_steps=4)
+    assert path[0] == "a" and path[-1] == "c"

@@ -4,7 +4,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Callable
 
 import networkx as nx
 import numpy as np
@@ -1554,6 +1554,48 @@ class KnowledgeGraph:
         for node, vec in emb.items():
             self.graph.nodes[node]["poincare_embedding"] = vec.tolist()
 
+    def compute_hyperbolic_hypergraph_embeddings(
+        self,
+        dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+    ) -> Dict[object, list[float]]:
+        """Compute hyperbolic embeddings treating hyperedges explicitly.
+
+        Hyperedges are represented as nodes with ``type`` ``"hyperedge"``. The
+        returned embeddings are stored under ``"hyperbolic_embedding"`` for all
+        non-hyperedge nodes and also returned as a dictionary.
+        """
+
+        import networkx as nx
+        from ..analysis.fractal import poincare_embedding
+
+        g = nx.Graph()
+        g.add_nodes_from(self.graph.nodes())
+        for u, v, data in self.graph.edges(data=True):
+            if (
+                self.graph.nodes[u].get("type") == "hyperedge"
+                or self.graph.nodes[v].get("type") == "hyperedge"
+            ):
+                g.add_edge(u, v)
+
+        emb = poincare_embedding(
+            g,
+            dim=dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+        )
+        results: Dict[object, list[float]] = {}
+        for node, vec in emb.items():
+            if self.graph.nodes[node].get("type") != "hyperedge":
+                self.graph.nodes[node]["hyperbolic_embedding"] = vec.tolist()
+                results[node] = vec.tolist()
+        return results
+
     def compute_graphsage_embeddings(
         self,
         *,
@@ -1663,6 +1705,50 @@ class KnowledgeGraph:
             if rel and rel in rel_means:
                 data["transe_embedding"] = rel_means[rel].astype(float).tolist()
 
+    def compute_distmult_embeddings(
+        self,
+        *,
+        dimensions: int = 64,
+    ) -> None:
+        """Compute DistMult-style relation embeddings.
+
+        Relation vectors are derived from the elementwise products of head
+        and tail node embeddings. Node embeddings are generated with
+        :meth:`compute_node2vec_embeddings` if missing.
+        """
+
+        if not all(
+            "embedding" in self.graph.nodes[n]
+            and len(self.graph.nodes[n]["embedding"]) == dimensions
+            for n in self.graph.nodes
+        ):
+            self.compute_node2vec_embeddings(
+                dimensions=dimensions,
+                walk_length=10,
+                num_walks=50,
+                workers=1,
+                seed=0,
+            )
+
+        rel_vectors: Dict[str, List[np.ndarray]] = {}
+        for u, v, data in self.graph.edges(data=True):
+            rel = data.get("relation")
+            if rel is None:
+                continue
+            head = np.asarray(self.graph.nodes[u]["embedding"], dtype=float)
+            tail = np.asarray(self.graph.nodes[v]["embedding"], dtype=float)
+            rel_vectors.setdefault(rel, []).append(head * tail)
+
+        rel_means = {
+            rel: np.mean(vectors, axis=0) if vectors else np.zeros(dimensions)
+            for rel, vectors in rel_vectors.items()
+        }
+
+        for u, v, data in self.graph.edges(data=True):
+            rel = data.get("relation")
+            if rel and rel in rel_means:
+                data["distmult_embedding"] = rel_means[rel].astype(float).tolist()
+
     def compute_multigeometric_embeddings(
         self,
         *,
@@ -1763,6 +1849,97 @@ class KnowledgeGraph:
         from ..analysis.sheaf import sheaf_laplacian as _sl
 
         return _sl(self.graph, edge_attr=edge_attr)
+
+    def sheaf_convolution(
+        self,
+        features: Dict[str, Iterable[float]],
+        *,
+        edge_attr: str = "sheaf_sign",
+        alpha: float = 0.1,
+    ) -> Dict[str, list[float]]:
+        """Return one sheaf convolution step on ``features``."""
+
+        from ..analysis.sheaf import sheaf_convolution as _sc
+
+        arr_feats = {n: np.asarray(f, dtype=float) for n, f in features.items()}
+        result = _sc(self.graph, arr_feats, edge_attr=edge_attr, alpha=alpha)
+        return {str(n): vec.tolist() for n, vec in result.items()}
+
+    def sheaf_neural_network(
+        self,
+        features: Dict[str, Iterable[float]],
+        *,
+        layers: int = 2,
+        alpha: float = 0.1,
+        edge_attr: str = "sheaf_sign",
+    ) -> Dict[str, list[float]]:
+        """Return features after a simple sheaf neural network."""
+
+        from ..analysis.sheaf import sheaf_neural_network as _snn
+
+        arr_feats = {n: np.asarray(f, dtype=float) for n, f in features.items()}
+        result = _snn(
+            self.graph,
+            arr_feats,
+            layers=layers,
+            alpha=alpha,
+            edge_attr=edge_attr,
+        )
+        return {str(n): vec.tolist() for n, vec in result.items()}
+
+    def path_to_text(self, path: Iterable) -> str:
+        """Return a textual description for ``path`` using node attributes."""
+
+        from ..utils.graph_text import neighborhood_to_sentence
+
+        return neighborhood_to_sentence(self.graph, path)
+
+    def neighborhood_to_sentence(self, path: Iterable) -> str:
+        """Alias of :meth:`path_to_text` for backward compatibility."""
+
+        return self.path_to_text(path)
+
+    def subgraph_to_text(self, nodes: Iterable) -> str:
+        """Return a textual summary for a subgraph made of ``nodes``."""
+
+        from ..utils.graph_text import subgraph_to_text
+
+        return subgraph_to_text(self.graph, nodes)
+
+    def graph_to_text(self) -> str:
+        """Return a textual summary of the entire graph."""
+
+        from ..utils.graph_text import graph_to_text
+
+        return graph_to_text(self.graph)
+
+    def auto_tool_calls(self, node_id: str, tools: Iterable[tuple[str, str]]) -> str:
+        """Insert tool call placeholders into a node's text."""
+
+        if not self.graph.has_node(node_id):
+            raise ValueError(f"Unknown node: {node_id}")
+
+        from ..utils.toolformer import insert_tool_calls
+
+        text = str(self.graph.nodes[node_id].get("text", ""))
+        updated = insert_tool_calls(text, tools)
+        self.graph.nodes[node_id]["text"] = updated
+        return updated
+
+    def auto_tool_calls_all(self, tools: Iterable[tuple[str, str]]) -> Dict[object, str]:
+        """Insert tool call placeholders on every node with text."""
+
+        from ..utils.toolformer import insert_tool_calls
+
+        results: Dict[object, str] = {}
+        for n, data in self.graph.nodes(data=True):
+            text = data.get("text")
+            if not text:
+                continue
+            updated = insert_tool_calls(str(text), tools)
+            self.graph.nodes[n]["text"] = updated
+            results[n] = updated
+        return results
 
     def graph_information_bottleneck(
         self,
@@ -1901,6 +2078,91 @@ class KnowledgeGraph:
         from ..analysis.fractal import fractal_information_density as _fid
 
         return _fid(self.graph.to_undirected(), radii, max_dim=max_dim)
+
+    def diversification_score(
+        self,
+        nodes: Iterable,
+        radii: Iterable[int],
+        *,
+        max_dim: int = 1,
+        dimension: int = 0,
+    ) -> float:
+        """Return diversification score for ``nodes`` against the whole graph."""
+
+        from ..analysis.fractal import diversification_score as _ds
+
+        sub = self.graph.subgraph(nodes)
+        return _ds(
+            self.graph.to_undirected(),
+            sub.to_undirected(),
+            radii,
+            max_dim=max_dim,
+            dimension=dimension,
+        )
+
+    def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
+        """Return ``k`` nearest neighbors in hyperbolic space."""
+
+        if not self.graph.has_node(node_id):
+            raise ValueError(f"Unknown node: {node_id}")
+        vec = self.graph.nodes[node_id].get("hyperbolic_embedding")
+        if vec is None:
+            raise ValueError("node has no hyperbolic embedding")
+
+        from ..analysis.fractal import hyperbolic_nearest_neighbors
+
+        emb = {
+            n: self.graph.nodes[n]["hyperbolic_embedding"]
+            for n in self.graph.nodes
+            if "hyperbolic_embedding" in self.graph.nodes[n]
+        }
+        neighs = hyperbolic_nearest_neighbors(emb, k=k).get(node_id, [])
+        return [(str(n), float(d)) for n, d in neighs]
+
+    def hyperbolic_reasoning(
+        self, start: str, goal: str, *, max_steps: int = 5
+    ) -> List[str]:
+        """Return a greedy path from ``start`` to ``goal`` in hyperbolic space."""
+
+        emb = {
+            n: self.graph.nodes[n]["hyperbolic_embedding"]
+            for n in self.graph.nodes
+            if "hyperbolic_embedding" in self.graph.nodes[n]
+        }
+        from ..analysis.fractal import hyperbolic_reasoning as _hr
+
+        path = _hr(emb, start, goal, max_steps=max_steps)
+        return [str(n) for n in path]
+
+    def hyperbolic_hypergraph_reasoning(
+        self,
+        start: str,
+        goal: str,
+        *,
+        penalty: float = 1.0,
+        max_steps: int = 5,
+    ) -> List[str]:
+        """Return a greedy path using hyperedge embeddings."""
+
+        emb = {
+            n: self.graph.nodes[n]["hyperbolic_embedding"]
+            for n in self.graph.nodes
+            if "hyperbolic_embedding" in self.graph.nodes[n]
+        }
+        hyperedges = [
+            n for n in self.graph.nodes if self.graph.nodes[n].get("type") == "hyperedge"
+        ]
+        from ..analysis.fractal import hyperbolic_hypergraph_reasoning as _hhr
+
+        path = _hhr(
+            emb,
+            hyperedges,
+            start,
+            goal,
+            penalty=penalty,
+            max_steps=max_steps,
+        )
+        return [str(n) for n in path]
 
     def dimension_distortion(self, radii: Iterable[int]) -> float:
         """Return difference between graph and embedding fractal dimensions."""
@@ -2119,6 +2381,81 @@ class KnowledgeGraph:
 
         return dist
 
+    def optimize_topology_constrained(
+        self,
+        target: nx.Graph,
+        radii: Iterable[int],
+        *,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        delta: float = 0.1,
+        max_iter: int = 100,
+        seed: int | None = None,
+        use_generator: bool = False,
+    ) -> Tuple[float, float]:
+        """Edit edges while preserving fractal dimension within ``delta``."""
+
+        from ..analysis.fractal import box_counting_dimension
+
+        dim_before, _ = box_counting_dimension(self.graph.to_undirected(), radii)
+        before_edges = [
+            (u, v, d.copy())
+            for u, v, d in self.graph.edges(data=True)
+            if d.get("relation") == "perception_link"
+        ]
+
+        dist = self.optimize_topology(
+            target,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+            seed=seed,
+            use_generator=use_generator,
+        )
+
+        dim_after, _ = box_counting_dimension(self.graph.to_undirected(), radii)
+        diff = abs(dim_after - dim_before)
+        if diff > delta:
+            # revert to previous perception edges
+            self.graph.remove_edges_from(
+                [
+                    (u, v)
+                    for u, v, d in self.graph.edges(data=True)
+                    if d.get("relation") == "perception_link"
+                ]
+            )
+            for u, v, d in before_edges:
+                self.graph.add_edge(u, v, **d)
+            return float("inf"), diff
+
+        return dist, diff
+
+    def validate_topology(
+        self,
+        target: nx.Graph,
+        radii: Iterable[int],
+        *,
+        dimension: int = 1,
+    ) -> Tuple[float, float]:
+        """Return bottleneck and fractal dimension differences to ``target``."""
+
+        from ..analysis.fractal import (
+            bottleneck_distance,
+            box_counting_dimension,
+        )
+
+        skeleton = nx.Graph()
+        skeleton.add_nodes_from(self.graph.nodes())
+        for u, v, data in self.graph.edges(data=True):
+            if data.get("relation") == "perception_link":
+                skeleton.add_edge(u, v)
+
+        dist = bottleneck_distance(skeleton, target, dimension=dimension)
+        dim_self, _ = box_counting_dimension(skeleton, radii)
+        dim_target, _ = box_counting_dimension(target, radii)
+        diff = abs(dim_self - dim_target)
+        return dist, diff
+
     # ------------------------------------------------------------------
     # Perception helpers
     # ------------------------------------------------------------------
@@ -2145,6 +2482,30 @@ class KnowledgeGraph:
         vec = self.index.embed(new_text)
         if vec.size:
             self.graph.nodes[node_id]["embedding"] = vec.tolist()
+
+    def apply_perception_all(
+        self,
+        transform: Callable[[str], str],
+        *,
+        perception_id: str | None = None,
+        strength: float | None = None,
+    ) -> Dict[object, str]:
+        """Apply ``transform`` to every node text and store results."""
+
+        updates: Dict[object, str] = {}
+        for n, data in self.graph.nodes(data=True):
+            text = data.get("text")
+            if text is None:
+                continue
+            new_text = transform(str(text))
+            self.apply_perception(
+                n,
+                new_text,
+                perception_id=perception_id,
+                strength=strength,
+            )
+            updates[n] = new_text
+        return updates
 
     # ------------------------------------------------------------------
     # Structure helpers

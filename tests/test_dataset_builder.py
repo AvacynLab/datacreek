@@ -869,6 +869,20 @@ def test_multigeometric_embeddings_wrapper():
     assert any(e.operation == "compute_graphsage_embeddings" for e in ds.events)
 
 
+def test_compute_hyperbolic_hypergraph_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.add_hyperedge("he1", ["c1", "c2"])
+    try:
+        res = ds.compute_hyperbolic_hypergraph_embeddings(dim=2, negative=2, epochs=5)
+    except RuntimeError:
+        pytest.skip("gensim not installed")
+    assert set(res) == {"c1", "c2"}
+    assert any(e.operation == "compute_hyperbolic_hypergraph_embeddings" for e in ds.events)
+
+
 def test_transe_embeddings_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -878,6 +892,17 @@ def test_transe_embeddings_wrapper():
     ds.compute_transe_embeddings(dimensions=8)
     assert len(ds.graph.graph.edges["c1", "c2"]["transe_embedding"]) == 8
     assert any(e.operation == "compute_transe_embeddings" for e in ds.events)
+
+
+def test_distmult_embeddings_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.graph.graph.add_edge("c1", "c2", relation="related")
+    ds.compute_distmult_embeddings(dimensions=8)
+    assert len(ds.graph.graph.edges["c1", "c2"]["distmult_embedding"]) == 8
+    assert any(e.operation == "compute_distmult_embeddings" for e in ds.events)
 
 
 def test_fractal_dimension_wrapper():
@@ -984,6 +1009,47 @@ def test_optimize_topology_wrapper():
     assert dist == pytest.approx(after, rel=1e-9)
 
 
+def test_optimize_topology_constrained_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.graph.graph.add_edge("c1", "c2", relation="perception_link")
+
+    target = nx.cycle_graph(3)
+    mapping = {i: n for i, n in enumerate(["c1", "c2", "d"])}
+    target = nx.relabel_nodes(target, mapping)
+
+    before = bottleneck_distance(ds.graph.graph.to_undirected(), target)
+    dist, diff = ds.optimize_topology_constrained(target, [1, 2], max_iter=5, seed=0, delta=1.0)
+    after = bottleneck_distance(ds.graph.graph.to_undirected(), target)
+    assert after <= before
+    assert dist == pytest.approx(after, rel=1e-9)
+    assert diff >= 0
+    assert any(e.operation == "optimize_topology_constrained" for e in ds.events)
+
+
+def test_validate_topology_wrapper():
+    from datacreek.analysis import bottleneck_distance
+    import pytest
+    if bottleneck_distance.__module__ == "datacreek.analysis.fractal" and getattr(__import__('datacreek.analysis.fractal', fromlist=['gd']), 'gd') is None:
+        pytest.skip("gudhi not available")
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.graph.graph.add_edge("c1", "c2", relation="perception_link")
+
+    target = nx.cycle_graph(3)
+    mapping = {i: n for i, n in enumerate(["c1", "c2", "d"])}
+    target = nx.relabel_nodes(target, mapping)
+
+    dist, diff = ds.validate_topology(target, [1, 2])
+    assert dist >= 0
+    assert diff >= 0
+    assert any(e.operation == "validate_topology" for e in ds.events)
+
+
 def test_apply_perception_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -996,6 +1062,18 @@ def test_apply_perception_wrapper():
     assert node.get("perception_strength") == 0.5
     assert "embedding" in node
     assert any(e.operation == "apply_perception" for e in ds.events)
+
+
+def test_apply_perception_all_nodes_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "bye")
+    ds.graph.index.build()
+    updates = ds.apply_perception_all_nodes(lambda t: t.title(), perception_id="p")
+    assert set(updates) == {"c1", "c2"}
+    assert ds.graph.graph.nodes["c1"]["text"] == "Hello"
+    assert any(e.operation == "apply_perception_all_nodes" for e in ds.events)
 
 
 def test_persistence_diagrams_wrapper():
@@ -1077,6 +1155,84 @@ def test_sheaf_laplacian_wrapper():
     assert L.shape == (2, 2)
     assert L[0, 1] == 1
     assert any(e.operation == "sheaf_laplacian" for e in ds.events)
+
+
+def test_sheaf_convolution_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a")
+    ds.graph.graph.add_node("b")
+    ds.graph.graph.add_edge("a", "b", sheaf_sign=-1)
+    features = {"a": [1.0], "b": [0.0]}
+    out = ds.sheaf_convolution(features, alpha=0.5)
+    assert set(out) == {"a", "b"}
+    assert any(e.operation == "sheaf_convolution" for e in ds.events)
+
+
+def test_sheaf_neural_network_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_edge("a", "b", sheaf_sign=-1)
+    feats = {"a": [1.0], "b": [0.0]}
+    out = ds.sheaf_neural_network(feats, layers=2, alpha=0.5)
+    assert set(out) == {"a", "b"}
+    assert any(e.operation == "sheaf_neural_network" for e in ds.events)
+
+
+def test_path_to_text_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", text="A")
+    ds.graph.graph.add_node("b", text="B")
+    ds.graph.graph.add_edge("a", "b", relation="rel")
+    sent = ds.path_to_text(["a", "b"])
+    assert "A" in sent and "B" in sent
+    assert any(e.operation == "path_to_text" for e in ds.events)
+
+
+def test_neighborhood_to_sentence_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", text="A")
+    ds.graph.graph.add_node("b", text="B")
+    ds.graph.graph.add_edge("a", "b", relation="rel")
+    sent = ds.neighborhood_to_sentence(["a", "b"])
+    assert "A" in sent and "B" in sent
+    assert any(e.operation == "neighborhood_to_sentence" for e in ds.events)
+
+
+def test_subgraph_to_text_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", text="A")
+    ds.graph.graph.add_node("b", text="B")
+    ds.graph.graph.add_edge("a", "b", relation="rel")
+    txt = ds.subgraph_to_text(["a", "b"])
+    assert "A" in txt and "B" in txt
+    assert any(e.operation == "subgraph_to_text" for e in ds.events)
+
+
+def test_graph_to_text_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", text="A")
+    ds.graph.graph.add_node("b", text="B")
+    ds.graph.graph.add_edge("a", "b", relation="rel")
+    txt = ds.graph_to_text()
+    assert "A" in txt and "B" in txt
+    assert any(e.operation == "graph_to_text" for e in ds.events)
+
+
+def test_auto_tool_calls_node_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", text="search cats")
+    out = ds.auto_tool_calls_node("a", [("search", r"search\s+\w+")])
+    assert "[TOOL:search" in out
+    assert any(e.operation == "auto_tool_calls_node" for e in ds.events)
+
+
+def test_auto_tool_calls_all_nodes_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", text="search cats")
+    ds.graph.graph.add_node("b", text="search dogs")
+    result = ds.auto_tool_calls_all_nodes([("search", r"search\s+\w+")])
+    assert set(result) == {"a", "b"}
+    assert all("[TOOL:search" in t for t in result.values())
+    assert any(e.operation == "auto_tool_calls_all_nodes" for e in ds.events)
 
 
 def test_spectral_density_wrapper():
@@ -1542,6 +1698,16 @@ def test_fractal_information_density_wrapper():
     assert any(e.operation == "fractal_information_density" for e in ds.events)
 
 
+def test_diversification_score_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    score = ds.diversification_score(["c1"], [1])
+    assert isinstance(score, float)
+    assert ds.events[-1].operation == "diversification_score"
+
+
 def test_hnsw_search(tmp_path):
     ds = DatasetBuilder(DatasetType.TEXT, use_hnsw=True)
     ds.add_document("d", source="s")
@@ -1558,3 +1724,37 @@ def test_add_audio_wrapper():
     ds.add_audio("d", "a1", "file.wav")
     assert "a1" in ds.graph.graph
     assert any(e.operation == "add_audio" for e in ds.events)
+
+
+def test_hyperbolic_neighbors_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", hyperbolic_embedding=[0.1, 0.2])
+    ds.graph.graph.add_node("b", hyperbolic_embedding=[0.2, 0.25])
+    ds.graph.graph.add_node("c", hyperbolic_embedding=[0.9, 0.1])
+    res = ds.hyperbolic_neighbors("a", k=1)
+    assert res and res[0][0] == "b"
+    assert any(e.operation == "hyperbolic_neighbors" for e in ds.events)
+
+
+def test_hyperbolic_reasoning_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", hyperbolic_embedding=[0.1, 0.0])
+    ds.graph.graph.add_node("b", hyperbolic_embedding=[0.2, 0.05])
+    ds.graph.graph.add_node("c", hyperbolic_embedding=[0.3, 0.06])
+    path = ds.hyperbolic_reasoning("a", "c", max_steps=3)
+    assert path[0] == "a" and path[-1] == "c"
+    assert any(e.operation == "hyperbolic_reasoning" for e in ds.events)
+
+
+def test_hyperbolic_hypergraph_reasoning_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_node("a", hyperbolic_embedding=[0.1, 0.0])
+    ds.graph.graph.add_node("b", hyperbolic_embedding=[0.2, 0.05])
+    ds.graph.graph.add_node("c", hyperbolic_embedding=[0.3, 0.06])
+    ds.graph.graph.add_node("h", type="hyperedge", hyperbolic_embedding=[0.5, 0.1])
+    ds.graph.graph.add_edge("a", "h")
+    ds.graph.graph.add_edge("b", "h")
+    ds.graph.graph.add_edge("c", "h")
+    path = ds.hyperbolic_hypergraph_reasoning("a", "c", max_steps=4)
+    assert path[0] == "a" and path[-1] == "c"
+    assert any(e.operation == "hyperbolic_hypergraph_reasoning" for e in ds.events)

@@ -25,6 +25,8 @@ from .llm_processing import (
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, split_into_chunks
+from .graph_text import neighborhood_to_sentence, subgraph_to_text, graph_to_text
+from .toolformer import insert_tool_calls
 
 
 def __getattr__(name: str):
@@ -67,4 +69,8 @@ __all__ = [
     "extract_facts",
     "extract_entities",
     "decode_hash",
+    "neighborhood_to_sentence",
+    "subgraph_to_text",
+    "graph_to_text",
+    "insert_tool_calls",
 ]

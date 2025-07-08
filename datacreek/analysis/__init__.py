@@ -24,7 +24,14 @@ __all__ = [
     "graph_information_bottleneck",
     "prototype_subgraph",
     "sheaf_laplacian",
+    "sheaf_convolution",
+    "sheaf_neural_network",
     "fractal_information_density",
+    "diversification_score",
+    "generate_graph_rnn_stateful",
+    "generate_graph_rnn_sequential",
+    "hyperbolic_reasoning",
+    "hyperbolic_hypergraph_reasoning",
 ]
 
 
@@ -51,6 +58,9 @@ def __getattr__(name: str):
         "spectral_entropy",
         "graph_lacunarity",
         "fractal_information_density",
+        "diversification_score",
+        "hyperbolic_reasoning",
+        "hyperbolic_hypergraph_reasoning",
     }:
         from . import fractal as _f
 
@@ -67,4 +77,20 @@ def __getattr__(name: str):
         from .sheaf import sheaf_laplacian as _sl
 
         return _sl
+    if name == "sheaf_convolution":
+        from .sheaf import sheaf_convolution as _sc
+
+        return _sc
+    if name == "sheaf_neural_network":
+        from .sheaf import sheaf_neural_network as _snn
+
+        return _snn
+    if name == "generate_graph_rnn_stateful":
+        from .generation import generate_graph_rnn_stateful as _grs
+
+        return _grs
+    if name == "generate_graph_rnn_sequential":
+        from .generation import generate_graph_rnn_sequential as _grs2
+
+        return _grs2
     raise AttributeError(name)
