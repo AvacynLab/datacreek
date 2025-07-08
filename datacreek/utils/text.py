@@ -9,8 +9,9 @@ import re
 from typing import Any, Dict, List, Optional
 
 try:  # optional dependency
-    from quantulum3 import parser as _qty_parser
     from pint import UnitRegistry as _UnitRegistry
+    from quantulum3 import parser as _qty_parser
+
     _PINT_AVAILABLE = True
 except Exception:  # pragma: no cover - optional dependency missing
     _PINT_AVAILABLE = False
