@@ -1297,7 +1297,7 @@ def test_gds_quality_check_wrapper(monkeypatch):
     ds.neo4j_driver = fake_driver
     called = {}
 
-    def fake_qc(self, driver, *, dataset=None, min_component_size=2, similarity_threshold=0.95):
+    def fake_qc(self, driver, *, dataset=None, min_component_size=2, similarity_threshold=0.95, triangle_threshold=1):
         called["driver"] = driver
         called["dataset"] = dataset
         return {"removed_nodes": [1]}
@@ -1306,7 +1306,7 @@ def test_gds_quality_check_wrapper(monkeypatch):
 
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "hello")
-    res = ds.gds_quality_check(driver=fake_driver)
+    res = ds.gds_quality_check(driver=fake_driver, triangle_threshold=1)
     assert res == {"removed_nodes": [1]}
     assert called["driver"] is fake_driver
     assert called["dataset"] == "qc"
@@ -1753,6 +1753,14 @@ def test_add_audio_wrapper():
     assert any(e.operation == "add_audio" for e in ds.events)
 
 
+def test_add_image_caption_edge_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_image("d", "img1", "path.png", alt_text="cat")
+    caps = ds.get_captions_for_document("d")
+    assert caps and ds.graph.graph.edges[caps[0], "img1"]["relation"] == "caption_of"
+
+
 def test_hyperbolic_neighbors_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.graph.graph.add_node("a", hyperbolic_embedding=[0.1, 0.2])
@@ -1785,3 +1793,14 @@ def test_hyperbolic_hypergraph_reasoning_wrapper():
     path = ds.hyperbolic_hypergraph_reasoning("a", "c", max_steps=4)
     assert path[0] == "a" and path[-1] == "c"
     assert any(e.operation == "hyperbolic_hypergraph_reasoning" for e in ds.events)
+
+
+def test_hyperbolic_multi_curvature_reasoning_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    for n in ["a", "b", "c"]:
+        ds.graph.graph.add_node(n, **{"hyperbolic_embedding_-1": [0.1 * (ord(n) - 96), 0.0], "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01]})
+    path = ds.hyperbolic_multi_curvature_reasoning(
+        "a", "c", curvatures=[-1, -0.5], max_steps=3
+    )
+    assert path[0] == "a" and path[-1] == "c"
+    assert any(e.operation == "hyperbolic_multi_curvature_reasoning" for e in ds.events)

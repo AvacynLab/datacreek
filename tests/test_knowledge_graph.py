@@ -1162,6 +1162,12 @@ class _DummySession:
             return [{"nodeId": 0, "score": 5}, {"nodeId": 1, "score": 1}]
         if "betweenness.stream" in query:
             return [{"nodeId": 0, "score": 0.8}, {"nodeId": 1, "score": 0.1}]
+        if "triangleCount.stream" in query:
+            return [{"nodeId": 0, "triangleCount": 0}, {"nodeId": 1, "triangleCount": 2}]
+        if "MATCH (a)-[r]->(b) RETURN" in query:
+            return [{"src": 0, "tgt": 1}]
+        if "id(n) IN $ids" in query:
+            return [{"id": 0}]
         return []
 
     def __enter__(self) -> "_DummySession":
@@ -1187,6 +1193,7 @@ def test_gds_quality_check_method():
     assert res["duplicates"]
     assert res["suggested_links"]
     assert 0 in res["hubs"]
+    assert res["weak_links"] == [(0, 1)]
 
 
 def test_quality_check_method():
@@ -1269,3 +1276,35 @@ def test_hyperbolic_hypergraph_reasoning_method():
     kg.graph.add_edge("c", "h")
     path = kg.hyperbolic_hypergraph_reasoning("a", "c", max_steps=4)
     assert path[0] == "a" and path[-1] == "c"
+
+
+def test_hyperbolic_multi_curvature_reasoning_method():
+    kg = KnowledgeGraph()
+    for n in ["a", "b", "c"]:
+        kg.graph.add_node(n, **{"hyperbolic_embedding_-1": [0.1 * (ord(n) - 96), 0.0], "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01]})
+    path = kg.hyperbolic_multi_curvature_reasoning("a", "c", curvatures=[-1, -0.5], max_steps=3)
+    assert path[0] == "a" and path[-1] == "c"
+
+
+def test_add_image_creates_caption_edge():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_image("d", "img1", "path.png", alt_text="a cat")
+    caps = kg.get_captions_for_document("d")
+    assert caps
+    cap = caps[0]
+    assert kg.graph.nodes[cap]["type"] == "caption"
+    assert kg.graph.edges[cap, "img1"]["relation"] == "caption_of"
+
+
+def test_cypher_ann_query_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello world")
+    kg.index.build()
+
+    class _Drv(_DummyDriver):
+        pass
+
+    res = kg.cypher_ann_query(_Drv(), "hello", "MATCH (n) WHERE id(n) IN $ids RETURN id(n) AS id")
+    assert res and res[0]["id"] == 0

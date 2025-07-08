@@ -190,3 +190,54 @@ def generate_graph_rnn_sequential(
             else:
                 prev = 0.0
     return g
+
+
+def generate_netgan_like(
+    g: nx.Graph,
+    num_walks: int = 32,
+    walk_length: int = 16,
+    p: float = 0.5,
+) -> nx.Graph:
+    """Return a graph grown from random walks mimicking NetGAN.
+
+    This lightweight implementation performs a series of random walks on the
+    input graph ``g`` to sample plausible edge pairs.  Edges from the walks are
+    reconnected in a new graph with probability ``p`` in order to approximate the
+    distribution learned by a true NetGAN model.
+
+    Parameters
+    ----------
+    g:
+        Reference graph used to sample random walks.
+    num_walks:
+        Number of random walks to generate.
+    walk_length:
+        Length of each walk.
+    p:
+        Probability of keeping an edge encountered in a walk.
+
+    Returns
+    -------
+    nx.Graph
+        New graph built from the sampled walks.
+    """
+
+    new_g = nx.Graph()
+    new_g.add_nodes_from(g.nodes())
+    nodes = list(g.nodes())
+    if not nodes:
+        return new_g
+
+    rng = random.Random(0)
+    for _ in range(num_walks):
+        current = rng.choice(nodes)
+        for _ in range(walk_length - 1):
+            neighbors = list(g.neighbors(current))
+            if not neighbors:
+                break
+            nxt = rng.choice(neighbors)
+            if rng.random() < p and not new_g.has_edge(current, nxt):
+                new_g.add_edge(current, nxt)
+            current = nxt
+
+    return new_g

@@ -52,6 +52,7 @@ __all__: list[str] = [
     "inverse_graph_fourier_transform",
     "generate_graph_rnn_stateful",
     "generate_graph_rnn_sequential",
+    "generate_netgan_like",
     "graph_information_bottleneck",
     "prototype_subgraph",
     "sheaf_laplacian",
@@ -63,6 +64,7 @@ __all__: list[str] = [
     "compute_distmult_embeddings",
     "hyperbolic_reasoning",
     "hyperbolic_hypergraph_reasoning",
+    "hyperbolic_multi_curvature_reasoning",
     "neighborhood_to_sentence",
     "subgraph_to_text",
     "graph_to_text",
@@ -108,6 +110,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         generate_graph_rnn_like,
         generate_graph_rnn_sequential,
         generate_graph_rnn_stateful,
+        generate_netgan_like,
     )
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
@@ -360,6 +363,10 @@ def __getattr__(name: str):
         from .analysis.generation import generate_graph_rnn_sequential as _grs2
 
         return _grs2
+    if name == "generate_netgan_like":
+        from .analysis.generation import generate_netgan_like as _gn
+
+        return _gn
     if name == "fractal_information_density":
         from .analysis.fractal import fractal_information_density as _fid
 
@@ -380,6 +387,10 @@ def __getattr__(name: str):
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
         return _KG.hyperbolic_hypergraph_reasoning
+    if name == "hyperbolic_multi_curvature_reasoning":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.hyperbolic_multi_curvature_reasoning
     if name == "compute_distmult_embeddings":
         from .core.knowledge_graph import KnowledgeGraph as _KG
 

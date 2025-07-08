@@ -457,6 +457,25 @@ class DatasetBuilder:
 
         return self.graph.search_hybrid(query, k=k, node_type=node_type)
 
+    def cypher_ann_query(
+        self,
+        driver: Driver,
+        query: str,
+        cypher: str,
+        *,
+        k: int = 5,
+        node_type: str = "chunk",
+    ) -> List[Dict[str, Any]]:
+        """Wrapper for :meth:`KnowledgeGraph.cypher_ann_query`."""
+
+        return self.graph.cypher_ann_query(
+            driver,
+            query,
+            cypher,
+            k=k,
+            node_type=node_type,
+        )
+
     def search_with_links(self, query: str, k: int = 5, hops: int = 1) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_with_links`."""
 
@@ -1030,6 +1049,7 @@ class DatasetBuilder:
         max_iter: int = 100,
         seed: int | None = None,
         use_generator: bool = False,
+        use_netgan: bool = False,
     ) -> Tuple[float, float]:
         """Wrapper for :meth:`KnowledgeGraph.optimize_topology_constrained`."""
 
@@ -1042,6 +1062,7 @@ class DatasetBuilder:
             max_iter=max_iter,
             seed=seed,
             use_generator=use_generator,
+            use_netgan=use_netgan,
         )
         self._record_event(
             "optimize_topology_constrained",
@@ -1051,6 +1072,7 @@ class DatasetBuilder:
             delta=delta,
             max_iter=max_iter,
             use_generator=use_generator,
+            use_netgan=use_netgan,
             dimension_diff=diff,
         )
         return dist, diff
@@ -1150,6 +1172,34 @@ class DatasetBuilder:
             start=start,
             goal=goal,
             penalty=penalty,
+            max_steps=max_steps,
+        )
+        return path
+
+    def hyperbolic_multi_curvature_reasoning(
+        self,
+        start: str,
+        goal: str,
+        *,
+        curvatures: Iterable[float],
+        weights: Optional[Dict[float, float]] = None,
+        max_steps: int = 5,
+    ) -> List[str]:
+        """Wrapper for :meth:`KnowledgeGraph.hyperbolic_multi_curvature_reasoning`."""
+
+        path = self.graph.hyperbolic_multi_curvature_reasoning(
+            start,
+            goal,
+            curvatures=curvatures,
+            weights=weights,
+            max_steps=max_steps,
+        )
+        self._record_event(
+            "hyperbolic_multi_curvature_reasoning",
+            "Multi-curvature hyperbolic path computed",
+            start=start,
+            goal=goal,
+            curvatures=list(curvatures),
             max_steps=max_steps,
         )
         return path
@@ -1506,6 +1556,7 @@ class DatasetBuilder:
         max_iter: int = 100,
         seed: int | None = None,
         use_generator: bool = False,
+        use_netgan: bool = False,
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.optimize_topology`."""
         before = self.graph.topological_signature(max_dim=dimension)
@@ -1516,6 +1567,7 @@ class DatasetBuilder:
             max_iter=max_iter,
             seed=seed,
             use_generator=use_generator,
+            use_netgan=use_netgan,
         )
         after = self.graph.topological_signature(max_dim=dimension)
         self._record_event(
@@ -1525,6 +1577,7 @@ class DatasetBuilder:
             epsilon=epsilon,
             max_iter=max_iter,
             use_generator=use_generator,
+            use_netgan=use_netgan,
             before_entropy=before.get("entropy"),
             after_entropy=after.get("entropy"),
         )
@@ -1614,6 +1667,7 @@ class DatasetBuilder:
         *,
         min_component_size: int = 2,
         similarity_threshold: float = 0.95,
+        triangle_threshold: int = 1,
         driver: Driver | None = None,
     ) -> Dict[str, Any]:
         """Run Neo4j GDS quality checks via :class:`KnowledgeGraph`."""
@@ -1627,12 +1681,14 @@ class DatasetBuilder:
             dataset=self.name,
             min_component_size=min_component_size,
             similarity_threshold=similarity_threshold,
+            triangle_threshold=triangle_threshold,
         )
         self._record_event(
             "gds_quality_check",
             "Neo4j GDS quality check performed",
             min_component_size=min_component_size,
             similarity_threshold=similarity_threshold,
+            triangle_threshold=triangle_threshold,
         )
         return result
 
@@ -1745,6 +1801,12 @@ class DatasetBuilder:
 
     def get_images_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_images_for_document(doc_id)
+
+    def get_captions_for_document(self, doc_id: str) -> list[str]:
+        return self.graph.get_captions_for_document(doc_id)
+
+    def get_caption_for_image(self, image_id: str) -> str | None:
+        return self.graph.get_caption_for_image(image_id)
 
     def get_audios_for_document(self, doc_id: str) -> list[str]:
         return self.graph.get_audios_for_document(doc_id)
