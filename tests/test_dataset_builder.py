@@ -1306,19 +1306,27 @@ def test_gds_quality_check_wrapper(monkeypatch):
         min_component_size=2,
         similarity_threshold=0.95,
         triangle_threshold=1,
+        link_threshold=0.0,
     ):
         called["driver"] = driver
         called["dataset"] = dataset
         return {"removed_nodes": [1]}
 
     monkeypatch.setattr(ds.graph.__class__, "gds_quality_check", fake_qc, raising=False)
+    monkeypatch.setattr(
+        ds.graph.__class__,
+        "to_neo4j",
+        lambda *a, **k: called.update({"write_ds": k.get("dataset")}),
+        raising=False,
+    )
 
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "hello")
-    res = ds.gds_quality_check(driver=fake_driver, triangle_threshold=1)
+    res = ds.gds_quality_check(driver=fake_driver, triangle_threshold=1, freeze_version=True)
     assert res == {"removed_nodes": [1]}
     assert called["driver"] is fake_driver
     assert called["dataset"] == "qc"
+    assert called.get("write_ds") == "qc_clean0"
     assert any(e.operation == "gds_quality_check" for e in ds.events)
 
 

@@ -68,8 +68,10 @@ __all__: list[str] = [
     "neighborhood_to_sentence",
     "subgraph_to_text",
     "graph_to_text",
+    "gds_quality_check",
     "quality_check",
     "validate_topology",
+    "optimize_topology_iterative",
     "md5_file",
     "caption_image",
     "detect_emotion",
@@ -312,10 +314,18 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.quality_check
+    if name == "gds_quality_check":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.gds_quality_check
     if name == "validate_topology":
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
         return _KG.validate_topology
+    if name == "optimize_topology_iterative":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.optimize_topology_iterative
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 

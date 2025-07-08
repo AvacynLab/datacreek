@@ -1741,6 +1741,40 @@ class DatasetBuilder:
         )
         return dist
 
+    def optimize_topology_iterative(
+        self,
+        target: nx.Graph,
+        *,
+        loops: int = 8,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        max_iter: int = 100,
+        seed: int | None = None,
+    ) -> float:
+        """Run :meth:`KnowledgeGraph.optimize_topology_iterative`."""
+
+        before = self.graph.topological_signature(max_dim=dimension)
+        dist = self.graph.optimize_topology_iterative(
+            target,
+            loops=loops,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+            seed=seed,
+        )
+        after = self.graph.topological_signature(max_dim=dimension)
+        self._record_event(
+            "optimize_topology_iterative",
+            "Topology iteratively optimized",
+            loops=loops,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+            before_entropy=before.get("entropy"),
+            after_entropy=after.get("entropy"),
+        )
+        return dist
+
     def apply_perception(
         self,
         node_id: str,
@@ -1940,9 +1974,28 @@ class DatasetBuilder:
         min_component_size: int = 2,
         similarity_threshold: float = 0.95,
         triangle_threshold: int = 1,
+        link_threshold: float = 0.0,
+        freeze_version: bool = False,
         driver: Driver | None = None,
     ) -> Dict[str, Any]:
-        """Run Neo4j GDS quality checks via :class:`KnowledgeGraph`."""
+        """Run Neo4j GDS quality checks via :class:`KnowledgeGraph`.
+
+        Parameters
+        ----------
+        min_component_size:
+            Components smaller than this size are removed.
+        similarity_threshold:
+            Duplicate nodes above this similarity are reported.
+        triangle_threshold:
+            Edges incident to nodes with fewer triangles are removed.
+        link_threshold:
+            Minimum score for suggested links to be added to the graph.
+        freeze_version:
+            When ``True``, a snapshot of the cleaned graph is written back to
+            Neo4j using the ``"_clean0"`` dataset suffix.
+        driver:
+            Optional Neo4j driver. If ``None`` the instance's driver is used.
+        """
 
         driver = driver or self.neo4j_driver
         if not driver:
@@ -1954,6 +2007,7 @@ class DatasetBuilder:
             min_component_size=min_component_size,
             similarity_threshold=similarity_threshold,
             triangle_threshold=triangle_threshold,
+            link_threshold=link_threshold,
         )
         self._record_event(
             "gds_quality_check",
@@ -1961,7 +2015,11 @@ class DatasetBuilder:
             min_component_size=min_component_size,
             similarity_threshold=similarity_threshold,
             triangle_threshold=triangle_threshold,
+            link_threshold=link_threshold,
+            freeze_version=freeze_version,
         )
+        if freeze_version:
+            self.graph.to_neo4j(driver, dataset=f"{self.name}_clean0")
         return result
 
     def quality_check(

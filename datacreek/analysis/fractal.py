@@ -315,6 +315,38 @@ def mdl_value(counts: List[Tuple[int, int]]) -> float:
     return float(n * math.log(rss / n + 1e-12) + k * math.log(n))
 
 
+def _slope(counts: List[Tuple[int, int]]) -> float:
+    """Return slope of ``log(N_B)`` vs ``log(1/l_B)`` for ``counts``."""
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    if len(xs) < 2:
+        return 0.0
+    slope, _ = np.polyfit(xs, ys, 1)
+    return float(slope)
+
+
+def dichotomic_radius(counts: List[Tuple[int, int]], target: float) -> int:
+    """Return index whose slope is closest to ``target`` using dichotomy."""
+
+    left = 1
+    right = len(counts) - 1
+    best = 1
+    best_diff = abs(_slope(counts[: best + 1]) - target)
+    while left <= right:
+        mid = (left + right) // 2
+        s = _slope(counts[: mid + 1])
+        diff = abs(s - target)
+        if diff < best_diff:
+            best = mid
+            best_diff = diff
+        if s > target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return best
+
+
 def spectral_dimension(
     graph: nx.Graph, times: Iterable[float]
 ) -> Tuple[float, List[Tuple[float, float]]]:
@@ -832,18 +864,23 @@ def build_fractal_hierarchy(
 
 
 def build_mdl_hierarchy(
-    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5
+    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5, slope_tol: float = 0.1
 ) -> List[Tuple[nx.Graph, Dict[object, int], int]]:
     """Return a hierarchy using MDL to stop when description length grows."""
 
     levels: List[Tuple[nx.Graph, Dict[object, int], int]] = []
     current = graph
     prev_mdl = float("inf")
+    target_dim = None
     for _ in range(max_levels):
         dim, counts = box_counting_dimension(current, radii)
         if not counts:
             break
         idx = mdl_optimal_radius(counts)
+        if target_dim is not None:
+            cand = dichotomic_radius(counts, target_dim)
+            if abs(_slope(counts[: cand + 1]) - target_dim) <= slope_tol:
+                idx = cand
         mdl_curr = mdl_value(counts[: idx + 1])
         if mdl_curr >= prev_mdl:
             break
@@ -853,6 +890,7 @@ def build_mdl_hierarchy(
         levels.append((coarse, mapping, radius))
         if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
             break
+        target_dim = _slope(counts[: idx + 1])
         current = coarse
     return levels
 
