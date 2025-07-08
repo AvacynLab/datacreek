@@ -715,7 +715,9 @@ class KnowledgeGraph:
 
         seeds = self.search_hybrid(query, k)
         if fractal_level is not None:
-            seeds = [s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level]
+            seeds = [
+                s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
+            ]
         seen = set(seeds)
         results = list(seeds)
         queue = [(cid, 0) for cid in seeds]
@@ -736,7 +738,10 @@ class KnowledgeGraph:
                     continue
                 if neighbor in seen:
                     continue
-                if fractal_level is not None and self.graph.nodes[neighbor].get("fractal_level", 0) > fractal_level:
+                if (
+                    fractal_level is not None
+                    and self.graph.nodes[neighbor].get("fractal_level", 0) > fractal_level
+                ):
                     continue
                 seen.add(neighbor)
                 results.append(neighbor)
@@ -761,7 +766,9 @@ class KnowledgeGraph:
 
         seeds = self.search_hybrid(query, k)
         if fractal_level is not None:
-            seeds = [s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level]
+            seeds = [
+                s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
+            ]
         seen = set(seeds)
         queue: List[tuple[str, int, List[str]]] = [(cid, 0, [cid]) for cid in seeds]
         results: List[tuple[str, int, List[str]]] = queue.copy()
@@ -776,7 +783,10 @@ class KnowledgeGraph:
                     continue
                 if nb in seen:
                     continue
-                if fractal_level is not None and self.graph.nodes[nb].get("fractal_level", 0) > fractal_level:
+                if (
+                    fractal_level is not None
+                    and self.graph.nodes[nb].get("fractal_level", 0) > fractal_level
+                ):
                     continue
                 seen.add(nb)
                 new_path = path + [nb]
@@ -3265,10 +3275,7 @@ class KnowledgeGraph:
         confidence score. ``0.0`` is returned when no statements are supplied.
         """
 
-        scores = [
-            self.fact_confidence(s, p, o, max_hops=max_hops)
-            for s, p, o in statements
-        ]
+        scores = [self.fact_confidence(s, p, o, max_hops=max_hops) for s, p, o in statements]
         return float(sum(scores) / len(scores)) if scores else 0.0
 
     def to_dict(self) -> Dict[str, Any]:

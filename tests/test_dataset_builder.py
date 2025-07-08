@@ -11,9 +11,9 @@ from datacreek.analysis import bottleneck_distance
 from datacreek.core import dataset
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.ingest import IngestOptions
+from datacreek.models.qa import QAPair
 from datacreek.models.stage import DatasetStage
 from datacreek.pipelines import DatasetType, PipelineStep
-from datacreek.models.qa import QAPair
 
 
 def test_dataset_has_its_own_graph():

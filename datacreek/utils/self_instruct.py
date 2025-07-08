@@ -1,12 +1,12 @@
 """Simple helpers implementing a Self-Instruct style loop."""
 from __future__ import annotations
 
-import logging
 import json
+import logging
 from typing import Callable, Iterable
 
-from .llm_processing import parse_qa_pairs
 from ..templates.library import validate_output
+from .llm_processing import parse_qa_pairs
 
 logger = logging.getLogger(__name__)
 

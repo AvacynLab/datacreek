@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import hashlib
+import json
 import logging
 import os
 import re
@@ -1161,16 +1161,10 @@ class DatasetBuilder:
         )
         return selected
 
-    def sample_diverse_chunks(
-        self, count: int, radii: Iterable[int]
-    ) -> list[str]:
+    def sample_diverse_chunks(self, count: int, radii: Iterable[int]) -> list[str]:
         """Return ``count`` chunk IDs maximizing diversification."""
 
-        candidates = [
-            n
-            for n, d in self.graph.graph.nodes(data=True)
-            if d.get("type") == "chunk"
-        ]
+        candidates = [n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "chunk"]
         selected = self.select_diverse_nodes(candidates, count, radii)
         self._record_event(
             "sample_diverse_chunks",
@@ -1555,7 +1549,11 @@ class DatasetBuilder:
     def record_feedback(self, record_id: str, comment: str) -> None:
         """Store user feedback linked to a dataset record."""
 
-        entry = {"record_id": record_id, "comment": comment, "time": datetime.now(timezone.utc).isoformat()}
+        entry = {
+            "record_id": record_id,
+            "comment": comment,
+            "time": datetime.now(timezone.utc).isoformat(),
+        }
         self.feedback.append(entry)
         self._record_event("record_feedback", "Feedback recorded", record_id=record_id)
 
@@ -1585,9 +1583,7 @@ class DatasetBuilder:
         from ..utils.fact_extraction import extract_facts
 
         facts = extract_facts(answer)
-        triples = [
-            (f["subject"], f["predicate"], f["object"]) for f in facts
-        ]
+        triples = [(f["subject"], f["predicate"], f["object"]) for f in facts]
         score = self.verify_statements(triples, max_hops=max_hops) if triples else 0.0
         self._record_event(
             "verify_answer",
@@ -1597,9 +1593,7 @@ class DatasetBuilder:
         )
         return score
 
-    def verify_qa_pairs(
-        self, pairs: Iterable["QAPair"], *, max_hops: int = 3
-    ) -> list["QAPair"]:
+    def verify_qa_pairs(self, pairs: Iterable["QAPair"], *, max_hops: int = 3) -> list["QAPair"]:
         """Annotate ``pairs`` with a confidence score using graph verification."""
 
         from datacreek.models.qa import QAPair
@@ -1638,9 +1632,7 @@ class DatasetBuilder:
             + nx.number_connected_components(self.graph.graph)
         )
         betti_sub = (
-            sub.number_of_edges()
-            - sub.number_of_nodes()
-            + nx.number_connected_components(sub)
+            sub.number_of_edges() - sub.number_of_nodes() + nx.number_connected_components(sub)
         )
         edge_cov = len(used_pairs) / total if total else 0.0
         betti_cov = betti_sub / betti_total if betti_total else 0.0
@@ -2611,8 +2603,8 @@ class DatasetBuilder:
 
         if self.dataset_type == DatasetType.QA:
             try:
-                from datacreek.models.results import CurationResult, QAGenerationResult
                 from datacreek.models.qa import QAPair
+                from datacreek.models.results import CurationResult, QAGenerationResult
 
                 if isinstance(result, CurationResult):
                     result.qa_pairs = self.verify_qa_pairs(result.qa_pairs)
@@ -2621,9 +2613,7 @@ class DatasetBuilder:
                 elif isinstance(result, QAGenerationResult):
                     result.qa_pairs = self.verify_qa_pairs(result.qa_pairs)
                 elif isinstance(result, dict) and "qa_pairs" in result:
-                    pairs = [
-                        QAPair(**p) if isinstance(p, dict) else p for p in result["qa_pairs"]
-                    ]
+                    pairs = [QAPair(**p) if isinstance(p, dict) else p for p in result["qa_pairs"]]
                     verified = self.verify_qa_pairs(pairs)
                     result["qa_pairs"] = [p.to_dict() for p in verified]
             except Exception:

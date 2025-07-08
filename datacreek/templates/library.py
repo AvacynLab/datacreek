@@ -2,16 +2,17 @@ from __future__ import annotations
 
 """Prompt template library with validation utilities."""
 
-from dataclasses import dataclass
-from pathlib import Path
 import json
 import re
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional
 
 import jsonschema
 
 # Template definitions live under ``specs/`` to avoid gitignore "data/" rules
 TEMPLATE_DIR = Path(__file__).resolve().parent / "specs"
+
 
 @dataclass
 class PromptTemplate:

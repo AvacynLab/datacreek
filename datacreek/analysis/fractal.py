@@ -1,6 +1,6 @@
 import math
 import random
-from typing import Any, Dict, Iterable, List, Tuple, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 try:  # optional dependency
     import gudhi as gd

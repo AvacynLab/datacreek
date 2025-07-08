@@ -421,10 +421,9 @@ def __getattr__(name: str):
 
         return _DB.coverage_stats
     if name == "get_template" or name == "PromptTemplate" or name == "validate_output":
-        from .templates.library import (
-            get_template as _gtmpl,
-            PromptTemplate as _PT,
-            validate_output as _vo,
-        )
+        from .templates.library import PromptTemplate as _PT
+        from .templates.library import get_template as _gtmpl
+        from .templates.library import validate_output as _vo
+
         return {"get_template": _gtmpl, "PromptTemplate": _PT, "validate_output": _vo}[name]
     raise AttributeError(name)
