@@ -1281,7 +1281,13 @@ def test_hyperbolic_hypergraph_reasoning_method():
 def test_hyperbolic_multi_curvature_reasoning_method():
     kg = KnowledgeGraph()
     for n in ["a", "b", "c"]:
-        kg.graph.add_node(n, **{"hyperbolic_embedding_-1": [0.1 * (ord(n) - 96), 0.0], "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01]})
+        kg.graph.add_node(
+            n,
+            **{
+                "hyperbolic_embedding_-1": [0.1 * (ord(n) - 96), 0.0],
+                "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01],
+            },
+        )
     path = kg.hyperbolic_multi_curvature_reasoning("a", "c", curvatures=[-1, -0.5], max_steps=3)
     assert path[0] == "a" and path[-1] == "c"
 
