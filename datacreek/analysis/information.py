@@ -71,6 +71,8 @@ def prototype_subgraph(
     X = np.stack([features[n] for n in nodes])
     y = np.array([labels[n] for n in nodes])
 
+    from sklearn.linear_model import LogisticRegression
+
     model = LogisticRegression(max_iter=1000, n_jobs=1)
     model.fit(X, y)
     probs = model.predict_proba(X)

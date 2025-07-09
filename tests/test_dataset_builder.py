@@ -4,6 +4,7 @@ from pathlib import Path
 
 import fakeredis
 import networkx as nx
+import numpy as np
 import pytest
 import requests
 
@@ -216,6 +217,19 @@ def test_ingest_file_async(tmp_path):
     assert list(ds.ingested_docs) == ["doc"]
     loaded = DatasetBuilder.from_redis(client, "dataset:demo")
     assert loaded.ingested_docs == ds.ingested_docs
+
+
+def test_run_ingestion_layer_wrapper(tmp_path):
+    f1 = tmp_path / "d1.txt"
+    f1.write_text("hello")
+    f2 = tmp_path / "d2.txt"
+    f2.write_text("world")
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    docs = ds.run_ingestion_layer([str(f1), str(f2)], options=IngestOptions())
+
+    assert set(docs) == {"d1", "d2"}
+    assert any(e.operation == "ingestion_layer" for e in ds.events)
 
 
 def test_persist_after_decorator(monkeypatch):
@@ -1276,6 +1290,51 @@ def test_resolve_sheaf_obstruction_wrapper():
     assert any(e.operation == "resolve_sheaf_obstruction" for e in ds.events)
 
 
+def test_run_fractal_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_chunk("d", f"c{i}", str(i))
+    res = ds.run_fractal_layer([1, 2], max_levels=2, delta=0.1)
+    assert res["levels"] >= 1
+    assert "dimension_before" in res
+    assert any(e.operation == "fractal_layer" for e in ds.events)
+
+
+def test_run_embedding_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    res = ds.run_embedding_layer(
+        node2vec_dim=4,
+        graphwave_scales=[0.5],
+        graphwave_points=4,
+        poincare_dim=2,
+        epochs=5,
+        entropy_threshold=0.1,
+    )
+    assert set(res) == {"entropy", "gw_entropy", "dimension"}
+    assert isinstance(res["entropy"], float)
+    assert any(e.operation == "embedding_layer" for e in ds.events)
+
+
+def test_run_topological_perception_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "a")
+    ds.add_chunk("d", "c2", "b")
+    ds.add_chunk("d", "c3", "c")
+    ds.graph.graph.add_edge("c1", "c2", relation="perception_link", sheaf_sign=1)
+    ds.graph.graph.add_edge("c2", "c3", relation="perception_link", sheaf_sign=1)
+    ds.graph.graph.add_edge("c3", "c1", relation="perception_link", sheaf_sign=1)
+    target = ds.graph.graph.to_undirected()
+    res = ds.run_topological_perception_layer(target, [1], loops=1, epsilon=0.0)
+    assert res["distance"] >= 0
+    assert res["h1_after"] <= res["h1_before"]
+    assert any(e.operation == "topological_perception_layer" for e in ds.events)
+
+
 def test_path_to_text_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.graph.graph.add_node("a", text="A")
@@ -1409,6 +1468,18 @@ def test_quality_check_wrapper():
     res = ds.quality_check(min_component_size=2)
     assert res["removed_nodes"] == 1
     assert any(e.operation == "quality_check" for e in ds.events)
+
+
+def test_run_quality_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.graph.graph.add_node("iso")
+
+    res = ds.run_quality_layer(min_component_size=2, use_neo4j=False)
+
+    assert res["removed_nodes"] >= 1
+    assert any(e.operation == "quality_layer" for e in ds.events)
 
 
 def test_consolidate_schema_wrapper():
@@ -1736,6 +1807,67 @@ def test_graph_information_bottleneck_wrapper():
     assert ds.events[-1].operation == "graph_information_bottleneck"
 
 
+def test_run_information_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(4):
+        ds.add_chunk("d", f"c{i}", str(i))
+        ds.graph.graph.nodes[f"c{i}"]["embedding"] = np.array([i, i + 1], dtype=float)
+    labels = {f"c{i}": i % 2 for i in range(4)}
+    motif = ds.graph.graph.subgraph(["c0", "c1"]).copy()
+    res = ds.run_information_layer(labels, [motif], beta=0.5)
+    assert res["loss"] > 0
+    assert res["mdl_after"] <= res["mdl_before"]
+    assert any(e.operation == "information_layer" for e in ds.events)
+
+
+def test_run_compression_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_chunk("d", f"c{i}", str(i))
+        ds.graph.graph.nodes[f"c{i}"]["embedding"] = np.array([0.0, 0.0], dtype=float)
+    ds.graph.graph.add_edge("c0", "c1")
+    ds.graph.graph.add_edge("c1", "c2")
+    ds.graph.graph.add_edge("c2", "c0")
+    res = ds.run_compression_layer(tol=0.01, max_count=6)
+    assert res["clusters"] == 1
+    assert res["classes"] >= 1
+    assert res["order"] >= 1
+    assert any(e.operation == "compression_layer" for e in ds.events)
+
+
+def test_run_export_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    out = ds.run_export_layer(fmt="alpaca", radii=[1], max_levels=1, ib_beta=0.5)
+    assert "instruction" in out
+    assert any(e.operation == "export_layer" for e in ds.events)
+
+
+def test_run_generation_layer_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.graph.index.build()
+
+    def dummy_call(prompt: str) -> str:
+        return '{"question": "Q", "answer": "A"}'
+
+    res = ds.run_generation_layer(
+        dummy_call,
+        query="hello",
+        k=1,
+        hops=0,
+        template="qa",
+        retries=1,
+    )
+
+    assert res and isinstance(res[0], dict)
+    assert any(e.operation == "generation_layer" for e in ds.events)
+
+
 def test_graph_entropy_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -1967,3 +2099,30 @@ def test_select_mdl_motifs_wrapper():
     sel = ds.select_mdl_motifs([motif])
     assert sel and isinstance(sel[0], nx.Graph)
     assert ds.events[-1].operation == "select_mdl_motifs"
+
+
+def test_invariants_dashboard_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_chunk("d", f"c{i}", str(i))
+    ds.graph.graph.add_edges_from([("c0", "c1"), ("c1", "c2"), ("c2", "c0")])
+    res = ds.invariants_dashboard([1])
+    assert set(res) == {"entropy", "fractal_dim", "spectral_gap", "signature"}
+    assert any(e.operation == "invariants_dashboard" for e in ds.events)
+
+
+def test_run_orchestrator_wrapper(tmp_path):
+    f = tmp_path / "doc.txt"
+    f.write_text("hello world")
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+
+    def dummy_call(prompt: str) -> str:
+        return '{"question": "Q?", "answer": "A"}'
+
+    out = ds.run_orchestrator(dummy_call, [str(f)], ingest_options=IngestOptions())
+
+    assert "instruction" in out
+    assert ds.stage == DatasetStage.EXPORTED
+    assert any(e.operation == "orchestrator" for e in ds.events)

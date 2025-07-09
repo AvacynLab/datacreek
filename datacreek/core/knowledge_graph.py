@@ -4,6 +4,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import networkx as nx
@@ -377,6 +378,8 @@ class KnowledgeGraph:
         source: str | None = None,
         *,
         page: int | None = None,
+        lang: str | None = None,
+        timestamp: datetime | None = None,
         emotion: str | None = None,
         modality: str | None = None,
         entities: list[str] | None = None,
@@ -400,6 +403,8 @@ class KnowledgeGraph:
             element_type=element_type,
             source=source,
             page=page,
+            lang=lang,
+            timestamp=(timestamp or datetime.now(timezone.utc)).isoformat(),
         )
         if emotion:
             self.graph.nodes[atom_id]["emotion"] = emotion

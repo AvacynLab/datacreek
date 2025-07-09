@@ -11,6 +11,7 @@ __version__ = "0.0.2"
 __all__: list[str] = [
     "__version__",
     "DatasetBuilder",
+    "Atom",
     "DatasetType",
     "GenerationPipeline",
     "TrainingGoal",
@@ -89,6 +90,7 @@ __all__: list[str] = [
     "validate_output",
     "betti_number",
     "coverage_stats",
+    "invariants_dashboard",
     "mapper_nerve",
     "inverse_mapper",
     "fractal_net_prune",
@@ -103,6 +105,16 @@ __all__: list[str] = [
     "automorphism_group_order",
     "quotient_by_symmetry",
     "prune_embeddings",
+    "ingestion_layer",
+    "quality_layer",
+    "fractal_layer",
+    "embedding_layer",
+    "generation_layer",
+    "compression_layer",
+    "topological_perception_layer",
+    "information_layer",
+    "export_layer",
+    "orchestrator",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -166,6 +178,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB
+    if name == "Atom":
+        from .core.dataset import Atom as _Atom
+
+        return _Atom
     if name in {"ingest_file", "to_kg", "ingest_into_dataset"}:
         from .core.ingest import ingest_into_dataset as _ingest_into_dataset
         from .core.ingest import process_file as _ingest_file
@@ -361,6 +377,42 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.optimize_topology_iterative
+    if name == "quality_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_quality_layer
+    if name == "fractal_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_fractal_layer
+    if name == "embedding_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_embedding_layer
+    if name == "generation_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_generation_layer
+    if name == "topological_perception_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_topological_perception_layer
+    if name == "compression_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_compression_layer
+    if name == "information_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_information_layer
+    if name == "export_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_export_layer
+    if name == "orchestrator":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_orchestrator
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 
@@ -465,6 +517,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.coverage_stats
+    if name == "invariants_dashboard":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.invariants_dashboard
     if name == "mapper_nerve":
         from .analysis.mapper import mapper_nerve as _mn
 
@@ -517,6 +573,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.prune_embeddings
+    if name == "ingestion_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_ingestion_layer
     if name in {"detect_automorphisms", "quotient_by_symmetry", "automorphism_group_order"}:
         from .core.dataset import DatasetBuilder as _DB
 
