@@ -112,6 +112,7 @@ __all__: list[str] = [
     "generation_layer",
     "compression_layer",
     "topological_perception_layer",
+    "topological_signature_hash",
     "information_layer",
     "export_layer",
     "orchestrator",
@@ -405,6 +406,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_information_layer
+    if name == "topological_signature_hash":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.topological_signature_hash
     if name == "export_layer":
         from .core.dataset import DatasetBuilder
 

@@ -716,6 +716,15 @@ def test_persistence_diagrams_method():
     assert diagrams[0].shape[1] == 2
 
 
+def test_topological_signature_hash_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    h = kg.topological_signature_hash(max_dim=1)
+    assert isinstance(h, str)
+    assert len(h) == 32
+
+
 def test_graph_fourier_transform_methods():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")

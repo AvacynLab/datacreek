@@ -2279,6 +2279,16 @@ class KnowledgeGraph:
             "entropy": entropies,
         }
 
+    def topological_signature_hash(self, max_dim: int = 1) -> str:
+        """Return an MD5 hash of the topological signature."""
+
+        import hashlib
+        import json
+
+        signature = self.topological_signature(max_dim=max_dim)
+        blob = json.dumps(signature, sort_keys=True).encode()
+        return hashlib.md5(blob).hexdigest()
+
     def betti_number(self, dimension: int = 1) -> int:
         """Return Betti number of ``dimension`` for the graph."""
 
