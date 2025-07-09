@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import traceback
+import logging
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from datacreek.core.save_as import convert_format
 from datacreek.db import Dataset, SessionLocal, SourceData
 from datacreek.models.export_format import ExportFormat
 from datacreek.models.llm_client import LLMClient
+from datacreek.models import LLMService
 from datacreek.models.task_status import TaskStatus
 from datacreek.pipelines import GenerationOptionsModel
 from datacreek.schemas import DatasetName
@@ -42,6 +44,8 @@ celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "
     "true",
 }
 celery_app.conf.task_store_eager_result = True
+
+logger = logging.getLogger(__name__)
 
 
 def _update_status(
@@ -280,7 +284,14 @@ def dataset_ingest_task(name: DatasetName, path: str, user_id: int | None = None
 
 @celery_app.task
 def dataset_generate_task(
-    name: DatasetName, params: dict | None = None, user_id: int | None = None
+    name: DatasetName,
+    params: dict | None = None,
+    user_id: int | None = None,
+    *,
+    provider: str | None = None,
+    profile: str | None = None,
+    api_base: str | None = None,
+    model: str | None = None,
 ) -> dict:
     """Run the post-KG pipeline for a persisted dataset."""
     client = get_redis_client()
@@ -302,8 +313,19 @@ def dataset_generate_task(
         all_args.update(params)
         client.hset(key, "generation_params", json.dumps(all_args))
     opt_dict = asdict(options) if is_dataclass(options) else {}
+    if provider or profile or api_base or model:
+        ds.configure_llm_service(
+            provider=provider or "vllm",
+            profile=profile,
+            api_base=api_base,
+            model=model,
+        )
     try:
         ds.run_post_kg_pipeline(redis_client=client, **opt_dict, **params)
+        try:
+            ds._enforce_policy([1])
+        except Exception:
+            logger.exception("Invariant enforcement failed")
         end_ts = datetime.now(timezone.utc).isoformat()
         client.hset(key, "generated_version", json.dumps(len(ds.versions)))
         client.hset(key, "generate_finish", end_ts)
@@ -335,6 +357,10 @@ def dataset_cleanup_task(name: str, params: dict | None = None, user_id: int | N
     try:
         removed, cleaned = ds.cleanup_graph(**params)
         _update_status(client, key, TaskStatus.CLEANUP, 0.5)
+        try:
+            ds.monitor_and_remediate([1])
+        except Exception:
+            logger.exception("Policy remediation failed")
 
         ts = datetime.now(timezone.utc).isoformat()
         client.hset(
@@ -767,7 +793,8 @@ def dataset_extract_facts_task(
     ds.redis_client = client
     llm_client = None
     if provider or profile:
-        llm_client = LLMClient(provider=provider, profile=profile)
+        ds.configure_llm_service(provider=provider or "vllm", profile=profile)
+        llm_client = ds.llm_service.client
     key = f"dataset:{name}:progress"
     _update_status(client, key, TaskStatus.EXTRACTING_FACTS, 0.0)
     try:

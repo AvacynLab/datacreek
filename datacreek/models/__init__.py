@@ -1,5 +1,6 @@
 __all__ = [
     "LLMClient",
+    "LLMService",
     "QAPair",
     "COTExample",
     "QAGenerationResult",
@@ -20,6 +21,10 @@ def __getattr__(name: str):
 
     if name == "LLMClient":
         from .llm_client import LLMClient as cls
+
+        return cls
+    if name == "LLMService":
+        from .llm_service import LLMService as cls
 
         return cls
     if name == "QAPair":

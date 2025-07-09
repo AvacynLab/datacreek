@@ -109,13 +109,23 @@ __all__: list[str] = [
     "quality_layer",
     "fractal_layer",
     "embedding_layer",
+    "hypergraph_layer",
     "generation_layer",
+    "generation_layer_async",
     "compression_layer",
     "topological_perception_layer",
     "topological_signature_hash",
     "information_layer",
     "export_layer",
     "orchestrator",
+    "orchestrator_async",
+    "InvariantPolicy",
+    "monitor_after",
+    "start_policy_monitor",
+    "stop_policy_monitor",
+    "start_policy_monitor_thread",
+    "stop_policy_monitor_thread",
+    "LLMService",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -390,10 +400,18 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_embedding_layer
+    if name == "hypergraph_layer":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_hypergraph_layer
     if name == "generation_layer":
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_generation_layer
+    if name == "generation_layer_async":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_generation_layer_async
     if name == "topological_perception_layer":
         from .core.dataset import DatasetBuilder
 
@@ -418,6 +436,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_orchestrator
+    if name == "orchestrator_async":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.run_orchestrator_async
     if name == "poincare_embedding":
         from .analysis.fractal import poincare_embedding as _peb
 
@@ -582,6 +604,30 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_ingestion_layer
+    if name == "InvariantPolicy":
+        from .core.dataset import InvariantPolicy as _IP
+
+        return _IP
+    if name == "monitor_after":
+        from .core.dataset import monitor_after as _ma
+
+        return _ma
+    if name == "start_policy_monitor":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.start_policy_monitor
+    if name == "stop_policy_monitor":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.stop_policy_monitor
+    if name == "start_policy_monitor_thread":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.start_policy_monitor_thread
+    if name == "stop_policy_monitor_thread":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.stop_policy_monitor_thread
     if name in {"detect_automorphisms", "quotient_by_symmetry", "automorphism_group_order"}:
         from .core.dataset import DatasetBuilder as _DB
 
