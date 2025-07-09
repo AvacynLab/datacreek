@@ -62,9 +62,7 @@ class Atom:
     id: str
     lang: str | None = None
     media: str | None = None
-    timestamp: datetime = field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -2466,13 +2464,9 @@ class DatasetBuilder:
 
         loss = self.graph_information_bottleneck(labels, beta=beta)
 
-        mdl_before = mdl_description_length(
-            self.graph.graph.to_undirected(), motifs
-        )
+        mdl_before = mdl_description_length(self.graph.graph.to_undirected(), motifs)
         selected = self.select_mdl_motifs(motifs)
-        mdl_after = mdl_description_length(
-            self.graph.graph.to_undirected(), selected
-        )
+        mdl_after = mdl_description_length(self.graph.graph.to_undirected(), selected)
 
         self._record_event(
             "information_layer",
@@ -2645,9 +2639,7 @@ class DatasetBuilder:
             ib_beta=ib_beta,
         )
 
-        qa_pairs = [
-            {"question": r["prompt"], "answer": ""} for r in records
-        ]
+        qa_pairs = [{"question": r["prompt"], "answer": ""} for r in records]
 
         from ..utils.format_converter import to_alpaca, to_chatml, to_jsonl
 
@@ -3898,7 +3890,21 @@ class DatasetBuilder:
         self.compute_graph_embeddings(dimensions=4, walk_length=4, num_walks=5, seed=0)
 
         target = self.graph.graph.to_undirected()
-        self.run_topological_perception_layer(target, [1], loops=1, epsilon=0.0)
+        try:
+            from ..analysis import fractal as _fr
+
+            if _fr.gd is not None:
+                self.run_topological_perception_layer(target, [1], loops=1, epsilon=0.0)
+            else:  # pragma: no cover - optional dependency missing
+                self._record_event(
+                    "topological_perception_layer",
+                    "Skipped - gudhi unavailable",
+                )
+        except Exception:  # pragma: no cover - unexpected failure
+            self._record_event(
+                "topological_perception_layer",
+                "Failed - exception raised",
+            )
 
         labels = {n: i % 2 for i, n in enumerate(self.graph.graph.nodes)}
         self.run_information_layer(labels, [], beta=1.0)

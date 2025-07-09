@@ -4,13 +4,13 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
-from datetime import datetime, timezone
 
 try:
     from neo4j import Driver, GraphDatabase
