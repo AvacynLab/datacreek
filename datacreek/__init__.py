@@ -131,13 +131,13 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         spectral_entropy,
         spectral_gap,
     )
-    from .analysis.hypergraph import hyper_sagnn_embeddings
     from .analysis.generation import (
         generate_graph_rnn_like,
         generate_graph_rnn_sequential,
         generate_graph_rnn_stateful,
         generate_netgan_like,
     )
+    from .analysis.hypergraph import hyper_sagnn_embeddings
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
     from .core.ingest import ingest_into_dataset

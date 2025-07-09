@@ -1,6 +1,11 @@
 import networkx as nx
-from datacreek.analysis.symmetry import automorphisms, automorphism_orbits, quotient_graph
-from datacreek.analysis.symmetry import automorphism_group_order
+
+from datacreek.analysis.symmetry import (
+    automorphism_group_order,
+    automorphism_orbits,
+    automorphisms,
+    quotient_graph,
+)
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 
@@ -32,4 +37,3 @@ def test_dataset_symmetry_wrappers():
     q, mapping = ds.quotient_by_symmetry(max_count=1)
     assert q.number_of_nodes() <= ds.graph.graph.number_of_nodes()
     assert mapping
-

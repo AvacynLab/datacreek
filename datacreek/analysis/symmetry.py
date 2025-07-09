@@ -1,6 +1,7 @@
-import networkx as nx
 from itertools import islice
-from typing import List, Dict, Set, Iterable, Tuple
+from typing import Dict, Iterable, List, Set, Tuple
+
+import networkx as nx
 
 
 def automorphisms(graph: nx.Graph, max_count: int = 10) -> List[Dict[object, object]]:

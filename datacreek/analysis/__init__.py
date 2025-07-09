@@ -91,13 +91,16 @@ def __getattr__(name: str):
 
         return _hs
     if name in {"mdl_description_length", "select_mdl_motifs"}:
-        from .information import (
-            mdl_description_length as _mdl_desc,
-            select_mdl_motifs as _mdl_sel,
-        )
+        from .information import mdl_description_length as _mdl_desc
+        from .information import select_mdl_motifs as _mdl_sel
 
         return _mdl_desc if name == "mdl_description_length" else _mdl_sel
-    if name in {"automorphisms", "automorphism_orbits", "quotient_graph", "automorphism_group_order"}:
+    if name in {
+        "automorphisms",
+        "automorphism_orbits",
+        "quotient_graph",
+        "automorphism_group_order",
+    }:
         from . import symmetry as _s
 
         return getattr(_s, name)

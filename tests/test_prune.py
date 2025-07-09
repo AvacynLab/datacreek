@@ -1,7 +1,7 @@
+from datacreek.analysis.fractal import fractal_net_prune
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.pipelines import DatasetType
-from datacreek.analysis.fractal import fractal_net_prune
 
 
 def test_prune_sources_kg():

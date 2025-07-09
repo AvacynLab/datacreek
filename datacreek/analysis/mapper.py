@@ -1,5 +1,6 @@
-import networkx as nx
 from typing import Iterable, List, Set, Tuple
+
+import networkx as nx
 
 
 def mapper_cover(graph: nx.Graph, radius: int = 1) -> List[Set[object]]:

@@ -35,8 +35,6 @@ def graph_information_bottleneck(
 
     from sklearn.linear_model import LogisticRegression
 
-    from sklearn.linear_model import LogisticRegression
-
     model = LogisticRegression(max_iter=1000, n_jobs=1)
     model.fit(X, y)
     probs = model.predict_proba(X)
@@ -87,9 +85,11 @@ def prototype_subgraph(
     sub = graph.subgraph(neighborhood.keys()).copy()
     return sub
 
+
 import math
-import networkx as nx
 from typing import Iterable, List
+
+import networkx as nx
 
 
 def mdl_description_length(graph: nx.Graph, motifs: Iterable[nx.Graph]) -> float:
@@ -130,8 +130,6 @@ def select_mdl_motifs(graph: nx.Graph, motifs: Iterable[nx.Graph]) -> List[nx.Gr
         selected.append(motif_list.pop(best_idx))
         uncovered -= best_edges  # type: ignore[arg-type]
     return selected
-
-
 
 
 def graph_entropy(graph: nx.Graph, *, base: float = 2.0) -> float:

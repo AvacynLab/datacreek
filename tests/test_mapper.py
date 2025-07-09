@@ -1,5 +1,6 @@
 import networkx as nx
-from datacreek.analysis.mapper import mapper_nerve, inverse_mapper
+
+from datacreek.analysis.mapper import inverse_mapper, mapper_nerve
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 

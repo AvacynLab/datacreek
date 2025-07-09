@@ -1635,11 +1635,7 @@ class KnowledgeGraph:
     def embedding_entropy(self, node_attr: str = "embedding") -> float:
         """Return differential entropy of vectors stored under ``node_attr``."""
 
-        feats = {
-            n: data[node_attr]
-            for n, data in self.graph.nodes(data=True)
-            if node_attr in data
-        }
+        feats = {n: data[node_attr] for n, data in self.graph.nodes(data=True) if node_attr in data}
         if not feats:
             return 0.0
         from ..analysis.fractal import embedding_entropy as _ee
@@ -1762,7 +1758,9 @@ class KnowledgeGraph:
 
         from ..analysis.hypergraph import hyper_sagnn_embeddings as _hs
 
-        embeddings = _hs([m for _, m in hyper_list], np.stack(features), embed_dim=embed_dim, seed=seed)
+        embeddings = _hs(
+            [m for _, m in hyper_list], np.stack(features), embed_dim=embed_dim, seed=seed
+        )
 
         result: Dict[str, list[float]] = {}
         for (node, _), vec in zip(hyper_list, embeddings):

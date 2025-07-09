@@ -1604,9 +1604,7 @@ class DatasetBuilder:
     ) -> int:
         """Wrapper for :meth:`KnowledgeGraph.resolve_sheaf_obstruction`."""
 
-        val = self.graph.resolve_sheaf_obstruction(
-            edge_attr=edge_attr, max_iter=max_iter
-        )
+        val = self.graph.resolve_sheaf_obstruction(edge_attr=edge_attr, max_iter=max_iter)
         self._record_event(
             "resolve_sheaf_obstruction",
             "Sheaf obstruction resolved",
