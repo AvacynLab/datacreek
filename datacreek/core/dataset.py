@@ -121,6 +121,13 @@ class DatasetBuilder:
     # background thread running the policy monitor
     _policy_thread: threading.Thread | None = field(default=None, repr=False, compare=False)
 
+    def __del__(self) -> None:
+        """Ensure background monitoring is terminated when the builder is collected."""
+        try:
+            self.stop_policy_monitor_thread()
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # Name validation
     # ------------------------------------------------------------------
