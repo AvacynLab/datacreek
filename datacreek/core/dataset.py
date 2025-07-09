@@ -1838,6 +1838,29 @@ class DatasetBuilder:
         )
         return sig
 
+    def topological_signature_hash(self, max_dim: int = 1) -> str:
+        """Return an MD5 digest of the graph's topological signature.
+
+        This simply forwards to
+        :meth:`KnowledgeGraph.topological_signature_hash` while logging the
+        access as an event so downstream consumers can trace when the
+        signature was computed.
+
+        Parameters
+        ----------
+        max_dim:
+            Maximum homology dimension considered when computing the
+            persistence diagrams.
+        """
+
+        h = self.graph.topological_signature_hash(max_dim=max_dim)
+        self._record_event(
+            "topological_signature_hash",
+            "Topological signature hashed",
+            max_dim=max_dim,
+        )
+        return h
+
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Wrapper for :meth:`KnowledgeGraph.fractalize_level`."""
 
@@ -2643,15 +2666,18 @@ class DatasetBuilder:
 
         from ..utils.format_converter import to_alpaca, to_chatml, to_jsonl
 
-        dispatch = {
-            "alpaca": to_alpaca,
-            "chatml": to_chatml,
-            "jsonl": to_jsonl,
-        }
-        if fmt not in dispatch:
-            raise ValueError(f"unknown format: {fmt}")
+        if fmt == "jsonl":
+            # retain metadata for full traceability
+            formatted = to_jsonl(records)
+        else:
+            dispatch = {
+                "alpaca": to_alpaca,
+                "chatml": to_chatml,
+            }
+            if fmt not in dispatch:
+                raise ValueError(f"unknown format: {fmt}")
 
-        formatted = dispatch[fmt](qa_pairs)
+            formatted = dispatch[fmt](qa_pairs)
 
         self._record_event(
             "export_layer",
@@ -3654,6 +3680,10 @@ class DatasetBuilder:
     ) -> List[Dict[str, Any]]:
         """Return prompt records with fractal and perception metadata.
 
+        Each entry includes the MD5 digest of the topological signature
+        obtained via :meth:`KnowledgeGraph.topological_signature_hash` so that
+        exported prompts can be traced back to a specific graph state.
+
         Parameters
         ----------
         auto_fractal:
@@ -3684,7 +3714,8 @@ class DatasetBuilder:
         commit = get_commit_hash()
 
         signature = self.graph.topological_signature(max_dim=1)
-        sig_hash = hashlib.md5(json.dumps(signature, sort_keys=True).encode()).hexdigest()
+        # call the wrapper so the event is recorded
+        sig_hash = self.topological_signature_hash(max_dim=1)
         data: List[Dict[str, Any]] = []
         for node, attrs in self.graph.graph.nodes(data=True):
             if attrs.get("type") != "chunk":

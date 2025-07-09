@@ -990,8 +990,10 @@ def test_compute_fractal_features_and_export():
     assert "git_commit" in records[0]
     assert records[0]["ib_beta"] == 0.5
     assert "mdl_gain" in records[0]
+    assert "signature_hash" in records[0]
     assert any(e.operation == "compute_fractal_features" for e in ds.events)
     assert any(e.operation == "export_prompts" for e in ds.events)
+    assert any(e.operation == "topological_signature_hash" for e in ds.events)
 
 
 def test_export_prompts_auto_fractal():
@@ -1188,6 +1190,16 @@ def test_topological_signature_wrapper():
     assert "entropy" in sig
     assert 0 in sig["diagrams"]
     assert any(e.operation == "topological_signature" for e in ds.events)
+
+
+def test_topological_signature_hash_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    h = ds.topological_signature_hash(max_dim=1)
+    assert isinstance(h, str)
+    assert len(h) == 32
+    assert any(e.operation == "topological_signature_hash" for e in ds.events)
 
 
 def test_spectral_dimension_wrapper():
@@ -1844,6 +1856,20 @@ def test_run_export_layer_wrapper():
     out = ds.run_export_layer(fmt="alpaca", radii=[1], max_levels=1, ib_beta=0.5)
     assert "instruction" in out
     assert any(e.operation == "export_layer" for e in ds.events)
+
+
+def test_run_export_layer_jsonl_with_meta():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    out = ds.run_export_layer(fmt="jsonl", radii=[1], max_levels=1, ib_beta=0.5)
+    line = out.splitlines()[0]
+    data = json.loads(line)
+    assert "fractal_level" in data
+    assert "signature_hash" in data
+    assert data["ib_beta"] == 0.5
+    assert any(e.operation == "export_layer" for e in ds.events)
+    assert any(e.operation == "topological_signature_hash" for e in ds.events)
 
 
 def test_run_generation_layer_wrapper():
