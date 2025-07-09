@@ -217,6 +217,70 @@ def graphwave_embedding(
     return {n: np.asarray(v, dtype=float) for n, v in emb.items()}
 
 
+def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
+    """Return differential entropy of GraphWave ``embeddings``.
+
+    The vectors are assumed to follow a continuous distribution approximated
+    by a multivariate Gaussian.  The entropy then reads
+
+    .. math:: H = \tfrac{1}{2}\log\bigl((2\pi e)^d \det \Sigma\bigr)
+
+    where ``d`` is the embedding dimension and ``\Sigma`` the covariance
+    matrix.
+
+    Parameters
+    ----------
+    embeddings:
+        Mapping of nodes to their embedding vectors.
+
+    Returns
+    -------
+    float
+        Estimated differential entropy.
+    """
+
+    arr = np.vstack([np.asarray(v, dtype=float) for v in embeddings.values()])
+    if arr.size == 0:
+        return 0.0
+    cov = np.cov(arr, rowvar=False)
+    d = cov.shape[0]
+    sign, logdet = np.linalg.slogdet(cov + 1e-8 * np.eye(d))
+    if sign <= 0:
+        return float("nan")
+    return 0.5 * (logdet + d * math.log(2 * math.pi * math.e))
+
+
+def embedding_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
+    """Return differential entropy for an embedding dictionary.
+
+    This is a generic variant of :func:`graphwave_entropy` that applies to any
+    set of embedding vectors. The computation assumes a multivariate Gaussian
+    distribution and uses the covariance determinant as
+
+    .. math:: H = \tfrac{1}{2}\log\bigl((2\pi e)^d \det \Sigma\bigr).
+
+    Parameters
+    ----------
+    embeddings:
+        Mapping of arbitrary keys to embedding vectors.
+
+    Returns
+    -------
+    float
+        Estimated differential entropy of the embeddings.
+    """
+
+    arr = np.vstack([np.asarray(v, dtype=float) for v in embeddings.values()])
+    if arr.size == 0:
+        return 0.0
+    cov = np.cov(arr, rowvar=False)
+    d = cov.shape[0]
+    sign, logdet = np.linalg.slogdet(cov + 1e-8 * np.eye(d))
+    if sign <= 0:
+        return float("nan")
+    return 0.5 * (logdet + d * math.log(2 * math.pi * math.e))
+
+
 def bottleneck_distance(
     g1: nx.Graph, g2: nx.Graph, dimension: int = 0, approx_epsilon: float | None = None
 ) -> float:
@@ -1108,3 +1172,36 @@ def hyperbolic_multi_curvature_reasoning(
         current = next_node
 
     return path
+
+
+def fractal_net_prune(
+    embeddings: Dict[object, Iterable[float]],
+    *,
+    tol: float = 1e-3,
+) -> Tuple[Dict[int, np.ndarray], Dict[object, int]]:
+    """Return pruned embedding centers and node mapping.
+
+    The function greedily merges embedding vectors whose Euclidean distance is
+    below ``tol``. Each node is assigned to a cluster represented by the mean
+    of its members. The returned dictionary maps cluster index to centroid
+    vector, while ``mapping`` tells which cluster each node belongs to.
+    """
+
+    centers: List[np.ndarray] = []
+    mapping: Dict[object, int] = {}
+
+    for node, vec in embeddings.items():
+        arr = np.asarray(vec, dtype=float)
+        assigned = False
+        for idx, c in enumerate(centers):
+            if np.linalg.norm(arr - c) <= tol:
+                centers[idx] = (c + arr) / 2.0
+                mapping[node] = idx
+                assigned = True
+                break
+        if not assigned:
+            centers.append(arr)
+            mapping[node] = len(centers) - 1
+
+    pruned = {i: centers[i] for i in range(len(centers))}
+    return pruned, mapping

@@ -860,6 +860,60 @@ class DatasetBuilder:
             num_points=num_points,
         )
 
+    def graphwave_entropy(self) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.graphwave_entropy`."""
+
+        val = self.graph.graphwave_entropy()
+        self._record_event("graphwave_entropy", "GraphWave entropy computed")
+        return val
+
+    def ensure_graphwave_entropy(
+        self,
+        threshold: float,
+        *,
+        scales: Iterable[float] = (0.5, 1.0),
+        num_points: int = 10,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.ensure_graphwave_entropy`."""
+
+        val = self.graph.ensure_graphwave_entropy(
+            threshold,
+            scales=scales,
+            num_points=num_points,
+        )
+        self._record_event(
+            "ensure_graphwave_entropy",
+            "GraphWave entropy enforced",
+            threshold=threshold,
+        )
+        return val
+
+    def embedding_entropy(self, node_attr: str = "embedding") -> float:
+        """Wrapper for :meth:`KnowledgeGraph.embedding_entropy`."""
+
+        val = self.graph.embedding_entropy(node_attr=node_attr)
+        self._record_event(
+            "embedding_entropy",
+            "Embedding entropy computed",
+            attribute=node_attr,
+        )
+        return val
+
+    def embedding_box_counting_dimension(
+        self, node_attr: str, radii: Iterable[float]
+    ) -> tuple[float, list[tuple[float, int]]]:
+        """Wrapper for :meth:`KnowledgeGraph.embedding_box_counting_dimension`."""
+
+        dim, counts = self.graph.embedding_box_counting_dimension(node_attr, radii)
+        self._record_event(
+            "embedding_box_counting_dimension",
+            "Embedding fractal dimension computed",
+            attribute=node_attr,
+            radii=list(radii),
+            dimension=dim,
+        )
+        return dim, counts
+
     def compute_poincare_embeddings(
         self,
         dim: int = 2,
@@ -912,6 +966,29 @@ class DatasetBuilder:
             epochs=epochs,
             learning_rate=learning_rate,
             burn_in=burn_in,
+        )
+        return result
+
+    def compute_hyper_sagnn_embeddings(
+        self,
+        *,
+        node_attr: str = "embedding",
+        edge_attr: str = "hyper_sagnn_embedding",
+        embed_dim: int | None = None,
+        seed: int | None = None,
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.compute_hyper_sagnn_embeddings`."""
+
+        result = self.graph.compute_hyper_sagnn_embeddings(
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+            embed_dim=embed_dim,
+            seed=seed,
+        )
+        self._record_event(
+            "compute_hyper_sagnn_embeddings",
+            "Hyper-SAGNN embeddings computed",
+            embed_dim=embed_dim,
         )
         return result
 
@@ -1011,6 +1088,17 @@ class DatasetBuilder:
             node2vec_q=node2vec_q,
         )
 
+    def prune_embeddings(self, *, tol: float = 1e-3) -> Dict[str, int]:
+        """Wrapper for :meth:`KnowledgeGraph.prune_embeddings`."""
+
+        mapping = self.graph.prune_embeddings(tol=tol)
+        self._record_event(
+            "prune_embeddings",
+            "Embeddings pruned via fractal Net",
+            clusters=len(set(mapping.values())),
+        )
+        return mapping
+
     def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
 
@@ -1059,6 +1147,139 @@ class DatasetBuilder:
             distortion=dist,
         )
         return dist
+
+    def detect_automorphisms(self, max_count: int = 10) -> List[Dict[str, str]]:
+        """Wrapper for :meth:`KnowledgeGraph.detect_automorphisms`."""
+
+        autos = self.graph.detect_automorphisms(max_count=max_count)
+        self._record_event(
+            "detect_automorphisms",
+            "Automorphisms detected",
+            count=len(autos),
+        )
+        return autos
+
+    def automorphism_group_order(self, max_count: int = 100) -> int:
+        """Wrapper for :meth:`KnowledgeGraph.automorphism_group_order`."""
+
+        order = self.graph.automorphism_group_order(max_count=max_count)
+        self._record_event(
+            "automorphism_group_order",
+            "Automorphism group order estimated",
+            count=order,
+        )
+        return order
+
+    def quotient_by_symmetry(self, *, max_count: int = 10) -> tuple[nx.Graph, Dict[str, int]]:
+        """Wrapper for :meth:`KnowledgeGraph.quotient_by_symmetry`."""
+
+        q, mapping = self.graph.quotient_by_symmetry(max_count=max_count)
+        self._record_event(
+            "quotient_by_symmetry",
+            "Graph quotient computed",
+            classes=len(set(mapping.values())),
+        )
+        return q, mapping
+
+    def mapper_nerve(self, radius: int) -> tuple[nx.Graph, list[set[str]]]:
+        """Wrapper for :meth:`KnowledgeGraph.mapper_nerve`."""
+
+        nerve, cover = self.graph.mapper_nerve(radius)
+        self._record_event(
+            "mapper_nerve",
+            "Mapper nerve computed",
+            radius=radius,
+            clusters=len(cover),
+        )
+        return nerve, cover
+
+    def inverse_mapper(self, nerve: nx.Graph, cover: Iterable[Iterable[str]]) -> nx.Graph:
+        """Wrapper for :meth:`KnowledgeGraph.inverse_mapper`."""
+
+        g = self.graph.inverse_mapper(nerve, cover)
+        self._record_event("inverse_mapper", "Graph reconstructed from nerve")
+        return g
+
+    # --------------------------------------------------------------
+    # Graph generation wrappers
+    # --------------------------------------------------------------
+
+    def generate_graph_rnn_like(self, num_nodes: int, num_edges: int) -> nx.Graph:
+        """Return a random graph mimicking GraphRNN output."""
+
+        g = self.graph.generate_graph_rnn_like(num_nodes, num_edges)
+        self._record_event(
+            "generate_graph_rnn_like",
+            "Random GraphRNN-like graph generated",
+            nodes=num_nodes,
+            edges=num_edges,
+        )
+        return g
+
+    def generate_graph_rnn(
+        self, num_nodes: int, num_edges: int, *, p: float = 0.5, directed: bool = False
+    ) -> nx.Graph:
+        """Return a simple sequential GraphRNN-style graph."""
+
+        g = self.graph.generate_graph_rnn(num_nodes, num_edges, p=p, directed=directed)
+        self._record_event(
+            "generate_graph_rnn",
+            "GraphRNN sequential graph generated",
+            nodes=num_nodes,
+            edges=num_edges,
+            p=p,
+            directed=directed,
+        )
+        return g
+
+    def generate_graph_rnn_stateful(
+        self,
+        num_nodes: int,
+        num_edges: int,
+        *,
+        hidden_dim: int = 8,
+        seed: int | None = None,
+    ) -> nx.DiGraph:
+        """Return a directed graph from a tiny stateful RNN generator."""
+
+        g = self.graph.generate_graph_rnn_stateful(
+            num_nodes, num_edges, hidden_dim=hidden_dim, seed=seed
+        )
+        self._record_event(
+            "generate_graph_rnn_stateful",
+            "Stateful GraphRNN graph generated",
+            nodes=num_nodes,
+            edges=num_edges,
+            hidden_dim=hidden_dim,
+        )
+        return g
+
+    def generate_graph_rnn_sequential(
+        self,
+        num_nodes: int,
+        num_edges: int,
+        *,
+        hidden_dim: int = 8,
+        seed: int | None = None,
+        directed: bool = True,
+    ) -> nx.Graph:
+        """Return a graph using a sequential RNN-style generator."""
+
+        g = self.graph.generate_graph_rnn_sequential(
+            num_nodes,
+            num_edges,
+            hidden_dim=hidden_dim,
+            seed=seed,
+            directed=directed,
+        )
+        self._record_event(
+            "generate_graph_rnn_sequential",
+            "Sequential GraphRNN graph generated",
+            nodes=num_nodes,
+            edges=num_edges,
+            directed=directed,
+        )
+        return g
 
     def optimize_topology_constrained(
         self,
@@ -1367,6 +1588,30 @@ class DatasetBuilder:
         )
         return result
 
+    def sheaf_cohomology(self, *, edge_attr: str = "sheaf_sign", tol: float = 1e-5) -> int:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_cohomology`."""
+
+        val = self.graph.sheaf_cohomology(edge_attr=edge_attr, tol=tol)
+        self._record_event(
+            "sheaf_cohomology",
+            "Sheaf cohomology computed",
+            h1=val,
+        )
+        return val
+
+    def resolve_sheaf_obstruction(
+        self, *, edge_attr: str = "sheaf_sign", max_iter: int = 10
+    ) -> int:
+        """Wrapper for :meth:`KnowledgeGraph.resolve_sheaf_obstruction`."""
+
+        val = self.graph.resolve_sheaf_obstruction(edge_attr=edge_attr, max_iter=max_iter)
+        self._record_event(
+            "resolve_sheaf_obstruction",
+            "Sheaf obstruction resolved",
+            h1=val,
+        )
+        return val
+
     def path_to_text(self, path: Iterable) -> str:
         """Wrapper for :meth:`KnowledgeGraph.path_to_text`."""
 
@@ -1426,6 +1671,25 @@ class DatasetBuilder:
         )
         return loss
 
+    def graph_entropy(self, *, base: float = 2.0) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.graph_entropy`."""
+
+        val = self.graph.graph_entropy(base=base)
+        self._record_event("graph_entropy", "Graph entropy computed", base=base)
+        return val
+
+    def subgraph_entropy(self, nodes: Iterable, *, base: float = 2.0) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.subgraph_entropy`."""
+
+        val = self.graph.subgraph_entropy(nodes, base=base)
+        self._record_event(
+            "subgraph_entropy",
+            "Subgraph entropy computed",
+            base=base,
+            nodes=list(nodes),
+        )
+        return val
+
     def prototype_subgraph(
         self,
         labels: Dict[str, int],
@@ -1443,6 +1707,17 @@ class DatasetBuilder:
             radius=radius,
         )
         return sub
+
+    def select_mdl_motifs(self, motifs: Iterable[nx.Graph]) -> List[nx.Graph]:
+        """Wrapper for :meth:`KnowledgeGraph.select_mdl_motifs`."""
+
+        selected = self.graph.select_mdl_motifs(motifs)
+        self._record_event(
+            "select_mdl_motifs",
+            "Motifs selected via MDL",
+            count=len(selected),
+        )
+        return selected
 
     def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
         """Wrapper for :meth:`KnowledgeGraph.laplacian_spectrum`."""
@@ -2741,6 +3016,8 @@ class DatasetBuilder:
         auto_fractal: bool = True,
         radii: Iterable[int] = (1, 2, 3),
         max_levels: int = 5,
+        mdl_radii: Iterable[int] | None = None,
+        ib_beta: float = 1.0,
     ) -> List[Dict[str, Any]]:
         """Return prompt records with fractal and perception metadata.
 
@@ -2763,6 +3040,16 @@ class DatasetBuilder:
             # annotate nodes in-place so the metadata is available for export
             self.annotate_mdl_levels(radii, max_levels=max_levels)
 
+        mdl_radii = tuple(mdl_radii or radii)
+        _, counts = self.graph.box_counting_dimension(mdl_radii)
+        from ..analysis.fractal import mdl_value
+
+        mdl_gain = mdl_value(counts)
+
+        from ..utils.gitinfo import get_commit_hash
+
+        commit = get_commit_hash()
+
         signature = self.graph.topological_signature(max_dim=1)
         sig_hash = hashlib.md5(json.dumps(signature, sort_keys=True).encode()).hexdigest()
         data: List[Dict[str, Any]] = []
@@ -2777,9 +3064,18 @@ class DatasetBuilder:
                 "topo_signature": signature,
                 "signature_hash": sig_hash,
                 "prompt_hash": hashlib.md5(prompt_text.encode()).hexdigest(),
+                "git_commit": commit,
+                "mdl_gain": mdl_gain,
+                "ib_beta": ib_beta,
             }
             data.append(record)
-        self._record_event("export_prompts", "Prompt data exported")
+        self._record_event(
+            "export_prompts",
+            "Prompt data exported",
+            commit=commit,
+            mdl_gain=mdl_gain,
+            ib_beta=ib_beta,
+        )
         return data
 
     @persist_after

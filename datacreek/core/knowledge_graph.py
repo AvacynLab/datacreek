@@ -1598,6 +1598,50 @@ class KnowledgeGraph:
         for node, vec in emb.items():
             self.graph.nodes[node]["graphwave_embedding"] = vec.tolist()
 
+    def graphwave_entropy(self) -> float:
+        """Return differential entropy of stored GraphWave embeddings."""
+
+        feats = {
+            n: data["graphwave_embedding"]
+            for n, data in self.graph.nodes(data=True)
+            if "graphwave_embedding" in data
+        }
+        if not feats:
+            return 0.0
+        from ..analysis.fractal import graphwave_entropy as _ge
+
+        return _ge(feats)
+
+    def ensure_graphwave_entropy(
+        self,
+        threshold: float,
+        *,
+        scales: Iterable[float] = (0.5, 1.0),
+        num_points: int = 10,
+    ) -> float:
+        """Ensure GraphWave entropy above ``threshold``.
+
+        If the current entropy is below ``threshold``, embeddings are recomputed
+        with slight random noise added to ``scales``.
+        """
+
+        H = self.graphwave_entropy()
+        if H < threshold:
+            noisy = [float(s) + np.random.uniform(-0.1, 0.1) for s in scales]
+            self.compute_graphwave_embeddings(noisy, num_points)
+            H = self.graphwave_entropy()
+        return H
+
+    def embedding_entropy(self, node_attr: str = "embedding") -> float:
+        """Return differential entropy of vectors stored under ``node_attr``."""
+
+        feats = {n: data[node_attr] for n, data in self.graph.nodes(data=True) if node_attr in data}
+        if not feats:
+            return 0.0
+        from ..analysis.fractal import embedding_entropy as _ee
+
+        return _ee(feats)
+
     def compute_poincare_embeddings(
         self,
         dim: int = 2,
@@ -1677,6 +1721,53 @@ class KnowledgeGraph:
                 self.graph.nodes[node]["hyperbolic_embedding"] = vec.tolist()
                 results[node] = vec.tolist()
         return results
+
+    def compute_hyper_sagnn_embeddings(
+        self,
+        *,
+        node_attr: str = "embedding",
+        edge_attr: str = "hyper_sagnn_embedding",
+        embed_dim: int | None = None,
+        seed: int | None = None,
+    ) -> Dict[str, list[float]]:
+        """Compute Hyper-SAGNN-like embeddings for hyperedges.
+
+        Hyperedges are nodes with ``type`` ``"hyperedge"`` connected to their
+        members. Node features are read from ``node_attr`` and combined using a
+        lightweight self-attention mechanism similar to Hyper-SAGNN.
+        """
+
+        import numpy as np
+
+        index: Dict[str, int] = {}
+        features: List[np.ndarray] = []
+        for node, data in self.graph.nodes(data=True):
+            if node_attr in data:
+                index[node] = len(features)
+                features.append(np.asarray(data[node_attr], dtype=float))
+
+        if not features:
+            raise ValueError("no node features found")
+
+        hyper_list: List[tuple[str, List[int]]] = []
+        for node, data in self.graph.nodes(data=True):
+            if data.get("type") == "hyperedge":
+                members = [index[v] for _, v in self.graph.edges(node) if v in index]
+                if members:
+                    hyper_list.append((node, members))
+
+        from ..analysis.hypergraph import hyper_sagnn_embeddings as _hs
+
+        embeddings = _hs(
+            [m for _, m in hyper_list], np.stack(features), embed_dim=embed_dim, seed=seed
+        )
+
+        result: Dict[str, list[float]] = {}
+        for (node, _), vec in zip(hyper_list, embeddings):
+            self.graph.nodes[node][edge_attr] = vec.astype(float).tolist()
+            result[node] = vec.astype(float).tolist()
+
+        return result
 
     def compute_graphsage_embeddings(
         self,
@@ -1868,6 +1959,23 @@ class KnowledgeGraph:
             burn_in=burn_in,
         )
 
+    def prune_embeddings(self, *, tol: float = 1e-3) -> Dict[str, int]:
+        """Cluster embeddings using :func:`fractal_net_prune`."""
+
+        from ..analysis.fractal import fractal_net_prune as _fp
+
+        feats = {
+            n: np.asarray(data.get("embedding"), dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if "embedding" in data
+        }
+        if not feats:
+            return {}
+        _, mapping = _fp(feats, tol=tol)
+        for node, idx in mapping.items():
+            self.graph.nodes[node]["pruned_class"] = int(idx)
+        return {str(n): int(c) for n, c in mapping.items()}
+
     # ------------------------------------------------------------------
     # Fractal and topological metrics
     # ------------------------------------------------------------------
@@ -1969,6 +2077,22 @@ class KnowledgeGraph:
         )
         return {str(n): vec.tolist() for n, vec in result.items()}
 
+    def sheaf_cohomology(self, edge_attr: str = "sheaf_sign", tol: float = 1e-5) -> int:
+        """Return dimension of :math:`H^1` for the sheaf defined by ``edge_attr``."""
+
+        from ..analysis.sheaf import sheaf_first_cohomology as _sfc
+
+        return _sfc(self.graph, edge_attr=edge_attr, tol=tol)
+
+    def resolve_sheaf_obstruction(
+        self, *, edge_attr: str = "sheaf_sign", max_iter: int = 10
+    ) -> int:
+        """Resolve cohomological obstructions by flipping edge signs."""
+
+        from ..analysis.sheaf import resolve_sheaf_obstruction as _rso
+
+        return _rso(self.graph, edge_attr=edge_attr, max_iter=max_iter)
+
     def path_to_text(self, path: Iterable) -> str:
         """Return a textual description for ``path`` using node attributes."""
 
@@ -2040,6 +2164,20 @@ class KnowledgeGraph:
         }
         return _gib(feats, labels, beta=beta)
 
+    def graph_entropy(self, *, base: float = 2.0) -> float:
+        """Return Shannon entropy of the degree distribution."""
+
+        from ..analysis.information import graph_entropy as _ge
+
+        return _ge(self.graph.to_undirected(), base=base)
+
+    def subgraph_entropy(self, nodes: Iterable, *, base: float = 2.0) -> float:
+        """Return entropy of node degrees restricted to ``nodes``."""
+
+        from ..analysis.information import subgraph_entropy as _se
+
+        return _se(self.graph.to_undirected(), nodes, base=base)
+
     def prototype_subgraph(
         self,
         labels: Dict[str, int],
@@ -2058,6 +2196,13 @@ class KnowledgeGraph:
         }
         sub = _ps(self.graph.to_undirected(), feats, labels, class_id, radius=radius)
         return sub
+
+    def select_mdl_motifs(self, motifs: Iterable[nx.Graph]) -> List[nx.Graph]:
+        """Return motifs that reduce description length."""
+
+        from ..analysis.information import select_mdl_motifs as _sel
+
+        return _sel(self.graph.to_undirected(), motifs)
 
     def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:
         """Return the Laplacian eigenvalues of the graph."""
@@ -2327,6 +2472,78 @@ class KnowledgeGraph:
         emb_dim, _ = embedding_box_counting_dimension(coords, radii)
         return abs(graph_dim - emb_dim)
 
+    def embedding_box_counting_dimension(
+        self, node_attr: str, radii: Iterable[float]
+    ) -> tuple[float, list[tuple[float, int]]]:
+        """Return fractal dimension of stored embeddings.
+
+        Parameters
+        ----------
+        node_attr:
+            Node attribute containing embedding vectors.
+        radii:
+            Iterable of ball radii used for the box counting.
+
+        Returns
+        -------
+        tuple
+            ``(dimension, counts)`` where ``counts`` records the number of
+            covering balls for each radius.
+        """
+
+        coords = {
+            n: self.graph.nodes[n].get(node_attr)
+            for n in self.graph.nodes
+            if self.graph.nodes[n].get(node_attr) is not None
+        }
+        if not coords:
+            return float("nan"), []
+        from ..analysis.fractal import embedding_box_counting_dimension as _ebcd
+
+        return _ebcd(coords, radii)
+
+    def detect_automorphisms(self, max_count: int = 10) -> List[Dict[str, str]]:
+        """Return up to ``max_count`` automorphisms as node mappings."""
+
+        from ..analysis.symmetry import automorphisms as _auto
+
+        autos = _auto(self.graph.to_undirected(), max_count=max_count)
+        return [{str(k): str(v) for k, v in a.items()} for a in autos]
+
+    def automorphism_group_order(self, max_count: int = 100) -> int:
+        """Return the number of automorphisms explored."""
+
+        from ..analysis.symmetry import automorphism_group_order as _ago
+
+        return _ago(self.graph.to_undirected(), max_count=max_count)
+
+    def quotient_by_symmetry(self, *, max_count: int = 10) -> tuple[nx.Graph, Dict[str, int]]:
+        """Return quotient graph collapsing automorphism orbits."""
+
+        from ..analysis.symmetry import automorphism_orbits, quotient_graph
+
+        orbits = automorphism_orbits(self.graph.to_undirected(), max_count=max_count)
+        q, mapping = quotient_graph(self.graph.to_undirected(), orbits)
+        str_map = {str(n): int(m) for n, m in mapping.items()}
+        return q, str_map
+
+    def mapper_nerve(self, radius: int) -> tuple[nx.Graph, list[set[str]]]:
+        """Return the Mapper nerve of the graph with balls of ``radius``."""
+
+        from ..analysis.mapper import mapper_nerve as _mn
+
+        nerve, cover = _mn(self.graph.to_undirected(), radius)
+        str_cover = [{str(n) for n in c} for c in cover]
+        return nerve, str_cover
+
+    def inverse_mapper(self, nerve: nx.Graph, cover: Iterable[Iterable[str]]) -> nx.Graph:
+        """Reconstruct a graph from ``nerve`` and ``cover`` sets."""
+
+        from ..analysis.mapper import inverse_mapper as _im
+
+        sets = [{n for n in c} for c in cover]
+        return _im(nerve, sets)
+
     def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:
         """Return a coarse-grained graph via box covering."""
 
@@ -2415,6 +2632,61 @@ class KnowledgeGraph:
                 if box in mapping:
                     current_map[node] = mapping[box]
                     self.graph.nodes[node]["fractal_level"] = level
+
+    # ------------------------------------------------------------------
+    # Graph generation utilities
+    # ------------------------------------------------------------------
+
+    def generate_graph_rnn_like(self, num_nodes: int, num_edges: int) -> nx.Graph:
+        """Return a random graph mimicking GraphRNN output."""
+
+        from ..analysis.generation import generate_graph_rnn_like as _gg
+
+        return _gg(num_nodes, num_edges)
+
+    def generate_graph_rnn(
+        self, num_nodes: int, num_edges: int, *, p: float = 0.5, directed: bool = False
+    ) -> nx.Graph:
+        """Return a simple sequential GraphRNN-style graph."""
+
+        from ..analysis.generation import generate_graph_rnn as _gr
+
+        return _gr(num_nodes, num_edges, p=p, directed=directed)
+
+    def generate_graph_rnn_stateful(
+        self,
+        num_nodes: int,
+        num_edges: int,
+        *,
+        hidden_dim: int = 8,
+        seed: int | None = None,
+    ) -> nx.DiGraph:
+        """Return a directed graph from a tiny stateful RNN generator."""
+
+        from ..analysis.generation import generate_graph_rnn_stateful as _grs
+
+        return _grs(num_nodes, num_edges, hidden_dim=hidden_dim, seed=seed)
+
+    def generate_graph_rnn_sequential(
+        self,
+        num_nodes: int,
+        num_edges: int,
+        *,
+        hidden_dim: int = 8,
+        seed: int | None = None,
+        directed: bool = True,
+    ) -> nx.Graph:
+        """Return a graph using a sequential RNN-style generator."""
+
+        from ..analysis.generation import generate_graph_rnn_sequential as _grsq
+
+        return _grsq(
+            num_nodes,
+            num_edges,
+            hidden_dim=hidden_dim,
+            seed=seed,
+            directed=directed,
+        )
 
     # ------------------------------------------------------------------
     # Quality checks inspired by Neo4j GDS

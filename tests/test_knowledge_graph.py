@@ -582,6 +582,53 @@ def test_compute_graphwave_embeddings():
     assert len(vec) == 8
 
 
+def test_graphwave_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(3):
+        kg.add_chunk("d", f"c{i}", "txt")
+    for i in range(2):
+        kg.add_entity(f"e{i}", "E")
+    kg.link_entity("c0", "e0")
+    kg.link_entity("c1", "e1")
+    kg.compute_graphwave_embeddings(scales=[0.5], num_points=4)
+    h = kg.graphwave_entropy()
+    assert isinstance(h, float)
+
+
+def test_ensure_graphwave_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    kg.add_entity("e1", "A")
+    kg.link_entity("c1", "e1")
+    kg.compute_graphwave_embeddings(scales=[0.5], num_points=4)
+    val = kg.ensure_graphwave_entropy(0.1, scales=[0.5], num_points=4)
+    assert isinstance(val, float)
+
+
+def test_embedding_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(3):
+        kg.add_chunk("d", f"c{i}", "txt")
+    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, seed=0)
+    ent = kg.embedding_entropy()
+    assert isinstance(ent, float)
+
+
+def test_embedding_box_counting_dimension_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(4):
+        kg.add_chunk("d", f"c{i}", "txt")
+    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, seed=0)
+    dim, counts = kg.embedding_box_counting_dimension("embedding", [0.5, 1.0])
+    assert isinstance(dim, float)
+    assert counts
+
+
 def test_compute_poincare_embeddings():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -730,6 +777,23 @@ def test_sheaf_neural_network_method():
     feats = {"a": [1.0], "b": [0.0]}
     out = kg.sheaf_neural_network(feats, layers=2, alpha=0.5)
     assert set(out) == {"a", "b"}
+
+
+def test_sheaf_cohomology_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=1)
+    h1 = kg.sheaf_cohomology()
+    assert isinstance(h1, int) and h1 >= 0
+
+
+def test_resolve_sheaf_obstruction_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=1)
+    kg.graph.add_edge("b", "c", sheaf_sign=1)
+    kg.graph.add_edge("c", "a", sheaf_sign=1)
+    before = kg.sheaf_cohomology()
+    after = kg.resolve_sheaf_obstruction(max_iter=5)
+    assert after <= before
 
 
 def test_path_to_text_method():
@@ -1227,6 +1291,26 @@ def test_graph_information_bottleneck():
     assert loss > 0
 
 
+def test_graph_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(3):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+    h = kg.graph_entropy()
+    assert h >= 0
+
+
+def test_subgraph_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(4):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+    kg.graph.add_edge("a0", "a1")
+    kg.graph.add_edge("a1", "a2")
+    val = kg.subgraph_entropy(["a0", "a1", "a2"])
+    assert val >= 0
+
+
 def test_prototype_subgraph():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -1314,3 +1398,11 @@ def test_cypher_ann_query_method():
 
     res = kg.cypher_ann_query(_Drv(), "hello", "MATCH (n) WHERE id(n) IN $ids RETURN id(n) AS id")
     assert res and res[0]["id"] == 0
+
+
+def test_select_mdl_motifs_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edges_from([("a", "b"), ("b", "c"), ("a", "c"), ("c", "d")])
+    motif = nx.Graph([("a", "b"), ("b", "c"), ("a", "c")])
+    selected = kg.select_mdl_motifs([motif])
+    assert selected and isinstance(selected[0], nx.Graph)
