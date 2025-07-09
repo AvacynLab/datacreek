@@ -87,3 +87,65 @@ def sheaf_neural_network(
         for n in out:
             out[n] = np.maximum(out[n], 0.0)
     return out
+
+
+def sheaf_first_cohomology(
+    graph: nx.Graph, *, edge_attr: str = "sheaf_sign", tol: float = 1e-5
+) -> int:
+    """Return the dimension of the first sheaf cohomology group ``H^1``.
+
+    The kernel of the sheaf Laplacian approximates the space of harmonic
+    1-cochains. We count eigenvalues below ``tol`` as zero modes.
+    """
+
+    L = sheaf_laplacian(graph, edge_attr=edge_attr)
+    vals = np.linalg.eigvalsh(L)
+    return int(np.sum(vals < tol))
+
+
+def resolve_sheaf_obstruction(
+    graph: nx.Graph,
+    *,
+    edge_attr: str = "sheaf_sign",
+    max_iter: int = 10,
+) -> int:
+    """Try to reduce :math:`H^1` by flipping edge signs.
+
+    The Huang-Chen (2024) corrector is approximated by greedily toggling
+    edge signs whenever it decreases the first cohomology dimension.
+
+    Parameters
+    ----------
+    graph:
+        Input graph whose edges may carry ``edge_attr`` signs.
+    edge_attr:
+        Name of the edge attribute storing the sheaf sign (``+1`` or ``-1``).
+    max_iter:
+        Maximum number of sign flips to attempt.
+
+    Returns
+    -------
+    int
+        The resulting dimension of :math:`H^1` after corrections.
+    """
+
+    h1 = sheaf_first_cohomology(graph, edge_attr=edge_attr, tol=1e-5)
+    for _ in range(max_iter):
+        if h1 == 0:
+            break
+        improved = False
+        for u, v, data in graph.edges(data=True):
+            current = data.get(edge_attr, 1.0)
+            candidate = -float(current)
+            if candidate == current:
+                continue
+            data[edge_attr] = candidate
+            new_h1 = sheaf_first_cohomology(graph, edge_attr=edge_attr, tol=1e-5)
+            if new_h1 <= h1:
+                h1 = new_h1
+                improved = True
+                break
+            data[edge_attr] = current
+        if not improved:
+            break
+    return h1

@@ -16,6 +16,7 @@ from .config import (
     merge_configs,
 )
 from .dataset_cleanup import deduplicate_pairs
+from .gitinfo import get_commit_hash
 from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
 from .llm_processing import (
     convert_to_conversation_format,
@@ -67,6 +68,7 @@ __all__ = [
     "convert_to_conversation_format",
     "qa_pairs_to_records",
     "deduplicate_pairs",
+    "get_commit_hash",
     "extract_facts",
     "extract_entities",
     "decode_hash",

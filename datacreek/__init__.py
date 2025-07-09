@@ -54,10 +54,14 @@ __all__: list[str] = [
     "generate_graph_rnn_sequential",
     "generate_netgan_like",
     "graph_information_bottleneck",
+    "graph_entropy",
+    "subgraph_entropy",
     "prototype_subgraph",
     "sheaf_laplacian",
     "sheaf_convolution",
     "sheaf_neural_network",
+    "sheaf_first_cohomology",
+    "resolve_sheaf_obstruction",
     "fractal_information_density",
     "diversification_score",
     "hyperbolic_neighbors",
@@ -85,6 +89,20 @@ __all__: list[str] = [
     "validate_output",
     "betti_number",
     "coverage_stats",
+    "mapper_nerve",
+    "inverse_mapper",
+    "fractal_net_prune",
+    "graphwave_entropy",
+    "embedding_entropy",
+    "embedding_box_counting_dimension",
+    "ensure_graphwave_entropy",
+    "hyper_sagnn_embeddings",
+    "select_mdl_motifs",
+    "mdl_description_length",
+    "detect_automorphisms",
+    "automorphism_group_order",
+    "quotient_by_symmetry",
+    "prune_embeddings",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -113,6 +131,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
         spectral_entropy,
         spectral_gap,
     )
+    from .analysis.hypergraph import hyper_sagnn_embeddings
     from .analysis.generation import (
         generate_graph_rnn_like,
         generate_graph_rnn_sequential,
@@ -294,6 +313,14 @@ def __getattr__(name: str):
         from .analysis.information import graph_information_bottleneck as _gib
 
         return _gib
+    if name == "graph_entropy":
+        from .analysis.information import graph_entropy as _ge
+
+        return _ge
+    if name == "subgraph_entropy":
+        from .analysis.information import subgraph_entropy as _se
+
+        return _se
     if name == "prototype_subgraph":
         from .analysis.information import prototype_subgraph as _ps
 
@@ -310,6 +337,14 @@ def __getattr__(name: str):
         from .analysis.sheaf import sheaf_neural_network as _snn
 
         return _snn
+    if name == "sheaf_first_cohomology":
+        from .analysis.sheaf import sheaf_first_cohomology as _sfc
+
+        return _sfc
+    if name == "resolve_sheaf_obstruction":
+        from .analysis.sheaf import resolve_sheaf_obstruction as _rso
+
+        return _rso
     if name == "quality_check":
         from .core.dataset import DatasetBuilder
 
@@ -430,6 +465,68 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.coverage_stats
+    if name == "mapper_nerve":
+        from .analysis.mapper import mapper_nerve as _mn
+
+        return _mn
+    if name == "inverse_mapper":
+        from .analysis.mapper import inverse_mapper as _im
+
+        return _im
+    if name == "fractal_net_prune":
+        from .analysis.fractal import fractal_net_prune as _fp
+
+        return _fp
+    if name == "graphwave_entropy":
+        from .analysis.fractal import graphwave_entropy as _ge
+
+        return _ge
+    if name == "embedding_entropy":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.embedding_entropy
+    if name == "graph_entropy":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.graph_entropy
+    if name == "subgraph_entropy":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.subgraph_entropy
+    if name == "embedding_box_counting_dimension":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.embedding_box_counting_dimension
+    if name == "ensure_graphwave_entropy":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.ensure_graphwave_entropy
+    if name == "hyper_sagnn_embeddings":
+        from .analysis.hypergraph import hyper_sagnn_embeddings as _hs
+
+        return _hs
+    if name == "select_mdl_motifs":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.select_mdl_motifs
+    if name == "mdl_description_length":
+        from .analysis.information import mdl_description_length as _mdl
+
+        return _mdl
+    if name == "prune_embeddings":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.prune_embeddings
+    if name in {"detect_automorphisms", "quotient_by_symmetry", "automorphism_group_order"}:
+        from .core.dataset import DatasetBuilder as _DB
+
+        mapping = {
+            "detect_automorphisms": _DB.detect_automorphisms,
+            "automorphism_group_order": _DB.automorphism_group_order,
+            "quotient_by_symmetry": _DB.quotient_by_symmetry,
+        }
+
+        return mapping[name]
     if name == "get_template" or name == "PromptTemplate" or name == "validate_output":
         from .templates.library import PromptTemplate as _PT
         from .templates.library import get_template as _gtmpl

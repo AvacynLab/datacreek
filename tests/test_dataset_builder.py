@@ -825,6 +825,55 @@ def test_graphwave_embeddings_wrapper():
     assert len(ds.graph.graph.nodes["e1"]["graphwave_embedding"]) == 8
 
 
+def test_graphwave_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "x")
+    ds.add_chunk("d", "c2", "y")
+    ds.add_entity("e1", "E")
+    ds.link_entity("c1", "e1")
+    ds.compute_graphwave_embeddings(scales=[0.5], num_points=4)
+    h = ds.graphwave_entropy()
+    assert isinstance(h, float)
+    assert any(e.operation == "graphwave_entropy" for e in ds.events)
+
+
+def test_ensure_graphwave_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "x")
+    ds.add_chunk("d", "c2", "y")
+    ds.add_entity("e1", "E")
+    ds.link_entity("c1", "e1")
+    ds.compute_graphwave_embeddings(scales=[0.5], num_points=4)
+    val = ds.ensure_graphwave_entropy(0.1)
+    assert isinstance(val, float)
+    assert any(e.operation == "ensure_graphwave_entropy" for e in ds.events)
+
+
+def test_embedding_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "x")
+    ds.add_chunk("d", "c2", "y")
+    ds.compute_graph_embeddings(dimensions=2, walk_length=2, num_walks=5, seed=0)
+    val = ds.embedding_entropy()
+    assert isinstance(val, float)
+    assert any(e.operation == "embedding_entropy" for e in ds.events)
+
+
+def test_embedding_box_counting_dimension_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(4):
+        ds.add_chunk("d", f"c{i}", "txt")
+    ds.compute_graph_embeddings(dimensions=2, walk_length=2, num_walks=5, seed=0)
+    dim, counts = ds.embedding_box_counting_dimension("embedding", [0.5, 1.0])
+    assert isinstance(dim, float)
+    assert counts
+    assert any(e.operation == "embedding_box_counting_dimension" for e in ds.events)
+
+
 def test_poincare_embeddings_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -922,8 +971,11 @@ def test_compute_fractal_features_and_export():
     ds.add_chunk("d", "c1", "hello")
     feats = ds.compute_fractal_features([1], max_dim=1)
     assert "dimension" in feats and "signature" in feats
-    records = ds.export_prompts()
+    records = ds.export_prompts(ib_beta=0.5, mdl_radii=[1])
     assert records and "topo_signature" in records[0]
+    assert "git_commit" in records[0]
+    assert records[0]["ib_beta"] == 0.5
+    assert "mdl_gain" in records[0]
     assert any(e.operation == "compute_fractal_features" for e in ds.events)
     assert any(e.operation == "export_prompts" for e in ds.events)
 
@@ -1203,6 +1255,25 @@ def test_sheaf_neural_network_wrapper():
     out = ds.sheaf_neural_network(feats, layers=2, alpha=0.5)
     assert set(out) == {"a", "b"}
     assert any(e.operation == "sheaf_neural_network" for e in ds.events)
+
+
+def test_sheaf_cohomology_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_edge("a", "b", sheaf_sign=1)
+    val = ds.sheaf_cohomology()
+    assert isinstance(val, int) and val >= 0
+    assert any(e.operation == "sheaf_cohomology" for e in ds.events)
+
+
+def test_resolve_sheaf_obstruction_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_edge("a", "b", sheaf_sign=1)
+    ds.graph.graph.add_edge("b", "c", sheaf_sign=1)
+    ds.graph.graph.add_edge("c", "a", sheaf_sign=1)
+    before = ds.sheaf_cohomology()
+    after = ds.resolve_sheaf_obstruction(max_iter=5)
+    assert after <= before
+    assert any(e.operation == "resolve_sheaf_obstruction" for e in ds.events)
 
 
 def test_path_to_text_wrapper():
@@ -1665,6 +1736,28 @@ def test_graph_information_bottleneck_wrapper():
     assert ds.events[-1].operation == "graph_information_bottleneck"
 
 
+def test_graph_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+    h = ds.graph_entropy()
+    assert h >= 0
+    assert ds.events[-1].operation == "graph_entropy"
+
+
+def test_subgraph_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(4):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+    ds.graph.graph.add_edge("a0", "a1")
+    ds.graph.graph.add_edge("a1", "a2")
+    val = ds.subgraph_entropy(["a0", "a1", "a2"])
+    assert val >= 0
+    assert ds.events[-1].operation == "subgraph_entropy"
+
+
 def test_prototype_subgraph_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -1848,3 +1941,29 @@ def test_sample_diverse_chunks():
     result = ds.sample_diverse_chunks(2, [1])
     assert len(result) >= 1
     assert any(e.operation == "sample_diverse_chunks" for e in ds.events)
+
+
+def test_graph_rnn_generation_wrappers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    g1 = ds.generate_graph_rnn_like(5, 4)
+    assert g1.number_of_nodes() == 5
+    g2 = ds.generate_graph_rnn(5, 4, p=0.5)
+    assert g2.number_of_nodes() == 5
+    g3 = ds.generate_graph_rnn_stateful(4, 3, hidden_dim=4, seed=0)
+    assert g3.number_of_nodes() == 4
+    g4 = ds.generate_graph_rnn_sequential(4, 3, hidden_dim=4, seed=0)
+    assert g4.number_of_nodes() == 4
+    ops = [e.operation for e in ds.events[-4:]]
+    assert "generate_graph_rnn_like" in ops
+    assert "generate_graph_rnn" in ops
+    assert "generate_graph_rnn_stateful" in ops
+    assert "generate_graph_rnn_sequential" in ops
+
+
+def test_select_mdl_motifs_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.graph.graph.add_edges_from([("a", "b"), ("b", "c"), ("a", "c"), ("c", "d")])
+    motif = nx.Graph([("a", "b"), ("b", "c"), ("a", "c")])
+    sel = ds.select_mdl_motifs([motif])
+    assert sel and isinstance(sel[0], nx.Graph)
+    assert ds.events[-1].operation == "select_mdl_motifs"
