@@ -55,6 +55,19 @@ class HistoryEvent:
 
 
 @dataclass
+class Atom:
+    """Minimal logical atom ``(d, m)`` used during ingestion."""
+
+    content: str
+    id: str
+    lang: str | None = None
+    media: str | None = None
+    timestamp: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+@dataclass
 class DatasetBuilder:
     """Manage a dataset under construction with its own knowledge graph."""
 
@@ -295,11 +308,33 @@ class DatasetBuilder:
         source: Optional[str] = None,
         *,
         page: int | None = None,
+        lang: str | None = None,
+        timestamp: datetime | None = None,
         emotion: str | None = None,
         modality: str | None = None,
         entities: list[str] | None = None,
     ) -> None:
-        """Insert an atom node."""
+        """Insert an atom node with optional metadata.
+
+        Parameters
+        ----------
+        doc_id:
+            ID of the parent document.
+        atom_id:
+            Identifier of the new atom.
+        text:
+            Raw textual content :math:`d`.
+        element_type:
+            Media or element type stored in ``m``.
+        page:
+            Page number if extracted from paginated media.
+        lang:
+            Language code for the content.
+        timestamp:
+            Timestamp when the atom was created. Defaults to ``now``.
+        emotion, modality, entities:
+            Optional semantic annotations.
+        """
 
         self.graph.add_atom(
             doc_id,
@@ -308,6 +343,8 @@ class DatasetBuilder:
             element_type,
             source,
             page=page,
+            lang=lang,
+            timestamp=timestamp,
             emotion=emotion,
             modality=modality,
             entities=entities,
@@ -1930,6 +1967,52 @@ class DatasetBuilder:
         )
         return {"edge_coverage": edge_cov, "betti_coverage": betti_cov}
 
+    def invariants_dashboard(
+        self,
+        radii: Iterable[int],
+        *,
+        max_dim: int = 1,
+        normed: bool = True,
+    ) -> Dict[str, Any]:
+        """Compute key graph invariants for monitoring.
+
+        Parameters
+        ----------
+        radii:
+            Box radii used when estimating the fractal dimension.
+        max_dim:
+            Maximum homology dimension for :func:`topological_signature`.
+        normed:
+            Whether to use the normalized Laplacian for the spectral gap.
+
+        Returns
+        -------
+        dict
+            ``entropy`` of the degree distribution, ``fractal_dim`` from
+            box-counting, ``spectral_gap`` of the Laplacian and the persistence
+            ``signature``.
+        """
+
+        entropy = self.graph_entropy()
+        dim, _ = self.fractal_dimension(radii)
+        gap = self.spectral_gap(normed=normed)
+        signature = self.topological_signature(max_dim=max_dim)
+
+        self._record_event(
+            "invariants_dashboard",
+            "Graph invariants computed",
+            entropy=entropy,
+            fractal_dim=dim,
+            spectral_gap=gap,
+        )
+
+        return {
+            "entropy": entropy,
+            "fractal_dim": dim,
+            "spectral_gap": gap,
+            "signature": signature,
+        }
+
     def build_fractal_hierarchy(
         self, radii: Iterable[int], *, max_levels: int = 5
     ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
@@ -2049,6 +2132,542 @@ class DatasetBuilder:
             after_entropy=after.get("entropy"),
         )
         return dist
+
+    def run_quality_layer(
+        self,
+        *,
+        use_neo4j: bool | None = None,
+        min_component_size: int = 2,
+        similarity_threshold: float = 0.95,
+        triangle_threshold: int = 1,
+        link_threshold: float = 0.0,
+        freeze_version: bool = False,
+    ) -> Dict[str, Any]:
+        """Clean the graph via quality checks.
+
+        When ``use_neo4j`` is ``True`` (or ``None`` with a configured Neo4j
+        driver) the routine delegates to :meth:`gds_quality_check` so the Neo4j
+        GDS library performs the heavy lifting. Otherwise a lightweight
+        in-memory variant :meth:`quality_check` is used. The result dictionary is
+        returned verbatim and an event is logged for traceability.
+
+        Parameters
+        ----------
+        use_neo4j:
+            Whether to rely on Neo4j. ``None`` means auto-detect based on
+            ``neo4j_driver``.
+        min_component_size:
+            Components smaller than this size are removed.
+        similarity_threshold:
+            Duplicate nodes above this value are merged.
+        triangle_threshold:
+            Edges incident to nodes with fewer triangles are pruned.
+        link_threshold:
+            Minimum score for suggested links to be added.
+        freeze_version:
+            When ``True`` a ``_clean0`` version of the dataset is written back
+            to Neo4j for auditing.
+
+        Returns
+        -------
+        dict
+            Summary metrics from the underlying quality check.
+        """
+
+        if use_neo4j is None:
+            use_neo4j = self.neo4j_driver is not None
+
+        if use_neo4j:
+            result = self.gds_quality_check(
+                driver=self.neo4j_driver,
+                dataset=self.name,
+                min_component_size=min_component_size,
+                similarity_threshold=similarity_threshold,
+                triangle_threshold=triangle_threshold,
+                link_threshold=link_threshold,
+                freeze_version=freeze_version,
+            )
+        else:
+            result = self.quality_check(
+                min_component_size=min_component_size,
+                triangle_threshold=triangle_threshold,
+                similarity=similarity_threshold,
+                link_threshold=link_threshold,
+            )
+
+        self._record_event(
+            "quality_layer",
+            "Graph cleaned via quality layer",
+            use_neo4j=use_neo4j,
+            freeze_version=freeze_version,
+            **result,
+        )
+
+        return result
+
+    def run_fractal_layer(
+        self,
+        radii: Iterable[int],
+        *,
+        max_levels: int = 5,
+        delta: float = 0.01,
+    ) -> Dict[str, Any]:
+        """Fractalize the graph and annotate levels.
+
+        The routine computes the fractal dimension using ``radii`` then builds
+        a multi-scale hierarchy via :meth:`build_fractal_hierarchy`. Nodes are
+        annotated with their ``fractal_level`` and the dimension is recomputed
+        afterwards to quantify the distortion.
+
+        Parameters
+        ----------
+        radii:
+            Candidate box radii used for the box-covering algorithm.
+        max_levels:
+            Maximum hierarchy depth to construct.
+        delta:
+            Threshold on the absolute change in fractal dimension signalling
+            convergence.
+
+        Returns
+        -------
+        dict
+            Dictionary with ``dimension_before``/``dimension_after`` and the
+            number of hierarchy ``levels`` constructed.
+        """
+
+        dim_before, _ = self.fractal_dimension(radii)
+        hierarchy = self.build_fractal_hierarchy(radii, max_levels=max_levels)
+        self.annotate_mdl_levels(radii, max_levels=max_levels)
+        dim_after, _ = self.fractal_dimension(radii)
+        diff = abs(dim_after - dim_before)
+
+        self._record_event(
+            "fractal_layer",
+            "Graph fractalized",
+            radii=list(radii),
+            max_levels=max_levels,
+            dimension_before=dim_before,
+            dimension_after=dim_after,
+            diff=diff,
+            converged=diff <= delta,
+        )
+
+        return {
+            "dimension_before": dim_before,
+            "dimension_after": dim_after,
+            "diff": diff,
+            "levels": len(hierarchy),
+            "converged": diff <= delta,
+        }
+
+    def run_embedding_layer(
+        self,
+        *,
+        node2vec_dim: int = 64,
+        graphwave_scales: Iterable[float] = (0.5, 1.0),
+        graphwave_points: int = 10,
+        poincare_dim: int = 2,
+        negative: int = 5,
+        epochs: int = 50,
+        learning_rate: float = 0.1,
+        burn_in: int = 10,
+        node2vec_p: float = 1.0,
+        node2vec_q: float = 1.0,
+        entropy_threshold: float = 0.5,
+        radii: Iterable[float] = (0.5, 1.0),
+    ) -> Dict[str, Any]:
+        """Generate multi-geometry embeddings and monitor entropy.
+
+        The routine computes Node2Vec, GraphWave, Poincar\u00e9 and GraphSAGE
+        embeddings via :meth:`compute_multigeometric_embeddings`. The resulting
+        ``embedding`` vectors are analysed through their entropy and fractal
+        dimension. GraphWave entropy is enforced using
+        :meth:`ensure_graphwave_entropy` with ``entropy_threshold``.
+
+        Parameters
+        ----------
+        node2vec_dim:
+            Dimension of the Node2Vec and GraphSAGE embeddings.
+        graphwave_scales:
+            Heat kernel scales for the GraphWave embeddings.
+        graphwave_points:
+            Number of sample points used by GraphWave.
+        poincare_dim:
+            Dimension of the Poincar\u00e9 embeddings.
+        negative:
+            Negative samples for the hyperbolic optimizer.
+        epochs:
+            Training epochs for the Poincar\u00e9 model.
+        learning_rate:
+            Learning rate of the Poincar\u00e9 optimizer.
+        burn_in:
+            Burn-in period for the Poincar\u00e9 optimizer.
+        node2vec_p, node2vec_q:
+            Return and in-out parameters of the Node2Vec random walks.
+        entropy_threshold:
+            Minimum acceptable GraphWave entropy.
+        radii:
+            Radii used to estimate the fractal dimension of embeddings.
+
+        Returns
+        -------
+        dict
+            Dictionary containing ``entropy`` of the embeddings, ``gw_entropy``
+            after enforcement and the fractal ``dimension``.
+        """
+
+        self.compute_multigeometric_embeddings(
+            node2vec_dim=node2vec_dim,
+            graphwave_scales=graphwave_scales,
+            graphwave_points=graphwave_points,
+            poincare_dim=poincare_dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+            node2vec_p=node2vec_p,
+            node2vec_q=node2vec_q,
+        )
+
+        gw_entropy = self.ensure_graphwave_entropy(
+            entropy_threshold,
+            scales=graphwave_scales,
+            num_points=graphwave_points,
+        )
+        entropy = self.embedding_entropy()
+        dim, _ = self.embedding_box_counting_dimension("embedding", radii)
+
+        self._record_event(
+            "embedding_layer",
+            "Multi-geometry embeddings computed",
+            node2vec_dim=node2vec_dim,
+            graphwave_scales=list(graphwave_scales),
+            graphwave_points=graphwave_points,
+            poincare_dim=poincare_dim,
+            negative=negative,
+            epochs=epochs,
+            learning_rate=learning_rate,
+            burn_in=burn_in,
+            node2vec_p=node2vec_p,
+            node2vec_q=node2vec_q,
+            entropy=entropy,
+            gw_entropy=gw_entropy,
+            dimension=dim,
+        )
+
+        return {"entropy": entropy, "gw_entropy": gw_entropy, "dimension": dim}
+
+    def run_topological_perception_layer(
+        self,
+        target: nx.Graph,
+        radii: Iterable[int],
+        *,
+        loops: int = 8,
+        dimension: int = 1,
+        epsilon: float = 0.0,
+        max_iter: int = 100,
+    ) -> Dict[str, Any]:
+        """Apply the Topological Perception Layer corrections.
+
+        The routine resolves sheaf cohomology obstructions and edits
+        ``perception_link`` edges so that the persistence diagram of the
+        resulting graph approaches ``target`` within ``epsilon``.
+
+        Parameters
+        ----------
+        target:
+            Reference graph providing the desired topology.
+        radii:
+            Candidate radii used to update fractal levels after optimization.
+        loops:
+            Maximum number of optimization rounds.
+        dimension:
+            Homology dimension for the bottleneck objective.
+        epsilon:
+            Stop once the bottleneck distance drops below this value.
+        max_iter:
+            Maximum iterations per optimization round.
+
+        Returns
+        -------
+        dict
+            Dictionary containing ``distance`` to ``target`` and the sheaf
+            cohomology before and after correction.
+        """
+
+        before_sig = self.topological_signature(max_dim=dimension)
+        h1_before = self.sheaf_cohomology()
+        h1_after = h1_before
+        if h1_before > 0:
+            h1_after = self.resolve_sheaf_obstruction(max_iter=loops)
+
+        dist = self.optimize_topology_iterative(
+            target,
+            loops=loops,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+        )
+        after_sig = self.topological_signature(max_dim=dimension)
+
+        # Refresh fractal levels to keep the hierarchy consistent
+        self.annotate_mdl_levels(radii, max_levels=loops)
+
+        self._record_event(
+            "topological_perception_layer",
+            "Topology and cohomology adjusted",
+            loops=loops,
+            dimension=dimension,
+            epsilon=epsilon,
+            max_iter=max_iter,
+            distance=dist,
+            h1_before=h1_before,
+            h1_after=h1_after,
+        )
+        return {
+            "distance": dist,
+            "h1_before": h1_before,
+            "h1_after": h1_after,
+            "before": before_sig,
+            "after": after_sig,
+        }
+
+    def run_information_layer(
+        self,
+        labels: Dict[str, int],
+        motifs: Iterable[nx.Graph],
+        *,
+        beta: float = 1.0,
+    ) -> Dict[str, Any]:
+        """Optimize semantic units via IB and MDL.
+
+        The routine computes the Graph Information Bottleneck loss using the
+        current node embeddings and ``labels``. It then selects a subset of
+        ``motifs`` that minimize the MDL description length. The MDL values
+        before and after selection, along with the IB loss, are returned.
+
+        Parameters
+        ----------
+        labels:
+            Mapping from node ID to integer class label.
+        motifs:
+            Candidate subgraphs describing higher order structure.
+        beta:
+            Weight of the information regularizer.
+
+        Returns
+        -------
+        dict
+            Dictionary containing ``loss`` and MDL metrics.
+        """
+
+        from ..analysis.information import mdl_description_length
+
+        loss = self.graph_information_bottleneck(labels, beta=beta)
+
+        mdl_before = mdl_description_length(
+            self.graph.graph.to_undirected(), motifs
+        )
+        selected = self.select_mdl_motifs(motifs)
+        mdl_after = mdl_description_length(
+            self.graph.graph.to_undirected(), selected
+        )
+
+        self._record_event(
+            "information_layer",
+            "Information bottleneck and MDL optimization",
+            beta=beta,
+            loss=loss,
+            mdl_before=mdl_before,
+            mdl_after=mdl_after,
+            selected=len(selected),
+        )
+
+        return {
+            "loss": loss,
+            "mdl_before": mdl_before,
+            "mdl_after": mdl_after,
+            "selected": len(selected),
+        }
+
+    def run_generation_layer(
+        self,
+        llm_call: Callable[[str], str],
+        *,
+        query: str,
+        k: int = 5,
+        hops: int = 1,
+        template: str = "qa",
+        retries: int = 3,
+        insert_patterns: Iterable[tuple[str, str]] = (),
+        max_path: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """Generate prompt/response pairs from an informative subgraph.
+
+        ``query`` seeds a neighborhood search via
+        :meth:`search_with_links_data`. Each resulting path is converted to
+        text with :meth:`neighborhood_to_sentence`.  Tool call markers from
+        ``insert_patterns`` are inserted and the prompt is fed to
+        ``llm_call`` using :func:`~datacreek.utils.self_instruct.generate_with_self_instruct`.
+        Paths longer than ``max_path`` yield a lower confidence value.
+
+        Parameters
+        ----------
+        llm_call:
+            Callable sending a prompt to a language model.
+        query:
+            Text used to select starting chunks.
+        k:
+            Number of initial ANN results.
+        hops:
+            Number of link hops when expanding the search.
+        template:
+            Name of the validation template for :func:`generate_with_self_instruct`.
+        retries:
+            Attempts allowed when the output does not validate.
+        insert_patterns:
+            Optional ``(name, regex)`` pairs for tool call insertion.
+        max_path:
+            Path length above which the confidence score is reduced.
+
+        Returns
+        -------
+        list of dict
+            ``prompt``/``response`` pairs with a ``confidence`` metric.
+        """
+
+        from ..utils.self_instruct import generate_with_self_instruct
+
+        paths = self.search_with_links_data(query, k=k, hops=hops)
+        records: List[Dict[str, Any]] = []
+        for item in paths:
+            p = item.get("path", [])
+            prompt = self.neighborhood_to_sentence(p)
+            if insert_patterns:
+                prompt = self.auto_tool_calls(prompt, insert_patterns)
+            response = generate_with_self_instruct(
+                llm_call, prompt, template=template, retries=retries
+            )
+            conf = 1.0 if len(p) <= max_path else 0.5
+            records.append({"prompt": prompt, "response": response, "confidence": conf})
+
+        self._record_event(
+            "generation_layer",
+            "LLM generation from graph context",
+            query=query,
+            k=k,
+            hops=hops,
+            count=len(records),
+        )
+        return records
+
+    def run_compression_layer(
+        self,
+        *,
+        tol: float = 1e-3,
+        max_count: int = 10,
+    ) -> Dict[str, int]:
+        """Compress embeddings and quotient by symmetry.
+
+        The method clusters node embeddings via :func:`fractal_net_prune` and
+        then computes the graph quotient under detected automorphisms.  The
+        automorphism group order gives a measure of global redundancy while the
+        embedding clusters highlight local similarity.
+
+        Parameters
+        ----------
+        tol:
+            Distance threshold when merging embeddings.
+        max_count:
+            Maximum number of automorphisms explored when estimating the group
+            order and the quotient mapping.
+
+        Returns
+        -------
+        dict
+            Dictionary with ``clusters`` from pruning, ``classes`` in the
+            quotient graph and the estimated automorphism ``order``.
+        """
+
+        mapping = self.prune_embeddings(tol=tol)
+        clusters = len(set(mapping.values())) if mapping else 0
+        order = self.automorphism_group_order(max_count=max_count)
+        _, sym_map = self.quotient_by_symmetry(max_count=max_count)
+        classes = len(set(sym_map.values())) if sym_map else 0
+
+        self._record_event(
+            "compression_layer",
+            "Embeddings pruned and graph quotiented",
+            tol=tol,
+            max_count=max_count,
+            clusters=clusters,
+            classes=classes,
+            order=order,
+        )
+        return {"clusters": clusters, "classes": classes, "order": order}
+
+    def run_export_layer(
+        self,
+        fmt: str = "chatml",
+        *,
+        radii: Iterable[int] = (1, 2, 3),
+        max_levels: int = 5,
+        ib_beta: float = 1.0,
+    ) -> str:
+        """Serialize prompts with fractal metadata.
+
+        The helper gathers prompt records via :meth:`export_prompts` then
+        converts them to ``fmt`` using :mod:`datacreek.utils.format_converter`.
+
+        Parameters
+        ----------
+        fmt:
+            Output format name (``"chatml"``, ``"alpaca"`` or ``"jsonl"``).
+        radii:
+            Candidate box radii used when annotating fractal levels.
+        max_levels:
+            Maximum hierarchy depth for the MDL-based annotation.
+        ib_beta:
+            Information bottleneck weight stored in each record.
+
+        Returns
+        -------
+        str
+            Dataset content in the requested format.
+        """
+
+        records = self.export_prompts(
+            auto_fractal=True,
+            radii=radii,
+            max_levels=max_levels,
+            mdl_radii=radii,
+            ib_beta=ib_beta,
+        )
+
+        qa_pairs = [
+            {"question": r["prompt"], "answer": ""} for r in records
+        ]
+
+        from ..utils.format_converter import to_alpaca, to_chatml, to_jsonl
+
+        dispatch = {
+            "alpaca": to_alpaca,
+            "chatml": to_chatml,
+            "jsonl": to_jsonl,
+        }
+        if fmt not in dispatch:
+            raise ValueError(f"unknown format: {fmt}")
+
+        formatted = dispatch[fmt](qa_pairs)
+
+        self._record_event(
+            "export_layer",
+            "Prompts serialized",
+            format=fmt,
+            count=len(records),
+        )
+        return formatted
 
     def apply_perception(
         self,
@@ -2842,6 +3461,28 @@ class DatasetBuilder:
         self._persist()
         return doc
 
+    def run_ingestion_layer(
+        self, paths: Iterable[str], *, options: "IngestOptions" | None = None
+    ) -> List[str]:
+        """Ingest many files at once.
+
+        ``paths`` are processed in order and turned into atoms
+        :math:`(d, m)` via :meth:`ingest_file`. The list of produced
+        document IDs is returned and the operation is logged for
+        auditing.
+        """
+
+        docs: List[str] = []
+        for p in paths:
+            docs.append(self.ingest_file(p, options=options))
+
+        self._record_event(
+            "ingestion_layer",
+            "Documents ingested",
+            count=len(docs),
+        )
+        return docs
+
     # ------------------------------------------------------------------
     # Generation helpers
     # ------------------------------------------------------------------
@@ -3231,3 +3872,48 @@ class DatasetBuilder:
             graph.query("MATCH (n {dataset:$ds}) DETACH DELETE n", {"ds": self.name})
         except Exception:
             logger.exception("Failed to delete graph %s from RedisGraph", self.name)
+
+    def run_orchestrator(
+        self,
+        llm_call: Callable[[str], str],
+        paths: Iterable[str],
+        *,
+        ingest_options: "IngestOptions" | None = None,
+    ) -> str:
+        """Run the end-to-end generation pipeline on ``paths``.
+
+        The routine sequentially invokes the ingestion, quality, fractal,
+        embedding, topological perception, information, generation,
+        compression and export layers. The final Alpaca formatted dataset is
+        returned. This helper is meant for quick prototyping and testing of
+        the full workflow.
+        """
+
+        # Ingest documents and build the initial graph
+        docs = self.run_ingestion_layer(paths, options=ingest_options)
+        # Basic cleanup and fractal hierarchy
+        self.run_quality_layer(use_neo4j=False)
+        self.run_fractal_layer([1], max_levels=1)
+        # Compute light-weight embeddings
+        self.compute_graph_embeddings(dimensions=4, walk_length=4, num_walks=5, seed=0)
+
+        target = self.graph.graph.to_undirected()
+        self.run_topological_perception_layer(target, [1], loops=1, epsilon=0.0)
+
+        labels = {n: i % 2 for i, n in enumerate(self.graph.graph.nodes)}
+        self.run_information_layer(labels, [], beta=1.0)
+
+        # Generate a single prompt per document
+        query = next(iter(docs)) if docs else ""
+        self.run_generation_layer(llm_call, query=query, k=1)
+
+        self.run_compression_layer()
+        out = self.run_export_layer("alpaca")
+        self.mark_exported()
+
+        self._record_event(
+            "orchestrator",
+            "Full pipeline executed",
+            docs=len(docs),
+        )
+        return out

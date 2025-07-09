@@ -10,6 +10,7 @@ import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
+from datetime import datetime, timezone
 
 try:
     from neo4j import Driver, GraphDatabase
@@ -377,6 +378,8 @@ class KnowledgeGraph:
         source: str | None = None,
         *,
         page: int | None = None,
+        lang: str | None = None,
+        timestamp: datetime | None = None,
         emotion: str | None = None,
         modality: str | None = None,
         entities: list[str] | None = None,
@@ -400,6 +403,8 @@ class KnowledgeGraph:
             element_type=element_type,
             source=source,
             page=page,
+            lang=lang,
+            timestamp=(timestamp or datetime.now(timezone.utc)).isoformat(),
         )
         if emotion:
             self.graph.nodes[atom_id]["emotion"] = emotion
