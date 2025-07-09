@@ -7,13 +7,13 @@ import logging
 import os
 import re
 import secrets
+import threading
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional
-import threading
 
 import networkx as nx
 import numpy as np
@@ -35,10 +35,10 @@ except Exception:  # pragma: no cover - optional
     RGNode = None
     RGEdge = None
 
+from ..models import LLMService
 from ..models.stage import DatasetStage
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
-from ..models import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -2249,9 +2249,7 @@ class DatasetBuilder:
         if self._policy_event is not None:
             self._policy_event.set()
 
-    def start_policy_monitor_thread(
-        self, radii: Iterable[int], *, interval: float = 60.0
-    ) -> None:
+    def start_policy_monitor_thread(self, radii: Iterable[int], *, interval: float = 60.0) -> None:
         """Run :meth:`start_policy_monitor` in a background thread."""
 
         if self._policy_thread is not None and self._policy_thread.is_alive():
