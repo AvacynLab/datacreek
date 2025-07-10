@@ -1,11 +1,22 @@
 from typing import Any
 
-import networkx as nx
+import numpy as np
 import pytest
-import requests
+
+try:
+    import networkx as nx
+    import requests
+except Exception:  # pragma: no cover - deps missing
+    nx = None  # type: ignore
+    requests = None  # type: ignore
 
 from datacreek.analysis import bottleneck_distance
-from datacreek.core.knowledge_graph import KnowledgeGraph
+try:
+    from datacreek import AutoTuneState
+    from datacreek.core.knowledge_graph import KnowledgeGraph
+except Exception:  # pragma: no cover - deps missing
+    AutoTuneState = None  # type: ignore
+    KnowledgeGraph = None  # type: ignore
 
 
 def test_add_document_and_chunk():
@@ -1320,6 +1331,16 @@ def test_subgraph_entropy_method():
     assert val >= 0
 
 
+def test_structural_entropy_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(3):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+    kg.graph.add_edges_from([("a0", "a1"), ("a1", "a2"), ("a0", "a2")])
+    val = kg.structural_entropy(1)
+    assert val >= 0
+
+
 def test_prototype_subgraph():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -1415,3 +1436,39 @@ def test_select_mdl_motifs_method():
     motif = nx.Graph([("a", "b"), ("b", "c"), ("a", "c")])
     selected = kg.select_mdl_motifs([motif])
     assert selected and isinstance(selected[0], nx.Graph)
+
+def test_autotune_step_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for i in range(3):
+        kg.add_atom("d", f"a{i}", str(i), "text")
+        kg.graph.nodes[f"a{i}"]["embedding"] = np.array([i, i], dtype=float)
+    kg.graph.add_edge("a0", "a1")
+    motifs = [kg.graph.subgraph(["a0", "a1"]).copy()]
+    labels = {f"a{i}": i % 2 for i in range(3)}
+    state = AutoTuneState()
+    res = kg.autotune_step(labels, motifs, state)
+    assert "cost" in res
+
+
+def test_fractal_coverage_methods():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "a")
+    kg.add_chunk("d", "c2", "b")
+    kg.annotate_fractal_levels([1], max_levels=1)
+    cov = kg.fractal_coverage()
+    assert 0.0 < cov <= 1.0
+    cov2 = kg.ensure_fractal_coverage(1.0, [1], max_levels=1)
+    assert cov2 >= 1.0
+
+
+def test_fractalnet_compress_method():
+    if KnowledgeGraph is None:
+        pytest.skip("deps missing")
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", embedding=[0.0, 0.0], fractal_level=0)
+    kg.graph.add_node("b", embedding=[0.2, 0.0], fractal_level=0)
+    kg.graph.add_node("c", embedding=[1.0, 0.0], fractal_level=1)
+    comp = kg.fractalnet_compress()
+    assert len(comp) == 2

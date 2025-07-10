@@ -25,6 +25,7 @@ __all__ = [
     "graph_information_bottleneck",
     "graph_entropy",
     "subgraph_entropy",
+    "structural_entropy",
     "prototype_subgraph",
     "sheaf_laplacian",
     "sheaf_convolution",
@@ -32,6 +33,7 @@ __all__ = [
     "sheaf_first_cohomology",
     "resolve_sheaf_obstruction",
     "fractal_information_density",
+    "fractal_level_coverage",
     "diversification_score",
     "generate_graph_rnn_stateful",
     "generate_graph_rnn_sequential",
@@ -44,11 +46,14 @@ __all__ = [
     "mapper_nerve",
     "inverse_mapper",
     "fractal_net_prune",
+    "fractalnet_compress",
     "graphwave_entropy",
     "embedding_entropy",
     "hyper_sagnn_embeddings",
     "mdl_description_length",
     "select_mdl_motifs",
+    "AutoTuneState",
+    "autotune_step",
 ]
 
 
@@ -75,10 +80,12 @@ def __getattr__(name: str):
         "spectral_entropy",
         "graph_lacunarity",
         "fractal_information_density",
+        "fractal_level_coverage",
         "diversification_score",
         "hyperbolic_reasoning",
         "hyperbolic_hypergraph_reasoning",
         "fractal_net_prune",
+        "fractalnet_compress",
         "graphwave_entropy",
         "embedding_entropy",
         "embedding_box_counting_dimension",
@@ -120,10 +127,19 @@ def __getattr__(name: str):
         from .information import subgraph_entropy as _se
 
         return _se
+    if name == "structural_entropy":
+        from .information import structural_entropy as _str_e
+
+        return _str_e
     if name == "prototype_subgraph":
         from .information import prototype_subgraph as _ps
 
         return _ps
+    if name in {"AutoTuneState", "autotune_step"}:
+        from .autotune import AutoTuneState as _AS
+        from .autotune import autotune_step as _at
+
+        return {"AutoTuneState": _AS, "autotune_step": _at}[name]
     if name == "sheaf_laplacian":
         from .sheaf import sheaf_laplacian as _sl
 

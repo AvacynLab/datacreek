@@ -57,6 +57,7 @@ __all__: list[str] = [
     "graph_information_bottleneck",
     "graph_entropy",
     "subgraph_entropy",
+    "structural_entropy",
     "prototype_subgraph",
     "sheaf_laplacian",
     "sheaf_convolution",
@@ -64,6 +65,8 @@ __all__: list[str] = [
     "sheaf_first_cohomology",
     "resolve_sheaf_obstruction",
     "fractal_information_density",
+    "fractal_coverage",
+    "ensure_fractal_coverage",
     "diversification_score",
     "hyperbolic_neighbors",
     "compute_distmult_embeddings",
@@ -94,6 +97,7 @@ __all__: list[str] = [
     "mapper_nerve",
     "inverse_mapper",
     "fractal_net_prune",
+    "fractalnet_compress",
     "graphwave_entropy",
     "embedding_entropy",
     "embedding_box_counting_dimension",
@@ -126,6 +130,12 @@ __all__: list[str] = [
     "start_policy_monitor_thread",
     "stop_policy_monitor_thread",
     "LLMService",
+    "AutoTuneState",
+    "autotune_step",
+    "xor_encrypt",
+    "xor_decrypt",
+    "encrypt_pii_fields",
+    "decrypt_pii_fields",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -348,6 +358,10 @@ def __getattr__(name: str):
         from .analysis.information import subgraph_entropy as _se
 
         return _se
+    if name == "structural_entropy":
+        from .analysis.information import structural_entropy as _str_e
+
+        return _str_e
     if name == "prototype_subgraph":
         from .analysis.information import prototype_subgraph as _ps
 
@@ -500,6 +514,14 @@ def __getattr__(name: str):
         from .analysis.fractal import fractal_information_density as _fid
 
         return _fid
+    if name == "fractal_coverage":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.fractal_coverage
+    if name == "ensure_fractal_coverage":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.ensure_fractal_coverage
     if name == "diversification_score":
         from .analysis.fractal import diversification_score as _ds
 
@@ -560,6 +582,14 @@ def __getattr__(name: str):
         from .analysis.fractal import fractal_net_prune as _fp
 
         return _fp
+    if name == "fractalnet_compress":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.fractalnet_compress
+    if name == "fractalnet_compress":
+        from .analysis.fractal import fractalnet_compress as _fc
+
+        return _fc
     if name == "graphwave_entropy":
         from .analysis.fractal import graphwave_entropy as _ge
 
@@ -576,6 +606,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.subgraph_entropy
+    if name == "structural_entropy":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.structural_entropy
     if name == "embedding_box_counting_dimension":
         from .core.dataset import DatasetBuilder as _DB
 
@@ -596,10 +630,34 @@ def __getattr__(name: str):
         from .analysis.information import mdl_description_length as _mdl
 
         return _mdl
+    if name == "AutoTuneState" or name == "autotune_step":
+        from .analysis.autotune import AutoTuneState as _AS
+        from .core.dataset import DatasetBuilder as _DB
+        if name == "AutoTuneState":
+            return _AS
+        return _DB.autotune_step
     if name == "prune_embeddings":
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.prune_embeddings
+    if name in {
+        "xor_encrypt",
+        "xor_decrypt",
+        "encrypt_pii_fields",
+        "decrypt_pii_fields",
+    }:
+        from .utils.crypto import (
+            xor_encrypt as _xe,
+            xor_decrypt as _xd,
+            encrypt_pii_fields as _ep,
+            decrypt_pii_fields as _dp,
+        )
+        return {
+            "xor_encrypt": _xe,
+            "xor_decrypt": _xd,
+            "encrypt_pii_fields": _ep,
+            "decrypt_pii_fields": _dp,
+        }[name]
     if name == "ingestion_layer":
         from .core.dataset import DatasetBuilder
 

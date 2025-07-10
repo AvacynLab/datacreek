@@ -88,3 +88,55 @@ def summarized_chunk_split(text: str, max_tokens: int, summary_len: int = 20) ->
         out.append((summary + " " if summary else "") + chunk)
         prev = chunk
     return out
+
+
+def chunk_by_tokens(text: str, max_tokens: int, *, overlap: int = 0) -> List[str]:
+    """Split ``text`` into chunks of ``max_tokens`` words.
+
+    Parameters
+    ----------
+    text:
+        Input text to segment.
+    max_tokens:
+        Maximum number of whitespace separated tokens per chunk.
+    overlap:
+        Number of tokens reused from the previous chunk. Must be smaller than
+        ``max_tokens``.
+
+    Returns
+    -------
+    list[str]
+        Sequence of token chunks of roughly ``max_tokens`` words.
+    """
+
+    if max_tokens <= 0:
+        raise ValueError("max_tokens must be positive")
+    if overlap >= max_tokens:
+        raise ValueError("overlap must be smaller than max_tokens")
+
+    words = text.split()
+    chunks: List[str] = []
+    start = 0
+    while start < len(words):
+        end = min(start + max_tokens, len(words))
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        if end == len(words):
+            break
+        start = end - overlap
+    return chunks
+
+
+def chunk_by_sentences(text: str, max_sentences: int) -> List[str]:
+    """Split ``text`` into chunks containing ``max_sentences`` sentences."""
+
+    if max_sentences <= 0:
+        raise ValueError("max_sentences must be positive")
+
+    sentences = [s.strip() for s in text.replace("\n", " ").split(".") if s.strip()]
+    chunks = []
+    for i in range(0, len(sentences), max_sentences):
+        chunk = ". ".join(sentences[i : i + max_sentences])
+        if chunk:
+            chunks.append(chunk)
+    return chunks

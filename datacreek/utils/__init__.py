@@ -18,6 +18,13 @@ from .config import (
 from .dataset_cleanup import deduplicate_pairs
 from .gitinfo import get_commit_hash
 from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
+from .crypto import (
+    xor_encrypt,
+    xor_decrypt,
+    encrypt_pii_fields,
+    decrypt_pii_fields,
+)
+from .metrics import push_metrics
 from .llm_processing import (
     convert_to_conversation_format,
     parse_qa_pairs,
@@ -26,7 +33,13 @@ from .llm_processing import (
 )
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
-from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
+from .text import (
+    clean_text,
+    extract_json_from_text,
+    normalize_units,
+    split_into_chunks,
+)
+from .chunking import chunk_by_tokens, chunk_by_sentences
 from .toolformer import execute_tool_calls, insert_tool_calls
 
 
@@ -58,6 +71,8 @@ __all__ = [
     "get_prompt",
     "merge_configs",
     "split_into_chunks",
+    "chunk_by_tokens",
+    "chunk_by_sentences",
     "extract_json_from_text",
     "clean_text",
     "normalize_units",
@@ -77,4 +92,9 @@ __all__ = [
     "graph_to_text",
     "insert_tool_calls",
     "execute_tool_calls",
+    "xor_encrypt",
+    "xor_decrypt",
+    "encrypt_pii_fields",
+    "decrypt_pii_fields",
+    "push_metrics",
 ]
