@@ -6,11 +6,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 import networkx as nx
 
 from .fractal import bottleneck_distance, fractal_level_coverage
-from .information import (
-    graph_information_bottleneck,
-    mdl_description_length,
-    structural_entropy,
-)
+from .information import graph_information_bottleneck, mdl_description_length, structural_entropy
 
 
 @dataclass

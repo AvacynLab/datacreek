@@ -16,12 +16,7 @@ from .config import (
     load_config,
     merge_configs,
 )
-from .crypto import (
-    decrypt_pii_fields,
-    encrypt_pii_fields,
-    xor_decrypt,
-    xor_encrypt,
-)
+from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
 from .gitinfo import get_commit_hash
 from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
@@ -34,12 +29,7 @@ from .llm_processing import (
 from .metrics import push_metrics
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
-from .text import (
-    clean_text,
-    extract_json_from_text,
-    normalize_units,
-    split_into_chunks,
-)
+from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
 from .toolformer import execute_tool_calls, insert_tool_calls
 
 
