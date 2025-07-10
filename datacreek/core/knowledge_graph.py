@@ -39,11 +39,15 @@ class KnowledgeGraph:
     graph: nx.DiGraph = field(default_factory=nx.DiGraph)
     use_hnsw: bool = False
     index: EmbeddingIndex = field(init=False)
+    faiss_index: object | None = field(init=False, default=None, repr=False)
+    faiss_ids: list[str] | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize the internal embedding index."""
 
         self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
+        self.faiss_index = None
+        self.faiss_ids = None
 
     def add_document(
         self,
@@ -1588,6 +1592,66 @@ class KnowledgeGraph:
             vec = model.wv[str(node)]
             self.graph.nodes[node]["embedding"] = vec.tolist()
 
+    def compute_node2vec_gds(
+        self,
+        driver: Driver,
+        *,
+        dimensions: int = 128,
+        walk_length: int = 40,
+        walks_per_node: int = 10,
+        p: float = 1.0,
+        q: float = 1.0,
+        dataset: str | None = None,
+        write_property: str = "embedding",
+    ) -> None:
+        """Compute Node2Vec embeddings using Neo4j GDS.
+
+        The graph is first persisted to Neo4j under ``dataset``. The GDS
+        procedure ``gds.beta.node2vec.write`` materializes the embeddings on the
+        nodes. They are then loaded back into the local NetworkX graph and the
+        temporary projection is removed.
+        """
+
+        if GraphDatabase is None:
+            raise RuntimeError("neo4j package is required")
+
+        ds = dataset or "kg_n2v_temp"
+        self.to_neo4j(driver, dataset=ds, clear=True)
+
+        node_query = "MATCH (n {dataset:$ds}) RETURN id(n) AS id"
+        rel_query = (
+            "MATCH (n {dataset:$ds})-[r]->(m {dataset:$ds}) RETURN id(n) AS source, id(m) AS target"
+        )
+
+        with driver.session() as session:
+            session.run("CALL gds.graph.drop('kg_n2v', false)")
+            session.run(
+                "CALL gds.graph.project.cypher('kg_n2v', $nq, $rq)",
+                nq=node_query,
+                rq=rel_query,
+                ds=ds,
+            )
+            session.run(
+                "CALL gds.beta.node2vec.write('kg_n2v', $config)",
+                config={
+                    "embeddingDimension": dimensions,
+                    "walkLength": walk_length,
+                    "walksPerNode": walks_per_node,
+                    "p": p,
+                    "q": q,
+                    "writeProperty": write_property,
+                },
+            )
+            res = session.run(
+                "MATCH (n {dataset:$ds}) RETURN n.id AS id, n[$prop] AS emb",
+                ds=ds,
+                prop=write_property,
+            )
+            for rec in res:
+                self.graph.nodes[rec["id"]][write_property] = list(rec["emb"])
+            session.run("CALL gds.graph.drop('kg_n2v')")
+            session.run("MATCH (n {dataset:$ds}) DETACH DELETE n", ds=ds)
+
     def compute_graphwave_embeddings(self, scales: Iterable[float], num_points: int = 10) -> None:
         """Compute GraphWave embeddings for all nodes.
 
@@ -1618,6 +1682,52 @@ class KnowledgeGraph:
         from ..analysis.fractal import graphwave_entropy as _ge
 
         return _ge(feats)
+
+    def build_faiss_index(self, node_attr: str = "embedding") -> None:
+        """Build a FAISS index from node embeddings.
+
+        Parameters
+        ----------
+        node_attr:
+            Node attribute containing the embedding vectors.
+        """
+
+        try:
+            import faiss
+            import numpy as np
+        except Exception as exc:  # pragma: no cover - optional dependency
+            raise RuntimeError("faiss is required") from exc
+
+        vectors = []
+        ids = []
+        for n, data in self.graph.nodes(data=True):
+            if node_attr in data:
+                vectors.append(np.asarray(data[node_attr], dtype=np.float32))
+                ids.append(n)
+        if not vectors:
+            raise ValueError("no embeddings found")
+
+        xb = np.vstack(vectors)
+        faiss.normalize_L2(xb)
+        index = faiss.IndexFlatIP(xb.shape[1])
+        index.add(xb)
+
+        self.faiss_index = index
+        self.faiss_ids = ids
+
+    def search_faiss(self, vector: Iterable[float], k: int = 5) -> list[str]:
+        """Return ``k`` nearest nodes to ``vector`` using the FAISS index."""
+
+        if self.faiss_index is None or self.faiss_ids is None:
+            raise RuntimeError("index not built")
+
+        import numpy as np
+        import faiss
+
+        xq = np.asarray([vector], dtype=np.float32)
+        faiss.normalize_L2(xq)
+        _, idx = self.faiss_index.search(xq, k)
+        return [self.faiss_ids[i] for i in idx[0]]
 
     def ensure_graphwave_entropy(
         self,
@@ -2222,7 +2332,7 @@ class KnowledgeGraph:
         state: "AutoTuneState",
         *,
         node_attr: str = "embedding",
-        weights: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+        weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
         lr: float = 0.1,
     ) -> Dict[str, Any]:
         """Run one autotuning iteration on the current graph."""

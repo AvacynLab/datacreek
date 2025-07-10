@@ -66,6 +66,8 @@ Below is a quick overview of the main options and operations exposed at each sta
 - `link_*()` – connect nodes that mention the same entities
 - `prune_sources([...])` – remove unwanted data from the graph
 - `compute_graph_embeddings()` – build Node2Vec embeddings
+- `compute_node2vec_gds(driver)` – run Neo4j GDS Node2Vec and store vectors
+- `build_faiss_index()` – create a FAISS index from stored embeddings
 - `mark_conflicting_facts()` – flag contradictory statements
 
 **Dataset generation**
@@ -110,6 +112,8 @@ step:
    links.
 5. **Fractalization & embeddings** – `build_mdl_hierarchy()` performs box
    covering and `compute_graph_embeddings()` materializes Node2Vec vectors.
+   `compute_node2vec_gds()` can leverage Neo4j GDS for large graphs and
+   `build_faiss_index()` exposes fast cosine search.
 6. **Automated monitoring** – `monitor_and_remediate()` runs after each
    major step to enforce entropy, fractal dimension and spectral gap
    thresholds.  Limits are defined by an `InvariantPolicy` dataclass and
