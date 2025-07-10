@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple, Sequence
 
 import networkx as nx
 import numpy as np
 
 from .fractal import bottleneck_distance, fractal_level_coverage
-from .information import graph_information_bottleneck, mdl_description_length, structural_entropy
+from .information import (
+    graph_information_bottleneck,
+    mdl_description_length,
+    structural_entropy,
+)
+from .multiview import hybrid_score
 
 
 @dataclass
@@ -41,8 +46,71 @@ class AutoTuneState:
     p: float = 1.0
     q: float = 1.0
     dim: int = 64
+    alpha: float = 0.5
+    gamma: float = 0.5
+    eta: float = 0.25
     prev_graph: Optional[nx.Graph] = None
     coverage_min: float = 0.0
+
+
+def recall_at_k(
+    graph: nx.Graph,
+    queries: Sequence[object],
+    ground_truth: Dict[object, Sequence[object]],
+    *,
+    k: int = 10,
+    gamma: float = 0.5,
+    eta: float = 0.25,
+) -> float:
+    """Compute mean recall@k using the hybrid similarity score.
+
+    Parameters
+    ----------
+    graph:
+        Knowledge graph containing embeddings on nodes.
+    queries:
+        Nodes for which to compute retrieval performance.
+    ground_truth:
+        Mapping of query node to relevant nodes.
+    k:
+        Cutoff rank.
+    gamma, eta:
+        Weights used by :func:`hybrid_score`.
+    """
+
+    total = 0.0
+    n = 0
+    for q in queries:
+        rel = set(ground_truth.get(q, []))
+        if not rel:
+            continue
+
+        node_data = graph.nodes[q]
+        n2v_q = node_data.get("embedding")
+        gw_q = node_data.get("graphwave_embedding")
+        hyp_q = node_data.get("poincare_embedding")
+        if n2v_q is None or gw_q is None or hyp_q is None:
+            continue
+
+        scores = []
+        for u, data in graph.nodes(data=True):
+            if u == q:
+                continue
+            n2v_u = data.get("embedding")
+            gw_u = data.get("graphwave_embedding")
+            hyp_u = data.get("poincare_embedding")
+            if n2v_u is None or gw_u is None or hyp_u is None:
+                continue
+            s = hybrid_score(n2v_u, n2v_q, gw_u, gw_q, hyp_u, hyp_q, gamma=gamma, eta=eta)
+            scores.append((u, s))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        retrieved = [u for u, _ in scores[:k]]
+        hits = len(rel.intersection(retrieved))
+        total += hits / len(rel)
+        n += 1
+
+    return total / n if n else 0.0
 
 
 def autotune_step(
@@ -52,7 +120,9 @@ def autotune_step(
     motifs: Iterable[nx.Graph],
     state: AutoTuneState,
     *,
-    weights: Tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
+    weights: Tuple[float, float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+    recall_data: Optional[Tuple[Sequence[object], Dict[object, Sequence[object]]]] = None,
+    k: int = 10,
     lr: float = 0.1,
 ) -> Dict[str, Any]:
     """Perform one step of the autotuning procedure.
@@ -77,8 +147,14 @@ def autotune_step(
     state:
         Mutable autotuning state.
     weights:
-        Weights ``(w1, w2, w3, w4, w5)`` of the multi-objective cost. ``w5``
-        controls the penalty on the variance of the Node2Vec norms.
+        Weights ``(w1, w2, w3, w4, w5, w6)`` of the multi-objective cost. ``w5``
+        controls the penalty on the variance of the Node2Vec norms and ``w6``
+        weights the negative recall term.
+    recall_data:
+        Optional tuple ``(queries, ground_truth)`` for computing recall@k with
+        the hybrid similarity score.
+    k:
+        Rank cutoff used in the recall metric.
     lr:
         Learning rate for the gradient heuristics.
 
@@ -100,12 +176,25 @@ def autotune_step(
     norms = [np.linalg.norm(v) for v in embeddings.values()] if embeddings else [0.0]
     var_phi = float(np.var(norms))
 
+    recall = 0.0
+    if recall_data is not None:
+        queries, gt = recall_data
+        recall = recall_at_k(
+            graph,
+            queries,
+            gt,
+            k=k,
+            gamma=state.gamma,
+            eta=state.eta,
+        )
+
     J = (
         weights[0] * (-H)
         + weights[1] * D
         + weights[2] * I
         + weights[3] * M
         + weights[4] * (-var_phi)
+        + weights[5] * (-recall)
     )
 
     # finite difference gradients for tau, eps, beta and delta
@@ -139,6 +228,7 @@ def autotune_step(
         "mdl": M,
         "coverage": coverage,
         "var_phi": var_phi,
+        "recall": recall,
         "cost": J,
         "tau": state.tau,
         "eps": state.eps,

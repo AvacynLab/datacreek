@@ -149,3 +149,17 @@ def resolve_sheaf_obstruction(
         if not improved:
             break
     return h1
+
+
+def sheaf_consistency_score(
+    graph: nx.Graph, *, edge_attr: str = "sheaf_sign"
+) -> float:
+    """Return a [0, 1] score measuring sheaf consistency.
+
+    The score is computed as ``1 / (1 + H^1)``, where ``H^1`` is the
+    dimension of the first sheaf cohomology group. A value close to ``1``
+    indicates high consistency of the sheaf structure.
+    """
+
+    h1 = sheaf_first_cohomology(graph, edge_attr=edge_attr, tol=1e-5)
+    return 1.0 / (1.0 + float(h1))

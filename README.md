@@ -560,6 +560,7 @@ The graph exposes simple search helpers so you can explore the content:
 
 ```python
 from datacreek import DatasetBuilder, DatasetType, KnowledgeGraph
+import networkx as nx
 
 ds = DatasetBuilder(DatasetType.QA, name="example")
 ds.add_document("doc1", source="paper.pdf")
@@ -574,6 +575,21 @@ ds.graph.index.build()
 print(ds.graph.search_embeddings("hello", k=1))  # ["c1"]
 print(ds.graph.search_hybrid("hello"))  # ["c1"]
 print(ds.search_hybrid("paper", node_type="document"))  # ["doc1"]
+print(ds.similar_by_hybrid("c1"))  # [("c2", 0.9), ...]
+print(ds.ann_hybrid_search(n2v_vec, gw_vec, hyp_vec))  # [("c5", 0.8), ...]
+print(ds.apply_k_out_privacy(["c1", "c2", "c3"]))
+print(ds.multiview_contrastive_loss())  # InfoNCE loss
+ds.compute_meta_embeddings()
+ds.compute_product_manifold_embeddings()
+ds.train_product_manifold_embeddings([("c1", "c2")])
+ds.compute_aligned_cca_embeddings()
+ds.compute_hyper_sagnn_head_drop_embeddings()
+print(ds.hybrid_score("c1", "c2"))
+print(ds.governance_metrics())
+g2 = nx.cycle_graph(3)
+print(ds.persistence_wasserstein_distance(g2))
+print(ds.tpl_correct_graph(g2))
+print(ds.sheaf_consistency_score())
 print(ds.search_with_links("hello", hops=1))  # ["c1", "c2", ...]
 print(ds.search_with_links_data("hello", hops=1)[0])  # includes depth and path
 ds.link_similar_chunks()         # connect semantically close chunks

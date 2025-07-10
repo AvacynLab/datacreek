@@ -70,6 +70,20 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `prune_sources()` | remove unwanted sources |
 | `compute_graph_embeddings()` | build Node2Vec embeddings on nodes |
 | `compute_node2vec_gds()` | Neo4j GDS Node2Vec on the database |
+| `compute_product_manifold_embeddings()` | fuse Poincaré and Node2Vec vectors |
+| `train_product_manifold_embeddings()` | optimize embeddings with simple product loss |
+| `compute_aligned_cca_embeddings()` | low-rank A-CCA between Node2Vec and GraphWave |
+| `multiview_contrastive_loss()` | compute InfoNCE loss across the three views |
+| `compute_meta_embeddings()` | generate 64D meta-embeddings via autoencoder |
+| `compute_hyper_sagnn_head_drop_embeddings()` | Hyper-SAGNN embeddings with HEAD-Drop |
+| `similar_by_hybrid()` | rank nodes by combined hyperbolic/Euclidean/spectral score |
+| `ann_hybrid_search()` | ANN candidate search followed by hybrid ranking |
+| `apply_k_out_privacy()` | apply k-out randomized response to ID lists |
+| `governance_metrics()` | compute alignment, crowding and bias indicators |
+| `persistence_wasserstein_distance()` | Wasserstein distance between persistence diagrams |
+| `tpl_correct_graph()` | Wasserstein-based topology correction |
+| `sheaf_consistency_score()` | measure sheaf coherence on the graph |
+| `autotune_step()` | update parameters using entropy, MDL and recall@k |
 | `build_faiss_index()` | build a FAISS index for cosine search |
 | `mark_conflicting_facts()` | flag contradictory facts |
 

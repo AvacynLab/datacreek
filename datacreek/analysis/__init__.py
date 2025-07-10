@@ -2,6 +2,7 @@
 
 __all__ = [
     "bottleneck_distance",
+    "persistence_wasserstein_distance",
     "box_counting_dimension",
     "box_cover",
     "graphwave_embedding",
@@ -32,6 +33,7 @@ __all__ = [
     "sheaf_neural_network",
     "sheaf_first_cohomology",
     "resolve_sheaf_obstruction",
+    "sheaf_consistency_score",
     "fractal_information_density",
     "fractal_level_coverage",
     "diversification_score",
@@ -50,8 +52,20 @@ __all__ = [
     "graphwave_entropy",
     "embedding_entropy",
     "hyper_sagnn_embeddings",
+    "hyper_sagnn_head_drop_embeddings",
     "mdl_description_length",
     "select_mdl_motifs",
+    "product_embedding",
+    "train_product_manifold",
+    "aligned_cca",
+    "hybrid_score",
+    "multiview_contrastive_loss",
+    "meta_autoencoder",
+    "tpl_correct_graph",
+    "alignment_correlation",
+    "average_hyperbolic_radius",
+    "scale_bias_wasserstein",
+    "governance_metrics",
     "AutoTuneState",
     "autotune_step",
 ]
@@ -74,6 +88,7 @@ def __getattr__(name: str):
         "build_mdl_hierarchy",
         "persistence_diagrams",
         "persistence_entropy",
+        "persistence_wasserstein_distance",
         "poincare_embedding",
         "spectral_density",
         "spectral_dimension",
@@ -93,15 +108,41 @@ def __getattr__(name: str):
         from . import fractal as _f
 
         return getattr(_f, name)
-    if name == "hyper_sagnn_embeddings":
-        from .hypergraph import hyper_sagnn_embeddings as _hs
+    if name in {"hyper_sagnn_embeddings", "hyper_sagnn_head_drop_embeddings"}:
+        from .hypergraph import (
+            hyper_sagnn_embeddings as _hs,
+            hyper_sagnn_head_drop_embeddings as _hd,
+        )
 
-        return _hs
+        return _hs if name == "hyper_sagnn_embeddings" else _hd
     if name in {"mdl_description_length", "select_mdl_motifs"}:
         from .information import mdl_description_length as _mdl_desc
         from .information import select_mdl_motifs as _mdl_sel
 
         return _mdl_desc if name == "mdl_description_length" else _mdl_sel
+    if name in {
+        "product_embedding",
+        "train_product_manifold",
+        "aligned_cca",
+        "hybrid_score",
+        "multiview_contrastive_loss",
+        "meta_autoencoder",
+        "tpl_correct_graph",
+        "alignment_correlation",
+        "average_hyperbolic_radius",
+        "scale_bias_wasserstein",
+        "governance_metrics",
+    }:
+        from . import multiview as _mv
+        from . import governance as _g
+
+        if hasattr(_mv, name):
+            return getattr(_mv, name)
+        return getattr(_g, name)
+    if name == "tpl_correct_graph":
+        from .tpl import tpl_correct_graph as _tcg
+
+        return _tcg
     if name in {
         "automorphisms",
         "automorphism_orbits",
@@ -160,6 +201,10 @@ def __getattr__(name: str):
         from .sheaf import resolve_sheaf_obstruction as _rso
 
         return _rso
+    if name == "sheaf_consistency_score":
+        from .sheaf import sheaf_consistency_score as _scs
+
+        return _scs
     if name == "generate_graph_rnn_stateful":
         from .generation import generate_graph_rnn_stateful as _grs
 

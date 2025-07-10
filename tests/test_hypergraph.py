@@ -1,6 +1,7 @@
 import numpy as np
 
 from datacreek.analysis.hypergraph import hyper_sagnn_embeddings
+from datacreek.analysis.hypergraph import hyper_sagnn_head_drop_embeddings
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 
@@ -27,3 +28,16 @@ def test_dataset_hyper_sagnn_wrapper():
     assert "h1" in result
     assert len(result["h1"]) == 2
     assert any(e.operation == "compute_hyper_sagnn_embeddings" for e in ds.events)
+
+    result_hd = ds.compute_hyper_sagnn_head_drop_embeddings(num_heads=2, threshold=0.0, seed=0)
+    assert "h1" in result_hd
+    assert len(result_hd["h1"]) == 1
+    assert any(e.operation == "compute_hyper_sagnn_head_drop_embeddings" for e in ds.events)
+
+
+def test_hyper_sagnn_head_drop():
+    edges = [[0, 1, 2], [2, 3]]
+    feats = np.random.RandomState(0).randn(4, 4)
+    emb = hyper_sagnn_head_drop_embeddings(edges, feats, num_heads=2, threshold=0.0, seed=0)
+    assert emb.shape[0] == 2
+    assert emb.shape[1] == 2

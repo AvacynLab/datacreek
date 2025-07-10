@@ -327,6 +327,50 @@ def bottleneck_distance(
     return float(gd.bottleneck_distance(d1, d2, e=approx_epsilon))
 
 
+def persistence_wasserstein_distance(
+    g1: nx.Graph, g2: nx.Graph, dimension: int = 0, order: int = 1
+) -> float:
+    """Return Wasserstein distance between ``g1`` and ``g2`` diagrams.
+
+    Parameters
+    ----------
+    g1, g2:
+        Graphs to compare.
+    dimension:
+        Homology dimension used for the persistence diagrams.
+    order:
+        Wasserstein order ``q`` controlling the exponent of the ground metric.
+
+    Returns
+    -------
+    float
+        Wasserstein distance between the diagrams of ``g1`` and ``g2`` in the
+        chosen dimension.
+    """
+
+    if gd is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
+
+    def _diagram(graph: nx.Graph) -> np.ndarray:
+        st = gd.SimplexTree()
+        mapping = {n: i for i, n in enumerate(graph.nodes())}
+        for node, idx in mapping.items():
+            st.insert([idx], filtration=0.0)
+        for u, v in graph.edges():
+            st.insert([mapping[u], mapping[v]], filtration=1.0)
+
+        st.compute_persistence(persistence_dim_max=True)
+        diag = np.array(st.persistence_intervals_in_dimension(dimension))
+        if diag.size == 0:
+            return np.empty((0, 2))
+        diag = diag[np.isfinite(diag[:, 1])]
+        return diag
+
+    d1 = _diagram(g1)
+    d2 = _diagram(g2)
+    return float(gd.wasserstein_distance(d1, d2, order=order, internal_p=order))
+
+
 def mdl_optimal_radius(counts: List[Tuple[int, int]]) -> int:
     """Return radius index minimizing a simple MDL criterion.
 

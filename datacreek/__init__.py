@@ -39,6 +39,7 @@ __all__: list[str] = [
     "bottleneck_distance",
     "mdl_optimal_radius",
     "persistence_diagrams",
+    "persistence_wasserstein_distance",
     "spectral_dimension",
     "laplacian_spectrum",
     "spectral_entropy",
@@ -58,6 +59,8 @@ __all__: list[str] = [
     "graph_entropy",
     "subgraph_entropy",
     "structural_entropy",
+    "product_embedding",
+    "aligned_cca",
     "prototype_subgraph",
     "sheaf_laplacian",
     "sheaf_convolution",
@@ -105,6 +108,11 @@ __all__: list[str] = [
     "hyper_sagnn_embeddings",
     "select_mdl_motifs",
     "mdl_description_length",
+    "alignment_correlation",
+    "average_hyperbolic_radius",
+    "scale_bias_wasserstein",
+    "governance_metrics",
+    "k_out_randomized_response",
     "detect_automorphisms",
     "automorphism_group_order",
     "quotient_by_symmetry",
@@ -118,6 +126,7 @@ __all__: list[str] = [
     "generation_layer_async",
     "compression_layer",
     "topological_perception_layer",
+    "tpl_correct_graph",
     "topological_signature_hash",
     "information_layer",
     "export_layer",
@@ -310,6 +319,12 @@ def __getattr__(name: str):
         from .analysis.fractal import persistence_diagrams as _pd
 
         return _pd
+    if name == "persistence_wasserstein_distance":
+        from .analysis.fractal import (
+            persistence_wasserstein_distance as _pwd,
+        )
+
+        return _pwd
     if name == "spectral_dimension":
         from .analysis.fractal import spectral_dimension as _sd
 
@@ -430,6 +445,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_topological_perception_layer
+    if name == "tpl_correct_graph":
+        from .core.dataset import DatasetBuilder
+
+        return DatasetBuilder.tpl_correct_graph
     if name == "compression_layer":
         from .core.dataset import DatasetBuilder
 
@@ -542,6 +561,10 @@ def __getattr__(name: str):
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
         return _KG.hyperbolic_multi_curvature_reasoning
+    if name == "tpl_correct_graph":
+        from .core.knowledge_graph import KnowledgeGraph as _KG
+
+        return _KG.tpl_correct_graph
     if name == "compute_distmult_embeddings":
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
@@ -610,6 +633,26 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.structural_entropy
+    if name in {
+        "product_embedding",
+        "aligned_cca",
+        "multiview_contrastive_loss",
+        "meta_autoencoder",
+        "alignment_correlation",
+        "average_hyperbolic_radius",
+        "scale_bias_wasserstein",
+        "governance_metrics",
+        "k_out_randomized_response",
+    }:
+        from .analysis import multiview as _mv
+        from .analysis import governance as _g
+        from .analysis import privacy as _p
+
+        if hasattr(_mv, name):
+            return getattr(_mv, name)
+        if hasattr(_g, name):
+            return getattr(_g, name)
+        return getattr(_p, name)
     if name == "embedding_box_counting_dimension":
         from .core.dataset import DatasetBuilder as _DB
 

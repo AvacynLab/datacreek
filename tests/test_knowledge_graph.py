@@ -728,6 +728,21 @@ def test_persistence_diagrams_method():
     assert diagrams[0].shape[1] == 2
 
 
+def test_persistence_wasserstein_distance_method():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    kg.add_chunk("d", "c1", "hello")
+    from datacreek.analysis import persistence_wasserstein_distance as _pwd
+    if (
+        _pwd.__module__ == "datacreek.analysis.fractal"
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+    ):
+        pytest.skip("gudhi not available")
+    other = nx.path_graph(1)
+    d = kg.persistence_wasserstein_distance(other)
+    assert d >= 0
+
+
 def test_topological_signature_hash_method():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")
@@ -815,6 +830,13 @@ def test_resolve_sheaf_obstruction_method():
     before = kg.sheaf_cohomology()
     after = kg.resolve_sheaf_obstruction(max_iter=5)
     assert after <= before
+
+
+def test_sheaf_consistency_score_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=1)
+    score = kg.sheaf_consistency_score()
+    assert 0.0 <= score <= 1.0
 
 
 def test_path_to_text_method():
