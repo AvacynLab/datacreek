@@ -50,6 +50,7 @@ def hyper_sagnn_embeddings(
         embeddings.append(emb)
     return np.stack(embeddings)
 
+
 def hyper_sagnn_head_drop_embeddings(
     hyperedges: List[Sequence[int]],
     node_features: np.ndarray,

@@ -320,9 +320,7 @@ def __getattr__(name: str):
 
         return _pd
     if name == "persistence_wasserstein_distance":
-        from .analysis.fractal import (
-            persistence_wasserstein_distance as _pwd,
-        )
+        from .analysis.fractal import persistence_wasserstein_distance as _pwd
 
         return _pwd
     if name == "spectral_dimension":
@@ -644,8 +642,8 @@ def __getattr__(name: str):
         "governance_metrics",
         "k_out_randomized_response",
     }:
-        from .analysis import multiview as _mv
         from .analysis import governance as _g
+        from .analysis import multiview as _mv
         from .analysis import privacy as _p
 
         if hasattr(_mv, name):

@@ -5,7 +5,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import networkx as nx
 import numpy as np
@@ -2284,10 +2284,7 @@ class KnowledgeGraph:
             for n, data in self.graph.nodes(data=True)
             if hyperbolic_attr in data and euclidean_attr in data
         }
-        eucl = {
-            n: self.graph.nodes[n][euclidean_attr]
-            for n in hyper
-        }
+        eucl = {n: self.graph.nodes[n][euclidean_attr] for n in hyper}
 
         h_new, e_new = _tpm(
             hyper,
@@ -2764,9 +2761,7 @@ class KnowledgeGraph:
     ) -> float:
         """Return Wasserstein distance to ``other`` graph."""
 
-        from ..analysis.fractal import (
-            persistence_wasserstein_distance as _pwd,
-        )
+        from ..analysis.fractal import persistence_wasserstein_distance as _pwd
 
         g1 = nx.convert_node_labels_to_integers(self.graph.to_undirected())
         g2 = nx.convert_node_labels_to_integers(other)

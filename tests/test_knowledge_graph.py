@@ -733,6 +733,7 @@ def test_persistence_wasserstein_distance_method():
     kg.add_document("d", source="s")
     kg.add_chunk("d", "c1", "hello")
     from datacreek.analysis import persistence_wasserstein_distance as _pwd
+
     if (
         _pwd.__module__ == "datacreek.analysis.fractal"
         and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None

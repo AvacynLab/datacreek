@@ -1206,6 +1206,7 @@ def test_persistence_wasserstein_distance_wrapper():
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "hello")
     from datacreek.analysis import persistence_wasserstein_distance as _pwd
+
     if (
         _pwd.__module__ == "datacreek.analysis.fractal"
         and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
@@ -1214,9 +1215,7 @@ def test_persistence_wasserstein_distance_wrapper():
     other = nx.path_graph(1)
     d = ds.persistence_wasserstein_distance(other)
     assert d >= 0
-    assert any(
-        e.operation == "persistence_wasserstein_distance" for e in ds.events
-    )
+    assert any(e.operation == "persistence_wasserstein_distance" for e in ds.events)
 
 
 def test_topological_signature_wrapper():

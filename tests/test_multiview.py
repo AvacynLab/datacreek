@@ -1,11 +1,11 @@
 import numpy as np
 
 from datacreek.analysis import (
+    aligned_cca,
+    meta_autoencoder,
+    multiview_contrastive_loss,
     product_embedding,
     train_product_manifold,
-    aligned_cca,
-    multiview_contrastive_loss,
-    meta_autoencoder,
 )
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 
@@ -62,12 +62,15 @@ def test_multiview_contrastive_and_meta():
 def test_train_product_manifold():
     hyper = {"a": [0.0, 0.5], "b": [0.5, 0.0]}
     eucl = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+
     def loss(h, e):
         dh = np.linalg.norm(h["a"] - h["b"]) ** 2
         de = np.linalg.norm(e["a"] - e["b"]) ** 2
         return dh + de
 
-    before = loss({k: np.array(v) for k, v in hyper.items()}, {k: np.array(v) for k, v in eucl.items()})
+    before = loss(
+        {k: np.array(v) for k, v in hyper.items()}, {k: np.array(v) for k, v in eucl.items()}
+    )
     h_new, e_new = train_product_manifold(hyper, eucl, [("a", "b")], epochs=5, lr=0.1)
     after = loss(h_new, e_new)
     assert after < before
@@ -103,16 +106,20 @@ def test_ann_hybrid_search():
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "hello world")
     ds.add_chunk("d", "c2", "hola mundo")
-    ds.graph.graph.nodes["c1"].update({
-        "embedding": [1.0, 0.0],
-        "graphwave_embedding": [0.5, 0.5],
-        "poincare_embedding": [0.0, 1.0],
-    })
-    ds.graph.graph.nodes["c2"].update({
-        "embedding": [0.9, 0.1],
-        "graphwave_embedding": [0.4, 0.6],
-        "poincare_embedding": [0.1, 0.9],
-    })
+    ds.graph.graph.nodes["c1"].update(
+        {
+            "embedding": [1.0, 0.0],
+            "graphwave_embedding": [0.5, 0.5],
+            "poincare_embedding": [0.0, 1.0],
+        }
+    )
+    ds.graph.graph.nodes["c2"].update(
+        {
+            "embedding": [0.9, 0.1],
+            "graphwave_embedding": [0.4, 0.6],
+            "poincare_embedding": [0.1, 0.9],
+        }
+    )
     ds.build_faiss_index("embedding")
     results = ds.ann_hybrid_search([1.0, 0.0], [0.5, 0.5], [0.0, 1.0])
     assert results[0][0] in {"c1", "c2"}
@@ -125,8 +132,19 @@ def test_dataset_train_product_manifold():
     ds.add_entity("e2", "B")
     ds.graph.graph.nodes["e1"].update({"embedding": [1.0, 0.0], "poincare_embedding": [0.0, 0.5]})
     ds.graph.graph.nodes["e2"].update({"embedding": [0.0, 1.0], "poincare_embedding": [0.5, 0.0]})
-    before = np.linalg.norm(np.array(ds.graph.graph.nodes["e1"]["embedding"]) - np.array(ds.graph.graph.nodes["e2"]["embedding"])) ** 2
+    before = (
+        np.linalg.norm(
+            np.array(ds.graph.graph.nodes["e1"]["embedding"])
+            - np.array(ds.graph.graph.nodes["e2"]["embedding"])
+        )
+        ** 2
+    )
     ds.train_product_manifold_embeddings([("e1", "e2")], epochs=5, lr=0.1)
-    after = np.linalg.norm(np.array(ds.graph.graph.nodes["e1"]["embedding"]) - np.array(ds.graph.graph.nodes["e2"]["embedding"])) ** 2
+    after = (
+        np.linalg.norm(
+            np.array(ds.graph.graph.nodes["e1"]["embedding"])
+            - np.array(ds.graph.graph.nodes["e2"]["embedding"])
+        )
+        ** 2
+    )
     assert after < before
-

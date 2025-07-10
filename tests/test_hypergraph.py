@@ -1,7 +1,6 @@
 import numpy as np
 
-from datacreek.analysis.hypergraph import hyper_sagnn_embeddings
-from datacreek.analysis.hypergraph import hyper_sagnn_head_drop_embeddings
+from datacreek.analysis.hypergraph import hyper_sagnn_embeddings, hyper_sagnn_head_drop_embeddings
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 

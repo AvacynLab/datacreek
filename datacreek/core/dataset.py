@@ -13,7 +13,18 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional, Tuple, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import networkx as nx
 import numpy as np
@@ -2321,9 +2332,7 @@ class DatasetBuilder:
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.persistence_wasserstein_distance`."""
 
-        dist = self.graph.persistence_wasserstein_distance(
-            other, dimension=dimension, order=order
-        )
+        dist = self.graph.persistence_wasserstein_distance(other, dimension=dimension, order=order)
         self._record_event(
             "persistence_wasserstein_distance",
             f"distance={dist}",

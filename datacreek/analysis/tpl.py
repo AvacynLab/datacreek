@@ -22,15 +22,11 @@ def tpl_correct_graph(
 ) -> Dict[str, float | bool]:
     """Correct ``graph`` topology if Wasserstein distance is too high."""
 
-    dist_before = persistence_wasserstein_distance(
-        graph, target, dimension=dimension, order=order
-    )
+    dist_before = persistence_wasserstein_distance(graph, target, dimension=dimension, order=order)
 
     corrected = False
     if dist_before > epsilon:
-        motif = generate_graph_rnn_like(
-            target.number_of_nodes(), target.number_of_edges()
-        )
+        motif = generate_graph_rnn_like(target.number_of_nodes(), target.number_of_edges())
         mapping = {i: n for i, n in enumerate(graph.nodes())}
         for u, v in motif.edges():
             a = mapping.get(u)
@@ -42,13 +38,10 @@ def tpl_correct_graph(
         resolve_sheaf_obstruction(graph, max_iter=max_iter)
         corrected = True
 
-    dist_after = persistence_wasserstein_distance(
-        graph, target, dimension=dimension, order=order
-    )
+    dist_after = persistence_wasserstein_distance(graph, target, dimension=dimension, order=order)
 
     return {
         "distance_before": float(dist_before),
         "distance_after": float(dist_after),
         "corrected": corrected,
     }
-

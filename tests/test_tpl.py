@@ -29,4 +29,3 @@ def test_tpl_correct_graph_wrapper():
         pytest.skip("gudhi not available")
     assert "distance_after" in res
     assert any(e.operation == "tpl_correct_graph" for e in ds.events)
-

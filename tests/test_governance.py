@@ -1,9 +1,10 @@
 import numpy as np
+
 from datacreek.analysis.governance import (
     alignment_correlation,
     average_hyperbolic_radius,
-    scale_bias_wasserstein,
     governance_metrics,
+    scale_bias_wasserstein,
 )
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 

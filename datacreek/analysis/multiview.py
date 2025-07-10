@@ -5,6 +5,7 @@ This module implements simple helpers to correlate Euclidean
 (Poincaré) ones. Functions are intentionally lightweight so that tests
 can run without heavy dependencies.
 """
+
 from __future__ import annotations
 
 from typing import Dict, Iterable, Tuple
@@ -39,9 +40,19 @@ def product_embedding(
         emb[n] = np.concatenate([h, e])
     return emb
 
+
 # --- Training on product manifold ---
 
-def train_product_manifold(hyperbolic: Dict[object, Iterable[float]], euclidean: Dict[object, Iterable[float]], contexts: Iterable[tuple[object, object]], *, alpha: float = 0.5, lr: float = 0.01, epochs: int = 1) -> tuple[Dict[object, np.ndarray], Dict[object, np.ndarray]]:
+
+def train_product_manifold(
+    hyperbolic: Dict[object, Iterable[float]],
+    euclidean: Dict[object, Iterable[float]],
+    contexts: Iterable[tuple[object, object]],
+    *,
+    alpha: float = 0.5,
+    lr: float = 0.01,
+    epochs: int = 1,
+) -> tuple[Dict[object, np.ndarray], Dict[object, np.ndarray]]:
     """Train embeddings by minimizing a simplified product-manifold loss."""
     nodes = hyperbolic.keys() & euclidean.keys()
     if not nodes:
@@ -226,7 +237,11 @@ def meta_autoencoder(
 
     X = [
         np.concatenate(
-            [np.asarray(n2v[n], dtype=float), np.asarray(gw[n], dtype=float), np.asarray(hyp[n], dtype=float)]
+            [
+                np.asarray(n2v[n], dtype=float),
+                np.asarray(gw[n], dtype=float),
+                np.asarray(hyp[n], dtype=float),
+            ]
         )
         for n in nodes
     ]
@@ -242,4 +257,3 @@ def meta_autoencoder(
         reconstructed[node] = recon[idx]
 
     return latent, reconstructed
-

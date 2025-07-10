@@ -109,10 +109,8 @@ def __getattr__(name: str):
 
         return getattr(_f, name)
     if name in {"hyper_sagnn_embeddings", "hyper_sagnn_head_drop_embeddings"}:
-        from .hypergraph import (
-            hyper_sagnn_embeddings as _hs,
-            hyper_sagnn_head_drop_embeddings as _hd,
-        )
+        from .hypergraph import hyper_sagnn_embeddings as _hs
+        from .hypergraph import hyper_sagnn_head_drop_embeddings as _hd
 
         return _hs if name == "hyper_sagnn_embeddings" else _hd
     if name in {"mdl_description_length", "select_mdl_motifs"}:
@@ -133,8 +131,8 @@ def __getattr__(name: str):
         "scale_bias_wasserstein",
         "governance_metrics",
     }:
-        from . import multiview as _mv
         from . import governance as _g
+        from . import multiview as _mv
 
         if hasattr(_mv, name):
             return getattr(_mv, name)

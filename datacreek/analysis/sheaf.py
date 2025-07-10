@@ -151,9 +151,7 @@ def resolve_sheaf_obstruction(
     return h1
 
 
-def sheaf_consistency_score(
-    graph: nx.Graph, *, edge_attr: str = "sheaf_sign"
-) -> float:
+def sheaf_consistency_score(graph: nx.Graph, *, edge_attr: str = "sheaf_sign") -> float:
     """Return a [0, 1] score measuring sheaf consistency.
 
     The score is computed as ``1 / (1 + H^1)``, where ``H^1`` is the
