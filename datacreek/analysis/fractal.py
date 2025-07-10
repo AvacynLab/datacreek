@@ -746,6 +746,16 @@ def fractal_information_density(
     return dim / (1.0 + ent_sum)
 
 
+def fractal_level_coverage(graph: nx.Graph) -> float:
+    """Return fraction of nodes annotated with a ``fractal_level``."""
+
+    total = graph.number_of_nodes()
+    if total == 0:
+        return 0.0
+    covered = sum(1 for _, data in graph.nodes(data=True) if "fractal_level" in data)
+    return covered / float(total)
+
+
 def diversification_score(
     global_graph: nx.Graph,
     batch_graph: nx.Graph,
@@ -1205,3 +1215,31 @@ def fractal_net_prune(
 
     pruned = {i: centers[i] for i in range(len(centers))}
     return pruned, mapping
+
+
+def fractalnet_compress(
+    embeddings: Dict[object, Iterable[float]],
+    levels: Dict[object, int],
+) -> Dict[int, np.ndarray]:
+    """Return averaged embeddings for each fractal level.
+
+    Parameters
+    ----------
+    embeddings:
+        Mapping of node id to embedding vector.
+    levels:
+        Mapping of node id to ``fractal_level`` integer.
+
+    Returns
+    -------
+    dict
+        Mapping ``level -> centroid`` computed as the mean of embeddings
+        belonging to that level. Levels with no embeddings are omitted.
+    """
+    groups: Dict[int, List[np.ndarray]] = {}
+    for node, vec in embeddings.items():
+        lvl = levels.get(node)
+        if lvl is None:
+            continue
+        groups.setdefault(int(lvl), []).append(np.asarray(vec, dtype=float))
+    return {lvl: np.mean(vs, axis=0) for lvl, vs in groups.items() if vs}

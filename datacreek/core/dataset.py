@@ -18,6 +18,9 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List
 import networkx as nx
 import numpy as np
 
+from ..analysis.autotune import AutoTuneState
+from ..utils import push_metrics
+
 if TYPE_CHECKING:
     from .ingest import IngestOptions
 
@@ -1222,6 +1225,18 @@ class DatasetBuilder:
         )
         return mapping
 
+    def fractalnet_compress(self, node_attr: str = "embedding") -> Dict[int, np.ndarray]:
+        """Wrapper for :meth:`KnowledgeGraph.fractalnet_compress`."""
+
+        comp = self.graph.fractalnet_compress(node_attr=node_attr)
+        self._record_event(
+            "fractalnet_compress",
+            "Embeddings compressed by fractal level",
+            node_attr=node_attr,
+            levels=len(comp),
+        )
+        return comp
+
     def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
 
@@ -1470,6 +1485,33 @@ class DatasetBuilder:
             "fractal_information_density",
             "Fractal information density computed",
             radii=list(radii),
+        )
+        return val
+
+    def fractal_coverage(self) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.fractal_coverage`."""
+
+        val = self.graph.fractal_coverage()
+        self._record_event(
+            "fractal_coverage",
+            "Fractal coverage computed",
+        )
+        return val
+
+    def ensure_fractal_coverage(
+        self,
+        threshold: float,
+        radii: Iterable[int],
+        *,
+        max_levels: int = 5,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.ensure_fractal_coverage`."""
+
+        val = self.graph.ensure_fractal_coverage(threshold, radii, max_levels=max_levels)
+        self._record_event(
+            "ensure_fractal_coverage",
+            "Fractal coverage enforced",
+            threshold=threshold,
         )
         return val
 
@@ -1812,6 +1854,57 @@ class DatasetBuilder:
             nodes=list(nodes),
         )
         return val
+
+    def structural_entropy(self, tau: int, *, base: float = 2.0) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.structural_entropy`."""
+
+        val = self.graph.structural_entropy(tau, base=base)
+        self._record_event(
+            "structural_entropy",
+            "Structural entropy computed",
+            base=base,
+            tau=tau,
+        )
+        return val
+
+    def autotune_step(
+        self,
+        labels: Dict[str, int],
+        motifs: Iterable[nx.Graph],
+        state: AutoTuneState,
+        *,
+        node_attr: str = "embedding",
+        weights: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+        lr: float = 0.1,
+    ) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.autotune_step`."""
+
+        res = self.graph.autotune_step(
+            labels,
+            motifs,
+            state,
+            node_attr=node_attr,
+            weights=weights,
+            lr=lr,
+        )
+        self._record_event(
+            "autotuning_layer",
+            "Autotuning iteration executed",
+            cost=res["cost"],
+            tau=res["tau"],
+            eps=res["eps"],
+        )
+        try:
+            push_metrics(
+                {
+                    "autotune_cost": float(res["cost"]),
+                    "autotune_tau": float(res["tau"]),
+                    "autotune_eps": float(res["eps"]),
+                }
+            )
+        except Exception:
+            pass
+        return res
 
     def prototype_subgraph(
         self,
@@ -4013,8 +4106,13 @@ class DatasetBuilder:
         max_levels: int = 5,
         mdl_radii: Iterable[int] | None = None,
         ib_beta: float = 1.0,
+        encrypt_key: str | None = None,
     ) -> List[Dict[str, Any]]:
         """Return prompt records with fractal and perception metadata.
+
+        When ``encrypt_key`` is provided, author and organization fields are
+        encrypted using a simple XOR cipher so that personally identifiable
+        information is not exposed in plaintext.
 
         Each entry includes the MD5 digest of the topological signature
         obtained via :meth:`KnowledgeGraph.topological_signature_hash` so that
@@ -4057,6 +4155,12 @@ class DatasetBuilder:
             if attrs.get("type") != "chunk":
                 continue
             prompt_text = attrs.get("text", "")
+            docs = [
+                u
+                for u, v, d in self.graph.graph.in_edges(node, data=True)
+                if d.get("relation") == "has_chunk"
+            ]
+            doc_attrs = self.graph.graph.nodes[docs[0]] if docs else {}
             record = {
                 "prompt": prompt_text,
                 "fractal_level": attrs.get("fractal_level"),
@@ -4067,7 +4171,14 @@ class DatasetBuilder:
                 "git_commit": commit,
                 "mdl_gain": mdl_gain,
                 "ib_beta": ib_beta,
+                "tag": "inferred",
+                "author": doc_attrs.get("author"),
+                "organization": doc_attrs.get("organization"),
             }
+            if encrypt_key:
+                from ..utils import encrypt_pii_fields
+
+                encrypt_pii_fields(record, encrypt_key, ("author", "organization"))
             data.append(record)
         self._record_event(
             "export_prompts",
@@ -4075,7 +4186,12 @@ class DatasetBuilder:
             commit=commit,
             mdl_gain=mdl_gain,
             ib_beta=ib_beta,
+            encrypted=bool(encrypt_key),
         )
+        try:
+            push_metrics({"prompts_exported": float(len(data))})
+        except Exception:
+            pass
         return data
 
     @persist_after

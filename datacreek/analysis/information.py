@@ -94,8 +94,27 @@ from typing import Iterable, List
 import networkx as nx
 
 
-def mdl_description_length(graph: nx.Graph, motifs: Iterable[nx.Graph]) -> float:
-    """Return a simplified MDL description length for ``motifs`` in ``graph``."""
+def mdl_description_length(
+    graph: nx.Graph, motifs: Iterable[nx.Graph], *, delta: float = 0.0
+) -> float:
+    """Return a simplified MDL description length for ``motifs`` in ``graph``.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    motifs:
+        Collection of motif subgraphs used to explain edges.
+    delta:
+        Optional tolerance factor. A positive ``delta`` increases the cost of
+        residual edges, effectively favouring denser motif covers.
+
+    Returns
+    -------
+    float
+        Estimated description length in bits.
+    """
+
     edges = {tuple(sorted(e)) for e in graph.edges()}
     base_bits = math.log(len(edges) + 1.0)
     motif_bits = math.log(graph.number_of_nodes() + 1.0)
@@ -103,7 +122,8 @@ def mdl_description_length(graph: nx.Graph, motifs: Iterable[nx.Graph]) -> float
     for m in motifs:
         covered.update(tuple(sorted(e)) for e in m.edges())
     residual = len(edges - covered)
-    return len(list(motifs)) * motif_bits + residual * base_bits
+    penalty = 1.0 + float(delta)
+    return len(list(motifs)) * motif_bits + residual * base_bits * penalty
 
 
 def select_mdl_motifs(graph: nx.Graph, motifs: Iterable[nx.Graph]) -> List[nx.Graph]:
@@ -164,3 +184,31 @@ def subgraph_entropy(graph: nx.Graph, nodes: Iterable, *, base: float = 2.0) -> 
     """
     sub = graph.subgraph(nodes)
     return graph_entropy(sub, base=base)
+
+
+def structural_entropy(graph: nx.Graph, tau: int, *, base: float = 2.0) -> float:
+    """Return entropy after purging edges incident to low-triangle nodes.
+
+    A temporary copy of ``graph`` is created. All edges touching a node whose
+    triangle count is strictly less than ``tau`` are removed. The Shannon
+    entropy of the resulting degree distribution is then computed.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    tau:
+        Minimum triangle count required to keep edges for a node.
+    base:
+        Logarithm base for entropy computation. Defaults to 2.
+
+    Returns
+    -------
+    float
+        Entropy of the filtered graph.
+    """
+    g = graph.copy()
+    tri = nx.triangles(g)
+    to_remove = [(u, v) for u, v in g.edges() if tri.get(u, 0) < tau or tri.get(v, 0) < tau]
+    g.remove_edges_from(to_remove)
+    return graph_entropy(g, base=base)

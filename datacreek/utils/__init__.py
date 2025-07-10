@@ -1,5 +1,6 @@
 """Utility helpers for datacreek."""
 
+from .chunking import chunk_by_sentences, chunk_by_tokens
 from .config import (
     get_curate_config,
     get_curate_settings,
@@ -15,6 +16,7 @@ from .config import (
     load_config,
     merge_configs,
 )
+from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
 from .gitinfo import get_commit_hash
 from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
@@ -24,6 +26,7 @@ from .llm_processing import (
     parse_ratings,
     qa_pairs_to_records,
 )
+from .metrics import push_metrics
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
@@ -58,6 +61,8 @@ __all__ = [
     "get_prompt",
     "merge_configs",
     "split_into_chunks",
+    "chunk_by_tokens",
+    "chunk_by_sentences",
     "extract_json_from_text",
     "clean_text",
     "normalize_units",
@@ -77,4 +82,9 @@ __all__ = [
     "graph_to_text",
     "insert_tool_calls",
     "execute_tool_calls",
+    "xor_encrypt",
+    "xor_decrypt",
+    "encrypt_pii_fields",
+    "decrypt_pii_fields",
+    "push_metrics",
 ]

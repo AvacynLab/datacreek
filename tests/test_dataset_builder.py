@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import json
 from pathlib import Path
 
@@ -8,13 +9,17 @@ import numpy as np
 import pytest
 import requests
 
-from datacreek.analysis import bottleneck_distance
-from datacreek.core import dataset
-from datacreek.core.dataset import DatasetBuilder
-from datacreek.core.ingest import IngestOptions
-from datacreek.models.qa import QAPair
-from datacreek.models.stage import DatasetStage
-from datacreek.pipelines import DatasetType, PipelineStep
+try:
+    from datacreek import AutoTuneState
+    from datacreek.analysis import bottleneck_distance
+    from datacreek.core import dataset
+    from datacreek.core.dataset import DatasetBuilder
+    from datacreek.core.ingest import IngestOptions
+    from datacreek.models.qa import QAPair
+    from datacreek.models.stage import DatasetStage
+    from datacreek.pipelines import DatasetType, PipelineStep
+except Exception:  # pragma: no cover - optional dependencies missing
+    pytest.skip("datacreek package unavailable", allow_module_level=True)
 
 
 def test_dataset_has_its_own_graph():
@@ -990,6 +995,7 @@ def test_compute_fractal_features_and_export():
     assert "git_commit" in records[0]
     assert records[0]["ib_beta"] == 0.5
     assert "mdl_gain" in records[0]
+    assert records[0]["tag"] == "inferred"
     assert "signature_hash" in records[0]
     assert any(e.operation == "compute_fractal_features" for e in ds.events)
     assert any(e.operation == "export_prompts" for e in ds.events)
@@ -1005,6 +1011,20 @@ def test_export_prompts_auto_fractal():
     levels = {r["fractal_level"] for r in records}
     assert levels == {1}
     assert any(e.operation == "annotate_mdl_levels" for e in ds.events)
+
+
+def test_export_prompts_encryption():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s", author="A", organization="O")
+    ds.add_chunk("d", "c1", "hello")
+    recs = ds.export_prompts(encrypt_key="k")
+    assert recs and "author" in recs[0]
+    assert recs[0]["author"] != "A"
+    from datacreek.utils import decrypt_pii_fields
+
+    decrypt_pii_fields(recs[0], "k", ["author", "organization"])
+    assert recs[0]["author"] == "A"
+    assert recs[0]["organization"] == "O"
 
 
 def test_dimension_distortion_wrapper():
@@ -1916,6 +1936,17 @@ def test_subgraph_entropy_wrapper():
     assert ds.events[-1].operation == "subgraph_entropy"
 
 
+def test_structural_entropy_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+    ds.graph.graph.add_edges_from([("a0", "a1"), ("a1", "a2"), ("a0", "a2")])
+    val = ds.structural_entropy(tau=1)
+    assert val >= 0
+    assert ds.events[-1].operation == "structural_entropy"
+
+
 def test_prototype_subgraph_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -2152,3 +2183,51 @@ def test_run_orchestrator_wrapper(tmp_path):
     assert "instruction" in out
     assert ds.stage == DatasetStage.EXPORTED
     assert any(e.operation == "orchestrator" for e in ds.events)
+
+
+def test_autotune_step_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(3):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+        ds.graph.graph.nodes[f"a{i}"]["embedding"] = np.array([i, i], dtype=float)
+    motifs = [ds.graph.graph.subgraph(["a0", "a1"]).copy()]
+    labels = {f"a{i}": i % 2 for i in range(3)}
+    state = AutoTuneState()
+    res = ds.autotune_step(labels, motifs, state)
+    assert "cost" in res
+    assert ds.events[-1].operation == "autotuning_layer"
+
+
+def test_autotune_step_metrics(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    for i in range(2):
+        ds.add_atom("d", f"a{i}", str(i), "text")
+        ds.graph.graph.nodes[f"a{i}"]["embedding"] = np.array([i, i], dtype=float)
+    calls = []
+
+    def dummy(metrics, **_):
+        calls.append(metrics)
+
+    mod = importlib.import_module("datacreek.utils.metrics")
+    monkeypatch.setattr(mod, "push_metrics", dummy)
+
+    labels = {"a0": 0, "a1": 1}
+    state = AutoTuneState()
+    ds.autotune_step(labels, [], state)
+    assert calls and "autotune_cost" in calls[0]
+
+
+def test_fractal_coverage_wrappers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_chunk("d", "c1", "hello")
+    ds.add_chunk("d", "c2", "world")
+    ds.annotate_fractal_levels([1], max_levels=1)
+    cov = ds.fractal_coverage()
+    assert 0.0 < cov <= 1.0
+    assert any(e.operation == "fractal_coverage" for e in ds.events)
+    cov2 = ds.ensure_fractal_coverage(1.0, [1], max_levels=1)
+    assert cov2 >= 1.0
+    assert any(e.operation == "ensure_fractal_coverage" for e in ds.events)

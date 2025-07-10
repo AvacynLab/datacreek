@@ -12,6 +12,8 @@ import numpy as np
 import requests
 from dateutil import parser
 
+from ..analysis.autotune import AutoTuneState
+
 try:
     from neo4j import Driver, GraphDatabase
 except Exception:  # pragma: no cover - optional dependency for tests
@@ -1752,7 +1754,8 @@ class KnowledgeGraph:
                 features.append(np.asarray(data[node_attr], dtype=float))
 
         if not features:
-            raise ValueError("no node features found")
+            # gracefully handle empty graphs without embeddings
+            return {}
 
         hyper_list: List[tuple[str, List[int]]] = []
         for node, data in self.graph.nodes(data=True):
@@ -1760,6 +1763,9 @@ class KnowledgeGraph:
                 members = [index[v] for _, v in self.graph.edges(node) if v in index]
                 if members:
                     hyper_list.append((node, members))
+
+        if not hyper_list:
+            return {}
 
         from ..analysis.hypergraph import hyper_sagnn_embeddings as _hs
 
@@ -1981,6 +1987,25 @@ class KnowledgeGraph:
             self.graph.nodes[node]["pruned_class"] = int(idx)
         return {str(n): int(c) for n, c in mapping.items()}
 
+    def fractalnet_compress(self, node_attr: str = "embedding") -> Dict[int, np.ndarray]:
+        """Return level-wise averaged embeddings using :func:`fractalnet_compress`."""
+
+        from ..analysis.fractal import fractalnet_compress as _fc
+
+        embeddings = {
+            n: np.asarray(data.get(node_attr), dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if node_attr in data
+        }
+        levels = {
+            n: int(data["fractal_level"])
+            for n, data in self.graph.nodes(data=True)
+            if "fractal_level" in data
+        }
+        if not embeddings or not levels:
+            return {}
+        return _fc(embeddings, levels)
+
     # ------------------------------------------------------------------
     # Fractal and topological metrics
     # ------------------------------------------------------------------
@@ -2183,6 +2208,42 @@ class KnowledgeGraph:
 
         return _se(self.graph.to_undirected(), nodes, base=base)
 
+    def structural_entropy(self, tau: int, *, base: float = 2.0) -> float:
+        """Return structural entropy filtered by triangle threshold ``tau``."""
+
+        from ..analysis.information import structural_entropy as _se
+
+        return _se(self.graph.to_undirected(), tau, base=base)
+
+    def autotune_step(
+        self,
+        labels: Dict[str, int],
+        motifs: Iterable[nx.Graph],
+        state: "AutoTuneState",
+        *,
+        node_attr: str = "embedding",
+        weights: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+        lr: float = 0.1,
+    ) -> Dict[str, Any]:
+        """Run one autotuning iteration on the current graph."""
+
+        from ..analysis.autotune import autotune_step as _at
+
+        feats = {
+            n: np.asarray(data[node_attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if node_attr in data
+        }
+        return _at(
+            self.graph.to_undirected(),
+            feats,
+            labels,
+            motifs,
+            state,
+            weights=weights,
+            lr=lr,
+        )
+
     def prototype_subgraph(
         self,
         labels: Dict[str, int],
@@ -2341,6 +2402,28 @@ class KnowledgeGraph:
         from ..analysis.fractal import fractal_information_density as _fid
 
         return _fid(self.graph.to_undirected(), radii, max_dim=max_dim)
+
+    def fractal_coverage(self) -> float:
+        """Return fraction of nodes with a ``fractal_level`` attribute."""
+
+        from ..analysis.fractal import fractal_level_coverage as _fc
+
+        return _fc(self.graph)
+
+    def ensure_fractal_coverage(
+        self,
+        threshold: float,
+        radii: Iterable[int],
+        *,
+        max_levels: int = 5,
+    ) -> float:
+        """Ensure that at least ``threshold`` nodes are annotated with a fractal level."""
+
+        cov = self.fractal_coverage()
+        if cov < threshold:
+            self.annotate_fractal_levels(radii, max_levels=max_levels)
+            cov = self.fractal_coverage()
+        return cov
 
     def diversification_score(
         self,
