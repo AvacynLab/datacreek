@@ -1453,6 +1453,18 @@ def test_autotune_step_method():
     assert "cost" in res
 
 
+def test_faiss_index_build_and_search():
+    kg = KnowledgeGraph()
+    kg.graph.add_node("a", embedding=[1.0, 0.0])
+    kg.graph.add_node("b", embedding=[0.0, 1.0])
+    try:
+        kg.build_faiss_index()
+    except RuntimeError:
+        pytest.skip("faiss not installed")
+    res = kg.search_faiss([1.0, 0.0], k=1)
+    assert res == ["a"]
+
+
 def test_fractal_coverage_methods():
     kg = KnowledgeGraph()
     kg.add_document("d", source="s")

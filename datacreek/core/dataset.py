@@ -975,6 +975,40 @@ class DatasetBuilder:
             seed=seed,
         )
 
+    def compute_node2vec_gds(
+        self,
+        driver: "Driver",
+        *,
+        dimensions: int = 128,
+        walk_length: int = 40,
+        walks_per_node: int = 10,
+        p: float = 1.0,
+        q: float = 1.0,
+        dataset: str | None = None,
+        write_property: str = "embedding",
+    ) -> None:
+        """Run Neo4j GDS Node2Vec and store embeddings on the graph."""
+
+        self.graph.compute_node2vec_gds(
+            driver,
+            dimensions=dimensions,
+            walk_length=walk_length,
+            walks_per_node=walks_per_node,
+            p=p,
+            q=q,
+            dataset=dataset,
+            write_property=write_property,
+        )
+        self._record_event(
+            "compute_node2vec_gds",
+            "Neo4j Node2Vec embeddings computed",
+            dimensions=dimensions,
+            walk_length=walk_length,
+            walks_per_node=walks_per_node,
+            p=p,
+            q=q,
+        )
+
     def compute_graphwave_embeddings(self, scales: Iterable[float], num_points: int = 10) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_graphwave_embeddings`."""
 
@@ -1147,6 +1181,21 @@ class DatasetBuilder:
             "TransE relation embeddings computed",
             dimensions=dimensions,
         )
+
+    def build_faiss_index(self, node_attr: str = "embedding") -> None:
+        """Wrapper for :meth:`KnowledgeGraph.build_faiss_index`."""
+
+        self.graph.build_faiss_index(node_attr=node_attr)
+        self._record_event(
+            "build_faiss_index",
+            "FAISS index built",
+            node_attr=node_attr,
+        )
+
+    def search_faiss(self, vector: Iterable[float], k: int = 5) -> list[str]:
+        """Wrapper for :meth:`KnowledgeGraph.search_faiss`."""
+
+        return self.graph.search_faiss(vector, k=k)
 
     def compute_distmult_embeddings(
         self,
@@ -1874,7 +1923,7 @@ class DatasetBuilder:
         state: AutoTuneState,
         *,
         node_attr: str = "embedding",
-        weights: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0),
+        weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
         lr: float = 0.1,
     ) -> Dict[str, Any]:
         """Wrapper for :meth:`KnowledgeGraph.autotune_step`."""

@@ -2231,3 +2231,30 @@ def test_fractal_coverage_wrappers():
     cov2 = ds.ensure_fractal_coverage(1.0, [1], max_levels=1)
     assert cov2 >= 1.0
     assert any(e.operation == "ensure_fractal_coverage" for e in ds.events)
+
+
+def test_faiss_index_wrappers():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.graph.graph.add_node("n1", embedding=[1.0, 0.0])
+    ds.graph.graph.add_node("n2", embedding=[0.0, 1.0])
+    try:
+        ds.build_faiss_index()
+    except RuntimeError:
+        pytest.skip("faiss not installed")
+    res = ds.search_faiss([1.0, 0.0], k=1)
+    assert res == ["n1"]
+
+
+def test_compute_node2vec_gds_wrapper(monkeypatch):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    called = {}
+
+    def fake(self, driver, **kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr(ds.graph.__class__, "compute_node2vec_gds", fake)
+    ds.compute_node2vec_gds(driver="drv", dimensions=16, p=2.0, q=0.5)
+    assert called["dimensions"] == 16
+    assert called["p"] == 2.0
+    assert called["q"] == 0.5

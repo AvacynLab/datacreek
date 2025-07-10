@@ -69,6 +69,8 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `link_authors_organizations()` | connect authors to their organisations |
 | `prune_sources()` | remove unwanted sources |
 | `compute_graph_embeddings()` | build Node2Vec embeddings on nodes |
+| `compute_node2vec_gds()` | Neo4j GDS Node2Vec on the database |
+| `build_faiss_index()` | build a FAISS index for cosine search |
 | `mark_conflicting_facts()` | flag contradictory facts |
 
 **Dataset generation**
@@ -1553,6 +1555,7 @@ curl -X POST localhost:8000/save -d "ds_id=1&fmt=jsonl"
    - Clean chunk text to strip markup and whitespace
    - Normalize date fields across nodes to ISO format
    - Compute Node2Vec embeddings for deeper graph analysis
+   - Optionally run Node2Vec in Neo4j GDS and build a FAISS index for ANN search
    - Predict links between entities using graph embeddings
    - Mark conflicting facts when multiple sources disagree
    - Validate logical consistency of relations (e.g., parent before child)
