@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 from itertools import cycle
-from typing import Any, Iterable, Dict
+from typing import Any, Dict, Iterable
 
 
 def xor_encrypt(text: str, key: str) -> str:

@@ -1,6 +1,7 @@
-import sys
 import importlib
+import sys
 import types
+
 import pytest
 
 # skip if datacreek cannot be imported due to missing deps

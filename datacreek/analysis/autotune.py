@@ -5,12 +5,12 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 import networkx as nx
 
+from .fractal import bottleneck_distance, fractal_level_coverage
 from .information import (
     graph_information_bottleneck,
     mdl_description_length,
     structural_entropy,
 )
-from .fractal import bottleneck_distance, fractal_level_coverage
 
 
 @dataclass
@@ -94,19 +94,15 @@ def autotune_step(
 
     # finite difference gradients for tau, eps, beta and delta
     H_next = structural_entropy(graph, state.tau + 1)
-    grad_tau = (H_next - H)
+    grad_tau = H_next - H
     state.tau = max(1, int(state.tau - lr * grad_tau))
 
     if state.prev_graph is not None:
-        D_next = bottleneck_distance(
-            state.prev_graph, graph, approx_epsilon=state.eps + 0.01
-        )
+        D_next = bottleneck_distance(state.prev_graph, graph, approx_epsilon=state.eps + 0.01)
         grad_eps = (D_next - D) / 0.01
         state.eps = max(0.0, state.eps + lr * grad_eps)
 
-    I_next = graph_information_bottleneck(
-        embeddings, labels, beta=state.beta + 0.01
-    )
+    I_next = graph_information_bottleneck(embeddings, labels, beta=state.beta + 0.01)
     grad_beta = (I_next - I) / 0.01
     state.beta = max(0.0, state.beta - lr * grad_beta)
 

@@ -11,6 +11,7 @@ import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
+
 from ..analysis.autotune import AutoTuneState
 
 try:

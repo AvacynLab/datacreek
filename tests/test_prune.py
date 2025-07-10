@@ -1,4 +1,5 @@
 import numpy as np
+
 from datacreek.analysis.fractal import fractal_net_prune, fractalnet_compress
 
 try:

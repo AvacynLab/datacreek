@@ -633,6 +633,7 @@ def __getattr__(name: str):
     if name == "AutoTuneState" or name == "autotune_step":
         from .analysis.autotune import AutoTuneState as _AS
         from .core.dataset import DatasetBuilder as _DB
+
         if name == "AutoTuneState":
             return _AS
         return _DB.autotune_step
@@ -646,12 +647,11 @@ def __getattr__(name: str):
         "encrypt_pii_fields",
         "decrypt_pii_fields",
     }:
-        from .utils.crypto import (
-            xor_encrypt as _xe,
-            xor_decrypt as _xd,
-            encrypt_pii_fields as _ep,
-            decrypt_pii_fields as _dp,
-        )
+        from .utils.crypto import decrypt_pii_fields as _dp
+        from .utils.crypto import encrypt_pii_fields as _ep
+        from .utils.crypto import xor_decrypt as _xd
+        from .utils.crypto import xor_encrypt as _xe
+
         return {
             "xor_encrypt": _xe,
             "xor_decrypt": _xd,

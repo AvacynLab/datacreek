@@ -1,7 +1,7 @@
 import asyncio
+import importlib
 import json
 from pathlib import Path
-import importlib
 
 import fakeredis
 import networkx as nx
@@ -10,8 +10,8 @@ import pytest
 import requests
 
 try:
-    from datacreek.analysis import bottleneck_distance
     from datacreek import AutoTuneState
+    from datacreek.analysis import bottleneck_distance
     from datacreek.core import dataset
     from datacreek.core.dataset import DatasetBuilder
     from datacreek.core.ingest import IngestOptions
@@ -2184,6 +2184,7 @@ def test_run_orchestrator_wrapper(tmp_path):
     assert ds.stage == DatasetStage.EXPORTED
     assert any(e.operation == "orchestrator" for e in ds.events)
 
+
 def test_autotune_step_wrapper():
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.add_document("d", source="s")
@@ -2230,4 +2231,3 @@ def test_fractal_coverage_wrappers():
     cov2 = ds.ensure_fractal_coverage(1.0, [1], max_levels=1)
     assert cov2 >= 1.0
     assert any(e.operation == "ensure_fractal_coverage" for e in ds.events)
-

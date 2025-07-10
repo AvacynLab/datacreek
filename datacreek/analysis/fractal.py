@@ -752,9 +752,7 @@ def fractal_level_coverage(graph: nx.Graph) -> float:
     total = graph.number_of_nodes()
     if total == 0:
         return 0.0
-    covered = sum(
-        1 for _, data in graph.nodes(data=True) if "fractal_level" in data
-    )
+    covered = sum(1 for _, data in graph.nodes(data=True) if "fractal_level" in data)
     return covered / float(total)
 
 
@@ -1245,4 +1243,3 @@ def fractalnet_compress(
             continue
         groups.setdefault(int(lvl), []).append(np.asarray(vec, dtype=float))
     return {lvl: np.mean(vs, axis=0) for lvl, vs in groups.items() if vs}
-

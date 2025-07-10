@@ -185,6 +185,7 @@ def subgraph_entropy(graph: nx.Graph, nodes: Iterable, *, base: float = 2.0) -> 
     sub = graph.subgraph(nodes)
     return graph_entropy(sub, base=base)
 
+
 def structural_entropy(graph: nx.Graph, tau: int, *, base: float = 2.0) -> float:
     """Return entropy after purging edges incident to low-triangle nodes.
 
@@ -211,4 +212,3 @@ def structural_entropy(graph: nx.Graph, tau: int, *, base: float = 2.0) -> float
     to_remove = [(u, v) for u, v in g.edges() if tri.get(u, 0) < tau or tri.get(v, 0) < tau]
     g.remove_edges_from(to_remove)
     return graph_entropy(g, base=base)
-

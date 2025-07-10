@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List
 
 import networkx as nx
 import numpy as np
+
 from ..analysis.autotune import AutoTuneState
 from ..utils import push_metrics
 
@@ -1506,9 +1507,7 @@ class DatasetBuilder:
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.ensure_fractal_coverage`."""
 
-        val = self.graph.ensure_fractal_coverage(
-            threshold, radii, max_levels=max_levels
-        )
+        val = self.graph.ensure_fractal_coverage(threshold, radii, max_levels=max_levels)
         self._record_event(
             "ensure_fractal_coverage",
             "Fractal coverage enforced",

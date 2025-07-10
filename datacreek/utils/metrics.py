@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Dict
 
 
-def push_metrics(metrics: Dict[str, float], *, prefix: str = "datacreek", host: str = "localhost", port: int = 8125) -> None:
+def push_metrics(
+    metrics: Dict[str, float],
+    *,
+    prefix: str = "datacreek",
+    host: str = "localhost",
+    port: int = 8125,
+) -> None:
     """Send ``metrics`` to a StatsD server if the client is available.
 
     Parameters

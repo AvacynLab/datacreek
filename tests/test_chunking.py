@@ -1,7 +1,8 @@
 import importlib.util
-from pathlib import Path
 import sys
 import types
+from pathlib import Path
+
 import pytest
 
 datacreek_pkg = sys.modules.setdefault("datacreek", types.ModuleType("datacreek"))
@@ -15,8 +16,12 @@ sys.modules.setdefault(
 )
 core_pkg = types.ModuleType("datacreek.core")
 dataset_mod = types.ModuleType("datacreek.core.dataset")
+
+
 class InvariantPolicy:
     loops = 0
+
+
 dataset_mod.InvariantPolicy = InvariantPolicy
 core_pkg.dataset = dataset_mod
 setattr(datacreek_pkg, "core", core_pkg)

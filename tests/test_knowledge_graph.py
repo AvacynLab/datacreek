@@ -11,6 +11,7 @@ except Exception:  # pragma: no cover - deps missing
     requests = None  # type: ignore
 
 from datacreek.analysis import bottleneck_distance
+
 try:
     from datacreek import AutoTuneState
     from datacreek.core.knowledge_graph import KnowledgeGraph
@@ -1436,6 +1437,7 @@ def test_select_mdl_motifs_method():
     motif = nx.Graph([("a", "b"), ("b", "c"), ("a", "c")])
     selected = kg.select_mdl_motifs([motif])
     assert selected and isinstance(selected[0], nx.Graph)
+
 
 def test_autotune_step_method():
     kg = KnowledgeGraph()
