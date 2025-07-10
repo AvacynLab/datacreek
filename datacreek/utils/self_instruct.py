@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Callable, Iterable
+from typing import Awaitable, Callable, Iterable
 
 from ..templates.library import validate_output
 from .llm_processing import parse_qa_pairs
@@ -29,6 +29,43 @@ def generate_with_self_instruct(
 
     for attempt in range(retries):
         raw = llm_call(instruction)
+        if validate_output(template, raw):
+            return raw
+        pairs = parse_qa_pairs(raw)
+        if pairs:
+            try:
+                serial = json.dumps([p.__dict__ for p in pairs])
+                if validate_output(template, serial):
+                    return serial
+            except Exception:
+                pass
+        logger.debug("Validation failed on attempt %d", attempt + 1)
+    raise RuntimeError("LLM output did not pass validation")
+
+
+async def generate_with_self_instruct_async(
+    llm_call: Callable[[str], Awaitable[str]],
+    instruction: str,
+    *,
+    template: str,
+    retries: int = 3,
+) -> str:
+    """Asynchronous variant of :func:`generate_with_self_instruct`.
+
+    Parameters
+    ----------
+    llm_call:
+        Awaitable callable returning a completion for ``instruction``.
+    instruction:
+        Prompt to send to the language model.
+    template:
+        Validation template name.
+    retries:
+        Number of attempts allowed before raising an error.
+    """
+
+    for attempt in range(retries):
+        raw = await llm_call(instruction)
         if validate_output(template, raw):
             return raw
         pairs = parse_qa_pairs(raw)

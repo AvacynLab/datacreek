@@ -10,4 +10,5 @@ import pytest
 def _no_neo4j(monkeypatch):
     """Disable Neo4j access during tests."""
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
+    monkeypatch.setattr("datacreek.core.dataset.InvariantPolicy.loops", 0)
     yield

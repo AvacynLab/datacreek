@@ -110,11 +110,37 @@ step:
    links.
 5. **Fractalization & embeddings** – `build_mdl_hierarchy()` performs box
    covering and `compute_graph_embeddings()` materializes Node2Vec vectors.
-6. **Topological Perception Layer** – `optimize_topology()` minimizes
-   bottleneck distance and can inject NetGAN/GraphRNN edges when needed.
-7. **Semantic perception** – `apply_perception()` modifies node text and now
+6. **Automated monitoring** – `monitor_and_remediate()` runs after each
+   major step to enforce entropy, fractal dimension and spectral gap
+   thresholds.  Limits are defined by an `InvariantPolicy` dataclass and
+   cleanup loops continue until metrics fall within range.
+7. **Dynamic reconfiguration** – `dynamic_reconfigure()` refreshes fractal levels
+   and resolves sheaf obstructions as the graph evolves.
+8. **Hypergraph layer** – `run_hypergraph_layer()` computes Hyper‑SAGNN
+   embeddings and inserts predicted hyperedges via
+   `update_hypergraph_structure()`.
+9. **Policy enforcement** – `_enforce_policy()` wraps dynamic reconfiguration,
+   hypergraph suggestions and invariant monitoring so each pipeline stage
+   remains within entropy, fractal and spectral limits.
+10. **Automatic triggers** – dataset mutations decorated with
+   `monitor_after()` enforce the policy right after each update.
+11. **Background monitor** – `start_policy_monitor()` periodically applies the
+   policy in an asynchronous loop until `stop_policy_monitor()` is called.
+12. **Threaded monitoring** – `start_policy_monitor_thread()` runs the same
+   loop in a separate thread when `auto_monitor=True`.
+   ```python
+   from datacreek import DatasetBuilder, DatasetType, InvariantPolicy, start_policy_monitor_thread
+
+   ds = DatasetBuilder(DatasetType.QA, name="demo", auto_monitor=True)
+   # adjust thresholds if necessary
+   ds.policy = InvariantPolicy(entropy_max=6.0, gap_min=0.1)
+   start_policy_monitor_thread(ds, [1], interval=120.0)
+   ```
+13. **Async orchestration** – `run_orchestrator_async()` executes the full
+   pipeline with concurrent LLM calls via `run_generation_layer_async`.
+9. **Semantic perception** – `apply_perception()` modifies node text and now
    automatically triggers `node_similarity()` to flag near duplicates.
-8. **Export & datasets** – `run_generation_pipeline()` produces QA pairs or
+11. **Export & datasets** – `run_generation_pipeline()` produces QA pairs or
    other dataset types which are curated via `curate.py` and saved through
    `save_as.py`.
 
@@ -798,6 +824,8 @@ records.
    duplicates can be detected. Edge traversal is recorded so
    `coverage_stats()` can report how much of the graph has been explored. User
    feedback is stored via `record_feedback()` for continuous improvements.
+8. **LLM service connectors** – `LLMService` centralizes OpenAI/vLLM access and
+   provides synchronous and asynchronous batch completions.
 
 ## License
 

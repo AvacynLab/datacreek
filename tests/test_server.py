@@ -119,6 +119,7 @@ def test_api_dataset_ingest_resolves_path(tmp_path, monkeypatch):
     client = fakeredis.FakeStrictRedis()
     app_module.REDIS = client
     monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
     import datacreek.tasks as tasks_mod
 
     tasks_mod.celery_app.conf.task_always_eager = True
@@ -408,6 +409,9 @@ def test_dataset_ops_endpoints(monkeypatch):
 
                 def __exit__(self_s, exc_type, exc, tb):
                     pass
+
+                def execute_write(self_s, func, *a, **k):
+                    func(self_s, *a, **k)
 
                 def run(self_s, *a, **k):
                     pass

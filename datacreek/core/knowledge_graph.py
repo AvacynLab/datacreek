@@ -2438,6 +2438,42 @@ class KnowledgeGraph:
         )
         return [str(n) for n in path]
 
+    def predict_hyperedges(
+        self, *, k: int = 5, threshold: float = 0.8
+    ) -> list[tuple[str, list[str]]]:
+        """Suggest new hyperedges based on embedding similarity.
+
+        Parameters
+        ----------
+        k:
+            Maximum number of hyperedges to propose.
+        threshold:
+            Minimum cosine similarity between Hyper-SAGNN embeddings to
+            trigger a suggestion.
+        """
+
+        import numpy as np
+        from sklearn.metrics.pairwise import cosine_similarity
+
+        emb = self.compute_hyper_sagnn_embeddings()
+        ids = list(emb)
+        if not ids:
+            return []
+
+        vecs = np.stack([emb[i] for i in ids])
+        sim = cosine_similarity(vecs)
+        suggestions: list[tuple[str, list[str]]] = []
+        for i in range(len(ids)):
+            for j in range(i + 1, len(ids)):
+                if sim[i, j] >= threshold:
+                    nodes_i = [v for _, v in self.graph.edges(ids[i])]
+                    nodes_j = [v for _, v in self.graph.edges(ids[j])]
+                    new_nodes = sorted(set(nodes_i + nodes_j))
+                    suggestions.append((f"{ids[i]}_{ids[j]}", new_nodes))
+                    if len(suggestions) >= k:
+                        return suggestions
+        return suggestions
+
     def hyperbolic_multi_curvature_reasoning(
         self,
         start: str,

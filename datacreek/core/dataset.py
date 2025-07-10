@@ -7,12 +7,13 @@ import logging
 import os
 import re
 import secrets
+import threading
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional
 
 import networkx as nx
 import numpy as np
@@ -34,6 +35,7 @@ except Exception:  # pragma: no cover - optional
     RGNode = None
     RGEdge = None
 
+from ..models import LLMService
 from ..models.stage import DatasetStage
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
@@ -66,6 +68,29 @@ class Atom:
 
 
 @dataclass
+class InvariantPolicy:
+    r"""Thresholds used by :meth:`monitor_and_remediate`.
+
+    Parameters
+    ----------
+    entropy_max:
+        Upper bound on graph entropy :math:`H = -\sum_i p_i \log p_i`.
+    gap_min:
+        Lower bound on the normalized Laplacian spectral gap :math:`\lambda_1`.
+    fractal_range:
+        Acceptable interval for the box-counting dimension
+        :math:`d_B = -\partial_{\log l_B} \log N_B(l_B)`.
+    loops:
+        Maximum number of remediation iterations.
+    """
+
+    entropy_max: float = 8.0
+    gap_min: float = 0.05
+    fractal_range: tuple[float, float] = (1.0, 4.0)
+    loops: int = 3
+
+
+@dataclass
 class DatasetBuilder:
     """Manage a dataset under construction with its own knowledge graph."""
 
@@ -88,6 +113,20 @@ class DatasetBuilder:
     redis_client: redis.Redis | None = field(default=None, repr=False)
     neo4j_driver: Driver | None = field(default=None, repr=False, compare=False)
     redis_key: str | None = field(default=None, repr=False)
+    policy: InvariantPolicy = field(default_factory=InvariantPolicy)
+    llm_service: LLMService | None = field(default=None, repr=False)
+    auto_monitor: bool = False
+    # stop signal used by the asynchronous policy monitor
+    _policy_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
+    # background thread running the policy monitor
+    _policy_thread: threading.Thread | None = field(default=None, repr=False, compare=False)
+
+    def __del__(self) -> None:
+        """Ensure background monitoring is terminated when the builder is collected."""
+        try:
+            self.stop_policy_monitor_thread()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Name validation
@@ -110,6 +149,28 @@ class DatasetBuilder:
         require = os.getenv("DATACREEK_REQUIRE_PERSISTENCE", "1") != "0"
         if require and (self.redis_client is None or self.neo4j_driver is None):
             raise ValueError("Redis and Neo4j must be configured")
+        if self.auto_monitor:
+            try:
+                self.start_policy_monitor_thread([1])
+            except Exception:
+                logger.exception("Failed to start policy monitor thread")
+
+    def configure_llm_service(
+        self,
+        *,
+        provider: str = "vllm",
+        profile: str | None = None,
+        api_base: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        """Instantiate and store an :class:`LLMService`."""
+
+        self.llm_service = LLMService(
+            provider=provider,
+            profile=profile,
+            api_base=api_base,
+            model=model,
+        )
 
     # ------------------------------------------------------------------
     # Persistence helpers
@@ -170,6 +231,28 @@ class DatasetBuilder:
 
         return wrapper
 
+    @staticmethod
+    def monitor_after(radii: Iterable[int] | None = None):
+        """Decorator running :meth:`_enforce_policy` after the wrapped call."""
+
+        if radii is None:
+            radii = [1]
+
+        def decorator(func: Callable[[Any], Any]):
+            @wraps(func)
+            def wrapper(self, *args, **kwargs):
+                result = func(self, *args, **kwargs)
+                if self.policy.loops > 0:
+                    try:
+                        self._enforce_policy(radii)
+                    except Exception:
+                        logger.exception("Automatic policy enforcement failed")
+                return result
+
+            return wrapper
+
+        return decorator
+
     def _record_event(self, operation: str, message: str, **params: Any) -> None:
         """Store a history event and log it."""
 
@@ -194,6 +277,7 @@ class DatasetBuilder:
 
         self._persist()
 
+    @monitor_after()
     def add_document(
         self,
         doc_id: str,
@@ -220,6 +304,7 @@ class DatasetBuilder:
             source=source,
         )
 
+    @monitor_after()
     def add_section(
         self,
         doc_id: str,
@@ -238,6 +323,7 @@ class DatasetBuilder:
             source=source,
         )
 
+    @monitor_after()
     def add_chunk(
         self,
         doc_id: str,
@@ -270,6 +356,7 @@ class DatasetBuilder:
             source=source,
         )
 
+    @monitor_after()
     def add_image(
         self,
         doc_id: str,
@@ -284,6 +371,7 @@ class DatasetBuilder:
         self.graph.add_image(doc_id, image_id, path, page=page, alt_text=alt_text)
         self._record_event("add_image", f"Added image {image_id} to {doc_id}")
 
+    @monitor_after()
     def add_audio(
         self,
         doc_id: str,
@@ -2034,6 +2122,161 @@ class DatasetBuilder:
             "signature": signature,
         }
 
+    def monitor_and_remediate(
+        self,
+        radii: Iterable[int],
+        *,
+        policy: InvariantPolicy | None = None,
+    ) -> Dict[str, Any]:
+        """Enforce invariants and rerun cleanup using ``policy``.
+
+        The dashboard metrics are recomputed after each iteration until the
+        entropy, spectral gap and fractal dimension fall within the limits set by
+        ``policy``.
+        """
+
+        p = policy or self.policy
+
+        metrics = self.invariants_dashboard(radii)
+        for _ in range(p.loops):
+            changed = False
+            if metrics["entropy"] > p.entropy_max:
+                self.run_quality_layer(use_neo4j=False)
+                self.run_information_layer({}, [], beta=1.0)
+                changed = True
+            if metrics["spectral_gap"] < p.gap_min:
+                self.run_topological_perception_layer(
+                    self.graph.graph.to_undirected(), radii, loops=1, epsilon=0.0
+                )
+                changed = True
+            if not (p.fractal_range[0] <= metrics["fractal_dim"] <= p.fractal_range[1]):
+                self.run_fractal_layer(radii, max_levels=1)
+                changed = True
+            if not changed:
+                break
+            metrics = self.invariants_dashboard(radii)
+
+        self._record_event(
+            "monitor_and_remediate",
+            "Invariant policy executed",
+            entropy=metrics.get("entropy"),
+            fractal_dim=metrics.get("fractal_dim"),
+            spectral_gap=metrics.get("spectral_gap"),
+        )
+        return metrics
+
+    def dynamic_reconfigure(self, radii: Iterable[int], *, loops: int = 1) -> None:
+        """Refresh fractal levels and resolve cohomology.
+
+        Parameters
+        ----------
+        radii:
+            Box radii used when calling :meth:`annotate_mdl_levels`.
+        loops:
+            Number of iterations for fractal and sheaf updates. Each
+            iteration inserts at most one new level and attempts to
+            resolve the :math:`H^{1}` obstruction class.
+        """
+
+        self.annotate_mdl_levels(radii, max_levels=loops)
+        if self.sheaf_cohomology() > 0:
+            self.resolve_sheaf_obstruction(max_iter=loops)
+        self.graph.compute_hyper_sagnn_embeddings()
+        self._record_event(
+            "dynamic_reconfigure",
+            "Hierarchy and sheaf refreshed",
+            loops=loops,
+        )
+
+    def update_hypergraph_structure(self, *, k: int = 5, threshold: float = 0.8) -> list[str]:
+        """Predict and insert new hyperedges via embeddings.
+
+        Parameters
+        ----------
+        k:
+            Maximum number of suggestions to insert.
+        threshold:
+            Cosine similarity cutoff between Hyper-SAGNN embeddings for
+            proposing a new hyperedge.
+        """
+
+        suggestions = self.graph.predict_hyperedges(k=k, threshold=threshold)
+        for edge_id, nodes in suggestions:
+            try:
+                self.graph.add_hyperedge(edge_id, nodes, relation="predicted", source="auto")
+            except ValueError:
+                continue
+        self._record_event(
+            "hypergraph_update",
+            "Hyperedges predicted",
+            count=len(suggestions),
+        )
+        return [e for e, _ in suggestions]
+
+    # ------------------------------------------------------------------
+    # Helper utilities
+
+    def _enforce_policy(self, radii: Iterable[int]) -> None:
+        """Apply dynamic reconfiguration and monitoring policy.
+
+        The sequence ``dynamic_reconfigure`` → ``update_hypergraph_structure``
+        → ``monitor_and_remediate`` refreshes fractal levels, resolves sheaf
+        inconsistencies, proposes new hyperedges and cleans up until the
+        invariant thresholds are satisfied.
+        """
+
+        self.dynamic_reconfigure(radii)
+        self.update_hypergraph_structure()
+        self.monitor_and_remediate(radii)
+
+    async def start_policy_monitor(
+        self,
+        radii: Iterable[int],
+        *,
+        interval: float = 60.0,
+    ) -> None:
+        """Periodically enforce invariant limits in the background.
+
+        The loop calls :meth:`_enforce_policy` every ``interval`` seconds so the
+        entropy :math:`H`, fractal dimension :math:`d_B` and Laplacian gap
+        :math:`\lambda_1` remain within the thresholds set by :attr:`policy`.
+        """
+
+        if self._policy_event is None:
+            self._policy_event = asyncio.Event()
+        while not self._policy_event.is_set():
+            try:
+                self._enforce_policy(radii)
+            except Exception:
+                logger.exception("Policy monitor iteration failed")
+            await asyncio.sleep(interval)
+
+    def stop_policy_monitor(self) -> None:
+        """Signal the asynchronous policy monitor to terminate."""
+
+        if self._policy_event is not None:
+            self._policy_event.set()
+
+    def start_policy_monitor_thread(self, radii: Iterable[int], *, interval: float = 60.0) -> None:
+        """Run :meth:`start_policy_monitor` in a background thread."""
+
+        if self._policy_thread is not None and self._policy_thread.is_alive():
+            return
+
+        def runner() -> None:
+            asyncio.run(self.start_policy_monitor(radii, interval=interval))
+
+        self._policy_thread = threading.Thread(target=runner, daemon=True)
+        self._policy_thread.start()
+
+    def stop_policy_monitor_thread(self) -> None:
+        """Terminate the background policy monitor thread."""
+
+        self.stop_policy_monitor()
+        if self._policy_thread is not None:
+            self._policy_thread.join(timeout=1.0)
+            self._policy_thread = None
+
     def build_fractal_hierarchy(
         self, radii: Iterable[int], *, max_levels: int = 5
     ) -> list[tuple[nx.Graph, Dict[str, int], int]]:
@@ -2379,6 +2622,27 @@ class DatasetBuilder:
 
         return {"entropy": entropy, "gw_entropy": gw_entropy, "dimension": dim}
 
+    def run_hypergraph_layer(
+        self,
+        *,
+        embed_dim: int = 64,
+        k: int = 5,
+        threshold: float = 0.8,
+    ) -> list[str]:
+        """Refresh embeddings and predict new hyperedges."""
+
+        self.compute_hyper_sagnn_embeddings(embed_dim=embed_dim)
+        edges = self.update_hypergraph_structure(k=k, threshold=threshold)
+        self._record_event(
+            "hypergraph_layer",
+            "Hypergraph structure updated",
+            embed_dim=embed_dim,
+            k=k,
+            threshold=threshold,
+            count=len(edges),
+        )
+        return edges
+
     def run_topological_perception_layer(
         self,
         target: nx.Graph,
@@ -2510,7 +2774,7 @@ class DatasetBuilder:
 
     def run_generation_layer(
         self,
-        llm_call: Callable[[str], str],
+        llm_call: Callable[[str], str] | None = None,
         *,
         query: str,
         k: int = 5,
@@ -2556,6 +2820,11 @@ class DatasetBuilder:
 
         from ..utils.self_instruct import generate_with_self_instruct
 
+        if llm_call is None:
+            if self.llm_service is None:
+                raise ValueError("llm_call required when no llm_service configured")
+            llm_call = self.llm_service
+
         paths = self.search_with_links_data(query, k=k, hops=hops)
         records: List[Dict[str, Any]] = []
         for item in paths:
@@ -2577,6 +2846,66 @@ class DatasetBuilder:
             hops=hops,
             count=len(records),
         )
+
+        # refresh fractal hierarchy and enforce invariant limits
+        self._enforce_policy([1])
+
+        return records
+
+    async def run_generation_layer_async(
+        self,
+        llm_call: Callable[[str], Awaitable[str]] | None = None,
+        *,
+        query: str,
+        k: int = 5,
+        hops: int = 1,
+        template: str = "qa",
+        retries: int = 3,
+        insert_patterns: Iterable[tuple[str, str]] = (),
+        max_path: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """Asynchronous variant of :meth:`run_generation_layer`."""
+
+        from ..utils.self_instruct import generate_with_self_instruct_async
+
+        if llm_call is None:
+            if self.llm_service is None:
+                raise ValueError("llm_call required when no llm_service configured")
+
+            async def default_call(prompt: str) -> str:
+                return (await self.llm_service.acomplete([prompt]))[0]
+
+            llm_call = default_call
+
+        paths = self.search_with_links_data(query, k=k, hops=hops)
+        records: List[Dict[str, Any]] = []
+
+        async def process(item: Dict[str, Any]) -> Dict[str, Any]:
+            p = item.get("path", [])
+            prompt = self.neighborhood_to_sentence(p)
+            if insert_patterns:
+                prompt = self.auto_tool_calls(prompt, insert_patterns)
+            response = await generate_with_self_instruct_async(
+                llm_call, prompt, template=template, retries=retries
+            )
+            conf = 1.0 if len(p) <= max_path else 0.5
+            return {"prompt": prompt, "response": response, "confidence": conf}
+
+        tasks = [process(item) for item in paths]
+        if tasks:
+            records = await asyncio.gather(*tasks)
+
+        self._record_event(
+            "generation_layer_async",
+            "Async LLM generation from graph context",
+            query=query,
+            k=k,
+            hops=hops,
+            count=len(records),
+        )
+
+        self._enforce_policy([1])
+
         return records
 
     def run_compression_layer(
@@ -2687,6 +3016,7 @@ class DatasetBuilder:
         )
         return formatted
 
+    @monitor_after()
     def apply_perception(
         self,
         node_id: str,
@@ -2746,6 +3076,7 @@ class DatasetBuilder:
                     matches=matches,
                 )
 
+    @monitor_after()
     def apply_perception_all_nodes(
         self,
         transform: Callable[[str], str],
@@ -2857,6 +3188,7 @@ class DatasetBuilder:
         self._record_event("auto_tool_calls", "Tool calls inserted", tools=list(tools))
         return out
 
+    @monitor_after()
     def auto_tool_calls_node(self, node_id: str, tools: Iterable[tuple[str, str]]) -> str:
         """Insert tool call placeholders into a graph node's text."""
 
@@ -2869,6 +3201,7 @@ class DatasetBuilder:
         )
         return updated
 
+    @monitor_after()
     def auto_tool_calls_all_nodes(self, tools: Iterable[tuple[str, str]]) -> Dict[object, str]:
         """Insert tool calls into every node in the graph."""
 
@@ -3494,6 +3827,9 @@ class DatasetBuilder:
         for p in paths:
             docs.append(self.ingest_file(p, options=options))
 
+        # immediately reconcile new nodes and enforce invariants
+        self._enforce_policy([1])
+
         self._record_event(
             "ingestion_layer",
             "Documents ingested",
@@ -3898,7 +4234,7 @@ class DatasetBuilder:
 
     def run_orchestrator(
         self,
-        llm_call: Callable[[str], str],
+        llm_call: Callable[[str], str] | None,
         paths: Iterable[str],
         *,
         ingest_options: "IngestOptions" | None = None,
@@ -3907,18 +4243,33 @@ class DatasetBuilder:
 
         The routine sequentially invokes the ingestion, quality, fractal,
         embedding, topological perception, information, generation,
-        compression and export layers. The final Alpaca formatted dataset is
-        returned. This helper is meant for quick prototyping and testing of
-        the full workflow.
+        compression and export layers. After each stage
+        :meth:`_enforce_policy` refreshes the hierarchy and ensures
+        invariants remain within bounds. The final Alpaca formatted dataset is returned. This helper is meant for
+        ``llm_call`` defaults to :attr:`llm_service` when ``None``. The helper is
+        meant for quick prototyping and testing of the full workflow.
         """
+
+        if llm_call is None:
+            if self.llm_service is None:
+                raise ValueError("llm_call required when no llm_service configured")
+            llm_call = self.llm_service
+
+        # start background monitoring while the pipeline runs
+        self.start_policy_monitor_thread([1])
 
         # Ingest documents and build the initial graph
         docs = self.run_ingestion_layer(paths, options=ingest_options)
         # Basic cleanup and fractal hierarchy
         self.run_quality_layer(use_neo4j=False)
         self.run_fractal_layer([1], max_levels=1)
+        self._enforce_policy([1])
         # Compute light-weight embeddings
         self.compute_graph_embeddings(dimensions=4, walk_length=4, num_walks=5, seed=0)
+
+        self.run_hypergraph_layer(embed_dim=8, k=5, threshold=0.8)
+
+        self._enforce_policy([1])
 
         target = self.graph.graph.to_undirected()
         try:
@@ -3937,8 +4288,12 @@ class DatasetBuilder:
                 "Failed - exception raised",
             )
 
+        self._enforce_policy([1])
+
         labels = {n: i % 2 for i, n in enumerate(self.graph.graph.nodes)}
         self.run_information_layer(labels, [], beta=1.0)
+
+        self._enforce_policy([1])
 
         # Generate a single prompt per document
         query = next(iter(docs)) if docs else ""
@@ -3948,9 +4303,80 @@ class DatasetBuilder:
         out = self.run_export_layer("alpaca")
         self.mark_exported()
 
+        # stop the background monitor
+        self.stop_policy_monitor_thread()
+
         self._record_event(
             "orchestrator",
             "Full pipeline executed",
+            docs=len(docs),
+        )
+        return out
+
+    async def run_orchestrator_async(
+        self,
+        llm_call: Callable[[str], Awaitable[str]] | None,
+        paths: Iterable[str],
+        *,
+        ingest_options: "IngestOptions" | None = None,
+    ) -> str:
+        """Asynchronous variant of :meth:`run_orchestrator`."""
+
+        if llm_call is None:
+            if self.llm_service is None:
+                raise ValueError("llm_call required when no llm_service configured")
+
+            async def default_call(prompt: str) -> str:
+                return (await self.llm_service.acomplete([prompt]))[0]
+
+            llm_call = default_call
+
+        self.start_policy_monitor_thread([1])
+
+        docs = self.run_ingestion_layer(paths, options=ingest_options)
+        self.run_quality_layer(use_neo4j=False)
+        self.run_fractal_layer([1], max_levels=1)
+        self._enforce_policy([1])
+        self.compute_graph_embeddings(dimensions=4, walk_length=4, num_walks=5, seed=0)
+        self.run_hypergraph_layer(embed_dim=8, k=5, threshold=0.8)
+        self._enforce_policy([1])
+
+        target = self.graph.graph.to_undirected()
+        try:
+            from ..analysis import fractal as _fr
+
+            if _fr.gd is not None:
+                self.run_topological_perception_layer(target, [1], loops=1, epsilon=0.0)
+            else:  # pragma: no cover - optional dependency missing
+                self._record_event(
+                    "topological_perception_layer",
+                    "Skipped - gudhi unavailable",
+                )
+        except Exception:  # pragma: no cover - unexpected failure
+            self._record_event(
+                "topological_perception_layer",
+                "Failed - exception raised",
+            )
+
+        self._enforce_policy([1])
+
+        labels = {n: i % 2 for i, n in enumerate(self.graph.graph.nodes)}
+        self.run_information_layer(labels, [], beta=1.0)
+
+        self._enforce_policy([1])
+
+        query = next(iter(docs)) if docs else ""
+        await self.run_generation_layer_async(llm_call, query=query, k=1)
+
+        self.run_compression_layer()
+        out = self.run_export_layer("alpaca")
+        self.mark_exported()
+
+        self.stop_policy_monitor_thread()
+
+        self._record_event(
+            "orchestrator_async",
+            "Full async pipeline executed",
             docs=len(docs),
         )
         return out
