@@ -242,10 +242,11 @@ class DatasetBuilder:
             @wraps(func)
             def wrapper(self, *args, **kwargs):
                 result = func(self, *args, **kwargs)
-                try:
-                    self._enforce_policy(radii)
-                except Exception:
-                    logger.exception("Automatic policy enforcement failed")
+                if self.policy.loops > 0:
+                    try:
+                        self._enforce_policy(radii)
+                    except Exception:
+                        logger.exception("Automatic policy enforcement failed")
                 return result
 
             return wrapper
