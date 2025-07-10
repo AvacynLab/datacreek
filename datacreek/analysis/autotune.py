@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-import numpy as np
-
 import networkx as nx
+import numpy as np
 
 from .fractal import bottleneck_distance, fractal_level_coverage
 from .information import graph_information_bottleneck, mdl_description_length, structural_entropy

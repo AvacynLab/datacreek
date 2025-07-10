@@ -1721,8 +1721,8 @@ class KnowledgeGraph:
         if self.faiss_index is None or self.faiss_ids is None:
             raise RuntimeError("index not built")
 
-        import numpy as np
         import faiss
+        import numpy as np
 
         xq = np.asarray([vector], dtype=np.float32)
         faiss.normalize_L2(xq)
