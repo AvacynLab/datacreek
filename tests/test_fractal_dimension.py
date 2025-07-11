@@ -9,6 +9,7 @@ from datacreek.analysis.fractal import (
     fractalize_optimal,
     graph_fourier_transform,
     graphwave_embedding,
+    graphwave_embedding_chebyshev,
     inverse_graph_fourier_transform,
     mdl_optimal_radius,
     persistence_diagrams,
@@ -63,6 +64,14 @@ def test_persistence_entropy_path():
 def test_graphwave_embedding_shape():
     g = nx.path_graph(4)
     emb = graphwave_embedding(g, scales=[0.5], num_points=4)
+    assert len(emb) == g.number_of_nodes()
+    for vec in emb.values():
+        assert vec.shape == (8,)
+
+
+def test_graphwave_embedding_chebyshev_shape():
+    g = nx.path_graph(4)
+    emb = graphwave_embedding_chebyshev(g, scales=[0.5], num_points=4, order=3)
     assert len(emb) == g.number_of_nodes()
     for vec in emb.values():
         assert vec.shape == (8,)

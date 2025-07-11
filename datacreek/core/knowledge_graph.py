@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -41,6 +43,9 @@ class KnowledgeGraph:
     index: EmbeddingIndex = field(init=False)
     faiss_index: object | None = field(init=False, default=None, repr=False)
     faiss_ids: list[str] | None = field(init=False, default=None, repr=False)
+    faiss_index_type: str | None = field(init=False, default=None, repr=False)
+    faiss_node_attr: str | None = field(init=False, default=None, repr=False)
+    _mapper_cache: Dict[int, tuple[nx.Graph, list[set[str]]]] = field(init=False, default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize the internal embedding index."""
@@ -48,6 +53,9 @@ class KnowledgeGraph:
         self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
         self.faiss_index = None
         self.faiss_ids = None
+        self.faiss_index_type = None
+        self.faiss_node_attr = None
+        self._mapper_cache = {}
 
     def add_document(
         self,
@@ -811,7 +819,41 @@ class KnowledgeGraph:
 
         with driver.session() as session:
             records = session.run(cypher, ids=ids)
-            return [dict(r) for r in records]
+        return [dict(r) for r in records]
+
+    def recall_at_k(
+        self,
+        queries: Sequence[str],
+        ground_truth: Dict[str, Sequence[str]],
+        *,
+        k: int = 10,
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> float:
+        """Return mean recall@k using hybrid similarity search.
+
+        Parameters
+        ----------
+        queries:
+            List of node identifiers acting as queries.
+        ground_truth:
+            Mapping from query to relevant node ids.
+        k:
+            Rank cutoff.
+        gamma, eta:
+            Weights for Node2Vec and hyperbolic terms.
+        """
+
+        from ..analysis.autotune import recall_at_k as _recall
+
+        return _recall(
+            self.graph,
+            queries,
+            ground_truth,
+            k=k,
+            gamma=gamma,
+            eta=eta,
+        )
 
     def search_with_links(
         self,
@@ -1762,7 +1804,13 @@ class KnowledgeGraph:
             session.run("CALL gds.graph.drop('kg_n2v')")
             session.run("MATCH (n {dataset:$ds}) DETACH DELETE n", ds=ds)
 
-    def compute_graphwave_embeddings(self, scales: Iterable[float], num_points: int = 10) -> None:
+    def compute_graphwave_embeddings(
+        self,
+        scales: Iterable[float],
+        num_points: int = 10,
+        *,
+        chebyshev_order: int | None = None,
+    ) -> None:
         """Compute GraphWave embeddings for all nodes.
 
         Parameters
@@ -1773,9 +1821,19 @@ class KnowledgeGraph:
             Number of sample points for the characteristic function.
         """
 
-        from ..analysis.fractal import graphwave_embedding
+        if chebyshev_order is None:
+            from ..analysis.fractal import graphwave_embedding as _gw
 
-        emb = graphwave_embedding(self.graph.to_undirected(), scales, num_points)
+            emb = _gw(self.graph.to_undirected(), scales, num_points)
+        else:
+            from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
+
+            emb = _gwc(
+                self.graph.to_undirected(),
+                scales,
+                num_points=num_points,
+                order=chebyshev_order,
+            )
         for node, vec in emb.items():
             self.graph.nodes[node]["graphwave_embedding"] = vec.tolist()
 
@@ -1793,7 +1851,9 @@ class KnowledgeGraph:
 
         return _ge(feats)
 
-    def build_faiss_index(self, node_attr: str = "embedding") -> None:
+    def build_faiss_index(
+        self, node_attr: str = "embedding", *, method: str = "flat"
+    ) -> None:
         """Build a FAISS index from node embeddings.
 
         Parameters
@@ -1819,14 +1879,32 @@ class KnowledgeGraph:
 
         xb = np.vstack(vectors)
         faiss.normalize_L2(xb)
-        index = faiss.IndexFlatIP(xb.shape[1])
+        if method == "hnsw":
+            index = faiss.IndexHNSWFlat(xb.shape[1], 32)
+            index.hnsw.efSearch = 200
+        else:
+            index = faiss.IndexFlatIP(xb.shape[1])
         index.add(xb)
 
         self.faiss_index = index
         self.faiss_ids = ids
+        self.faiss_index_type = method
+        self.faiss_node_attr = node_attr
 
-    def search_faiss(self, vector: Iterable[float], k: int = 5) -> list[str]:
-        """Return ``k`` nearest nodes to ``vector`` using the FAISS index."""
+    def search_faiss(
+        self,
+        vector: Iterable[float],
+        k: int = 5,
+        *,
+        adaptive: bool = False,
+        latency_threshold: float = 0.1,
+    ) -> list[str]:
+        """Return ``k`` nearest nodes using the FAISS index.
+
+        If ``adaptive`` is ``True`` and search latency exceeds
+        ``latency_threshold`` seconds with a flat index, the index is
+        rebuilt using HNSW for faster queries.
+        """
 
         if self.faiss_index is None or self.faiss_ids is None:
             raise RuntimeError("index not built")
@@ -1836,7 +1914,24 @@ class KnowledgeGraph:
 
         xq = np.asarray([vector], dtype=np.float32)
         faiss.normalize_L2(xq)
+        start = time.monotonic()
         _, idx = self.faiss_index.search(xq, k)
+        latency = time.monotonic() - start
+
+        if (
+            adaptive
+            and self.faiss_index_type == "flat"
+            and latency > latency_threshold
+            and self.faiss_node_attr is not None
+        ):
+            self.build_faiss_index(self.faiss_node_attr, method="hnsw")
+            return self.search_faiss(
+                vector,
+                k,
+                adaptive=False,
+                latency_threshold=latency_threshold,
+            )
+
         return [self.faiss_ids[i] for i in idx[0]]
 
     def ensure_graphwave_entropy(
@@ -1998,6 +2093,69 @@ class KnowledgeGraph:
             self.graph.nodes[node][edge_attr] = vec.astype(float).tolist()
             result[node] = vec.astype(float).tolist()
 
+        return result
+
+    def hyper_adamic_adar_scores(self) -> Dict[tuple[str, str], float]:
+        """Return Hyper-Adamic–Adar scores for node pairs.
+
+        Hyperedges are nodes of type ``"hyperedge"`` connected to their members.
+        The score between two nodes is the sum of ``1 / log(|H|)`` over
+        hyperedges ``H`` that contain both nodes.
+        """
+
+        hyperedges: List[List[str]] = []
+        for node, data in self.graph.nodes(data=True):
+            if data.get("type") == "hyperedge":
+                members = [v for _, v in self.graph.edges(node)]
+                if len(members) > 1:
+                    hyperedges.append(members)
+
+        from ..analysis.hypergraph import hyper_adamic_adar_scores as _haa
+
+        scores = _haa(hyperedges)
+        return {(str(u), str(v)): float(s) for (u, v), s in scores.items()}
+
+    def edge_attention_scores(
+        self,
+        *,
+        node_attr: str = "embedding",
+        seed: int | None = None,
+    ) -> Dict[str, float]:
+        """Return attention-based importance scores for hyperedges.
+
+        The score of a hyperedge is the average absolute attention weight
+        produced by a lightweight self-attention layer over its member nodes.
+        """
+
+        import numpy as np
+
+        hyper_nodes: list[str] = []
+        hyperedges: list[list[str]] = []
+        features = []
+        for node, data in self.graph.nodes(data=True):
+            if data.get("type") == "hyperedge":
+                members = [v for _, v in self.graph.edges(node)]
+                if not members:
+                    continue
+                hyper_nodes.append(node)
+                hyperedges.append(members)
+                features.append(np.vstack([self.graph.nodes[m][node_attr] for m in members]))
+
+        if not hyperedges:
+            return {}
+
+        from ..analysis.hypergraph import hyperedge_attention_scores as _att
+
+        node_features = np.concatenate(features, axis=0)
+        sizes = [len(m) for m in hyperedges]
+        offsets = np.cumsum([0] + sizes[:-1])
+        edge_arrays = [list(range(o, o + s)) for o, s in zip(offsets, sizes)]
+
+        scores = _att(edge_arrays, node_features, seed=seed)
+
+        result: Dict[str, float] = {}
+        for node, score in zip(hyper_nodes, scores):
+            result[str(node)] = float(score)
         return result
 
     def compute_hyper_sagnn_head_drop_embeddings(
@@ -2407,6 +2565,13 @@ class KnowledgeGraph:
             return {}
         return _fc(embeddings, levels)
 
+    def prune_fractalnet_weights(self, weights: "np.ndarray | list[float]", *, ratio: float = 0.5):
+        """Prune model weights using :func:`prune_fractalnet`."""
+
+        from ..analysis.compression import prune_fractalnet as _pf
+
+        return _pf(weights, ratio=ratio)
+
     # ------------------------------------------------------------------
     # Fractal and topological metrics
     # ------------------------------------------------------------------
@@ -2515,6 +2680,19 @@ class KnowledgeGraph:
 
         return _sfc(self.graph, edge_attr=edge_attr, tol=tol)
 
+    def sheaf_cohomology_blocksmith(
+        self,
+        *,
+        edge_attr: str = "sheaf_sign",
+        block_size: int = 40000,
+        tol: float = 1e-5,
+    ) -> int:
+        """Approximate :math:`H^1` using a block-Smith reduction."""
+
+        from ..analysis.sheaf import sheaf_first_cohomology_blocksmith as _sfcbs
+
+        return _sfcbs(self.graph, edge_attr=edge_attr, block_size=block_size, tol=tol)
+
     def resolve_sheaf_obstruction(
         self, *, edge_attr: str = "sheaf_sign", max_iter: int = 10
     ) -> int:
@@ -2530,6 +2708,54 @@ class KnowledgeGraph:
         from ..analysis.sheaf import sheaf_consistency_score as _scs
 
         return _scs(self.graph, edge_attr=edge_attr)
+
+    def sheaf_consistency_score_batched(
+        self,
+        batches: Iterable[Iterable[str]],
+        *,
+        edge_attr: str = "sheaf_sign",
+    ) -> list[float]:
+        """Return sheaf consistency scores for ``batches`` of nodes."""
+
+        from ..analysis.sheaf import sheaf_consistency_score_batched as _scsb
+
+        return _scsb(self.graph, batches, edge_attr=edge_attr)
+
+    def spectral_bound_exceeded(
+        self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
+    ) -> bool:
+        """Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
+
+        Parameters
+        ----------
+        k:
+            Index of the eigenvalue (1-indexed).
+        tau:
+            Threshold used for early stopping.
+        edge_attr:
+            Edge attribute storing sheaf restrictions.
+        """
+
+        from ..analysis.sheaf import spectral_bound_exceeded as _sbe
+
+        return _sbe(self.graph, k, tau, edge_attr=edge_attr)
+
+    def rollback_gremlin_diff(self, output: str = "rollback.diff") -> str:
+        """Write diff of the last commit and return its path."""
+
+        from ..analysis.rollback import rollback_gremlin_diff as _rgd
+
+        return _rgd(Path.cwd(), output)
+
+    def sheaf_checker_sla(self, failures: Iterable[float]) -> float:
+        """Return MTTR in hours for sheaf checker failures."""
+
+        from ..analysis.rollback import SheafSLA as _sla
+
+        sla = _sla()
+        for ts in failures:
+            sla.record_failure(ts)
+        return sla.mttr_hours()
 
     def path_to_text(self, path: Iterable) -> str:
         """Return a textual description for ``path`` using node attributes."""
@@ -2623,6 +2849,29 @@ class KnowledgeGraph:
 
         return _se(self.graph.to_undirected(), tau, base=base)
 
+    def adaptive_triangle_threshold(
+        self,
+        *,
+        weight: str = "weight",
+        base: float = 2.0,
+        scale: float = 10.0,
+    ) -> int:
+        """Return entropy-based triangle threshold.
+
+        Parameters
+        ----------
+        weight:
+            Edge attribute storing weights.
+        base:
+            Logarithm base used for entropy.
+        scale:
+            Scaling factor to convert entropy into an integer threshold.
+        """
+
+        from ..analysis.filtering import entropy_triangle_threshold as _ett
+
+        return _ett(self.graph.to_undirected(), weight=weight, base=base, scale=scale)
+
     def governance_metrics(
         self,
         *,
@@ -2650,6 +2899,43 @@ class KnowledgeGraph:
             if hyp_attr in data
         }
         return _gm(n2v, gw, hyp)
+
+    def mitigate_bias_wasserstein(
+        self,
+        groups: Dict[str, str],
+        *,
+        attr: str = "embedding",
+    ) -> Dict[str, np.ndarray]:
+        """Return reweighted embeddings using Wasserstein bias mitigation."""
+
+        from ..analysis.governance import mitigate_bias_wasserstein as _mbw
+
+        emb = {
+            n: np.asarray(data[attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if attr in data and n in groups
+        }
+        return _mbw(emb, groups)
+
+    def average_hyperbolic_radius(self, *, attr: str = "poincare_embedding") -> float:
+        """Return mean Poincaré radius of stored embeddings.
+
+        Parameters
+        ----------
+        attr:
+            Node attribute containing Poincaré vectors.
+        """
+
+        from ..analysis.governance import average_hyperbolic_radius as _ahr
+
+        emb = {
+            n: np.asarray(data[attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if attr in data
+        }
+        if not emb:
+            return 0.0
+        return _ahr(emb)
 
     def autotune_step(
         self,
@@ -2680,6 +2966,31 @@ class KnowledgeGraph:
             lr=lr,
         )
 
+    def svgp_ei_propose(
+        self,
+        history: Sequence[tuple[Sequence[float], float]],
+        bounds: Sequence[tuple[float, float]],
+        *,
+        m: int = 100,
+        n_samples: int = 256,
+    ) -> list[float]:
+        """Propose new parameters using SVGP Expected Improvement."""
+
+        from ..analysis.autotune import svgp_ei_propose as _sv
+
+        params = [h[0] for h in history]
+        scores = [h[1] for h in history]
+        x_next = _sv(params, scores, bounds, m=m, n_samples=n_samples)
+        return x_next.tolist()
+
+    def kw_gradient(
+        self, f: Callable[[float], float], x: float, *, h: float = 1.0, n: int = 4
+    ) -> float:
+        """Wrapper for :func:`analysis.kw_gradient`."""
+
+        from ..analysis.autotune import kw_gradient as _kw
+
+        return float(_kw(f, x, h=h, n=n))
     def prototype_subgraph(
         self,
         labels: Dict[str, int],
@@ -3109,13 +3420,28 @@ class KnowledgeGraph:
         return q, str_map
 
     def mapper_nerve(self, radius: int) -> tuple[nx.Graph, list[set[str]]]:
-        """Return the Mapper nerve of the graph with balls of ``radius``."""
+        """Return the Mapper nerve of the graph with balls of ``radius``.
+
+        Results are cached per ``radius`` so repeated calls avoid recomputation.
+        The cache is reset when :meth:`clear_mapper_cache` is invoked.
+        """
+
+        if radius in self._mapper_cache:
+            nerve, cover = self._mapper_cache[radius]
+            # return copies to prevent accidental mutation
+            return nerve.copy(), [set(c) for c in cover]
 
         from ..analysis.mapper import mapper_nerve as _mn
 
         nerve, cover = _mn(self.graph.to_undirected(), radius)
         str_cover = [{str(n) for n in c} for c in cover]
+        self._mapper_cache[radius] = (nerve.copy(), str_cover)
         return nerve, str_cover
+
+    def clear_mapper_cache(self) -> None:
+        """Clear any cached Mapper nerve computations."""
+
+        self._mapper_cache.clear()
 
     def inverse_mapper(self, nerve: nx.Graph, cover: Iterable[Iterable[str]]) -> nx.Graph:
         """Reconstruct a graph from ``nerve`` and ``cover`` sets."""
@@ -3268,6 +3594,19 @@ class KnowledgeGraph:
             seed=seed,
             directed=directed,
         )
+
+    def filter_semantic_cycles(
+        self,
+        *,
+        attr: str = "text",
+        stopwords: Iterable[str] | None = None,
+        max_len: int = 4,
+    ) -> None:
+        """Remove trivial GraphRNN cycles based on text labels."""
+
+        from ..analysis.filtering import filter_semantic_cycles as _fsc
+
+        self.graph = _fsc(self.graph, attr=attr, stopwords=stopwords, max_len=max_len)
 
     # ------------------------------------------------------------------
     # Quality checks inspired by Neo4j GDS

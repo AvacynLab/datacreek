@@ -53,6 +53,7 @@ from ..models import LLMService
 from ..models.stage import DatasetStage
 from ..pipelines import DatasetType, PipelineStep
 from .knowledge_graph import KnowledgeGraph
+from ..security.dp_budget import DPBudgetManager
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,7 @@ class DatasetBuilder:
     policy: InvariantPolicy = field(default_factory=InvariantPolicy)
     llm_service: LLMService | None = field(default=None, repr=False)
     auto_monitor: bool = False
+    dp_budgets: DPBudgetManager = field(default_factory=DPBudgetManager)
     # stop signal used by the asynchronous policy monitor
     _policy_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
     # background thread running the policy monitor
@@ -398,6 +400,30 @@ class DatasetBuilder:
 
         self.graph.add_audio(doc_id, audio_id, path, page=page)
         self._record_event("add_audio", f"Added audio {audio_id} to {doc_id}")
+
+    def ingest_text_atoms(self, path: str, doc_id: str) -> list[str]:
+        """Parse ``path`` into textual atoms and add them under ``doc_id``."""
+
+        from ..analysis.ingestion import partition_files_to_atoms
+
+        atoms = []
+        for idx, text in enumerate(partition_files_to_atoms(path)):
+            atom_id = f"{doc_id}_a{idx}"
+            self.add_atom(doc_id, atom_id, text, "text")
+            atoms.append(atom_id)
+        return atoms
+
+    def ingest_code_atoms(self, path: str, doc_id: str) -> list[str]:
+        """Parse Python code into atoms (functions/classes) under ``doc_id``."""
+
+        from ..analysis.ingestion import parse_code_to_atoms
+
+        atoms = []
+        for idx, text in enumerate(parse_code_to_atoms(path)):
+            atom_id = f"{doc_id}_c{idx}"
+            self.add_atom(doc_id, atom_id, text, "code")
+            atoms.append(atom_id)
+        return atoms
 
     def add_atom(
         self,
@@ -856,6 +882,25 @@ class DatasetBuilder:
         self._record_event("governance_metrics", str(metrics))
         return metrics
 
+    def mitigate_bias_wasserstein(
+        self,
+        groups: Dict[str, str],
+        *,
+        attr: str = "embedding",
+    ) -> Dict[str, np.ndarray]:
+        """Wrapper for :meth:`KnowledgeGraph.mitigate_bias_wasserstein`."""
+
+        res = self.graph.mitigate_bias_wasserstein(groups, attr=attr)
+        self._record_event("mitigate_bias_wasserstein", f"groups={len(groups)}")
+        return res
+
+    def average_hyperbolic_radius(self, *, attr: str = "poincare_embedding") -> float:
+        """Wrapper for :meth:`KnowledgeGraph.average_hyperbolic_radius`."""
+
+        radius = self.graph.average_hyperbolic_radius(attr=attr)
+        self._record_event("average_hyperbolic_radius", f"radius={radius:.4f}")
+        return radius
+
     def apply_k_out_privacy(self, ids: List[str], k: int = 2) -> List[str]:
         """Return ``ids`` after applying k-out randomized response."""
 
@@ -864,6 +909,23 @@ class DatasetBuilder:
         priv = k_out_randomized_response(ids, k=k)
         self._record_event("k_out_privacy", f"k={k}")
         return priv
+
+    # ------------------------------------------------------------------
+    # Differential privacy budget helpers
+    # ------------------------------------------------------------------
+
+    def add_privacy_budget(self, user: str, epsilon: float) -> None:
+        """Register ``user`` with a daily budget ``epsilon``."""
+
+        self.dp_budgets.add_user(user, epsilon)
+        self._record_event("add_privacy_budget", f"user={user} eps={epsilon}")
+
+    def consume_privacy_budget(self, user: str, amount: float) -> bool:
+        """Consume ``amount`` from ``user``'s privacy budget."""
+
+        ok = self.dp_budgets.consume(user, amount)
+        self._record_event("consume_privacy_budget", f"user={user} amount={amount}")
+        return ok
 
     def get_chunk_context(self, chunk_id: str, before: int = 1, after: int = 1) -> list[str]:
         """Return chunk IDs surrounding ``chunk_id`` including itself."""
@@ -1125,15 +1187,26 @@ class DatasetBuilder:
             q=q,
         )
 
-    def compute_graphwave_embeddings(self, scales: Iterable[float], num_points: int = 10) -> None:
+    def compute_graphwave_embeddings(
+        self,
+        scales: Iterable[float],
+        num_points: int = 10,
+        *,
+        chebyshev_order: int | None = None,
+    ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_graphwave_embeddings`."""
 
-        self.graph.compute_graphwave_embeddings(scales=scales, num_points=num_points)
+        self.graph.compute_graphwave_embeddings(
+            scales=scales,
+            num_points=num_points,
+            chebyshev_order=chebyshev_order,
+        )
         self._record_event(
             "compute_graphwave_embeddings",
             "GraphWave embeddings computed",
             scales=list(scales),
             num_points=num_points,
+            chebyshev_order=chebyshev_order,
         )
 
     def graphwave_entropy(self) -> float:
@@ -1294,6 +1367,56 @@ class DatasetBuilder:
         )
         return result
 
+    def hyper_adamic_adar_scores(self) -> Dict[tuple[str, str], float]:
+        """Wrapper for :meth:`KnowledgeGraph.hyper_adamic_adar_scores`."""
+
+        result = self.graph.hyper_adamic_adar_scores()
+        self._record_event(
+            "hyper_adamic_adar_scores",
+            "Hyper-Adamic–Adar scores computed",
+        )
+        return result
+
+    def edge_attention_scores(
+        self,
+        *,
+        node_attr: str = "embedding",
+        seed: int | None = None,
+    ) -> Dict[str, float]:
+        """Wrapper for :meth:`KnowledgeGraph.edge_attention_scores`."""
+
+        result = self.graph.edge_attention_scores(node_attr=node_attr, seed=seed)
+        self._record_event(
+            "edge_attention_scores",
+            "Edge attention scores computed",
+        )
+        return result
+
+    def recall_at_k(
+        self,
+        queries: Sequence[str],
+        ground_truth: Dict[str, Sequence[str]],
+        *,
+        k: int = 10,
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.recall_at_k`."""
+
+        score = self.graph.recall_at_k(
+            queries,
+            ground_truth,
+            k=k,
+            gamma=gamma,
+            eta=eta,
+        )
+        self._record_event(
+            "recall_at_k",
+            "Recall@k computed",
+            k=k,
+        )
+        return score
+
     def compute_graphsage_embeddings(
         self,
         *,
@@ -1324,20 +1447,35 @@ class DatasetBuilder:
             dimensions=dimensions,
         )
 
-    def build_faiss_index(self, node_attr: str = "embedding") -> None:
+    def build_faiss_index(
+        self, node_attr: str = "embedding", *, method: str = "flat"
+    ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.build_faiss_index`."""
 
-        self.graph.build_faiss_index(node_attr=node_attr)
+        self.graph.build_faiss_index(node_attr=node_attr, method=method)
         self._record_event(
             "build_faiss_index",
             "FAISS index built",
             node_attr=node_attr,
+            method=method,
         )
 
-    def search_faiss(self, vector: Iterable[float], k: int = 5) -> list[str]:
+    def search_faiss(
+        self,
+        vector: Iterable[float],
+        k: int = 5,
+        *,
+        adaptive: bool = False,
+        latency_threshold: float = 0.1,
+    ) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_faiss`."""
 
-        return self.graph.search_faiss(vector, k=k)
+        return self.graph.search_faiss(
+            vector,
+            k=k,
+            adaptive=adaptive,
+            latency_threshold=latency_threshold,
+        )
 
     def compute_distmult_embeddings(
         self,
@@ -1545,6 +1683,33 @@ class DatasetBuilder:
         )
         return comp
 
+    def prune_fractalnet_weights(self, weights: np.ndarray, *, ratio: float = 0.5) -> np.ndarray:
+        """Prune model weights via :func:`prune_fractalnet`.
+
+        Parameters
+        ----------
+        weights:
+            Weight array to prune.
+        ratio:
+            Fraction of weights to keep.
+
+        Returns
+        -------
+        numpy.ndarray
+            Pruned weight array.
+        """
+
+        from ..analysis.compression import prune_fractalnet as _pf
+
+        pruned = _pf(weights, ratio=ratio)
+        self._record_event(
+            "prune_fractalnet_weights",
+            "Weights pruned via FractalNet rule",
+            ratio=ratio,
+            kept=int(np.count_nonzero(pruned)),
+        )
+        return pruned
+
     def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
 
@@ -1639,6 +1804,26 @@ class DatasetBuilder:
         )
         return nerve, cover
 
+    def clear_mapper_cache(self) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.clear_mapper_cache`."""
+
+        self.graph.clear_mapper_cache()
+        self._record_event("clear_mapper_cache", "Mapper cache cleared")
+
+    def rollback_gremlin_diff(self, output: str = "rollback.diff") -> str:
+        """Wrapper for :meth:`KnowledgeGraph.rollback_gremlin_diff`."""
+
+        path = self.graph.rollback_gremlin_diff(output)
+        self._record_event("rollback_gremlin_diff", "Rollback diff written", path=path)
+        return path
+
+    def sheaf_checker_sla(self, failures: Iterable[float]) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_checker_sla`."""
+
+        mttr = self.graph.sheaf_checker_sla(failures)
+        self._record_event("sheaf_checker_sla", "SLA evaluated", mttr=mttr)
+        return mttr
+
     def inverse_mapper(self, nerve: nx.Graph, cover: Iterable[Iterable[str]]) -> nx.Graph:
         """Wrapper for :meth:`KnowledgeGraph.inverse_mapper`."""
 
@@ -1661,6 +1846,22 @@ class DatasetBuilder:
             edges=num_edges,
         )
         return g
+
+    def filter_semantic_cycles(
+        self,
+        *,
+        attr: str = "text",
+        stopwords: Iterable[str] | None = None,
+        max_len: int = 4,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.filter_semantic_cycles`."""
+
+        self.graph.filter_semantic_cycles(attr=attr, stopwords=stopwords, max_len=max_len)
+        self._record_event(
+            "filter_semantic_cycles",
+            "Trivial cycles removed",
+            max_len=max_len,
+        )
 
     def generate_graph_rnn(
         self, num_nodes: int, num_edges: int, *, p: float = 0.5, directed: bool = False
@@ -2072,6 +2273,27 @@ class DatasetBuilder:
         )
         return val
 
+    def sheaf_cohomology_blocksmith(
+        self,
+        *,
+        edge_attr: str = "sheaf_sign",
+        block_size: int = 40000,
+        tol: float = 1e-5,
+    ) -> int:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_cohomology_blocksmith`."""
+
+        val = self.graph.sheaf_cohomology_blocksmith(
+            edge_attr=edge_attr,
+            block_size=block_size,
+            tol=tol,
+        )
+        self._record_event(
+            "sheaf_cohomology_blocksmith",
+            "Sheaf cohomology approximated via Block-Smith",
+            h1=val,
+        )
+        return val
+
     def resolve_sheaf_obstruction(
         self, *, edge_attr: str = "sheaf_sign", max_iter: int = 10
     ) -> int:
@@ -2095,6 +2317,38 @@ class DatasetBuilder:
             score=val,
         )
         return val
+
+    def sheaf_consistency_score_batched(
+        self,
+        batches: Iterable[Iterable[str]],
+        *,
+        edge_attr: str = "sheaf_sign",
+    ) -> list[float]:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_consistency_score_batched`."""
+
+        scores = self.graph.sheaf_consistency_score_batched(
+            batches, edge_attr=edge_attr
+        )
+        self._record_event(
+            "sheaf_consistency_score_batched",
+            "Computed batched sheaf consistency scores",
+        )
+        return scores
+
+    def spectral_bound_exceeded(
+        self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
+    ) -> bool:
+        """Wrapper for :meth:`KnowledgeGraph.spectral_bound_exceeded`."""
+
+        flag = self.graph.spectral_bound_exceeded(k, tau, edge_attr=edge_attr)
+        self._record_event(
+            "spectral_bound_exceeded",
+            "Checked spectral bound",
+            k=k,
+            tau=tau,
+            exceeded=flag,
+        )
+        return flag
 
     def path_to_text(self, path: Iterable) -> str:
         """Wrapper for :meth:`KnowledgeGraph.path_to_text`."""
@@ -2186,6 +2440,28 @@ class DatasetBuilder:
         )
         return val
 
+    def adaptive_triangle_threshold(
+        self,
+        *,
+        weight: str = "weight",
+        base: float = 2.0,
+        scale: float = 10.0,
+    ) -> int:
+        """Wrapper for :meth:`KnowledgeGraph.adaptive_triangle_threshold`."""
+
+        val = self.graph.adaptive_triangle_threshold(
+            weight=weight, base=base, scale=scale
+        )
+        self._record_event(
+            "adaptive_triangle_threshold",
+            "Entropy-based triangle threshold computed",
+            weight=weight,
+            base=base,
+            scale=scale,
+            value=val,
+        )
+        return val
+
     def autotune_step(
         self,
         labels: Dict[str, int],
@@ -2224,6 +2500,37 @@ class DatasetBuilder:
         except Exception:
             pass
         return res
+
+    def svgp_ei_propose(
+        self,
+        history: Sequence[tuple[Sequence[float], float]],
+        bounds: Sequence[tuple[float, float]],
+        *,
+        m: int = 100,
+        n_samples: int = 256,
+    ) -> list[float]:
+        """Wrapper for :meth:`KnowledgeGraph.svgp_ei_propose`."""
+
+        vec = self.graph.svgp_ei_propose(
+            history,
+            bounds,
+            m=m,
+            n_samples=n_samples,
+        )
+        self._record_event(
+            "svgp_ei_propose",
+            "SVGP-EI hyperparameter proposal",
+        )
+        return vec
+
+    def kw_gradient(
+        self, f: Callable[[float], float], x: float, *, h: float = 1.0, n: int = 4
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.kw_gradient`."""
+
+        val = self.graph.kw_gradient(f, x, h=h, n=n)
+        self._record_event("kw_gradient", "KW gradient estimate")
+        return val
 
     def prototype_subgraph(
         self,

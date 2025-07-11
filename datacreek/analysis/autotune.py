@@ -109,6 +109,28 @@ def recall_at_k(
     return total / n if n else 0.0
 
 
+def kw_gradient(f, x: float, h: float = 1.0, n: int = 4) -> float:
+    """Return Kiefer-Wolfowitz stochastic gradient estimate.
+
+    Parameters
+    ----------
+    f:
+        Function taking a float and returning the scalar objective.
+    x:
+        Current parameter value.
+    h:
+        Perturbation size.
+    n:
+        Number of random evaluations.
+    """
+    rng = np.random.default_rng()
+    grad = 0.0
+    for _ in range(n):
+        s = rng.choice([-1.0, 1.0])
+        grad += s * f(x + s * h)
+    return grad / (n * h)
+
+
 def autotune_step(
     graph: nx.Graph,
     embeddings: Dict[object, Iterable[float]],
@@ -193,14 +215,16 @@ def autotune_step(
         + weights[5] * (-recall)
     )
 
-    # finite difference gradients for tau, eps, beta and delta
-    H_next = structural_entropy(graph, state.tau + 1)
-    grad_tau = H_next - H
+    # stochastic KW gradients for tau and eps
+    grad_tau = kw_gradient(lambda t: structural_entropy(graph, int(max(1, t))), state.tau)
     state.tau = max(1, int(state.tau - lr * grad_tau))
 
     if state.prev_graph is not None:
-        D_next = bottleneck_distance(state.prev_graph, graph, approx_epsilon=state.eps + 0.01)
-        grad_eps = (D_next - D) / 0.01
+        grad_eps = kw_gradient(
+            lambda e: bottleneck_distance(state.prev_graph, graph, approx_epsilon=max(0.0, e)),
+            state.eps,
+            h=0.01,
+        )
         state.eps = max(0.0, state.eps + lr * grad_eps)
 
     I_next = graph_information_bottleneck(embeddings, labels, beta=state.beta + 0.01)
@@ -231,3 +255,57 @@ def autotune_step(
         "beta": state.beta,
         "delta": state.delta,
     }
+
+
+def svgp_ei_propose(
+    params: Sequence[Sequence[float]],
+    scores: Sequence[float],
+    bounds: Sequence[tuple[float, float]],
+    *,
+    m: int = 100,
+    n_samples: int = 256,
+) -> np.ndarray:
+    """Return new parameter vector maximizing Expected Improvement.
+
+    A sparse Gaussian Process regression model is fitted on ``params`` and
+    ``scores``. ``m`` subsamples are used as inducing points. ``n_samples``
+    random candidates are drawn within ``bounds`` and the one with highest
+    expected improvement over the best observed score is returned.
+    """
+
+    from math import inf
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+    from scipy.stats import norm
+
+    X = np.asarray(list(params), dtype=float)
+    y = np.asarray(list(scores), dtype=float)
+    if len(X) == 0:
+        raise ValueError("no observations provided")
+    idx = np.linspace(0, len(X) - 1, min(len(X), m), dtype=int)
+    X_sub = X[idx]
+    y_sub = y[idx]
+
+    kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=1.0)
+    gp = GaussianProcessRegressor(kernel=kernel, alpha=1e-6, normalize_y=True)
+    gp.fit(X_sub, y_sub)
+
+    bounds = np.asarray(bounds, dtype=float)
+    dim = bounds.shape[0]
+    rng = np.random.default_rng()
+    candidates = rng.uniform(bounds[:, 0], bounds[:, 1], size=(n_samples, dim))
+
+    y_best = y.min()
+    best_x = None
+    best_ei = -inf
+    for x in candidates:
+        mu, sigma = gp.predict(x.reshape(1, -1), return_std=True)
+        sigma = float(sigma) + 1e-9
+        improvement = y_best - mu
+        Z = improvement / sigma
+        ei = improvement * norm.cdf(Z) + sigma * norm.pdf(Z)
+        if ei > best_ei:
+            best_ei = float(ei)
+            best_x = x
+    return best_x if best_x is not None else candidates[0]
+

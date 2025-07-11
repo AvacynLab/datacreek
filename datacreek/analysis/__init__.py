@@ -32,6 +32,8 @@ __all__ = [
     "sheaf_convolution",
     "sheaf_neural_network",
     "sheaf_first_cohomology",
+    "sheaf_first_cohomology_blocksmith",
+    "sheaf_consistency_score_batched",
     "resolve_sheaf_obstruction",
     "sheaf_consistency_score",
     "fractal_information_density",
@@ -49,10 +51,12 @@ __all__ = [
     "inverse_mapper",
     "fractal_net_prune",
     "fractalnet_compress",
+    "prune_fractalnet",
     "graphwave_entropy",
     "embedding_entropy",
     "hyper_sagnn_embeddings",
     "hyper_sagnn_head_drop_embeddings",
+    "hyperedge_attention_scores",
     "mdl_description_length",
     "select_mdl_motifs",
     "product_embedding",
@@ -68,6 +72,13 @@ __all__ = [
     "governance_metrics",
     "AutoTuneState",
     "autotune_step",
+    "svgp_ei_propose",
+    "kw_gradient",
+    "spectral_bound_exceeded",
+    "filter_semantic_cycles",
+    "entropy_triangle_threshold",
+    "rollback_gremlin_diff",
+    "SheafSLA",
 ]
 
 
@@ -101,6 +112,7 @@ def __getattr__(name: str):
         "hyperbolic_hypergraph_reasoning",
         "fractal_net_prune",
         "fractalnet_compress",
+        "prune_fractalnet",
         "graphwave_entropy",
         "embedding_entropy",
         "embedding_box_counting_dimension",
@@ -108,11 +120,16 @@ def __getattr__(name: str):
         from . import fractal as _f
 
         return getattr(_f, name)
-    if name in {"hyper_sagnn_embeddings", "hyper_sagnn_head_drop_embeddings"}:
+    if name in {"hyper_sagnn_embeddings", "hyper_sagnn_head_drop_embeddings", "hyperedge_attention_scores"}:
         from .hypergraph import hyper_sagnn_embeddings as _hs
         from .hypergraph import hyper_sagnn_head_drop_embeddings as _hd
+        from .hypergraph import hyperedge_attention_scores as _att
 
-        return _hs if name == "hyper_sagnn_embeddings" else _hd
+        return {
+            "hyper_sagnn_embeddings": _hs,
+            "hyper_sagnn_head_drop_embeddings": _hd,
+            "hyperedge_attention_scores": _att,
+        }[name]
     if name in {"mdl_description_length", "select_mdl_motifs"}:
         from .information import mdl_description_length as _mdl_desc
         from .information import select_mdl_motifs as _mdl_sel
@@ -174,11 +191,20 @@ def __getattr__(name: str):
         from .information import prototype_subgraph as _ps
 
         return _ps
-    if name in {"AutoTuneState", "autotune_step"}:
-        from .autotune import AutoTuneState as _AS
-        from .autotune import autotune_step as _at
+    if name in {"AutoTuneState", "autotune_step", "svgp_ei_propose", "kw_gradient"}:
+        from .autotune import (
+            AutoTuneState as _AS,
+            autotune_step as _at,
+            svgp_ei_propose as _sv,
+            kw_gradient as _kw,
+        )
 
-        return {"AutoTuneState": _AS, "autotune_step": _at}[name]
+        return {
+            "AutoTuneState": _AS,
+            "autotune_step": _at,
+            "svgp_ei_propose": _sv,
+            "kw_gradient": _kw,
+        }[name]
     if name == "sheaf_laplacian":
         from .sheaf import sheaf_laplacian as _sl
 
@@ -195,6 +221,10 @@ def __getattr__(name: str):
         from .sheaf import sheaf_first_cohomology as _sfc
 
         return _sfc
+    if name == "sheaf_first_cohomology_blocksmith":
+        from .sheaf import sheaf_first_cohomology_blocksmith as _sfcbs
+
+        return _sfcbs
     if name == "resolve_sheaf_obstruction":
         from .sheaf import resolve_sheaf_obstruction as _rso
 
@@ -203,6 +233,14 @@ def __getattr__(name: str):
         from .sheaf import sheaf_consistency_score as _scs
 
         return _scs
+    if name == "sheaf_consistency_score_batched":
+        from .sheaf import sheaf_consistency_score_batched as _scsb
+
+        return _scsb
+    if name == "spectral_bound_exceeded":
+        from .sheaf import spectral_bound_exceeded as _sbe
+
+        return _sbe
     if name == "generate_graph_rnn_stateful":
         from .generation import generate_graph_rnn_stateful as _grs
 
@@ -211,4 +249,20 @@ def __getattr__(name: str):
         from .generation import generate_graph_rnn_sequential as _grs2
 
         return _grs2
+    if name == "filter_semantic_cycles":
+        from .filtering import filter_semantic_cycles as _fsc
+
+        return _fsc
+    if name == "entropy_triangle_threshold":
+        from .filtering import entropy_triangle_threshold as _ett
+
+        return _ett
+    if name == "rollback_gremlin_diff":
+        from .rollback import rollback_gremlin_diff as _rgd
+
+        return _rgd
+    if name == "SheafSLA":
+        from .rollback import SheafSLA as _sla
+
+        return _sla
     raise AttributeError(name)

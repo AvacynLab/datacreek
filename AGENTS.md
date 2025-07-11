@@ -2,20 +2,15 @@
 
 ## Pending Tasks
 
-- [ ] None
-
 ## Completed Tasks
-- [x] Implement product-manifold embedding training
-- [x] Implement aligned CCA latent projections
-- [x] Implement multi-view contrastive learning
-- [x] Implement meta-embedding autoencoder (64D bottleneck)
-- [x] Implement hybrid score search combining views
-- [x] Extend autotuner with alpha, gamma, eta
-- [x] Provide governance metrics (alignment, radius, bias)
-- [x] Update documentation and examples
+- implement Kiefer-Wolfowitz gradients for `autotune_step`
+- expose new gradient helper in DatasetBuilder and KnowledgeGraph
+- document KW update in DOCS
+- write tests for KW gradient function
 
 ## Info
-Cycle: multiview correlation features implemented. Starting new cycle – awaiting new tasks.
+Cycle: KW autotune improvements
 
 ## History
-- Completed multiview features and governance metrics
+- new cycle initialized
+- added kw_gradient helper and integrated in autotune_step

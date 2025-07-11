@@ -5,6 +5,7 @@ from datacreek.analysis.governance import (
     average_hyperbolic_radius,
     governance_metrics,
     scale_bias_wasserstein,
+    mitigate_bias_wasserstein,
 )
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 
@@ -21,6 +22,15 @@ def test_governance_metrics_functions():
     assert bias >= 0.0
     metrics = governance_metrics(n2v, gw, hyp)
     assert set(metrics) == {"alignment_corr", "hyperbolic_radius", "bias_wasserstein"}
+
+
+def test_mitigate_bias_wasserstein_function():
+    emb = {"a": [1.0, 0.0], "b": [0.0, 1.0], "c": [1.0, 1.0]}
+    groups = {"a": "g1", "b": "g2", "c": "g2"}
+    res = mitigate_bias_wasserstein(emb, groups)
+    g1_mean = np.linalg.norm(res["a"])
+    g2_mean = np.mean([np.linalg.norm(res[n]) for n in ["b", "c"]])
+    assert abs(g1_mean - g2_mean) < 1e-6
 
 
 def test_dataset_governance_wrapper():
@@ -43,6 +53,16 @@ def test_dataset_governance_wrapper():
     )
     metrics = ds.governance_metrics()
     assert "alignment_corr" in metrics and "hyperbolic_radius" in metrics
+
+
+def test_dataset_mitigate_bias_wrapper():
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_entity("u1", "A")
+    ds.graph.graph.nodes["u1"].update({"embedding": [1.0, 0.0]})
+    ds.add_entity("u2", "B")
+    ds.graph.graph.nodes["u2"].update({"embedding": [0.0, 1.0]})
+    res = ds.mitigate_bias_wasserstein({"u1": "g1", "u2": "g2"})
+    assert set(res) == {"u1", "u2"}
 
 
 def test_sheaf_consistency_score_function():
