@@ -1,12 +1,12 @@
-import numpy as np
-
 import math
+
+import numpy as np
 import pytest
 
 from datacreek.analysis.hypergraph import (
+    hyper_adamic_adar_scores,
     hyper_sagnn_embeddings,
     hyper_sagnn_head_drop_embeddings,
-    hyper_adamic_adar_scores,
 )
 from datacreek.core.knowledge_graph import KnowledgeGraph
 

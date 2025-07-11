@@ -8,10 +8,10 @@ budget, effectively implementing a rolling allowance (e.g. per day).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, Deque, Tuple
-from collections import deque
 import time
+from collections import deque
+from dataclasses import dataclass, field
+from typing import Deque, Dict, Tuple
 
 
 @dataclass

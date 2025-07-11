@@ -1,6 +1,7 @@
 import numpy as np
-from datacreek.core.dataset import DatasetBuilder, DatasetType
+
 from datacreek.analysis.governance import average_hyperbolic_radius
+from datacreek.core.dataset import DatasetBuilder, DatasetType
 
 
 def test_average_hyperbolic_radius_function():

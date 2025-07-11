@@ -4,8 +4,8 @@ from datacreek.analysis.governance import (
     alignment_correlation,
     average_hyperbolic_radius,
     governance_metrics,
-    scale_bias_wasserstein,
     mitigate_bias_wasserstein,
+    scale_bias_wasserstein,
 )
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 
