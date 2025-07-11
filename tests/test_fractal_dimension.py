@@ -13,6 +13,7 @@ from datacreek.analysis.fractal import (
     mdl_optimal_radius,
     persistence_diagrams,
     persistence_entropy,
+    persistence_wasserstein_distance,
     poincare_embedding,
     spectral_density,
     spectral_dimension,
@@ -133,3 +134,16 @@ def test_graph_fourier_roundtrip():
     recon = inverse_graph_fourier_transform(g, coeffs)
     for n, val in zip(g.nodes(), recon):
         assert pytest.approx(val, rel=1e-6) == signal[n]
+
+
+def test_persistence_wasserstein_distance():
+    g1 = nx.path_graph(4)
+    g2 = nx.cycle_graph(4)
+    if (
+        persistence_wasserstein_distance.__module__ == "datacreek.analysis.fractal"
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+    ):
+        pytest.skip("gudhi not available")
+    d = persistence_wasserstein_distance(g1, g1)
+    assert d == pytest.approx(0.0, abs=1e-9)
+    assert persistence_wasserstein_distance(g1, g2) > 0.0

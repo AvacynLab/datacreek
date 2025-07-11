@@ -13,7 +13,18 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable, List, Optional
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import networkx as nx
 import numpy as np
@@ -749,6 +760,111 @@ class DatasetBuilder:
 
         return self.graph.get_similar_documents(doc_id, k=k)
 
+    def hybrid_score(
+        self,
+        src: str,
+        tgt: str,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.hybrid_score`."""
+
+        return self.graph.hybrid_score(
+            src,
+            tgt,
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            hyper_attr=hyper_attr,
+            gamma=gamma,
+            eta=eta,
+        )
+
+    def similar_by_hybrid(
+        self,
+        node_id: str,
+        *,
+        k: int = 5,
+        node_type: str = "chunk",
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> List[Tuple[str, float]]:
+        """Wrapper for :meth:`KnowledgeGraph.similar_by_hybrid`."""
+
+        return self.graph.similar_by_hybrid(
+            node_id,
+            k=k,
+            node_type=node_type,
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            hyper_attr=hyper_attr,
+            gamma=gamma,
+            eta=eta,
+        )
+
+    def ann_hybrid_search(
+        self,
+        q_n2v: Sequence[float],
+        q_gw: Sequence[float],
+        q_hyp: Sequence[float],
+        *,
+        k: int = 5,
+        ann_k: int = 2000,
+        node_type: str = "chunk",
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> List[Tuple[str, float]]:
+        """Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`."""
+
+        return self.graph.ann_hybrid_search(
+            q_n2v,
+            q_gw,
+            q_hyp,
+            k=k,
+            ann_k=ann_k,
+            node_type=node_type,
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            hyper_attr=hyper_attr,
+            gamma=gamma,
+            eta=eta,
+        )
+
+    def governance_metrics(
+        self,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+    ) -> Dict[str, float]:
+        """Wrapper for :meth:`KnowledgeGraph.governance_metrics`."""
+
+        metrics = self.graph.governance_metrics(
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            hyp_attr=hyper_attr,
+        )
+        self._record_event("governance_metrics", str(metrics))
+        return metrics
+
+    def apply_k_out_privacy(self, ids: List[str], k: int = 2) -> List[str]:
+        """Return ``ids`` after applying k-out randomized response."""
+
+        from ..analysis.privacy import k_out_randomized_response
+
+        priv = k_out_randomized_response(ids, k=k)
+        self._record_event("k_out_privacy", f"k={k}")
+        return priv
+
     def get_chunk_context(self, chunk_id: str, before: int = 1, after: int = 1) -> list[str]:
         """Return chunk IDs surrounding ``chunk_id`` including itself."""
 
@@ -1152,6 +1268,32 @@ class DatasetBuilder:
         )
         return result
 
+    def compute_hyper_sagnn_head_drop_embeddings(
+        self,
+        *,
+        node_attr: str = "embedding",
+        edge_attr: str = "hyper_sagnn_hd_embedding",
+        num_heads: int = 4,
+        threshold: float = 0.1,
+        seed: int | None = None,
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.compute_hyper_sagnn_head_drop_embeddings`."""
+
+        result = self.graph.compute_hyper_sagnn_head_drop_embeddings(
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+            num_heads=num_heads,
+            threshold=threshold,
+            seed=seed,
+        )
+        self._record_event(
+            "compute_hyper_sagnn_head_drop_embeddings",
+            "Hyper-SAGNN embeddings computed with HEAD-Drop",
+            num_heads=num_heads,
+            threshold=threshold,
+        )
+        return result
+
     def compute_graphsage_embeddings(
         self,
         *,
@@ -1261,6 +1403,123 @@ class DatasetBuilder:
             burn_in=burn_in,
             node2vec_p=node2vec_p,
             node2vec_q=node2vec_q,
+        )
+
+    def compute_product_manifold_embeddings(
+        self,
+        *,
+        hyperbolic_attr: str = "poincare_embedding",
+        euclidean_attr: str = "embedding",
+        write_property: str = "product_embedding",
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_product_manifold_embeddings`."""
+
+        self.graph.compute_product_manifold_embeddings(
+            hyperbolic_attr=hyperbolic_attr,
+            euclidean_attr=euclidean_attr,
+            write_property=write_property,
+        )
+        self._record_event(
+            "compute_product_manifold_embeddings",
+            "Product-manifold embeddings computed",
+            hyperbolic_attr=hyperbolic_attr,
+            euclidean_attr=euclidean_attr,
+        )
+
+    def train_product_manifold_embeddings(
+        self,
+        contexts: Iterable[tuple[str, str]],
+        *,
+        hyperbolic_attr: str = "poincare_embedding",
+        euclidean_attr: str = "embedding",
+        alpha: float = 0.5,
+        lr: float = 0.01,
+        epochs: int = 1,
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.train_product_manifold_embeddings`."""
+
+        self.graph.train_product_manifold_embeddings(
+            contexts,
+            hyperbolic_attr=hyperbolic_attr,
+            euclidean_attr=euclidean_attr,
+            alpha=alpha,
+            lr=lr,
+            epochs=epochs,
+        )
+        self._record_event(
+            "train_product_manifold_embeddings",
+            "Product-manifold embeddings trained",
+            alpha=alpha,
+            epochs=epochs,
+        )
+
+    def compute_aligned_cca_embeddings(
+        self,
+        *,
+        n_components: int = 32,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        write_property: str = "acca_embedding",
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_aligned_cca_embeddings`."""
+
+        self.graph.compute_aligned_cca_embeddings(
+            n_components=n_components,
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            write_property=write_property,
+        )
+        self._record_event(
+            "compute_aligned_cca_embeddings",
+            "Aligned CCA embeddings computed",
+            n_components=n_components,
+        )
+
+    def multiview_contrastive_loss(
+        self,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        tau: float = 0.1,
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.multiview_contrastive_loss`."""
+
+        loss = self.graph.multiview_contrastive_loss(
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            hyper_attr=hyper_attr,
+            tau=tau,
+        )
+        self._record_event(
+            "multiview_contrastive_loss",
+            "Computed multi-view contrastive loss",
+            tau=tau,
+        )
+        return loss
+
+    def compute_meta_embeddings(
+        self,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        bottleneck: int = 64,
+        write_property: str = "meta_embedding",
+    ) -> None:
+        """Wrapper for :meth:`KnowledgeGraph.compute_meta_embeddings`."""
+
+        self.graph.compute_meta_embeddings(
+            n2v_attr=n2v_attr,
+            gw_attr=gw_attr,
+            hyper_attr=hyper_attr,
+            bottleneck=bottleneck,
+            write_property=write_property,
+        )
+        self._record_event(
+            "compute_meta_embeddings",
+            "Meta-embeddings computed",
+            bottleneck=bottleneck,
         )
 
     def prune_embeddings(self, *, tol: float = 1e-3) -> Dict[str, int]:
@@ -1826,6 +2085,17 @@ class DatasetBuilder:
         )
         return val
 
+    def sheaf_consistency_score(self, *, edge_attr: str = "sheaf_sign") -> float:
+        """Wrapper for :meth:`KnowledgeGraph.sheaf_consistency_score`."""
+
+        val = self.graph.sheaf_consistency_score(edge_attr=edge_attr)
+        self._record_event(
+            "sheaf_consistency_score",
+            "Computed sheaf consistency score",
+            score=val,
+        )
+        return val
+
     def path_to_text(self, path: Iterable) -> str:
         """Wrapper for :meth:`KnowledgeGraph.path_to_text`."""
 
@@ -2056,6 +2326,20 @@ class DatasetBuilder:
             max_dim=max_dim,
         )
         return diags
+
+    def persistence_wasserstein_distance(
+        self, other: nx.Graph, *, dimension: int = 0, order: int = 1
+    ) -> float:
+        """Wrapper for :meth:`KnowledgeGraph.persistence_wasserstein_distance`."""
+
+        dist = self.graph.persistence_wasserstein_distance(other, dimension=dimension, order=order)
+        self._record_event(
+            "persistence_wasserstein_distance",
+            f"distance={dist}",
+            dimension=dimension,
+            order=order,
+        )
+        return dist
 
     def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:
         """Wrapper for :meth:`KnowledgeGraph.topological_signature`."""
@@ -2859,6 +3143,34 @@ class DatasetBuilder:
             "before": before_sig,
             "after": after_sig,
         }
+
+    def tpl_correct_graph(
+        self,
+        target: nx.Graph,
+        *,
+        epsilon: float = 0.1,
+        dimension: int = 1,
+        order: int = 1,
+        max_iter: int = 5,
+    ) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.tpl_correct_graph`."""
+
+        res = self.graph.tpl_correct_graph(
+            target,
+            epsilon=epsilon,
+            dimension=dimension,
+            order=order,
+            max_iter=max_iter,
+        )
+        self._record_event(
+            "tpl_correct_graph",
+            "Wasserstein-based topology correction",
+            epsilon=epsilon,
+            dimension=dimension,
+            order=order,
+            corrected=res["corrected"],
+        )
+        return res
 
     def run_information_layer(
         self,

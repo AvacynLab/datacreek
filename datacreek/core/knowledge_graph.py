@@ -5,7 +5,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import networkx as nx
 import numpy as np
@@ -682,6 +682,116 @@ class KnowledgeGraph:
             if len(results) >= k:
                 break
         return results
+
+    def hybrid_score(
+        self,
+        src: str,
+        tgt: str,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> float:
+        """Return the multi-view similarity between two nodes.
+
+        Parameters
+        ----------
+        src, tgt:
+            Node identifiers whose embeddings will be compared.
+        n2v_attr, gw_attr, hyper_attr:
+            Node properties storing the Node2Vec, GraphWave and Poincar\xe9
+            embeddings.
+        gamma, eta:
+            Weights of the Node2Vec and hyperbolic terms in the score.
+        """
+
+        from ..analysis import hybrid_score as _hs
+
+        a = self.graph.nodes[src].get(n2v_attr)
+        b = self.graph.nodes[tgt].get(n2v_attr)
+        gw_a = self.graph.nodes[src].get(gw_attr)
+        gw_b = self.graph.nodes[tgt].get(gw_attr)
+        hyp_a = self.graph.nodes[src].get(hyper_attr)
+        hyp_b = self.graph.nodes[tgt].get(hyper_attr)
+        if a is None or b is None or gw_a is None or gw_b is None or hyp_a is None or hyp_b is None:
+            return 0.0
+        return _hs(a, b, gw_a, gw_b, hyp_a, hyp_b, gamma=gamma, eta=eta)
+
+    def similar_by_hybrid(
+        self,
+        node_id: str,
+        *,
+        k: int = 5,
+        node_type: str = "chunk",
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> List[tuple[str, float]]:
+        """Return nodes ranked by :meth:`hybrid_score` with ``node_id``."""
+
+        scores: List[tuple[str, float]] = []
+        for n, data in self.graph.nodes(data=True):
+            if n == node_id or data.get("type") != node_type:
+                continue
+            s = self.hybrid_score(
+                node_id,
+                n,
+                n2v_attr=n2v_attr,
+                gw_attr=gw_attr,
+                hyper_attr=hyper_attr,
+                gamma=gamma,
+                eta=eta,
+            )
+            scores.append((n, s))
+        scores.sort(key=lambda x: x[1], reverse=True)
+        return scores[:k]
+
+    def ann_hybrid_search(
+        self,
+        q_n2v: Sequence[float],
+        q_gw: Sequence[float],
+        q_hyp: Sequence[float],
+        *,
+        k: int = 5,
+        ann_k: int = 2000,
+        node_type: str = "chunk",
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        gamma: float = 0.5,
+        eta: float = 0.25,
+    ) -> List[Tuple[str, float]]:
+        """Return top ``k`` nodes by hybrid score using an ANN pre-filter.
+
+        The FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates
+        which are then ranked with :func:`hybrid_score` against the provided
+        query vectors.
+        """
+
+        if self.faiss_index is None:
+            raise RuntimeError("FAISS index not built")
+
+        candidates = self.search_faiss(list(q_n2v), k=ann_k)
+        results: List[Tuple[str, float]] = []
+        for cid in candidates:
+            data = self.graph.nodes[cid]
+            if data.get("type") != node_type:
+                continue
+            vec_n2v = data.get(n2v_attr)
+            vec_gw = data.get(gw_attr)
+            vec_hyp = data.get(hyper_attr)
+            if vec_n2v is None or vec_gw is None or vec_hyp is None:
+                continue
+            from ..analysis import hybrid_score as _hs
+
+            s = _hs(q_n2v, vec_n2v, q_gw, vec_gw, q_hyp, vec_hyp, gamma=gamma, eta=eta)
+            results.append((cid, s))
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:k]
 
     def cypher_ann_query(
         self,
@@ -1890,6 +2000,56 @@ class KnowledgeGraph:
 
         return result
 
+    def compute_hyper_sagnn_head_drop_embeddings(
+        self,
+        *,
+        node_attr: str = "embedding",
+        edge_attr: str = "hyper_sagnn_hd_embedding",
+        num_heads: int = 4,
+        threshold: float = 0.1,
+        seed: int | None = None,
+    ) -> Dict[str, list[float]]:
+        """Compute Hyper-SAGNN embeddings with HEAD-Drop pruning."""
+
+        import numpy as np
+
+        index: Dict[str, int] = {}
+        features: List[np.ndarray] = []
+        for node, data in self.graph.nodes(data=True):
+            if node_attr in data:
+                index[node] = len(features)
+                features.append(np.asarray(data[node_attr], dtype=float))
+
+        if not features:
+            return {}
+
+        hyper_list: List[tuple[str, List[int]]] = []
+        for node, data in self.graph.nodes(data=True):
+            if data.get("type") == "hyperedge":
+                members = [index[v] for _, v in self.graph.edges(node) if v in index]
+                if members:
+                    hyper_list.append((node, members))
+
+        if not hyper_list:
+            return {}
+
+        from ..analysis.hypergraph import hyper_sagnn_head_drop_embeddings as _hd
+
+        embeddings = _hd(
+            [m for _, m in hyper_list],
+            np.stack(features),
+            num_heads=num_heads,
+            threshold=threshold,
+            seed=seed,
+        )
+
+        result: Dict[str, list[float]] = {}
+        for (node, _), vec in zip(hyper_list, embeddings):
+            self.graph.nodes[node][edge_attr] = vec.astype(float).tolist()
+            result[node] = vec.astype(float).tolist()
+
+        return result
+
     def compute_graphsage_embeddings(
         self,
         *,
@@ -2080,6 +2240,137 @@ class KnowledgeGraph:
             burn_in=burn_in,
         )
 
+    def compute_product_manifold_embeddings(
+        self,
+        *,
+        hyperbolic_attr: str = "poincare_embedding",
+        euclidean_attr: str = "embedding",
+        write_property: str = "product_embedding",
+    ) -> None:
+        """Combine hyperbolic and Euclidean embeddings."""
+
+        from ..analysis import product_embedding as _pe
+
+        hyper = {
+            n: data[hyperbolic_attr]
+            for n, data in self.graph.nodes(data=True)
+            if hyperbolic_attr in data and euclidean_attr in data
+        }
+        eucl = {
+            n: data[euclidean_attr]
+            for n, data in self.graph.nodes(data=True)
+            if hyperbolic_attr in data and euclidean_attr in data
+        }
+        emb = _pe(hyper, eucl)
+        for node, vec in emb.items():
+            self.graph.nodes[node][write_property] = vec.tolist()
+
+    def train_product_manifold_embeddings(
+        self,
+        contexts: Iterable[tuple[str, str]],
+        *,
+        hyperbolic_attr: str = "poincare_embedding",
+        euclidean_attr: str = "embedding",
+        alpha: float = 0.5,
+        lr: float = 0.01,
+        epochs: int = 1,
+    ) -> None:
+        """Optimize embeddings using a simple product-manifold loss."""
+
+        from ..analysis import train_product_manifold as _tpm
+
+        hyper = {
+            n: data[hyperbolic_attr]
+            for n, data in self.graph.nodes(data=True)
+            if hyperbolic_attr in data and euclidean_attr in data
+        }
+        eucl = {n: self.graph.nodes[n][euclidean_attr] for n in hyper}
+
+        h_new, e_new = _tpm(
+            hyper,
+            eucl,
+            contexts,
+            alpha=alpha,
+            lr=lr,
+            epochs=epochs,
+        )
+
+        for node, vec in h_new.items():
+            self.graph.nodes[node][hyperbolic_attr] = vec.tolist()
+        for node, vec in e_new.items():
+            self.graph.nodes[node][euclidean_attr] = vec.tolist()
+
+    def compute_aligned_cca_embeddings(
+        self,
+        *,
+        n_components: int = 32,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        write_property: str = "acca_embedding",
+    ) -> None:
+        """Compute A-CCA latent vectors between Node2Vec and GraphWave."""
+
+        from ..analysis import aligned_cca as _acca
+
+        n2v = {
+            n: data[n2v_attr]
+            for n, data in self.graph.nodes(data=True)
+            if n2v_attr in data and gw_attr in data
+        }
+        gw = {
+            n: data[gw_attr]
+            for n, data in self.graph.nodes(data=True)
+            if n2v_attr in data and gw_attr in data
+        }
+        latent, _ = _acca(n2v, gw, n_components=n_components)
+        for node, vec in latent.items():
+            self.graph.nodes[node][write_property] = vec.tolist()
+
+    def multiview_contrastive_loss(
+        self,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        tau: float = 0.1,
+    ) -> float:
+        """Compute InfoNCE loss across Node2Vec, GraphWave and Poincar\xe9 embeddings."""
+
+        from ..analysis import multiview_contrastive_loss as _mcl
+
+        n2v = {
+            n: data[n2v_attr]
+            for n, data in self.graph.nodes(data=True)
+            if n2v_attr in data and gw_attr in data and hyper_attr in data
+        }
+        gw = {n: data[gw_attr] for n, data in self.graph.nodes(data=True) if n in n2v}
+        hyp = {n: data[hyper_attr] for n in n2v}
+        return _mcl(n2v, gw, hyp, tau=tau)
+
+    def compute_meta_embeddings(
+        self,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyper_attr: str = "poincare_embedding",
+        bottleneck: int = 64,
+        write_property: str = "meta_embedding",
+    ) -> None:
+        """Compute meta-embeddings with a simple autoencoder."""
+
+        from ..analysis import meta_autoencoder as _ma
+
+        n2v = {
+            n: data[n2v_attr]
+            for n, data in self.graph.nodes(data=True)
+            if n2v_attr in data and gw_attr in data and hyper_attr in data
+        }
+        gw = {n: data[gw_attr] for n in n2v}
+        hyp = {n: data[hyper_attr] for n in n2v}
+        latent, _ = _ma(n2v, gw, hyp, bottleneck=bottleneck)
+        for node, vec in latent.items():
+            self.graph.nodes[node][write_property] = vec.tolist()
+
     def prune_embeddings(self, *, tol: float = 1e-3) -> Dict[str, int]:
         """Cluster embeddings using :func:`fractal_net_prune`."""
 
@@ -2233,6 +2524,13 @@ class KnowledgeGraph:
 
         return _rso(self.graph, edge_attr=edge_attr, max_iter=max_iter)
 
+    def sheaf_consistency_score(self, edge_attr: str = "sheaf_sign") -> float:
+        """Return a score in [0, 1] measuring sheaf consistency."""
+
+        from ..analysis.sheaf import sheaf_consistency_score as _scs
+
+        return _scs(self.graph, edge_attr=edge_attr)
+
     def path_to_text(self, path: Iterable) -> str:
         """Return a textual description for ``path`` using node attributes."""
 
@@ -2324,6 +2622,34 @@ class KnowledgeGraph:
         from ..analysis.information import structural_entropy as _se
 
         return _se(self.graph.to_undirected(), tau, base=base)
+
+    def governance_metrics(
+        self,
+        *,
+        n2v_attr: str = "embedding",
+        gw_attr: str = "graphwave_embedding",
+        hyp_attr: str = "poincare_embedding",
+    ) -> Dict[str, float]:
+        """Return alignment and bias metrics for stored embeddings."""
+
+        from ..analysis.governance import governance_metrics as _gm
+
+        n2v = {
+            n: np.asarray(data[n2v_attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if n2v_attr in data
+        }
+        gw = {
+            n: np.asarray(data[gw_attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if gw_attr in data
+        }
+        hyp = {
+            n: np.asarray(data[hyp_attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if hyp_attr in data
+        }
+        return _gm(n2v, gw, hyp)
 
     def autotune_step(
         self,
@@ -2429,6 +2755,17 @@ class KnowledgeGraph:
 
         g = nx.convert_node_labels_to_integers(self.graph.to_undirected())
         return _pd(g, max_dim)
+
+    def persistence_wasserstein_distance(
+        self, other: nx.Graph, *, dimension: int = 0, order: int = 1
+    ) -> float:
+        """Return Wasserstein distance to ``other`` graph."""
+
+        from ..analysis.fractal import persistence_wasserstein_distance as _pwd
+
+        g1 = nx.convert_node_labels_to_integers(self.graph.to_undirected())
+        g2 = nx.convert_node_labels_to_integers(other)
+        return _pwd(g1, g2, dimension=dimension, order=order)
 
     def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:
         """Return persistence diagrams and entropies for ``max_dim``."""
@@ -3170,6 +3507,28 @@ class KnowledgeGraph:
         dim_target, _ = box_counting_dimension(target, radii)
         diff = abs(dim_self - dim_target)
         return dist, diff
+
+    def tpl_correct_graph(
+        self,
+        target: nx.Graph,
+        *,
+        epsilon: float = 0.1,
+        dimension: int = 1,
+        order: int = 1,
+        max_iter: int = 5,
+    ) -> Dict[str, float | bool]:
+        """Apply Wasserstein-based TPL correction toward ``target``."""
+
+        from ..analysis.tpl import tpl_correct_graph as _tpl
+
+        return _tpl(
+            self.graph.to_undirected(),
+            target.to_undirected(),
+            epsilon=epsilon,
+            dimension=dimension,
+            order=order,
+            max_iter=max_iter,
+        )
 
     # ------------------------------------------------------------------
     # Perception helpers
