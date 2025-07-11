@@ -79,6 +79,7 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `compute_graphwave_embeddings(chebyshev_order=m)` | GraphWave using Chebyshev order `m` |
 | `hyper_adamic_adar_scores()` | compute Hyper-Adamic–Adar link scores |
 | `edge_attention_scores()` | mean attention weight per hyperedge |
+| `hybrid_score()` | joint similarity from Node2Vec, Poincaré and GraphWave |
 | `rollback_gremlin_diff()` | export git diff patch for rollback |
 | `SheafSLA` | measure mean time to recovery for sheaf checks |
 | `mapper_nerve(radius)` | compute or fetch cached Mapper nerve |

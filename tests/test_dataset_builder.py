@@ -40,3 +40,17 @@ def test_dataset_colour_box_dimension_wrapper():
     ds.graph.add_edge("a", "b")
     dim, counts = ds.colour_box_dimension([1])
     assert isinstance(dim, float) and len(counts) == 1
+
+
+def test_dataset_search_hybrid_wrapper(monkeypatch):
+    if DatasetBuilder is None:
+        pytest.skip("DatasetBuilder unavailable")
+    ds = DatasetBuilder()
+
+    def fake(self, query, k=5, node_type="chunk"):
+        assert query == "hello" and k == 2 and node_type == "chunk"
+        return ["a", "b"]
+
+    monkeypatch.setattr(ds.graph.__class__, "search_hybrid", fake)
+    res = ds.search_hybrid("hello", k=2)
+    assert res == ["a", "b"]

@@ -1,15 +1,13 @@
 # Agent Tasks Checklist
 
 ## Pending Tasks
-- implement `colour_box_dimension` for GPU-style fractal dimension
-- expose `colour_box_dimension` via KnowledgeGraph and DatasetBuilder
-- document new function in DOCS
-- add unit test for colour-box dimension
+- document `hybrid_score` and search functions in DOCS
+- ensure tests cover hybrid search wrappers
 
 ## Completed Tasks
 
 ## Info
-Cycle: fractal gpu box covering
+Cycle: hybrid scoring docs
 
 ## History
-- new cycle initialized with colour-box tasks
+- reset tasks for new cycle focusing on hybrid scoring documentation
