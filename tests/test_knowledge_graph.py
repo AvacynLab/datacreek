@@ -1,8 +1,10 @@
-from typing import Any
 import os
 import sys
+from typing import Any
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import pytest
+
 pytest.importorskip("datacreek.api", reason="api deps missing")
 
 import numpy as np
@@ -1560,11 +1562,13 @@ def test_mapper_cache_method(monkeypatch):
     kg.mapper_nerve(1)
     assert len(calls) == 2
 
+
 def test_svgp_ei_propose_method():
     kg = KnowledgeGraph()
     vec = kg.svgp_ei_propose([([0.0, 0.0], 1.0)], [(0.0, 1.0), (0.0, 1.0)], m=10, n_samples=20)
     assert len(vec) == 2
     assert 0.0 <= vec[0] <= 1.0
+
 
 def test_prune_fractalnet_weights_method():
     if KnowledgeGraph is None:

@@ -1,5 +1,7 @@
 import os
-from datacreek.analysis.rollback import rollback_gremlin_diff, SheafSLA
+
+from datacreek.analysis.rollback import SheafSLA, rollback_gremlin_diff
+
 
 def test_rollback_diff(tmp_path):
     path = rollback_gremlin_diff(repo=os.getcwd(), output="test.diff")

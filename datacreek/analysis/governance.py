@@ -61,6 +61,7 @@ def governance_metrics(
         "bias_wasserstein": scale_bias_wasserstein(n2v, gw, hyp),
     }
 
+
 def mitigate_bias_wasserstein(
     embeddings: Dict[str, Iterable[float]],
     groups: Dict[str, str],
@@ -96,4 +97,3 @@ def mitigate_bias_wasserstein(
         factor = factors.get(groups[node], 1.0)
         rescaled[node] = vec * factor
     return rescaled
-

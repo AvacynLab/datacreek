@@ -1,5 +1,7 @@
 import math
+
 from datacreek.analysis.autotune import kw_gradient
+
 
 def test_kw_gradient_quadratic():
     f = lambda x: (x - 1.0) ** 2

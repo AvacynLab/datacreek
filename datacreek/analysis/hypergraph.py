@@ -192,4 +192,3 @@ def hyperedge_attention_scores(
         att = att / att.sum(axis=1, keepdims=True)
         scores.append(float(np.abs(att).mean()))
     return np.asarray(scores)
-

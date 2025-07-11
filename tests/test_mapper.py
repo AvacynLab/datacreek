@@ -1,8 +1,10 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import networkx as nx
 import pytest
+
 pytest.importorskip("datacreek.api", reason="api deps missing")
 
 from datacreek.analysis.mapper import inverse_mapper, mapper_nerve

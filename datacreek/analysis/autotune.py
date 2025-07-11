@@ -274,9 +274,11 @@ def svgp_ei_propose(
     """
 
     from math import inf
-    from sklearn.gaussian_process import GaussianProcessRegressor
-    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
+
     from scipy.stats import norm
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import RBF
+    from sklearn.gaussian_process.kernels import ConstantKernel as C
 
     X = np.asarray(list(params), dtype=float)
     y = np.asarray(list(scores), dtype=float)
@@ -308,4 +310,3 @@ def svgp_ei_propose(
             best_ei = float(ei)
             best_x = x
     return best_x if best_x is not None else candidates[0]
-

@@ -35,11 +35,13 @@ def blip_caption_image(path: str) -> str:
     """Return image caption using BLIP if available."""
     try:  # pragma: no cover - heavy optional dependency
         from PIL import Image
-        from transformers import BlipProcessor, BlipForConditionalGeneration
+        from transformers import BlipForConditionalGeneration, BlipProcessor
 
         img = Image.open(path)
         processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+        model = BlipForConditionalGeneration.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
         inputs = processor(img, return_tensors="pt")
         out = model.generate(**inputs)
         return processor.decode(out[0], skip_special_tokens=True)
@@ -62,7 +64,6 @@ def parse_code_to_atoms(path: str) -> List[str]:
     """
     try:
         import ast
-
         import textwrap
 
         with open(path, "r", encoding="utf-8", errors="ignore") as f:

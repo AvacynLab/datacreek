@@ -18,9 +18,7 @@ def rollback_gremlin_diff(repo: str, output: str = "rollback.diff") -> str:
         Path where the diff patch will be written.
     """
     repo_path = Path(repo)
-    patch = subprocess.check_output(
-        ["git", "diff", "HEAD~1", "HEAD"], cwd=repo_path
-    ).decode()
+    patch = subprocess.check_output(["git", "diff", "HEAD~1", "HEAD"], cwd=repo_path).decode()
     out_path = repo_path / output
     out_path.write_text(patch)
     return str(out_path)

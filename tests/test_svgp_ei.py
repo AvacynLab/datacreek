@@ -1,5 +1,9 @@
-import os, sys; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import numpy as np
+
 from datacreek.analysis.autotune import svgp_ei_propose
 
 

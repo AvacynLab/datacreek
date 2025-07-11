@@ -3,7 +3,9 @@ try:
 except Exception:  # pragma: no cover - optional dependency missing
     np = None
 import pytest
+
 from datacreek.analysis.compression import prune_fractalnet
+
 
 def test_prune_fractalnet_basic():
     if np is None:
@@ -12,6 +14,7 @@ def test_prune_fractalnet_basic():
     pruned = prune_fractalnet(w, ratio=0.5)
     assert np.count_nonzero(pruned) == 5
     assert pruned.shape == w.shape
+
 
 def test_dataset_prune_wrapper():
     if np is None:

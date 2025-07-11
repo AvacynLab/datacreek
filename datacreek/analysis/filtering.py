@@ -38,9 +38,7 @@ def filter_semantic_cycles(
     sw: Set[str] = {w.lower() for w in stopwords}
 
     g = graph.copy()
-    cycles = (
-        nx.simple_cycles(g) if g.is_directed() else nx.cycle_basis(g)
-    )
+    cycles = nx.simple_cycles(g) if g.is_directed() else nx.cycle_basis(g)
     for cyc in cycles:
         if len(cyc) > max_len:
             continue
@@ -49,6 +47,7 @@ def filter_semantic_cycles(
             edges = list(zip(cyc, cyc[1:] + [cyc[0]]))
             g.remove_edges_from(edges)
     return g
+
 
 import numpy as np
 

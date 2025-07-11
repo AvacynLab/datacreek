@@ -1,5 +1,10 @@
 import os
-from datacreek.analysis.ingestion import partition_files_to_atoms, transcribe_audio, blip_caption_image
+
+from datacreek.analysis.ingestion import (
+    blip_caption_image,
+    partition_files_to_atoms,
+    transcribe_audio,
+)
 
 
 def test_partition_files_to_atoms(tmp_path):
@@ -20,6 +25,7 @@ def test_blip_caption_image_fallback(tmp_path):
     p.write_bytes(b"fake")
     assert blip_caption_image(str(p)) == ""
 
+
 def test_parse_code_to_atoms(tmp_path):
     code = """\
  def foo(x):
@@ -32,6 +38,7 @@ def test_parse_code_to_atoms(tmp_path):
     p = tmp_path / "sample.py"
     p.write_text(code)
     from datacreek.analysis.ingestion import parse_code_to_atoms
+
     atoms = parse_code_to_atoms(str(p))
     assert len(atoms) == 2
     assert "def foo" in atoms[0]

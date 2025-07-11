@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -30,4 +31,3 @@ def test_faiss_adaptive_switch(monkeypatch):
     res = kg.search_faiss([1.0, 0.0], k=1, adaptive=True, latency_threshold=0.1)
     assert res == ["a"]
     assert kg.faiss_index_type == "hnsw"
-

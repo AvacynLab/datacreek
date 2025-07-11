@@ -219,7 +219,9 @@ def sheaf_consistency_score_batched(
     return scores
 
 
-def spectral_bound_exceeded(graph: nx.Graph, k: int, tau: float, *, edge_attr: str = "sheaf_sign") -> bool:
+def spectral_bound_exceeded(
+    graph: nx.Graph, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
+) -> bool:
     """Return True if the k-th sheaf Laplacian eigenvalue exceeds ``tau``.
 
     Parameters
@@ -246,4 +248,3 @@ def spectral_bound_exceeded(graph: nx.Graph, k: int, tau: float, *, edge_attr: s
     if k - 1 < len(vals):
         return bool(vals[k - 1] > tau)
     return False
-
