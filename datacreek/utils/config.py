@@ -11,19 +11,16 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from datacreek.config_models import (
-    CurateSettings,
-    FormatSettings,
-    GenerationSettings,
-    LLMSettings,
-    OpenAISettings,
-    VLLMSettings,
-)
+from datacreek.config_models import (CurateSettings, FormatSettings,
+                                     GenerationSettings, LLMSettings,
+                                     OpenAISettings, VLLMSettings)
 
 # Default config location relative to the project root
 ORIGINAL_CONFIG_PATH = os.path.abspath(
     os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs", "config.yaml"
+        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        "configs",
+        "config.yaml",
     )
 )
 
@@ -236,7 +233,9 @@ def get_format_settings(config: Dict[str, Any]) -> FormatSettings:
 
 def get_format_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Get format configuration"""
-    return config.get("format", {"default": "jsonl", "include_metadata": True, "pretty_json": True})
+    return config.get(
+        "format", {"default": "jsonl", "include_metadata": True, "pretty_json": True}
+    )
 
 
 def get_prompt(config: Dict[str, Any], prompt_name: str) -> str:
@@ -247,7 +246,9 @@ def get_prompt(config: Dict[str, Any], prompt_name: str) -> str:
     return prompts[prompt_name]
 
 
-def merge_configs(base_config: Dict[str, Any], override_config: Dict[str, Any]) -> Dict[str, Any]:
+def merge_configs(
+    base_config: Dict[str, Any], override_config: Dict[str, Any]
+) -> Dict[str, Any]:
     """Merge two configuration dictionaries"""
     result = base_config.copy()
     for key, value in override_config.items():

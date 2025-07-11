@@ -14,12 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 
-from datacreek.utils.config import (
-    get_llm_provider,
-    get_openai_settings,
-    get_vllm_settings,
-    load_config_with_overrides,
-)
+from datacreek.utils.config import (get_llm_provider, get_openai_settings,
+                                    get_vllm_settings,
+                                    load_config_with_overrides)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -86,7 +83,10 @@ class LLMClient:
                 )
 
             # Load API endpoint configuration and apply profile overrides
-            api_endpoint_config = {**get_openai_settings(self.config).__dict__, **profile_cfg}
+            api_endpoint_config = {
+                **get_openai_settings(self.config).__dict__,
+                **profile_cfg,
+            }
 
             # Set parameters, with CLI/ENV overrides taking precedence
             self.api_base = (
@@ -118,12 +118,18 @@ class LLMClient:
                     else (
                         "From env var"
                         if api_endpoint_key
-                        else "From config" if api_endpoint_config.get("api_key") else "None"
+                        else (
+                            "From config"
+                            if api_endpoint_config.get("api_key")
+                            else "None"
+                        )
                     )
                 ),
             )
 
-            if not self.api_key and not self.api_base:  # Only require API key for official API
+            if (
+                not self.api_key and not self.api_base
+            ):  # Only require API key for official API
                 raise ValueError(
                     "API key is required for API endpoint provider. Set in config or API_ENDPOINT_KEY env var."
                 )
@@ -137,13 +143,17 @@ class LLMClient:
             self.max_retries = max_retries or int(
                 os.environ.get(
                     "LLM_MAX_RETRIES",
-                    profile_cfg.get("max_retries", api_endpoint_config.get("max_retries")),
+                    profile_cfg.get(
+                        "max_retries", api_endpoint_config.get("max_retries")
+                    ),
                 )
             )
             self.retry_delay = retry_delay or float(
                 os.environ.get(
                     "LLM_RETRY_DELAY",
-                    profile_cfg.get("retry_delay", api_endpoint_config.get("retry_delay")),
+                    profile_cfg.get(
+                        "retry_delay", api_endpoint_config.get("retry_delay")
+                    ),
                 )
             )
 
@@ -183,7 +193,9 @@ class LLMClient:
             # Verify server is running
             available, info = self._check_vllm_server()
             if not available:
-                raise ConnectionError(f"VLLM server not available at {self.api_base}: {info}")
+                raise ConnectionError(
+                    f"VLLM server not available at {self.api_base}: {info}"
+                )
 
     def _init_openai_client(self):
         """Initialize OpenAI client with appropriate configuration"""
@@ -236,10 +248,14 @@ class LLMClient:
         # Get defaults from config if not provided
         generation_config = self.config.get("generation", {})
         temperature = (
-            temperature if temperature is not None else generation_config.get("temperature", 0.1)
+            temperature
+            if temperature is not None
+            else generation_config.get("temperature", 0.1)
         )
         max_tokens = (
-            max_tokens if max_tokens is not None else generation_config.get("max_tokens", 4096)
+            max_tokens
+            if max_tokens is not None
+            else generation_config.get("max_tokens", 4096)
         )
         top_p = top_p if top_p is not None else generation_config.get("top_p", 0.95)
         frequency_penalty = (
@@ -409,7 +425,9 @@ class LLMClient:
 
                 # Last resort: Try to print the full response for debugging
                 if verbose or debug_mode:
-                    logger.error("Could not extract content from response using any known method")
+                    logger.error(
+                        "Could not extract content from response using any known method"
+                    )
                     logger.error(f"Response: {response}")
                     if isinstance(response, dict):
                         for k, v in response.items():
@@ -431,7 +449,9 @@ class LLMClient:
                         except:
                             pass
 
-                raise ValueError(f"Could not extract content from response using any known method")
+                raise ValueError(
+                    f"Could not extract content from response using any known method"
+                )
 
             except Exception as e:
                 if verbose:
@@ -483,7 +503,9 @@ class LLMClient:
                 )
 
                 if verbose:
-                    logger.info(f"Received response with status code: {response.status_code}")
+                    logger.info(
+                        f"Received response with status code: {response.status_code}"
+                    )
 
                 response.raise_for_status()
                 return response.json()["choices"][0]["message"]["content"]
@@ -514,14 +536,20 @@ class LLMClient:
         # Get defaults from config if not provided
         generation_config = self.config.get("generation", {})
         temperature = (
-            temperature if temperature is not None else generation_config.get("temperature", 0.1)
+            temperature
+            if temperature is not None
+            else generation_config.get("temperature", 0.1)
         )
         max_tokens = (
-            max_tokens if max_tokens is not None else generation_config.get("max_tokens", 4096)
+            max_tokens
+            if max_tokens is not None
+            else generation_config.get("max_tokens", 4096)
         )
         top_p = top_p if top_p is not None else generation_config.get("top_p", 0.95)
         batch_size = (
-            batch_size if batch_size is not None else generation_config.get("batch_size", 32)
+            batch_size
+            if batch_size is not None
+            else generation_config.get("batch_size", 32)
         )
         frequency_penalty = (
             frequency_penalty
@@ -580,8 +608,10 @@ class LLMClient:
             tasks = [
                 self._process_message_async(
                     messages,
-                    temperature or self.config.get("generation", {}).get("temperature", 0.1),
-                    max_tokens or self.config.get("generation", {}).get("max_tokens", 4096),
+                    temperature
+                    or self.config.get("generation", {}).get("temperature", 0.1),
+                    max_tokens
+                    or self.config.get("generation", {}).get("max_tokens", 4096),
                     top_p or self.config.get("generation", {}).get("top_p", 0.95),
                     frequency_penalty
                     or self.config.get("generation", {}).get("frequency_penalty", 0.0),
@@ -598,13 +628,15 @@ class LLMClient:
             return await asyncio.to_thread(
                 self._vllm_batch_completion,
                 message_batches,
-                temperature or self.config.get("generation", {}).get("temperature", 0.1),
+                temperature
+                or self.config.get("generation", {}).get("temperature", 0.1),
                 max_tokens or self.config.get("generation", {}).get("max_tokens", 4096),
                 top_p or self.config.get("generation", {}).get("top_p", 0.95),
                 batch_size or self.config.get("generation", {}).get("batch_size", 32),
                 frequency_penalty
                 or self.config.get("generation", {}).get("frequency_penalty", 0.0),
-                presence_penalty or self.config.get("generation", {}).get("presence_penalty", 0.0),
+                presence_penalty
+                or self.config.get("generation", {}).get("presence_penalty", 0.0),
                 stop or self.config.get("generation", {}).get("stop"),
                 logger.isEnabledFor(logging.DEBUG),
             )
@@ -697,7 +729,10 @@ class LLMClient:
                             if isinstance(completion, dict) and "content" in completion:
                                 content_obj = completion["content"]
                                 # Different Llama API response formats
-                                if isinstance(content_obj, dict) and "text" in content_obj:
+                                if (
+                                    isinstance(content_obj, dict)
+                                    and "text" in content_obj
+                                ):
                                     content = content_obj["text"]
                                 elif isinstance(content_obj, str):
                                     content = content_obj
@@ -730,7 +765,10 @@ class LLMClient:
                                 comp = response_dict["completion_message"]
                                 if isinstance(comp, dict) and "content" in comp:
                                     content_obj = comp["content"]
-                                    if isinstance(content_obj, dict) and "text" in content_obj:
+                                    if (
+                                        isinstance(content_obj, dict)
+                                        and "text" in content_obj
+                                    ):
                                         content = content_obj["text"]
                                     elif isinstance(content_obj, str):
                                         content = content_obj
@@ -764,7 +802,9 @@ class LLMClient:
                         logger.error(f"Response: {response}")
                         if isinstance(response, dict):
                             for k, v in response.items():
-                                logger.error(f"Key: {k}, Value type: {type(v)}, Value: {v}")
+                                logger.error(
+                                    f"Key: {k}, Value type: {type(v)}, Value: {v}"
+                                )
                         # Try to find any content-like fields
                         all_attrs = dir(response)
                         content_fields = [
@@ -797,7 +837,9 @@ class LLMClient:
                 if attempt == self.max_retries - 1:
                     return f"ERROR: {str(e)}"
 
-                await asyncio.sleep(self.retry_delay * (attempt + 1))  # Exponential backoff
+                await asyncio.sleep(
+                    self.retry_delay * (attempt + 1)
+                )  # Exponential backoff
 
     def _openai_batch_completion(
         self,
@@ -906,7 +948,9 @@ class LLMClient:
                 for request_data in batch_requests:
                     # Only print if verbose mode is enabled
                     if verbose:
-                        logger.info(f"Sending batch request to vLLM model {self.model}...")
+                        logger.info(
+                            f"Sending batch request to vLLM model {self.model}..."
+                        )
 
                     response = requests.post(
                         f"{self.api_base}/chat/completions",
@@ -916,7 +960,9 @@ class LLMClient:
                     )
 
                     if verbose:
-                        logger.info(f"Received response with status code: {response.status_code}")
+                        logger.info(
+                            f"Received response with status code: {response.status_code}"
+                        )
 
                     response.raise_for_status()
                     content = response.json()["choices"][0]["message"]["content"]

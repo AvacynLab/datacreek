@@ -17,7 +17,8 @@ def to_jsonl(data: List[Dict[str, Any]]) -> str:
 def to_alpaca(qa_pairs: List[Dict[str, str]]) -> str:
     """Return QA pairs in Alpaca format as a JSON string."""
     alpaca_data = [
-        {"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs
+        {"instruction": p["question"], "input": "", "output": p["answer"]}
+        for p in qa_pairs
     ]
     return json.dumps(alpaca_data, indent=2)
 

@@ -111,7 +111,9 @@ class VQAGenerator:
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_base64}"
+                            },
                         },
                         {"type": "text", "text": f"{query} Final answer: {label}"},
                     ],
@@ -219,7 +221,9 @@ class VQAGenerator:
                 batch_size = self.generation_config.batch_size
 
                 if verbose:
-                    logger.info("Using batch size of %d for dataset processing", batch_size)
+                    logger.info(
+                        "Using batch size of %d for dataset processing", batch_size
+                    )
 
                 # Process the dataset
                 ds = dataset.map(

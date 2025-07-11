@@ -167,37 +167,25 @@ __all__: list[str] = [
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
-    from .analysis.fractal import (
-        bottleneck_distance,
-        box_counting_dimension,
-        box_cover,
-        build_fractal_hierarchy,
-        build_mdl_hierarchy,
-        fractal_information_density,
-        fractalize_graph,
-        fractalize_optimal,
-        graph_fourier_transform,
-        graph_lacunarity,
-        graphwave_embedding,
-        inverse_graph_fourier_transform,
-        laplacian_energy,
-        laplacian_spectrum,
-        mdl_optimal_radius,
-        minimize_bottleneck_distance,
-        persistence_diagrams,
-        persistence_entropy,
-        poincare_embedding,
-        spectral_density,
-        spectral_dimension,
-        spectral_entropy,
-        spectral_gap,
-    )
-    from .analysis.generation import (
-        generate_graph_rnn_like,
-        generate_graph_rnn_sequential,
-        generate_graph_rnn_stateful,
-        generate_netgan_like,
-    )
+    from .analysis.fractal import (bottleneck_distance, box_counting_dimension,
+                                   box_cover, build_fractal_hierarchy,
+                                   build_mdl_hierarchy,
+                                   fractal_information_density,
+                                   fractalize_graph, fractalize_optimal,
+                                   graph_fourier_transform, graph_lacunarity,
+                                   graphwave_embedding,
+                                   inverse_graph_fourier_transform,
+                                   laplacian_energy, laplacian_spectrum,
+                                   mdl_optimal_radius,
+                                   minimize_bottleneck_distance,
+                                   persistence_diagrams, persistence_entropy,
+                                   poincare_embedding, spectral_density,
+                                   spectral_dimension, spectral_entropy,
+                                   spectral_gap)
+    from .analysis.generation import (generate_graph_rnn_like,
+                                      generate_graph_rnn_sequential,
+                                      generate_graph_rnn_stateful,
+                                      generate_netgan_like)
     from .analysis.hypergraph import hyper_sagnn_embeddings
     from .config_models import GenerationSettings
     from .core.dataset import DatasetBuilder
@@ -205,18 +193,11 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
     from .core.ingest import process_file as ingest_file
     from .core.ingest import to_kg
     from .core.knowledge_graph import KnowledgeGraph
-    from .pipelines import (
-        PIPELINES,
-        DatasetType,
-        GenerationPipeline,
-        TrainingGoal,
-        get_dataset_types_for_training,
-        get_pipeline,
-        get_pipelines_for_training,
-        get_trainings_for_dataset,
-        run_generation_pipeline,
-        run_generation_pipeline_async,
-    )
+    from .pipelines import (PIPELINES, DatasetType, GenerationPipeline,
+                            TrainingGoal, get_dataset_types_for_training,
+                            get_pipeline, get_pipelines_for_training,
+                            get_trainings_for_dataset, run_generation_pipeline,
+                            run_generation_pipeline_async)
     from .utils.emotion import detect_emotion
     from .utils.fact_extraction import extract_facts
     from .utils.image_captioning import caption_image
@@ -820,7 +801,11 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.ingest_text_atoms
-    if name in {"detect_automorphisms", "quotient_by_symmetry", "automorphism_group_order"}:
+    if name in {
+        "detect_automorphisms",
+        "quotient_by_symmetry",
+        "automorphism_group_order",
+    }:
         from .core.dataset import DatasetBuilder as _DB
 
         mapping = {
@@ -835,5 +820,7 @@ def __getattr__(name: str):
         from .templates.library import get_template as _gtmpl
         from .templates.library import validate_output as _vo
 
-        return {"get_template": _gtmpl, "PromptTemplate": _PT, "validate_output": _vo}[name]
+        return {"get_template": _gtmpl, "PromptTemplate": _PT, "validate_output": _vo}[
+            name
+        ]
     raise AttributeError(name)

@@ -76,7 +76,20 @@ def test_dataset_ann_hybrid_search_wrapper(monkeypatch):
         pytest.skip("DatasetBuilder unavailable")
     ds = DatasetBuilder()
 
-    def fake(self, q_n2v, q_gw, q_hyp, k=5, ann_k=2000, node_type="chunk", n2v_attr="embedding", gw_attr="graphwave_embedding", hyper_attr="poincare_embedding", gamma=0.5, eta=0.25):
+    def fake(
+        self,
+        q_n2v,
+        q_gw,
+        q_hyp,
+        k=5,
+        ann_k=2000,
+        node_type="chunk",
+        n2v_attr="embedding",
+        gw_attr="graphwave_embedding",
+        hyper_attr="poincare_embedding",
+        gamma=0.5,
+        eta=0.25,
+    ):
         assert q_n2v == [1] and q_gw == [2] and q_hyp == [3]
         assert k == 4 and ann_k == 100
         assert node_type == "chunk" and n2v_attr == "embedding"
