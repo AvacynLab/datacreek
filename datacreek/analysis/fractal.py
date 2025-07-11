@@ -104,6 +104,51 @@ def box_counting_dimension(
     return slope, counts
 
 
+def colour_box_dimension(
+    graph: nx.Graph, radii: Iterable[int]
+) -> tuple[float, list[tuple[int, int]]]:
+    """Estimate fractal dimension using a simple COLOUR-box scheme.
+
+    This approximates the GPU COLOUR-box algorithm by assigning boxes in
+    parallel via colour classes. Each radius ``l_B`` is processed by
+    greedily colouring nodes so that no two neighbouring nodes share a colour
+    within that radius.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    radii:
+        Iterable of box radii ``l_B``.
+
+    Returns
+    -------
+    tuple[float, list[tuple[int, int]]]
+        Estimated dimension and the ``(radius, box_count)`` pairs.
+    """
+
+    counts: list[tuple[int, int]] = []
+    for r in radii:
+        color = {}
+        current = 0
+        for node in graph:
+            if node in color:
+                continue
+            color[node] = current
+            for nbr in nx.single_source_shortest_path_length(graph, node, cutoff=r):
+                if nbr != node:
+                    color[nbr] = current
+            current += 1
+        counts.append((r, current))
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    if len(xs) < 2:
+        return 0.0, counts
+    slope, _ = np.polyfit(xs, ys, 1)
+    return slope, counts
+
+
 def persistence_entropy(graph: nx.Graph, dimension: int = 0) -> float:
     """Return the persistence entropy for ``graph`` in a given dimension.
 

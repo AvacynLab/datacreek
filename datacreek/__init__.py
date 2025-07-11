@@ -113,6 +113,7 @@ __all__: list[str] = [
     "graphwave_entropy",
     "embedding_entropy",
     "embedding_box_counting_dimension",
+    "colour_box_dimension",
     "ensure_graphwave_entropy",
     "hyper_sagnn_embeddings",
     "select_mdl_motifs",
@@ -313,6 +314,10 @@ def __getattr__(name: str):
         from .analysis.fractal import box_counting_dimension as _bcd
 
         return _bcd
+    if name == "colour_box_dimension":
+        from .analysis.fractal import colour_box_dimension as _cbd
+
+        return _cbd
     if name == "persistence_entropy":
         from .analysis.fractal import persistence_entropy as _pe
 
@@ -703,10 +708,10 @@ def __getattr__(name: str):
         "DPBudgetManager",
         "DPBudget",
     }:
+        from .analysis import filtering as _flt
         from .analysis import governance as _g
         from .analysis import multiview as _mv
         from .analysis import privacy as _p
-        from .analysis import filtering as _flt
         from .security import dp_budget as _dp
 
         if hasattr(_mv, name):
@@ -732,6 +737,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.embedding_box_counting_dimension
+    if name == "colour_box_dimension":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.colour_box_dimension
     if name == "ensure_graphwave_entropy":
         from .core.dataset import DatasetBuilder as _DB
 
@@ -749,7 +758,8 @@ def __getattr__(name: str):
 
         return _mdl
     if name in {"AutoTuneState", "autotune_step", "kw_gradient"}:
-        from .analysis.autotune import AutoTuneState as _AS, kw_gradient as _kw
+        from .analysis.autotune import AutoTuneState as _AS
+        from .analysis.autotune import kw_gradient as _kw
         from .core.dataset import DatasetBuilder as _DB
 
         if name == "AutoTuneState":

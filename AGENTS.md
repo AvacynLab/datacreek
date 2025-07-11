@@ -1,16 +1,15 @@
 # Agent Tasks Checklist
 
 ## Pending Tasks
+- implement `colour_box_dimension` for GPU-style fractal dimension
+- expose `colour_box_dimension` via KnowledgeGraph and DatasetBuilder
+- document new function in DOCS
+- add unit test for colour-box dimension
 
 ## Completed Tasks
-- implement Kiefer-Wolfowitz gradients for `autotune_step`
-- expose new gradient helper in DatasetBuilder and KnowledgeGraph
-- document KW update in DOCS
-- write tests for KW gradient function
 
 ## Info
-Cycle: KW autotune improvements
+Cycle: fractal gpu box covering
 
 ## History
-- new cycle initialized
-- added kw_gradient helper and integrated in autotune_step
+- new cycle initialized with colour-box tasks

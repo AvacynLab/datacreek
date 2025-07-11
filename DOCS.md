@@ -84,6 +84,7 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `mapper_nerve(radius)` | compute or fetch cached Mapper nerve |
 | `clear_mapper_cache()` | drop cached Mapper nerve results |
 | `prune_fractalnet(weights, ratio)` | magnitude-based pruning of model weights |
+| `colour_box_dimension(radii)` | GPU-style box counting for fractal dim |
 | `adaptive_triangle_threshold()` | derive triangle cutoff from edge weight entropy |
 | `partition_files_to_atoms(path)` | split file into text atoms |
 | `parse_code_to_atoms(path)` | split Python source into code atoms |

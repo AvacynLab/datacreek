@@ -7,6 +7,7 @@ __all__ = [
     "box_cover",
     "graphwave_embedding",
     "embedding_box_counting_dimension",
+    "colour_box_dimension",
     "mdl_optimal_radius",
     "persistence_diagrams",
     "persistence_entropy",
@@ -116,11 +117,16 @@ def __getattr__(name: str):
         "graphwave_entropy",
         "embedding_entropy",
         "embedding_box_counting_dimension",
+        "colour_box_dimension",
     }:
         from . import fractal as _f
 
         return getattr(_f, name)
-    if name in {"hyper_sagnn_embeddings", "hyper_sagnn_head_drop_embeddings", "hyperedge_attention_scores"}:
+    if name in {
+        "hyper_sagnn_embeddings",
+        "hyper_sagnn_head_drop_embeddings",
+        "hyperedge_attention_scores",
+    }:
         from .hypergraph import hyper_sagnn_embeddings as _hs
         from .hypergraph import hyper_sagnn_head_drop_embeddings as _hd
         from .hypergraph import hyperedge_attention_scores as _att
@@ -192,12 +198,10 @@ def __getattr__(name: str):
 
         return _ps
     if name in {"AutoTuneState", "autotune_step", "svgp_ei_propose", "kw_gradient"}:
-        from .autotune import (
-            AutoTuneState as _AS,
-            autotune_step as _at,
-            svgp_ei_propose as _sv,
-            kw_gradient as _kw,
-        )
+        from .autotune import AutoTuneState as _AS
+        from .autotune import autotune_step as _at
+        from .autotune import kw_gradient as _kw
+        from .autotune import svgp_ei_propose as _sv
 
         return {
             "AutoTuneState": _AS,

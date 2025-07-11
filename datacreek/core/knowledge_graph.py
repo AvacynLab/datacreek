@@ -4,9 +4,9 @@ import json
 import os
 import re
 import time
-from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import networkx as nx
@@ -45,7 +45,9 @@ class KnowledgeGraph:
     faiss_ids: list[str] | None = field(init=False, default=None, repr=False)
     faiss_index_type: str | None = field(init=False, default=None, repr=False)
     faiss_node_attr: str | None = field(init=False, default=None, repr=False)
-    _mapper_cache: Dict[int, tuple[nx.Graph, list[set[str]]]] = field(init=False, default_factory=dict, repr=False)
+    _mapper_cache: Dict[int, tuple[nx.Graph, list[set[str]]]] = field(
+        init=False, default_factory=dict, repr=False
+    )
 
     def __post_init__(self) -> None:
         """Initialize the internal embedding index."""
@@ -1851,9 +1853,7 @@ class KnowledgeGraph:
 
         return _ge(feats)
 
-    def build_faiss_index(
-        self, node_attr: str = "embedding", *, method: str = "flat"
-    ) -> None:
+    def build_faiss_index(self, node_attr: str = "embedding", *, method: str = "flat") -> None:
         """Build a FAISS index from node embeddings.
 
         Parameters
@@ -2594,6 +2594,13 @@ class KnowledgeGraph:
 
         return _bcd(self.graph.to_undirected(), radii)
 
+    def colour_box_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+        """Estimate fractal dimension with the COLOUR-box method."""
+
+        from ..analysis.fractal import colour_box_dimension as _cbd
+
+        return _cbd(self.graph.to_undirected(), radii)
+
     def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
         """Estimate spectral dimension from heat trace scaling."""
 
@@ -2721,9 +2728,7 @@ class KnowledgeGraph:
 
         return _scsb(self.graph, batches, edge_attr=edge_attr)
 
-    def spectral_bound_exceeded(
-        self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
-    ) -> bool:
+    def spectral_bound_exceeded(self, k: int, tau: float, *, edge_attr: str = "sheaf_sign") -> bool:
         """Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
 
         Parameters
@@ -2991,6 +2996,7 @@ class KnowledgeGraph:
         from ..analysis.autotune import kw_gradient as _kw
 
         return float(_kw(f, x, h=h, n=n))
+
     def prototype_subgraph(
         self,
         labels: Dict[str, int],

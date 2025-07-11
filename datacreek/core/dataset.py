@@ -52,8 +52,8 @@ except Exception:  # pragma: no cover - optional
 from ..models import LLMService
 from ..models.stage import DatasetStage
 from ..pipelines import DatasetType, PipelineStep
-from .knowledge_graph import KnowledgeGraph
 from ..security.dp_budget import DPBudgetManager
+from .knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
@@ -1447,9 +1447,7 @@ class DatasetBuilder:
             dimensions=dimensions,
         )
 
-    def build_faiss_index(
-        self, node_attr: str = "embedding", *, method: str = "flat"
-    ) -> None:
+    def build_faiss_index(self, node_attr: str = "embedding", *, method: str = "flat") -> None:
         """Wrapper for :meth:`KnowledgeGraph.build_faiss_index`."""
 
         self.graph.build_faiss_index(node_attr=node_attr, method=method)
@@ -1717,6 +1715,17 @@ class DatasetBuilder:
         self._record_event(
             "fractal_dimension",
             "Fractal dimension computed",
+            radii=list(radii),
+        )
+        return dim, counts
+
+    def colour_box_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+        """Wrapper for :meth:`KnowledgeGraph.colour_box_dimension`."""
+
+        dim, counts = self.graph.colour_box_dimension(radii)
+        self._record_event(
+            "colour_box_dimension",
+            "COLOUR-box fractal dimension computed",
             radii=list(radii),
         )
         return dim, counts
@@ -2326,18 +2335,14 @@ class DatasetBuilder:
     ) -> list[float]:
         """Wrapper for :meth:`KnowledgeGraph.sheaf_consistency_score_batched`."""
 
-        scores = self.graph.sheaf_consistency_score_batched(
-            batches, edge_attr=edge_attr
-        )
+        scores = self.graph.sheaf_consistency_score_batched(batches, edge_attr=edge_attr)
         self._record_event(
             "sheaf_consistency_score_batched",
             "Computed batched sheaf consistency scores",
         )
         return scores
 
-    def spectral_bound_exceeded(
-        self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
-    ) -> bool:
+    def spectral_bound_exceeded(self, k: int, tau: float, *, edge_attr: str = "sheaf_sign") -> bool:
         """Wrapper for :meth:`KnowledgeGraph.spectral_bound_exceeded`."""
 
         flag = self.graph.spectral_bound_exceeded(k, tau, edge_attr=edge_attr)
@@ -2449,9 +2454,7 @@ class DatasetBuilder:
     ) -> int:
         """Wrapper for :meth:`KnowledgeGraph.adaptive_triangle_threshold`."""
 
-        val = self.graph.adaptive_triangle_threshold(
-            weight=weight, base=base, scale=scale
-        )
+        val = self.graph.adaptive_triangle_threshold(weight=weight, base=base, scale=scale)
         self._record_event(
             "adaptive_triangle_threshold",
             "Entropy-based triangle threshold computed",
