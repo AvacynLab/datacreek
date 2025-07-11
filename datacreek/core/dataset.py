@@ -135,7 +135,9 @@ class DatasetBuilder:
     # stop signal used by the asynchronous policy monitor
     _policy_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
     # background thread running the policy monitor
-    _policy_thread: threading.Thread | None = field(default=None, repr=False, compare=False)
+    _policy_thread: threading.Thread | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def __del__(self) -> None:
         """Ensure background monitoring is terminated when the builder is collected."""
@@ -332,7 +334,9 @@ class DatasetBuilder:
     ) -> None:
         """Insert a section node for ``doc_id``."""
 
-        self.graph.add_section(doc_id, section_id, title=title, source=source, page=page)
+        self.graph.add_section(
+            doc_id, section_id, title=title, source=source, page=page
+        )
         self._record_event(
             "add_section",
             f"Added section {section_id} to {doc_id}",
@@ -536,7 +540,9 @@ class DatasetBuilder:
             source=source,
         )
 
-    def add_entity(self, entity_id: str, text: str, source: Optional[str] = None) -> None:
+    def add_entity(
+        self, entity_id: str, text: str, source: Optional[str] = None
+    ) -> None:
         """Insert an entity node."""
 
         self.graph.add_entity(entity_id, text, source)
@@ -573,14 +579,18 @@ class DatasetBuilder:
         """Return chunk IDs with a specific emotion label."""
 
         ids = self.graph.chunks_by_emotion(emotion)
-        self._record_event("chunks_by_emotion", "Chunks filtered by emotion", emotion=emotion)
+        self._record_event(
+            "chunks_by_emotion", "Chunks filtered by emotion", emotion=emotion
+        )
         return ids
 
     def chunks_by_modality(self, modality: str) -> list[str]:
         """Return chunk IDs with a specific modality label."""
 
         ids = self.graph.chunks_by_modality(modality)
-        self._record_event("chunks_by_modality", "Chunks filtered by modality", modality=modality)
+        self._record_event(
+            "chunks_by_modality", "Chunks filtered by modality", modality=modality
+        )
         return ids
 
     def search(self, query: str, node_type: str = "chunk") -> list[str]:
@@ -625,7 +635,9 @@ class DatasetBuilder:
             node_type=node_type,
         )
 
-    def search_hybrid(self, query: str, k: int = 5, *, node_type: str = "chunk") -> list[str]:
+    def search_hybrid(
+        self, query: str, k: int = 5, *, node_type: str = "chunk"
+    ) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_hybrid`."""
 
         return self.graph.search_hybrid(query, k=k, node_type=node_type)
@@ -639,7 +651,20 @@ class DatasetBuilder:
         k: int = 5,
         node_type: str = "chunk",
     ) -> List[Dict[str, Any]]:
-        """Wrapper for :meth:`KnowledgeGraph.cypher_ann_query`."""
+        """Wrapper for :meth:`KnowledgeGraph.cypher_ann_query`.
+
+        Parameters mirror :meth:`KnowledgeGraph.cypher_ann_query`:
+
+        - ``driver``: Neo4j driver instance
+        - ``query``: text passed to the ANN search
+        - ``cypher``: query string using ``$ids``
+        - ``k``: number of ANN candidates
+        - ``node_type``: restrict matches to this type
+
+        The FAISS index retrieves up to ``k`` candidate IDs from ``query``.
+        These IDs are bound to the ``ids`` parameter in ``cypher`` so you can
+        execute arbitrary graph queries seeded by the ANN search.
+        """
 
         return self.graph.cypher_ann_query(
             driver,
@@ -654,7 +679,9 @@ class DatasetBuilder:
     ) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.search_with_links`."""
 
-        return self.graph.search_with_links(query, k=k, hops=hops, fractal_level=fractal_level)
+        return self.graph.search_with_links(
+            query, k=k, hops=hops, fractal_level=fractal_level
+        )
 
     def search_with_links_data(
         self, query: str, k: int = 5, hops: int = 1, *, fractal_level: int | None = None
@@ -761,7 +788,9 @@ class DatasetBuilder:
 
         return self.graph.get_similar_chunks(chunk_id, k=k)
 
-    def get_similar_chunks_data(self, chunk_id: str, k: int = 3) -> List[Dict[str, Any]]:
+    def get_similar_chunks_data(
+        self, chunk_id: str, k: int = 3
+    ) -> List[Dict[str, Any]]:
         """Return up to ``k`` similar chunk infos for ``chunk_id``."""
 
         return self.graph.get_similar_chunks_data(chunk_id, k=k)
@@ -797,7 +826,21 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Wrapper for :meth:`KnowledgeGraph.hybrid_score`."""
+        """Wrapper for :meth:`KnowledgeGraph.hybrid_score`.
+
+        Parameters mirror :meth:`KnowledgeGraph.hybrid_score` and the
+        returned value is the multi-view similarity
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}})
+            + (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where ``n2v_attr``, ``gw_attr`` and ``hyper_attr`` name the node
+        properties holding the Node2Vec, GraphWave and Poincar\xe9
+        embeddings. ``gamma`` controls the weight of the Euclidean term
+        while ``eta`` controls the hyperbolic part.
+        """
 
         return self.graph.hybrid_score(
             src,
@@ -821,7 +864,20 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Wrapper for :meth:`KnowledgeGraph.similar_by_hybrid`."""
+        """Return nodes ranked by multi-view similarity to ``node_id``.
+
+        The method delegates to :meth:`KnowledgeGraph.similar_by_hybrid` and
+        computes the same hybrid score
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where the Node2Vec, Poincar\xe9 and GraphWave embeddings are read from
+        ``n2v_attr``, ``hyper_attr`` and ``gw_attr``. ``gamma`` and ``eta``
+        control the Euclidean and hyperbolic contribution respectively.
+        """
 
         return self.graph.similar_by_hybrid(
             node_id,
@@ -849,7 +905,21 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`."""
+        """Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`.
+
+        ``q_n2v``, ``q_gw`` and ``q_hyp`` are the query embeddings in
+        Node2Vec, GraphWave and Poincar\xe9 space. Candidates are fetched
+        from the FAISS index on ``n2v_attr`` and scored with
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where ``gamma`` and ``eta`` weight the Euclidean and hyperbolic parts.
+        ``ann_k`` controls the number of FAISS candidates considered before
+        returning the top ``k`` results.
+        """
 
         return self.graph.ann_hybrid_search(
             q_n2v,
@@ -927,7 +997,9 @@ class DatasetBuilder:
         self._record_event("consume_privacy_budget", f"user={user} amount={amount}")
         return ok
 
-    def get_chunk_context(self, chunk_id: str, before: int = 1, after: int = 1) -> list[str]:
+    def get_chunk_context(
+        self, chunk_id: str, before: int = 1, after: int = 1
+    ) -> list[str]:
         """Return chunk IDs surrounding ``chunk_id`` including itself."""
 
         return self.graph.get_chunk_context(chunk_id, before=before, after=after)
@@ -1047,10 +1119,14 @@ class DatasetBuilder:
             )
         return merged
 
-    def predict_links(self, threshold: float = 0.8, *, use_graph_embeddings: bool = False) -> None:
+    def predict_links(
+        self, threshold: float = 0.8, *, use_graph_embeddings: bool = False
+    ) -> None:
         """Infer missing relations between entities based on similarity."""
 
-        self.graph.predict_links(threshold=threshold, use_graph_embeddings=use_graph_embeddings)
+        self.graph.predict_links(
+            threshold=threshold, use_graph_embeddings=use_graph_embeddings
+        )
         self._record_event(
             "predict_links",
             "Predicted entity links",
@@ -1111,7 +1187,9 @@ class DatasetBuilder:
         self.graph.score_trust()
         self._record_event("score_trust", "Computed trust scores")
 
-    def compute_centrality(self, node_type: str = "entity", metric: str = "degree") -> None:
+    def compute_centrality(
+        self, node_type: str = "entity", metric: str = "degree"
+    ) -> None:
         """Compute centrality metrics for graph nodes."""
         self.graph.compute_centrality(node_type=node_type, metric=metric)
         self._record_event(
@@ -1425,7 +1503,9 @@ class DatasetBuilder:
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_graphsage_embeddings`."""
 
-        self.graph.compute_graphsage_embeddings(dimensions=dimensions, num_layers=num_layers)
+        self.graph.compute_graphsage_embeddings(
+            dimensions=dimensions, num_layers=num_layers
+        )
         self._record_event(
             "compute_graphsage_embeddings",
             "GraphSAGE embeddings computed",
@@ -1447,7 +1527,9 @@ class DatasetBuilder:
             dimensions=dimensions,
         )
 
-    def build_faiss_index(self, node_attr: str = "embedding", *, method: str = "flat") -> None:
+    def build_faiss_index(
+        self, node_attr: str = "embedding", *, method: str = "flat"
+    ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.build_faiss_index`."""
 
         self.graph.build_faiss_index(node_attr=node_attr, method=method)
@@ -1669,7 +1751,9 @@ class DatasetBuilder:
         )
         return mapping
 
-    def fractalnet_compress(self, node_attr: str = "embedding") -> Dict[int, np.ndarray]:
+    def fractalnet_compress(
+        self, node_attr: str = "embedding"
+    ) -> Dict[int, np.ndarray]:
         """Wrapper for :meth:`KnowledgeGraph.fractalnet_compress`."""
 
         comp = self.graph.fractalnet_compress(node_attr=node_attr)
@@ -1681,7 +1765,9 @@ class DatasetBuilder:
         )
         return comp
 
-    def prune_fractalnet_weights(self, weights: np.ndarray, *, ratio: float = 0.5) -> np.ndarray:
+    def prune_fractalnet_weights(
+        self, weights: np.ndarray, *, ratio: float = 0.5
+    ) -> np.ndarray:
         """Prune model weights via :func:`prune_fractalnet`.
 
         Parameters
@@ -1708,7 +1794,9 @@ class DatasetBuilder:
         )
         return pruned
 
-    def fractal_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+    def fractal_dimension(
+        self, radii: Iterable[int]
+    ) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.box_counting_dimension`."""
 
         dim, counts = self.graph.box_counting_dimension(radii)
@@ -1719,7 +1807,9 @@ class DatasetBuilder:
         )
         return dim, counts
 
-    def colour_box_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+    def colour_box_dimension(
+        self, radii: Iterable[int]
+    ) -> tuple[float, list[tuple[int, int]]]:
         """Wrapper for :meth:`KnowledgeGraph.colour_box_dimension`."""
 
         dim, counts = self.graph.colour_box_dimension(radii)
@@ -1730,7 +1820,9 @@ class DatasetBuilder:
         )
         return dim, counts
 
-    def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
+    def compute_fractal_features(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> Dict[str, Any]:
         """Compute fractal metrics and record the event."""
 
         features = self.graph.compute_fractal_features(radii, max_dim=max_dim)
@@ -1757,7 +1849,15 @@ class DatasetBuilder:
         return metrics
 
     def dimension_distortion(self, radii: Iterable[int]) -> float:
-        """Wrapper for :meth:`KnowledgeGraph.dimension_distortion`."""
+        """Return |D_graph - D_embedding| for stored Poincaré embeddings.
+
+        This method forwards ``radii`` to
+        :meth:`KnowledgeGraph.dimension_distortion`, which estimates the fractal
+        dimensions of the graph and its Poincaré embedding using box counting.
+        The returned value is the absolute difference between these dimensions
+        and indicates how faithfully the embedding preserves the graph
+        geometry.
+        """
 
         dist = self.graph.dimension_distortion(radii)
         self._record_event(
@@ -1790,7 +1890,9 @@ class DatasetBuilder:
         )
         return order
 
-    def quotient_by_symmetry(self, *, max_count: int = 10) -> tuple[nx.Graph, Dict[str, int]]:
+    def quotient_by_symmetry(
+        self, *, max_count: int = 10
+    ) -> tuple[nx.Graph, Dict[str, int]]:
         """Wrapper for :meth:`KnowledgeGraph.quotient_by_symmetry`."""
 
         q, mapping = self.graph.quotient_by_symmetry(max_count=max_count)
@@ -1833,7 +1935,9 @@ class DatasetBuilder:
         self._record_event("sheaf_checker_sla", "SLA evaluated", mttr=mttr)
         return mttr
 
-    def inverse_mapper(self, nerve: nx.Graph, cover: Iterable[Iterable[str]]) -> nx.Graph:
+    def inverse_mapper(
+        self, nerve: nx.Graph, cover: Iterable[Iterable[str]]
+    ) -> nx.Graph:
         """Wrapper for :meth:`KnowledgeGraph.inverse_mapper`."""
 
         g = self.graph.inverse_mapper(nerve, cover)
@@ -1865,7 +1969,9 @@ class DatasetBuilder:
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.filter_semantic_cycles`."""
 
-        self.graph.filter_semantic_cycles(attr=attr, stopwords=stopwords, max_len=max_len)
+        self.graph.filter_semantic_cycles(
+            attr=attr, stopwords=stopwords, max_len=max_len
+        )
         self._record_event(
             "filter_semantic_cycles",
             "Trivial cycles removed",
@@ -1995,7 +2101,9 @@ class DatasetBuilder:
         )
         return dist, diff
 
-    def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
+    def fractal_information_density(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.fractal_information_density`."""
 
         val = self.graph.fractal_information_density(radii, max_dim=max_dim)
@@ -2025,7 +2133,9 @@ class DatasetBuilder:
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.ensure_fractal_coverage`."""
 
-        val = self.graph.ensure_fractal_coverage(threshold, radii, max_levels=max_levels)
+        val = self.graph.ensure_fractal_coverage(
+            threshold, radii, max_levels=max_levels
+        )
         self._record_event(
             "ensure_fractal_coverage",
             "Fractal coverage enforced",
@@ -2043,7 +2153,9 @@ class DatasetBuilder:
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.diversification_score`."""
 
-        val = self.graph.diversification_score(nodes, radii, max_dim=max_dim, dimension=dimension)
+        val = self.graph.diversification_score(
+            nodes, radii, max_dim=max_dim, dimension=dimension
+        )
         self._record_event(
             "diversification_score",
             "Diversification score computed",
@@ -2073,7 +2185,9 @@ class DatasetBuilder:
         sample from novel subgraphs.
         """
 
-        candidates = [n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "chunk"]
+        candidates = [
+            n for n, d in self.graph.graph.nodes(data=True) if d.get("type") == "chunk"
+        ]
         selected = self.select_diverse_nodes(candidates, count, radii)
         self._record_event(
             "sample_diverse_chunks",
@@ -2095,7 +2209,9 @@ class DatasetBuilder:
         )
         return neighs
 
-    def hyperbolic_reasoning(self, start: str, goal: str, *, max_steps: int = 5) -> List[str]:
+    def hyperbolic_reasoning(
+        self, start: str, goal: str, *, max_steps: int = 5
+    ) -> List[str]:
         """Wrapper for :meth:`KnowledgeGraph.hyperbolic_reasoning`."""
 
         path = self.graph.hyperbolic_reasoning(start, goal, max_steps=max_steps)
@@ -2162,7 +2278,9 @@ class DatasetBuilder:
         )
         return path
 
-    def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
+    def spectral_dimension(
+        self, times: Iterable[float]
+    ) -> tuple[float, list[tuple[float, float]]]:
         """Wrapper for :meth:`KnowledgeGraph.spectral_dimension`."""
 
         dim, traces = self.graph.spectral_dimension(times)
@@ -2237,7 +2355,9 @@ class DatasetBuilder:
     ) -> Dict[str, list[float]]:
         """Wrapper for :meth:`KnowledgeGraph.sheaf_convolution`."""
 
-        result = self.graph.sheaf_convolution(features, edge_attr=edge_attr, alpha=alpha)
+        result = self.graph.sheaf_convolution(
+            features, edge_attr=edge_attr, alpha=alpha
+        )
         self._record_event(
             "sheaf_convolution",
             "Sheaf convolution applied",
@@ -2271,7 +2391,9 @@ class DatasetBuilder:
         )
         return result
 
-    def sheaf_cohomology(self, *, edge_attr: str = "sheaf_sign", tol: float = 1e-5) -> int:
+    def sheaf_cohomology(
+        self, *, edge_attr: str = "sheaf_sign", tol: float = 1e-5
+    ) -> int:
         """Wrapper for :meth:`KnowledgeGraph.sheaf_cohomology`."""
 
         val = self.graph.sheaf_cohomology(edge_attr=edge_attr, tol=tol)
@@ -2308,7 +2430,9 @@ class DatasetBuilder:
     ) -> int:
         """Wrapper for :meth:`KnowledgeGraph.resolve_sheaf_obstruction`."""
 
-        val = self.graph.resolve_sheaf_obstruction(edge_attr=edge_attr, max_iter=max_iter)
+        val = self.graph.resolve_sheaf_obstruction(
+            edge_attr=edge_attr, max_iter=max_iter
+        )
         self._record_event(
             "resolve_sheaf_obstruction",
             "Sheaf obstruction resolved",
@@ -2335,14 +2459,18 @@ class DatasetBuilder:
     ) -> list[float]:
         """Wrapper for :meth:`KnowledgeGraph.sheaf_consistency_score_batched`."""
 
-        scores = self.graph.sheaf_consistency_score_batched(batches, edge_attr=edge_attr)
+        scores = self.graph.sheaf_consistency_score_batched(
+            batches, edge_attr=edge_attr
+        )
         self._record_event(
             "sheaf_consistency_score_batched",
             "Computed batched sheaf consistency scores",
         )
         return scores
 
-    def spectral_bound_exceeded(self, k: int, tau: float, *, edge_attr: str = "sheaf_sign") -> bool:
+    def spectral_bound_exceeded(
+        self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
+    ) -> bool:
         """Wrapper for :meth:`KnowledgeGraph.spectral_bound_exceeded`."""
 
         flag = self.graph.spectral_bound_exceeded(k, tau, edge_attr=edge_attr)
@@ -2454,7 +2582,9 @@ class DatasetBuilder:
     ) -> int:
         """Wrapper for :meth:`KnowledgeGraph.adaptive_triangle_threshold`."""
 
-        val = self.graph.adaptive_triangle_threshold(weight=weight, base=base, scale=scale)
+        val = self.graph.adaptive_triangle_threshold(
+            weight=weight, base=base, scale=scale
+        )
         self._record_event(
             "adaptive_triangle_threshold",
             "Entropy-based triangle threshold computed",
@@ -2642,7 +2772,9 @@ class DatasetBuilder:
     ) -> float:
         """Wrapper for :meth:`KnowledgeGraph.persistence_wasserstein_distance`."""
 
-        dist = self.graph.persistence_wasserstein_distance(other, dimension=dimension, order=order)
+        dist = self.graph.persistence_wasserstein_distance(
+            other, dimension=dimension, order=order
+        )
         self._record_event(
             "persistence_wasserstein_distance",
             f"distance={dist}",
@@ -2696,7 +2828,9 @@ class DatasetBuilder:
         )
         return coarse, mapping
 
-    def fractalize_optimal(self, radii: Iterable[int]) -> tuple[nx.Graph, Dict[str, int], int]:
+    def fractalize_optimal(
+        self, radii: Iterable[int]
+    ) -> tuple[nx.Graph, Dict[str, int], int]:
         """Wrapper for :meth:`KnowledgeGraph.fractalize_optimal`."""
 
         coarse, mapping, radius = self.graph.fractalize_optimal(radii)
@@ -2755,7 +2889,9 @@ class DatasetBuilder:
         )
         return score
 
-    def verify_qa_pairs(self, pairs: Iterable["QAPair"], *, max_hops: int = 3) -> list["QAPair"]:
+    def verify_qa_pairs(
+        self, pairs: Iterable["QAPair"], *, max_hops: int = 3
+    ) -> list["QAPair"]:
         """Annotate ``pairs`` with a confidence score using graph verification."""
 
         from datacreek.models.qa import QAPair
@@ -2800,7 +2936,9 @@ class DatasetBuilder:
             + nx.number_connected_components(self.graph.graph)
         )
         betti_sub = (
-            sub.number_of_edges() - sub.number_of_nodes() + nx.number_connected_components(sub)
+            sub.number_of_edges()
+            - sub.number_of_nodes()
+            + nx.number_connected_components(sub)
         )
         edge_cov = len(used_pairs) / total if total else 0.0
         betti_cov = betti_sub / betti_total if betti_total else 0.0
@@ -2924,7 +3062,9 @@ class DatasetBuilder:
             loops=loops,
         )
 
-    def update_hypergraph_structure(self, *, k: int = 5, threshold: float = 0.8) -> list[str]:
+    def update_hypergraph_structure(
+        self, *, k: int = 5, threshold: float = 0.8
+    ) -> list[str]:
         """Predict and insert new hyperedges via embeddings.
 
         Parameters
@@ -2939,7 +3079,9 @@ class DatasetBuilder:
         suggestions = self.graph.predict_hyperedges(k=k, threshold=threshold)
         for edge_id, nodes in suggestions:
             try:
-                self.graph.add_hyperedge(edge_id, nodes, relation="predicted", source="auto")
+                self.graph.add_hyperedge(
+                    edge_id, nodes, relation="predicted", source="auto"
+                )
             except ValueError:
                 continue
         self._record_event(
@@ -2993,7 +3135,9 @@ class DatasetBuilder:
         if self._policy_event is not None:
             self._policy_event.set()
 
-    def start_policy_monitor_thread(self, radii: Iterable[int], *, interval: float = 60.0) -> None:
+    def start_policy_monitor_thread(
+        self, radii: Iterable[int], *, interval: float = 60.0
+    ) -> None:
         """Run :meth:`start_policy_monitor` in a background thread."""
 
         if self._policy_thread is not None and self._policy_thread.is_alive():
@@ -3041,7 +3185,9 @@ class DatasetBuilder:
         )
         return hierarchy
 
-    def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+    def annotate_fractal_levels(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.annotate_fractal_levels`."""
 
         self.graph.annotate_fractal_levels(radii, max_levels=max_levels)
@@ -3953,7 +4099,9 @@ class DatasetBuilder:
         return out
 
     @monitor_after()
-    def auto_tool_calls_node(self, node_id: str, tools: Iterable[tuple[str, str]]) -> str:
+    def auto_tool_calls_node(
+        self, node_id: str, tools: Iterable[tuple[str, str]]
+    ) -> str:
         """Insert tool call placeholders into a graph node's text."""
 
         updated = self.graph.auto_tool_calls(node_id, tools)
@@ -3966,7 +4114,9 @@ class DatasetBuilder:
         return updated
 
     @monitor_after()
-    def auto_tool_calls_all_nodes(self, tools: Iterable[tuple[str, str]]) -> Dict[object, str]:
+    def auto_tool_calls_all_nodes(
+        self, tools: Iterable[tuple[str, str]]
+    ) -> Dict[object, str]:
         """Insert tool calls into every node in the graph."""
 
         updated = self.graph.auto_tool_calls_all(tools)
@@ -4058,7 +4208,9 @@ class DatasetBuilder:
         """Materialize embeddings for nodes of ``node_type``."""
 
         self.graph.update_embeddings(node_type=node_type)
-        self._record_event("update_embeddings", "Embeddings materialized", node_type=node_type)
+        self._record_event(
+            "update_embeddings", "Embeddings materialized", node_type=node_type
+        )
 
     def extract_facts(self, client: Optional["LLMClient"] = None) -> None:
         """Run fact extraction on all chunk nodes."""
@@ -4272,7 +4424,9 @@ class DatasetBuilder:
     ) -> list[str]:
         """Wrapper for :meth:`KnowledgeGraph.find_facts`."""
 
-        return self.graph.find_facts(subject=subject, predicate=predicate, object=object)
+        return self.graph.find_facts(
+            subject=subject, predicate=predicate, object=object
+        )
 
     def get_documents_for_entity(self, entity_id: str) -> list[str]:
         """Return document IDs where ``entity_id`` is mentioned."""
@@ -4329,7 +4483,9 @@ class DatasetBuilder:
             "history": self.history,
             "versions": self.versions,
             "ingested_docs": self.ingested_docs,
-            "events": [{**asdict(e), "timestamp": e.timestamp.isoformat()} for e in self.events],
+            "events": [
+                {**asdict(e), "timestamp": e.timestamp.isoformat()} for e in self.events
+            ],
             "graph": self.graph.to_dict(),
             "stage": int(self.stage),
             "use_hnsw": self.use_hnsw,
@@ -4378,14 +4534,20 @@ class DatasetBuilder:
     # Redis helpers
     # ------------------------------------------------------------------
 
-    def to_redis(self, client: redis.Redis | redis.client.Pipeline, key: str | None = None) -> str:
+    def to_redis(
+        self, client: redis.Redis | redis.client.Pipeline, key: str | None = None
+    ) -> str:
         """Persist the dataset in Redis under ``key``."""
 
         key = key or (self.name or "dataset")
         self.redis_key = key
         if self.name:
             self.validate_name(self.name)
-        pipe = client.pipeline() if not isinstance(client, redis.client.Pipeline) else client
+        pipe = (
+            client.pipeline()
+            if not isinstance(client, redis.client.Pipeline)
+            else client
+        )
         pipe.set(key, json.dumps(self.to_dict()))
         events_key = f"{key}:events"
         pipe.delete(events_key)
@@ -4646,7 +4808,10 @@ class DatasetBuilder:
         recorded.
         """
 
-        from datacreek.pipelines import run_generation_pipeline, run_generation_pipeline_async
+        from datacreek.pipelines import (
+            run_generation_pipeline,
+            run_generation_pipeline_async,
+        )
 
         if redis_client is None:
             redis_client = self.redis_client
@@ -4716,7 +4881,10 @@ class DatasetBuilder:
                 elif isinstance(result, QAGenerationResult):
                     result.qa_pairs = self.verify_qa_pairs(result.qa_pairs)
                 elif isinstance(result, dict) and "qa_pairs" in result:
-                    pairs = [QAPair(**p) if isinstance(p, dict) else p for p in result["qa_pairs"]]
+                    pairs = [
+                        QAPair(**p) if isinstance(p, dict) else p
+                        for p in result["qa_pairs"]
+                    ]
                     verified = self.verify_qa_pairs(pairs)
                     result["qa_pairs"] = [p.to_dict() for p in verified]
             except Exception:
@@ -4734,16 +4902,24 @@ class DatasetBuilder:
             "batch_size": batch_size,
             "inference_batch": inference_batch,
             "start_step": start_step.value if start_step else None,
-            "pipeline_config_path": str(pipeline_config_path) if pipeline_config_path else None,
+            "pipeline_config_path": (
+                str(pipeline_config_path) if pipeline_config_path else None
+            ),
             "dedup_similarity": dedup_similarity,
             "keep_ratings": keep_ratings,
         }
 
         res_data = (
-            asdict(result) if is_dataclass(result) else result if isinstance(result, dict) else None
+            asdict(result)
+            if is_dataclass(result)
+            else result if isinstance(result, dict) else None
         )
         self.versions.append(
-            {"params": params, "time": datetime.now(timezone.utc).isoformat(), "result": res_data}
+            {
+                "params": params,
+                "time": datetime.now(timezone.utc).isoformat(),
+                "result": res_data,
+            }
         )
         self.stage = max(self.stage, DatasetStage.GENERATED)
         self._record_event("generate", f"Post-KG pipeline run (v{len(self.versions)})")

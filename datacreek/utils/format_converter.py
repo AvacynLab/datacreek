@@ -17,7 +17,8 @@ def to_jsonl(data: List[Dict[str, Any]]) -> str:
 def to_alpaca(qa_pairs: List[Dict[str, str]]) -> str:
     """Return QA pairs in Alpaca format as a JSON string."""
     alpaca_data = [
-        {"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs
+        {"instruction": p["question"], "input": "", "output": p["answer"]}
+        for p in qa_pairs
     ]
     return json.dumps(alpaca_data, indent=2)
 
@@ -64,7 +65,7 @@ def to_hf_dataset(qa_pairs: List[Dict[str, str]]) -> str:
         from datasets import Dataset
     except ImportError:
         raise ImportError(
-            "The 'datasets' package is required for HF dataset format. "
+            "The 'datasets' library is required for HF dataset format. "
             "Install it with: pip install datasets"
         )
 

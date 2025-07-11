@@ -19,7 +19,7 @@ from datacreek.utils.config import get_generation_config, load_config
 
 logger = logging.getLogger(__name__)
 
-# Note: The following packages are required for this module:
+# Note: The following libraries are required for this module:
 # - openai: For API access to vision models
 # - datasets: For handling HuggingFace datasets
 # - huggingface_hub: For accessing HuggingFace repositories
@@ -32,7 +32,7 @@ def _check_optional_deps() -> None:
         import huggingface_hub  # noqa: F401
     except Exception as exc:  # pragma: no cover - runtime import
         raise ImportError(
-            "The 'datasets' and 'huggingface_hub' packages are required for VQA generation."
+            "The 'datasets' and 'huggingface_hub' libraries are required for VQA generation."
         ) from exc
 
 
@@ -111,7 +111,9 @@ class VQAGenerator:
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_base64}"
+                            },
                         },
                         {"type": "text", "text": f"{query} Final answer: {label}"},
                     ],
@@ -175,7 +177,7 @@ class VQAGenerator:
                 from datasets import Dataset
             except ImportError:
                 raise ImportError(
-                    "The 'datasets' package is required for this functionality. Please install it using 'pip install datasets'."
+                    "The 'datasets' library is required for this functionality. Please install it using 'pip install datasets'."
                 )
             try:
                 with open(dataset_source, "r", encoding="utf-8") as f:
@@ -188,7 +190,7 @@ class VQAGenerator:
                     from huggingface_hub import HfApi
                 except ImportError:
                     raise ImportError(
-                        "The 'huggingface_hub' and 'datasets' packages are required for this functionality. Please install them using 'pip install huggingface_hub datasets'."
+                        "The 'huggingface_hub' and 'datasets' libraries are required for this functionality. Please install them using 'pip install huggingface_hub datasets'."
                     )
 
                 hf_api = HfApi()
@@ -219,7 +221,9 @@ class VQAGenerator:
                 batch_size = self.generation_config.batch_size
 
                 if verbose:
-                    logger.info("Using batch size of %d for dataset processing", batch_size)
+                    logger.info(
+                        "Using batch size of %d for dataset processing", batch_size
+                    )
 
                 # Process the dataset
                 ds = dataset.map(

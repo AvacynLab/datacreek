@@ -1,4 +1,4 @@
-"""Datacreek package."""
+"""Datacreek application."""
 
 from typing import TYPE_CHECKING
 
@@ -820,7 +820,11 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.ingest_text_atoms
-    if name in {"detect_automorphisms", "quotient_by_symmetry", "automorphism_group_order"}:
+    if name in {
+        "detect_automorphisms",
+        "quotient_by_symmetry",
+        "automorphism_group_order",
+    }:
         from .core.dataset import DatasetBuilder as _DB
 
         mapping = {
@@ -835,5 +839,7 @@ def __getattr__(name: str):
         from .templates.library import get_template as _gtmpl
         from .templates.library import validate_output as _vo
 
-        return {"get_template": _gtmpl, "PromptTemplate": _PT, "validate_output": _vo}[name]
+        return {"get_template": _gtmpl, "PromptTemplate": _PT, "validate_output": _vo}[
+            name
+        ]
     raise AttributeError(name)

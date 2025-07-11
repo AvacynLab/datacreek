@@ -1,2 +1,0 @@
-include datacreek/config.yaml
-recursive-include configs *.yaml

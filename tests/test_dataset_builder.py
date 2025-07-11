@@ -54,3 +54,47 @@ def test_dataset_search_hybrid_wrapper(monkeypatch):
     monkeypatch.setattr(ds.graph.__class__, "search_hybrid", fake)
     res = ds.search_hybrid("hello", k=2)
     assert res == ["a", "b"]
+
+
+def test_dataset_cypher_ann_query_wrapper(monkeypatch):
+    if DatasetBuilder is None:
+        pytest.skip("DatasetBuilder unavailable")
+    ds = DatasetBuilder()
+    driver = object()
+
+    def fake(self, drv, query, cypher, k=5, node_type="chunk"):
+        assert drv is driver and query == "hello" and cypher == "MATCH n" and k == 3
+        return [{"id": "c1"}]
+
+    monkeypatch.setattr(ds.graph.__class__, "cypher_ann_query", fake)
+    res = ds.cypher_ann_query(driver, "hello", "MATCH n", k=3)
+    assert res == [{"id": "c1"}]
+
+
+def test_dataset_ann_hybrid_search_wrapper(monkeypatch):
+    if DatasetBuilder is None:
+        pytest.skip("DatasetBuilder unavailable")
+    ds = DatasetBuilder()
+
+    def fake(
+        self,
+        q_n2v,
+        q_gw,
+        q_hyp,
+        k=5,
+        ann_k=2000,
+        node_type="chunk",
+        n2v_attr="embedding",
+        gw_attr="graphwave_embedding",
+        hyper_attr="poincare_embedding",
+        gamma=0.5,
+        eta=0.25,
+    ):
+        assert q_n2v == [1] and q_gw == [2] and q_hyp == [3]
+        assert k == 4 and ann_k == 100
+        assert node_type == "chunk" and n2v_attr == "embedding"
+        return [("c1", 0.9)]
+
+    monkeypatch.setattr(ds.graph.__class__, "ann_hybrid_search", fake)
+    res = ds.ann_hybrid_search([1], [2], [3], k=4, ann_k=100)
+    assert res == [("c1", 0.9)]

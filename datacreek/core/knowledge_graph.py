@@ -155,7 +155,9 @@ class KnowledgeGraph:
             raise ValueError("Unknown node")
         if provenance is None:
             provenance = self.graph.nodes[node_id].get("source")
-        self.graph.add_edge(node_id, entity_id, relation=relation, provenance=provenance)
+        self.graph.add_edge(
+            node_id, entity_id, relation=relation, provenance=provenance
+        )
 
     def link_transcript(
         self,
@@ -170,7 +172,9 @@ class KnowledgeGraph:
             raise ValueError("Unknown node")
         if provenance is None:
             provenance = self.graph.nodes[chunk_id].get("source")
-        self.graph.add_edge(chunk_id, audio_id, relation="transcript_of", provenance=provenance)
+        self.graph.add_edge(
+            chunk_id, audio_id, relation="transcript_of", provenance=provenance
+        )
 
     def add_section(
         self,
@@ -610,7 +614,10 @@ class KnowledgeGraph:
                 ):
                     results.append(node)
             elif node_type == "section":
-                if query_lower in node.lower() or query_lower in str(data.get("title", "")).lower():
+                if (
+                    query_lower in node.lower()
+                    or query_lower in str(data.get("title", "")).lower()
+                ):
                     results.append(node)
             else:
                 if query_lower in str(data.get("text", "")).lower():
@@ -668,7 +675,9 @@ class KnowledgeGraph:
                 result.append(n)
         return result
 
-    def search_hybrid(self, query: str, k: int = 5, *, node_type: str = "chunk") -> list[str]:
+    def search_hybrid(
+        self, query: str, k: int = 5, *, node_type: str = "chunk"
+    ) -> list[str]:
         """Return node IDs by combining lexical and embedding search.
 
         Results from plain text search are returned first followed by
@@ -704,7 +713,18 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Return the multi-view similarity between two nodes.
+        """Return the multi-view similarity between ``src`` and ``tgt``.
+
+        The score mixes cosine similarity in Node2Vec space, Poincar\xe9
+        distance and GraphWave similarity. It is computed as
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta) (1 - \cos(\text{gw}))
+
+        where :math:`d_{\mathbb{B}}` is the Poincar\xe9 distance. ``gamma`` and
+        ``eta`` control the influence of the Node2Vec and Poincar\xe9 terms.
 
         Parameters
         ----------
@@ -725,7 +745,14 @@ class KnowledgeGraph:
         gw_b = self.graph.nodes[tgt].get(gw_attr)
         hyp_a = self.graph.nodes[src].get(hyper_attr)
         hyp_b = self.graph.nodes[tgt].get(hyper_attr)
-        if a is None or b is None or gw_a is None or gw_b is None or hyp_a is None or hyp_b is None:
+        if (
+            a is None
+            or b is None
+            or gw_a is None
+            or gw_b is None
+            or hyp_a is None
+            or hyp_b is None
+        ):
             return 0.0
         return _hs(a, b, gw_a, gw_b, hyp_a, hyp_b, gamma=gamma, eta=eta)
 
@@ -775,11 +802,19 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Return top ``k`` nodes by hybrid score using an ANN pre-filter.
+        """Return top ``k`` nodes by the multi-view similarity.
 
-        The FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates
-        which are then ranked with :func:`hybrid_score` against the provided
-        query vectors.
+        A FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates.
+        Each candidate is then scored via
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where the query vectors (``q_n2v``, ``q_gw``, ``q_hyp``) are compared to
+        the stored embeddings. ``gamma`` and ``eta`` control the contribution of
+        the Euclidean and hyperbolic terms.
         """
 
         if self.faiss_index is None:
@@ -812,9 +847,30 @@ class KnowledgeGraph:
         k: int = 5,
         node_type: str = "chunk",
     ) -> List[Dict[str, Any]]:
-        """Return Cypher query results seeded by ANN search."""
+        """Return Cypher query results seeded by ANN search.
 
-        ids = self.search_embeddings(query, k=k, fetch_neighbors=False, node_type=node_type)
+        Parameters
+        ----------
+        driver:
+            Neo4j driver used to execute the query.
+        query:
+            Text input searched via the FAISS index.
+        cypher:
+            Cypher statement expecting an ``ids`` parameter.
+        k:
+            Number of ANN candidates fetched from ``query``.
+        node_type:
+            Restrict matches to nodes with this ``type``.
+
+        The query text ``query`` is first used to retrieve up to ``k`` node
+        identifiers via :meth:`search_embeddings`. Those identifiers are passed
+        as ``ids`` to the provided Cypher statement, allowing complex graph
+        queries on a narrow candidate set.
+        """
+
+        ids = self.search_embeddings(
+            query, k=k, fetch_neighbors=False, node_type=node_type
+        )
 
         if not ids:
             return []
@@ -881,7 +937,9 @@ class KnowledgeGraph:
         seeds = self.search_hybrid(query, k)
         if fractal_level is not None:
             seeds = [
-                s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
+                s
+                for s in seeds
+                if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
             ]
         seen = set(seeds)
         results = list(seeds)
@@ -893,7 +951,9 @@ class KnowledgeGraph:
                 continue
             # traverse both successors and predecessors so that similar chunks
             # are discovered regardless of edge direction
-            for neighbor in list(self.graph.successors(node)) + list(self.graph.predecessors(node)):
+            for neighbor in list(self.graph.successors(node)) + list(
+                self.graph.predecessors(node)
+            ):
                 rel = self.graph.edges.get((node, neighbor)) or self.graph.edges.get(
                     (neighbor, node)
                 )
@@ -905,7 +965,8 @@ class KnowledgeGraph:
                     continue
                 if (
                     fractal_level is not None
-                    and self.graph.nodes[neighbor].get("fractal_level", 0) > fractal_level
+                    and self.graph.nodes[neighbor].get("fractal_level", 0)
+                    > fractal_level
                 ):
                     continue
                 seen.add(neighbor)
@@ -932,7 +993,9 @@ class KnowledgeGraph:
         seeds = self.search_hybrid(query, k)
         if fractal_level is not None:
             seeds = [
-                s for s in seeds if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
+                s
+                for s in seeds
+                if self.graph.nodes[s].get("fractal_level", 0) <= fractal_level
             ]
         seen = set(seeds)
         queue: List[tuple[str, int, List[str]]] = [(cid, 0, [cid]) for cid in seeds]
@@ -942,8 +1005,12 @@ class KnowledgeGraph:
             node, depth, path = queue.pop(0)
             if depth >= hops:
                 continue
-            for nb in list(self.graph.successors(node)) + list(self.graph.predecessors(node)):
-                rel = self.graph.edges.get((node, nb)) or self.graph.edges.get((nb, node))
+            for nb in list(self.graph.successors(node)) + list(
+                self.graph.predecessors(node)
+            ):
+                rel = self.graph.edges.get((node, nb)) or self.graph.edges.get(
+                    (nb, node)
+                )
                 if not rel or rel.get("relation") not in {"next_chunk", "similar_to"}:
                     continue
                 if nb in seen:
@@ -1402,7 +1469,9 @@ class KnowledgeGraph:
             canonical label before similarity-based merging occurs.
         """
 
-        entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
+        entities = [
+            n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"
+        ]
         texts = [self.graph.nodes[e].get("text", "") for e in entities]
         if len(entities) < 2:
             return 0
@@ -1415,7 +1484,9 @@ class KnowledgeGraph:
             def _norm(t: str) -> str:
                 return re.sub(r"\W+", "", t).lower()
 
-            label_to_id = {_norm(self.graph.nodes[e].get("text", "")): e for e in entities}
+            label_to_id = {
+                _norm(self.graph.nodes[e].get("text", "")): e for e in entities
+            }
             for canon, alist in aliases.items():
                 target = label_to_id.get(_norm(canon))
                 if not target:
@@ -1440,9 +1511,9 @@ class KnowledgeGraph:
                 if j in used or j in used_alias_indices:
                     continue
                 sim = float(
-                    cosine_similarity(embeddings[i].reshape(1, -1), embeddings[j].reshape(1, -1))[
-                        0, 0
-                    ]
+                    cosine_similarity(
+                        embeddings[i].reshape(1, -1), embeddings[j].reshape(1, -1)
+                    )[0, 0]
                 )
                 t1 = re.sub(r"\W+", "", texts[i]).lower()
                 t2 = re.sub(r"\W+", "", texts[j]).lower()
@@ -1528,7 +1599,9 @@ class KnowledgeGraph:
         if desc:
             node["description_dbpedia"] = desc
 
-    def predict_links(self, threshold: float = 0.8, *, use_graph_embeddings: bool = False) -> None:
+    def predict_links(
+        self, threshold: float = 0.8, *, use_graph_embeddings: bool = False
+    ) -> None:
         """Create ``related_to`` edges between similar entities.
 
         Parameters
@@ -1541,7 +1614,9 @@ class KnowledgeGraph:
             present they will be generated automatically.
         """
 
-        entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
+        entities = [
+            n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"
+        ]
         if len(entities) < 2:
             return
 
@@ -1557,12 +1632,14 @@ class KnowledgeGraph:
             for j in range(i + 1, len(entities)):
                 eid2 = entities[j]
                 sim = float(
-                    cosine_similarity(emb_matrix[i].reshape(1, -1), emb_matrix[j].reshape(1, -1))[
-                        0, 0
-                    ]
+                    cosine_similarity(
+                        emb_matrix[i].reshape(1, -1), emb_matrix[j].reshape(1, -1)
+                    )[0, 0]
                 )
                 if sim >= threshold and not self.graph.has_edge(eid1, eid2):
-                    self.graph.add_edge(eid1, eid2, relation="related_to", similarity=sim)
+                    self.graph.add_edge(
+                        eid1, eid2, relation="related_to", similarity=sim
+                    )
 
     # ------------------------------------------------------------------
     # Advanced operations
@@ -1629,7 +1706,9 @@ class KnowledgeGraph:
     def cluster_entities(self, n_clusters: int = 3) -> None:
         """Cluster entity nodes into groups using embeddings."""
 
-        entities = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"]
+        entities = [
+            n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"
+        ]
         embeddings = [self._node_embedding(n) for n in entities]
         embeddings = [e for e in embeddings if e is not None]
         if not embeddings:
@@ -1648,7 +1727,9 @@ class KnowledgeGraph:
     def summarize_communities(self) -> None:
         """Create a simple summary text for each community node."""
 
-        for c in [n for n, d in self.graph.nodes(data=True) if d.get("type") == "community"]:
+        for c in [
+            n for n, d in self.graph.nodes(data=True) if d.get("type") == "community"
+        ]:
             members = [
                 u
                 for u, v in self.graph.in_edges(c)
@@ -1663,7 +1744,9 @@ class KnowledgeGraph:
     def summarize_entity_groups(self) -> None:
         """Assign a naive summary to each entity group."""
 
-        for g in [n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity_group"]:
+        for g in [
+            n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity_group"
+        ]:
             members = [
                 u
                 for u, v in self.graph.in_edges(g)
@@ -1699,7 +1782,9 @@ class KnowledgeGraph:
             count = src_counts.get(src, 1)
             d["trust"] = min(1.0, count / 3)
 
-    def compute_centrality(self, node_type: str = "entity", metric: str = "degree") -> None:
+    def compute_centrality(
+        self, node_type: str = "entity", metric: str = "degree"
+    ) -> None:
         """Compute centrality scores for nodes of ``node_type``."""
 
         if metric == "degree":
@@ -1729,7 +1814,7 @@ class KnowledgeGraph:
         try:
             from node2vec import Node2Vec
         except Exception as e:  # pragma: no cover - dependency missing
-            raise RuntimeError("node2vec package is required") from e
+            raise RuntimeError("node2vec library is required") from e
 
         n2v = Node2Vec(
             self.graph,
@@ -1767,15 +1852,13 @@ class KnowledgeGraph:
         """
 
         if GraphDatabase is None:
-            raise RuntimeError("neo4j package is required")
+            raise RuntimeError("neo4j library is required")
 
         ds = dataset or "kg_n2v_temp"
         self.to_neo4j(driver, dataset=ds, clear=True)
 
         node_query = "MATCH (n {dataset:$ds}) RETURN id(n) AS id"
-        rel_query = (
-            "MATCH (n {dataset:$ds})-[r]->(m {dataset:$ds}) RETURN id(n) AS source, id(m) AS target"
-        )
+        rel_query = "MATCH (n {dataset:$ds})-[r]->(m {dataset:$ds}) RETURN id(n) AS source, id(m) AS target"
 
         with driver.session() as session:
             session.run("CALL gds.graph.drop('kg_n2v', false)")
@@ -1853,7 +1936,9 @@ class KnowledgeGraph:
 
         return _ge(feats)
 
-    def build_faiss_index(self, node_attr: str = "embedding", *, method: str = "flat") -> None:
+    def build_faiss_index(
+        self, node_attr: str = "embedding", *, method: str = "flat"
+    ) -> None:
         """Build a FAISS index from node embeddings.
 
         Parameters
@@ -1957,7 +2042,11 @@ class KnowledgeGraph:
     def embedding_entropy(self, node_attr: str = "embedding") -> float:
         """Return differential entropy of vectors stored under ``node_attr``."""
 
-        feats = {n: data[node_attr] for n, data in self.graph.nodes(data=True) if node_attr in data}
+        feats = {
+            n: data[node_attr]
+            for n, data in self.graph.nodes(data=True)
+            if node_attr in data
+        }
         if not feats:
             return 0.0
         from ..analysis.fractal import embedding_entropy as _ee
@@ -2085,7 +2174,10 @@ class KnowledgeGraph:
         from ..analysis.hypergraph import hyper_sagnn_embeddings as _hs
 
         embeddings = _hs(
-            [m for _, m in hyper_list], np.stack(features), embed_dim=embed_dim, seed=seed
+            [m for _, m in hyper_list],
+            np.stack(features),
+            embed_dim=embed_dim,
+            seed=seed,
         )
 
         result: Dict[str, list[float]] = {}
@@ -2139,7 +2231,9 @@ class KnowledgeGraph:
                     continue
                 hyper_nodes.append(node)
                 hyperedges.append(members)
-                features.append(np.vstack([self.graph.nodes[m][node_attr] for m in members]))
+                features.append(
+                    np.vstack([self.graph.nodes[m][node_attr] for m in members])
+                )
 
         if not hyperedges:
             return {}
@@ -2243,13 +2337,16 @@ class KnowledgeGraph:
             )
 
         feats = {
-            n: np.asarray(self.graph.nodes[n]["embedding"], dtype=float) for n in self.graph.nodes
+            n: np.asarray(self.graph.nodes[n]["embedding"], dtype=float)
+            for n in self.graph.nodes
         }
 
         for _ in range(max(1, num_layers)):
             new_feats: Dict[str, np.ndarray] = {}
             for node in self.graph.nodes:
-                neigh_vecs = [feats[n] for n in self.graph.neighbors(node) if n in feats]
+                neigh_vecs = [
+                    feats[n] for n in self.graph.neighbors(node) if n in feats
+                ]
                 if neigh_vecs:
                     neigh_mean = np.mean(neigh_vecs, axis=0)
                 else:
@@ -2546,7 +2643,9 @@ class KnowledgeGraph:
             self.graph.nodes[node]["pruned_class"] = int(idx)
         return {str(n): int(c) for n, c in mapping.items()}
 
-    def fractalnet_compress(self, node_attr: str = "embedding") -> Dict[int, np.ndarray]:
+    def fractalnet_compress(
+        self, node_attr: str = "embedding"
+    ) -> Dict[int, np.ndarray]:
         """Return level-wise averaged embeddings using :func:`fractalnet_compress`."""
 
         from ..analysis.fractal import fractalnet_compress as _fc
@@ -2565,7 +2664,9 @@ class KnowledgeGraph:
             return {}
         return _fc(embeddings, levels)
 
-    def prune_fractalnet_weights(self, weights: "np.ndarray | list[float]", *, ratio: float = 0.5):
+    def prune_fractalnet_weights(
+        self, weights: "np.ndarray | list[float]", *, ratio: float = 0.5
+    ):
         """Prune model weights using :func:`prune_fractalnet`."""
 
         from ..analysis.compression import prune_fractalnet as _pf
@@ -2576,7 +2677,9 @@ class KnowledgeGraph:
     # Fractal and topological metrics
     # ------------------------------------------------------------------
 
-    def box_counting_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+    def box_counting_dimension(
+        self, radii: Iterable[int]
+    ) -> tuple[float, list[tuple[int, int]]]:
         """Estimate fractal dimension via box covering.
 
         Parameters
@@ -2594,14 +2697,18 @@ class KnowledgeGraph:
 
         return _bcd(self.graph.to_undirected(), radii)
 
-    def colour_box_dimension(self, radii: Iterable[int]) -> tuple[float, list[tuple[int, int]]]:
+    def colour_box_dimension(
+        self, radii: Iterable[int]
+    ) -> tuple[float, list[tuple[int, int]]]:
         """Estimate fractal dimension with the COLOUR-box method."""
 
         from ..analysis.fractal import colour_box_dimension as _cbd
 
         return _cbd(self.graph.to_undirected(), radii)
 
-    def spectral_dimension(self, times: Iterable[float]) -> tuple[float, list[tuple[float, float]]]:
+    def spectral_dimension(
+        self, times: Iterable[float]
+    ) -> tuple[float, list[tuple[float, float]]]:
         """Estimate spectral dimension from heat trace scaling."""
 
         from ..analysis.fractal import spectral_dimension as _sd
@@ -2728,7 +2835,9 @@ class KnowledgeGraph:
 
         return _scsb(self.graph, batches, edge_attr=edge_attr)
 
-    def spectral_bound_exceeded(self, k: int, tau: float, *, edge_attr: str = "sheaf_sign") -> bool:
+    def spectral_bound_exceeded(
+        self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
+    ) -> bool:
         """Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
 
         Parameters
@@ -2801,7 +2910,9 @@ class KnowledgeGraph:
         self.graph.nodes[node_id]["text"] = updated
         return updated
 
-    def auto_tool_calls_all(self, tools: Iterable[tuple[str, str]]) -> Dict[object, str]:
+    def auto_tool_calls_all(
+        self, tools: Iterable[tuple[str, str]]
+    ) -> Dict[object, str]:
         """Insert tool call placeholders on every node with text."""
 
         from ..utils.toolformer import insert_tool_calls
@@ -3135,7 +3246,9 @@ class KnowledgeGraph:
             return 0
         return int(sum(np.isinf(diag[:, 1]) == False))
 
-    def compute_fractal_features(self, radii: Iterable[int], *, max_dim: int = 1) -> Dict[str, Any]:
+    def compute_fractal_features(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> Dict[str, Any]:
         """Return fractal dimension, optimal radius and topological signature."""
 
         dim, counts = self.box_counting_dimension(radii)
@@ -3160,7 +3273,9 @@ class KnowledgeGraph:
 
         return _fim(self.graph.to_undirected(), radii, max_dim=max_dim)
 
-    def fractal_information_density(self, radii: Iterable[int], *, max_dim: int = 1) -> float:
+    def fractal_information_density(
+        self, radii: Iterable[int], *, max_dim: int = 1
+    ) -> float:
         """Return fractal information density for ``radii``."""
 
         from ..analysis.fractal import fractal_information_density as _fid
@@ -3226,7 +3341,19 @@ class KnowledgeGraph:
         return chosen
 
     def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
-        """Return ``k`` nearest neighbors in hyperbolic space."""
+        """Return ``k`` nearest neighbors using the Poincar\xe9 distance.
+
+        The neighbors are ranked by :math:`d_{\mathbb{B}}(u,v)` between the
+        query embedding ``node_id`` and every other node with a
+        ``hyperbolic_embedding`` attribute.
+
+        Parameters
+        ----------
+        node_id:
+            Identifier of the query node.
+        k:
+            Number of closest nodes to return.
+        """
 
         if not self.graph.has_node(node_id):
             raise ValueError(f"Unknown node: {node_id}")
@@ -3244,8 +3371,15 @@ class KnowledgeGraph:
         neighs = hyperbolic_nearest_neighbors(emb, k=k).get(node_id, [])
         return [(str(n), float(d)) for n, d in neighs]
 
-    def hyperbolic_reasoning(self, start: str, goal: str, *, max_steps: int = 5) -> List[str]:
-        """Return a greedy path from ``start`` to ``goal`` in hyperbolic space."""
+    def hyperbolic_reasoning(
+        self, start: str, goal: str, *, max_steps: int = 5
+    ) -> List[str]:
+        """Return a greedy path from ``start`` to ``goal`` using hyperbolic distance.
+
+        At each step the neighbor minimizing :math:`d_{\mathbb{B}}` to the goal
+        is selected until the path length reaches ``max_steps`` or the goal is
+        found.
+        """
 
         emb = {
             n: self.graph.nodes[n]["hyperbolic_embedding"]
@@ -3265,14 +3399,23 @@ class KnowledgeGraph:
         penalty: float = 1.0,
         max_steps: int = 5,
     ) -> List[str]:
-        """Return a greedy path using hyperedge embeddings."""
+        """Return a greedy path using hyperedge embeddings.
+
+        The search expands through hyperedges weighted by ``penalty`` to
+        discourage long hops. Distances are measured in the Poincar\xe9 ball and
+        the path stops when ``goal`` is reached or ``max_steps`` is exceeded.
+        """
 
         emb = {
             n: self.graph.nodes[n]["hyperbolic_embedding"]
             for n in self.graph.nodes
             if "hyperbolic_embedding" in self.graph.nodes[n]
         }
-        hyperedges = [n for n in self.graph.nodes if self.graph.nodes[n].get("type") == "hyperedge"]
+        hyperedges = [
+            n
+            for n in self.graph.nodes
+            if self.graph.nodes[n].get("type") == "hyperedge"
+        ]
         from ..analysis.fractal import hyperbolic_hypergraph_reasoning as _hhr
 
         path = _hhr(
@@ -3330,7 +3473,13 @@ class KnowledgeGraph:
         weights: Optional[Dict[float, float]] = None,
         max_steps: int = 5,
     ) -> List[str]:
-        """Return a greedy path mixing several curvature embeddings."""
+        """Return a greedy path mixing several curvature embeddings.
+
+        Embeddings for each curvature in ``curvatures`` are loaded from node
+        attributes named ``hyperbolic_embedding_{c}``. Optionally ``weights``
+        can adjust the influence of each curvature when ranking neighbors.
+        The path search stops when ``goal`` is reached or ``max_steps`` is hit.
+        """
 
         embeddings: Dict[float, Dict[str, Iterable[float]]] = {}
         for c in curvatures:
@@ -3355,7 +3504,31 @@ class KnowledgeGraph:
         return [str(n) for n in path]
 
     def dimension_distortion(self, radii: Iterable[int]) -> float:
-        """Return difference between graph and embedding fractal dimensions."""
+        """Return difference between graph and embedding fractal dimensions.
+
+        The fractal dimension of the graph is estimated with
+        :func:`box_counting_dimension`. The dimension of the hyperbolic
+        embeddings stored under ``poincare_embedding`` is computed with
+        :func:`embedding_box_counting_dimension`. The distortion is the absolute
+        difference
+
+        .. math::
+
+            |D_{\text{graph}} - D_{\text{emb}}|
+
+        where ``D_{\text{graph}}`` is the dimension of the original graph and
+        ``D_{\text{emb}}`` the dimension of the embedding space.
+
+        Parameters
+        ----------
+        radii:
+            Iterable of ball radii used for the box counting.
+
+        Returns
+        -------
+        float
+            Absolute difference between the two dimensions.
+        """
 
         graph_dim, _ = self.box_counting_dimension(radii)
         coords = {
@@ -3415,7 +3588,9 @@ class KnowledgeGraph:
 
         return _ago(self.graph.to_undirected(), max_count=max_count)
 
-    def quotient_by_symmetry(self, *, max_count: int = 10) -> tuple[nx.Graph, Dict[str, int]]:
+    def quotient_by_symmetry(
+        self, *, max_count: int = 10
+    ) -> tuple[nx.Graph, Dict[str, int]]:
         """Return quotient graph collapsing automorphism orbits."""
 
         from ..analysis.symmetry import automorphism_orbits, quotient_graph
@@ -3449,7 +3624,9 @@ class KnowledgeGraph:
 
         self._mapper_cache.clear()
 
-    def inverse_mapper(self, nerve: nx.Graph, cover: Iterable[Iterable[str]]) -> nx.Graph:
+    def inverse_mapper(
+        self, nerve: nx.Graph, cover: Iterable[Iterable[str]]
+    ) -> nx.Graph:
         """Reconstruct a graph from ``nerve`` and ``cover`` sets."""
 
         from ..analysis.mapper import inverse_mapper as _im
@@ -3466,7 +3643,9 @@ class KnowledgeGraph:
         str_mapping = {str(node): idx for node, idx in mapping.items()}
         return coarse, str_mapping
 
-    def fractalize_optimal(self, radii: Iterable[int]) -> tuple[nx.Graph, Dict[str, int], int]:
+    def fractalize_optimal(
+        self, radii: Iterable[int]
+    ) -> tuple[nx.Graph, Dict[str, int], int]:
         """Coarse-grain the graph using the MDL-optimal radius.
 
         Parameters
@@ -3515,7 +3694,9 @@ class KnowledgeGraph:
             converted.append((g, str_mapping, r))
         return converted
 
-    def annotate_fractal_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:
+    def annotate_fractal_levels(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> None:
         """Annotate nodes with their fractal level using box covering."""
         from ..analysis.fractal import build_fractal_hierarchy as _bfh
 
@@ -3723,7 +3904,9 @@ class KnowledgeGraph:
             extra = (
                 generate_netgan_like(skeleton)
                 if use_netgan
-                else generate_graph_rnn_like(skeleton.number_of_nodes(), skeleton.number_of_edges())
+                else generate_graph_rnn_like(
+                    skeleton.number_of_nodes(), skeleton.number_of_edges()
+                )
             )
             node_map = {i: n for i, n in enumerate(skeleton.nodes())}
             for u, v in extra.edges():
@@ -3946,7 +4129,9 @@ class KnowledgeGraph:
 
         edges = [
             (data.get("sequence", i), tgt)
-            for i, (src, tgt, data) in enumerate(self.graph.edges(section_id, data=True))
+            for i, (src, tgt, data) in enumerate(
+                self.graph.edges(section_id, data=True)
+            )
             if data.get("relation") == "under_section"
         ]
         edges.sort(key=lambda x: x[0])
@@ -4123,7 +4308,9 @@ class KnowledgeGraph:
 
         edges = [
             (data.get("sequence", i), tgt)
-            for i, (src, tgt, data) in enumerate(self.graph.edges(molecule_id, data=True))
+            for i, (src, tgt, data) in enumerate(
+                self.graph.edges(molecule_id, data=True)
+            )
             if data.get("relation") == "inside"
         ]
         edges.sort(key=lambda x: x[0])
@@ -4157,7 +4344,8 @@ class KnowledgeGraph:
         facts = [
             tgt
             for _, tgt, data in self.graph.out_edges(chunk_id, data=True)
-            if data.get("relation") == "has_fact" and self.graph.nodes[tgt].get("type") == "fact"
+            if data.get("relation") == "has_fact"
+            and self.graph.nodes[tgt].get("type") == "fact"
         ]
         return facts
 
@@ -4227,7 +4415,8 @@ class KnowledgeGraph:
         entities = [
             tgt
             for _, tgt, data in self.graph.out_edges(chunk_id, data=True)
-            if data.get("relation") == "mentions" and self.graph.nodes[tgt].get("type") == "entity"
+            if data.get("relation") == "mentions"
+            and self.graph.nodes[tgt].get("type") == "entity"
         ]
         return entities
 
@@ -4237,7 +4426,8 @@ class KnowledgeGraph:
         entities: list[str] = [
             tgt
             for _, tgt, data in self.graph.out_edges(doc_id, data=True)
-            if data.get("relation") == "mentions" and self.graph.nodes[tgt].get("type") == "entity"
+            if data.get("relation") == "mentions"
+            and self.graph.nodes[tgt].get("type") == "entity"
         ]
         for cid in self.get_chunks_for_document(doc_id):
             entities.extend(self.get_entities_for_chunk(cid))
@@ -4272,7 +4462,10 @@ class KnowledgeGraph:
     def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:
         """Return up to ``k`` chunk IDs most similar to ``chunk_id``."""
 
-        if chunk_id not in self.graph.nodes or self.graph.nodes[chunk_id].get("type") != "chunk":
+        if (
+            chunk_id not in self.graph.nodes
+            or self.graph.nodes[chunk_id].get("type") != "chunk"
+        ):
             return []
 
         text = self.graph.nodes[chunk_id].get("text")
@@ -4292,14 +4485,21 @@ class KnowledgeGraph:
                 break
         return neighbors
 
-    def get_similar_chunks_data(self, chunk_id: str, k: int = 3) -> list[dict[str, Any]]:
+    def get_similar_chunks_data(
+        self, chunk_id: str, k: int = 3
+    ) -> list[dict[str, Any]]:
         """Return up to ``k`` similar chunk infos for ``chunk_id``."""
 
-        if chunk_id not in self.graph.nodes or self.graph.nodes[chunk_id].get("type") != "chunk":
+        if (
+            chunk_id not in self.graph.nodes
+            or self.graph.nodes[chunk_id].get("type") != "chunk"
+        ):
             return []
 
         data = []
-        neighbors = self.index.nearest_neighbors(k=k, return_distances=True).get(chunk_id, [])
+        neighbors = self.index.nearest_neighbors(k=k, return_distances=True).get(
+            chunk_id, []
+        )
         for nid, score in neighbors:
             if self.graph.nodes[nid].get("type") != "chunk":
                 continue
@@ -4321,7 +4521,9 @@ class KnowledgeGraph:
         for cid, neigh in raw.items():
             if self.graph.nodes.get(cid, {}).get("type") != "chunk":
                 continue
-            filtered = [n for n in neigh if self.graph.nodes.get(n, {}).get("type") == "chunk"]
+            filtered = [
+                n for n in neigh if self.graph.nodes.get(n, {}).get("type") == "chunk"
+            ]
             neighbors[cid] = filtered
         return neighbors
 
@@ -4377,7 +4579,10 @@ class KnowledgeGraph:
     def get_similar_documents(self, doc_id: str, k: int = 3) -> list[str]:
         """Return up to ``k`` document IDs similar to ``doc_id``."""
 
-        if doc_id not in self.graph.nodes or self.graph.nodes[doc_id].get("type") != "document":
+        if (
+            doc_id not in self.graph.nodes
+            or self.graph.nodes[doc_id].get("type") != "document"
+        ):
             return []
 
         text = self.graph.nodes[doc_id].get("text")
@@ -4397,10 +4602,15 @@ class KnowledgeGraph:
                 break
         return neighbors
 
-    def get_chunk_context(self, chunk_id: str, before: int = 1, after: int = 1) -> list[str]:
+    def get_chunk_context(
+        self, chunk_id: str, before: int = 1, after: int = 1
+    ) -> list[str]:
         """Return chunk IDs surrounding ``chunk_id`` including itself."""
 
-        if chunk_id not in self.graph.nodes or self.graph.nodes[chunk_id].get("type") != "chunk":
+        if (
+            chunk_id not in self.graph.nodes
+            or self.graph.nodes[chunk_id].get("type") != "chunk"
+        ):
             return []
 
         context: list[str] = [chunk_id]
@@ -4521,7 +4731,9 @@ class KnowledgeGraph:
         confidence score. ``0.0`` is returned when no statements are supplied.
         """
 
-        scores = [self.fact_confidence(s, p, o, max_hops=max_hops) for s, p, o in statements]
+        scores = [
+            self.fact_confidence(s, p, o, max_hops=max_hops) for s, p, o in statements
+        ]
         return float(sum(scores) / len(scores)) if scores else 0.0
 
     def to_dict(self) -> Dict[str, Any]:
@@ -4530,7 +4742,8 @@ class KnowledgeGraph:
         return {
             "nodes": [{"id": n, **data} for n, data in self.graph.nodes(data=True)],
             "edges": [
-                {"source": u, "target": v, **data} for u, v, data in self.graph.edges(data=True)
+                {"source": u, "target": v, **data}
+                for u, v, data in self.graph.edges(data=True)
             ],
         }
 
@@ -4555,7 +4768,9 @@ class KnowledgeGraph:
         """Return all chunk texts concatenated in document order."""
 
         parts: list[str] = []
-        docs = [n for n, d in self.graph.nodes(data=True) if d.get("type") == "document"]
+        docs = [
+            n for n, d in self.graph.nodes(data=True) if d.get("type") == "document"
+        ]
         docs.sort()
         for doc_id in docs:
             chunks = self.get_chunks_for_document(doc_id)
@@ -4711,7 +4926,9 @@ class KnowledgeGraph:
         """
 
         node_query = (
-            "MATCH (n" + (" {dataset:$dataset}" if dataset else "") + ") RETURN id(n) AS id"
+            "MATCH (n"
+            + (" {dataset:$dataset}" if dataset else "")
+            + ") RETURN id(n) AS id"
         )
         rel_query = (
             "MATCH (n"
@@ -4731,7 +4948,9 @@ class KnowledgeGraph:
                 **params,
             )
 
-            comps = session.run("CALL gds.wcc.stream('kg_qc') YIELD nodeId, componentId")
+            comps = session.run(
+                "CALL gds.wcc.stream('kg_qc') YIELD nodeId, componentId"
+            )
             groups: Dict[int, List[int]] = {}
             for rec in comps:
                 groups.setdefault(rec["componentId"], []).append(rec["nodeId"])
@@ -4792,12 +5011,16 @@ class KnowledgeGraph:
                     if u and v and not self.graph.has_edge(u, v):
                         self.graph.add_edge(u, v, relation="suggested", score=score)
 
-            deg_records = list(session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score"))
+            deg_records = list(
+                session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score")
+            )
             bet_records = list(
                 session.run("CALL gds.betweenness.stream('kg_qc') YIELD nodeId, score")
             )
             tri_records = list(
-                session.run("CALL gds.triangleCount.stream('kg_qc') YIELD nodeId, triangleCount")
+                session.run(
+                    "CALL gds.triangleCount.stream('kg_qc') YIELD nodeId, triangleCount"
+                )
             )
             deg_scores = sorted(r["score"] for r in deg_records)
             bet_scores = sorted(r["score"] for r in bet_records)
@@ -4817,13 +5040,20 @@ class KnowledgeGraph:
             weak_links: List[tuple[int, int]] = []
             edge_records = session.run(
                 "MATCH (a)-[r]->(b) RETURN id(a) AS src, id(b) AS tgt"
-                + ("" if not dataset else " WHERE a.dataset=$dataset AND b.dataset=$dataset"),
+                + (
+                    ""
+                    if not dataset
+                    else " WHERE a.dataset=$dataset AND b.dataset=$dataset"
+                ),
                 **params,
             )
             for rec in edge_records:
                 s = rec["src"]
                 t = rec["tgt"]
-                if tri_map.get(s, 0) < triangle_threshold or tri_map.get(t, 0) < triangle_threshold:
+                if (
+                    tri_map.get(s, 0) < triangle_threshold
+                    or tri_map.get(t, 0) < triangle_threshold
+                ):
                     session.run(
                         "MATCH (a)-[r]->(b) WHERE id(a)=$s AND id(b)=$t DELETE r",
                         s=s,
@@ -4891,7 +5121,9 @@ class KnowledgeGraph:
             )
 
             rec = session.run(
-                "MATCH (n {id:$node_id" + (", dataset:$dataset" if dataset else "") + "}) "
+                "MATCH (n {id:$node_id"
+                + (", dataset:$dataset" if dataset else "")
+                + "}) "
                 "RETURN id(n) AS nid",
                 node_id=node_id,
                 **params,

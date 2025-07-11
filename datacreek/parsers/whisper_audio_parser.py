@@ -12,7 +12,9 @@ class WhisperAudioParser(BaseParser):
         try:
             import whisper
         except Exception as exc:  # pragma: no cover - optional dependency
-            raise ImportError("The whisper package is required for audio parsing") from exc
+            raise ImportError(
+                "The whisper library is required for audio parsing"
+            ) from exc
 
         model = whisper.load_model("base")
         result = model.transcribe(file_path)
