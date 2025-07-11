@@ -11,9 +11,14 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from datacreek.config_models import (CurateSettings, FormatSettings,
-                                     GenerationSettings, LLMSettings,
-                                     OpenAISettings, VLLMSettings)
+from datacreek.config_models import (
+    CurateSettings,
+    FormatSettings,
+    GenerationSettings,
+    LLMSettings,
+    OpenAISettings,
+    VLLMSettings,
+)
 
 # Default config location relative to the project root
 ORIGINAL_CONFIG_PATH = os.path.abspath(

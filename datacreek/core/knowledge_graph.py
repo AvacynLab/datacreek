@@ -7,8 +7,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Tuple)
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import networkx as nx
 import numpy as np
@@ -1912,8 +1911,7 @@ class KnowledgeGraph:
 
             emb = _gw(self.graph.to_undirected(), scales, num_points)
         else:
-            from ..analysis.fractal import \
-                graphwave_embedding_chebyshev as _gwc
+            from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
 
             emb = _gwc(
                 self.graph.to_undirected(),
@@ -2287,8 +2285,7 @@ class KnowledgeGraph:
         if not hyper_list:
             return {}
 
-        from ..analysis.hypergraph import \
-            hyper_sagnn_head_drop_embeddings as _hd
+        from ..analysis.hypergraph import hyper_sagnn_head_drop_embeddings as _hd
 
         embeddings = _hd(
             [m for _, m in hyper_list],
@@ -2806,8 +2803,7 @@ class KnowledgeGraph:
     ) -> int:
         """Approximate :math:`H^1` using a block-Smith reduction."""
 
-        from ..analysis.sheaf import \
-            sheaf_first_cohomology_blocksmith as _sfcbs
+        from ..analysis.sheaf import sheaf_first_cohomology_blocksmith as _sfcbs
 
         return _sfcbs(self.graph, edge_attr=edge_attr, block_size=block_size, tol=tol)
 
@@ -3496,8 +3492,7 @@ class KnowledgeGraph:
             if embs:
                 embeddings[c] = embs
 
-        from ..analysis.fractal import \
-            hyperbolic_multi_curvature_reasoning as _hmcr
+        from ..analysis.fractal import hyperbolic_multi_curvature_reasoning as _hmcr
 
         path = _hmcr(
             embeddings,
@@ -3574,8 +3569,7 @@ class KnowledgeGraph:
         }
         if not coords:
             return float("nan"), []
-        from ..analysis.fractal import \
-            embedding_box_counting_dimension as _ebcd
+        from ..analysis.fractal import embedding_box_counting_dimension as _ebcd
 
         return _ebcd(coords, radii)
 
@@ -3778,8 +3772,7 @@ class KnowledgeGraph:
     ) -> nx.Graph:
         """Return a graph using a sequential RNN-style generator."""
 
-        from ..analysis.generation import \
-            generate_graph_rnn_sequential as _grsq
+        from ..analysis.generation import generate_graph_rnn_sequential as _grsq
 
         return _grsq(
             num_nodes,
@@ -4029,8 +4022,7 @@ class KnowledgeGraph:
     ) -> Tuple[float, float]:
         """Return bottleneck and fractal dimension differences to ``target``."""
 
-        from ..analysis.fractal import (bottleneck_distance,
-                                        box_counting_dimension)
+        from ..analysis.fractal import bottleneck_distance, box_counting_dimension
 
         skeleton = nx.Graph()
         skeleton.add_nodes_from(self.graph.nodes())

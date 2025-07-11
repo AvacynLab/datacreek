@@ -13,8 +13,18 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-from typing import (TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable,
-                    List, Optional, Sequence, Tuple)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 import networkx as nx
 import numpy as np
@@ -4798,8 +4808,10 @@ class DatasetBuilder:
         recorded.
         """
 
-        from datacreek.pipelines import (run_generation_pipeline,
-                                         run_generation_pipeline_async)
+        from datacreek.pipelines import (
+            run_generation_pipeline,
+            run_generation_pipeline_async,
+        )
 
         if redis_client is None:
             redis_client = self.redis_client
@@ -4860,8 +4872,7 @@ class DatasetBuilder:
         if self.dataset_type == DatasetType.QA:
             try:
                 from datacreek.models.qa import QAPair
-                from datacreek.models.results import (CurationResult,
-                                                      QAGenerationResult)
+                from datacreek.models.results import CurationResult, QAGenerationResult
 
                 if isinstance(result, CurationResult):
                     result.qa_pairs = self.verify_qa_pairs(result.qa_pairs)

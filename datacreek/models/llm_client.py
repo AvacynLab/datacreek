@@ -14,9 +14,12 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import requests
 
-from datacreek.utils.config import (get_llm_provider, get_openai_settings,
-                                    get_vllm_settings,
-                                    load_config_with_overrides)
+from datacreek.utils.config import (
+    get_llm_provider,
+    get_openai_settings,
+    get_vllm_settings,
+    load_config_with_overrides,
+)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
