@@ -113,3 +113,82 @@ def hyper_sagnn_head_drop_embeddings(
             emb = np.zeros(head_dim)
         embeddings.append(emb)
     return np.stack(embeddings)
+
+
+def hyper_adamic_adar_scores(
+    hyperedges: Iterable[Iterable[object]],
+) -> dict[tuple[object, object], float]:
+    """Return Hyper-Adamic\N{EN DASH}Adar scores between pairs of nodes.
+
+    Each hyperedge contributes :math:`1 / \log |H|` to every pair of
+    its incident nodes. This generalizes the classical Adamic--Adar index
+    to higher-order interactions.
+
+    Parameters
+    ----------
+    hyperedges:
+        Collection of hyperedges, each given as an iterable of node IDs.
+
+    Returns
+    -------
+    dict
+        Mapping ``(u, v)`` to accumulated score.
+    """
+
+    from itertools import combinations
+
+    scores: dict[tuple[object, object], float] = {}
+    for edge in hyperedges:
+        nodes = list(dict.fromkeys(edge))
+        if len(nodes) < 2:
+            continue
+        weight = 1.0 / math.log(len(nodes))
+        for u, v in combinations(nodes, 2):
+            pair = (u, v) if u <= v else (v, u)
+            scores[pair] = scores.get(pair, 0.0) + weight
+    return scores
+
+
+def hyperedge_attention_scores(
+    hyperedges: List[Sequence[int]],
+    node_features: np.ndarray,
+    *,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Return an attention-based importance score for each hyperedge.
+
+    For pruning and prioritization we compute the average absolute
+    attention weight produced by a single-head self-attention layer.
+    Higher scores indicate that the hyperedge attracts more attention.
+
+    Parameters
+    ----------
+    hyperedges:
+        List of hyperedges, each as a sequence of node indices.
+    node_features:
+        Feature matrix of shape ``(num_nodes, feat_dim)``.
+    seed:
+        Optional seed controlling the random attention parameters.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape ``(len(hyperedges),)`` with attention scores.
+    """
+    rng = np.random.default_rng(seed)
+    feat_dim = node_features.shape[1]
+
+    W_q = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(feat_dim, 1))
+    W_k = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(feat_dim, 1))
+
+    scores = []
+    for edge in hyperedges:
+        X = node_features[np.asarray(edge)]
+        q = X @ W_q  # (|H|, 1)
+        k = X @ W_k  # (|H|, 1)
+        # attention weights for single head
+        att = q @ k.T
+        att = np.exp(att - att.max(axis=1, keepdims=True))
+        att = att / att.sum(axis=1, keepdims=True)
+        scores.append(float(np.abs(att).mean()))
+    return np.asarray(scores)

@@ -1,8 +1,14 @@
-import numpy as np
+import math
 
-from datacreek.analysis.hypergraph import hyper_sagnn_embeddings, hyper_sagnn_head_drop_embeddings
-from datacreek.core.dataset import DatasetBuilder
-from datacreek.pipelines import DatasetType
+import numpy as np
+import pytest
+
+from datacreek.analysis.hypergraph import (
+    hyper_adamic_adar_scores,
+    hyper_sagnn_embeddings,
+    hyper_sagnn_head_drop_embeddings,
+)
+from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
 def test_hyper_sagnn_embeddings_shape():
@@ -40,3 +46,23 @@ def test_hyper_sagnn_head_drop():
     emb = hyper_sagnn_head_drop_embeddings(edges, feats, num_heads=2, threshold=0.0, seed=0)
     assert emb.shape[0] == 2
     assert emb.shape[1] == 2
+
+
+def test_hyper_adamic_adar_simple():
+    edges = [["a", "b"], ["a", "c"]]
+    scores = hyper_adamic_adar_scores(edges)
+    w = 1 / math.log(2)
+    assert scores[("a", "b")] == pytest.approx(w)
+    assert scores[("a", "c")] == pytest.approx(w)
+    assert ("b", "c") not in scores
+
+
+def test_hyper_adamic_adar_on_graph():
+    kg = KnowledgeGraph()
+    kg.add_document("d", source="s")
+    for cid in ("c1", "c2", "c3"):
+        kg.add_chunk("d", cid, "t")
+    kg.add_hyperedge("h1", ["c1", "c2"])
+    kg.add_hyperedge("h2", ["c1", "c3"])
+    scores = kg.hyper_adamic_adar_scores()
+    assert ("c1", "c2") in scores

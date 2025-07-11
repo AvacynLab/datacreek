@@ -104,6 +104,51 @@ def box_counting_dimension(
     return slope, counts
 
 
+def colour_box_dimension(
+    graph: nx.Graph, radii: Iterable[int]
+) -> tuple[float, list[tuple[int, int]]]:
+    """Estimate fractal dimension using a simple COLOUR-box scheme.
+
+    This approximates the GPU COLOUR-box algorithm by assigning boxes in
+    parallel via colour classes. Each radius ``l_B`` is processed by
+    greedily colouring nodes so that no two neighbouring nodes share a colour
+    within that radius.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    radii:
+        Iterable of box radii ``l_B``.
+
+    Returns
+    -------
+    tuple[float, list[tuple[int, int]]]
+        Estimated dimension and the ``(radius, box_count)`` pairs.
+    """
+
+    counts: list[tuple[int, int]] = []
+    for r in radii:
+        color = {}
+        current = 0
+        for node in graph:
+            if node in color:
+                continue
+            color[node] = current
+            for nbr in nx.single_source_shortest_path_length(graph, node, cutoff=r):
+                if nbr != node:
+                    color[nbr] = current
+            current += 1
+        counts.append((r, current))
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    if len(xs) < 2:
+        return 0.0, counts
+    slope, _ = np.polyfit(xs, ys, 1)
+    return slope, counts
+
+
 def persistence_entropy(graph: nx.Graph, dimension: int = 0) -> float:
     """Return the persistence entropy for ``graph`` in a given dimension.
 
@@ -209,6 +254,84 @@ def graphwave_embedding(
 
     for s in scales:
         heat = evecs @ np.diag(np.exp(-s * evals)) @ evecs.T
+        for idx, node in enumerate(nodes):
+            coeffs = np.exp(1j * np.outer(ts, heat[idx, :])).sum(axis=1)
+            emb[node].extend(coeffs.real)
+            emb[node].extend(coeffs.imag)
+
+    return {n: np.asarray(v, dtype=float) for n, v in emb.items()}
+
+
+def graphwave_embedding_chebyshev(
+    graph: nx.Graph,
+    scales: Iterable[float],
+    *,
+    num_points: int = 10,
+    order: int = 7,
+) -> Dict[int, np.ndarray]:
+    """Return GraphWave embeddings using Chebyshev approximation.
+
+    The heat kernel :math:`e^{-sL}` is expanded in Chebyshev polynomials of the
+    scaled Laplacian. This avoids the expensive full eigen-decomposition and
+    scales linearly with ``order`` and ``|E|``.
+
+    Parameters
+    ----------
+    graph:
+        Input graph.
+    scales:
+        Diffusion scales used for the wavelets.
+    num_points:
+        Number of sample points for the characteristic function.
+    order:
+        Degree ``m`` of the Chebyshev approximation. ``m=7`` gives a good
+        trade-off between accuracy and speed.
+
+    Returns
+    -------
+    dict
+        Mapping of node to embedding vectors.
+    """
+
+    import numpy.linalg as nla
+    from scipy.special import iv  # modified Bessel function
+
+    nodes = list(graph.nodes())
+    lap = _laplacian(graph, normed=False)
+
+    # Estimate the largest eigenvalue to scale the Laplacian in [-1, 1]
+    try:  # pragma: no cover - prefer sparse eigs when available
+        from scipy.sparse.linalg import eigsh
+
+        lambda_max = float(eigsh(lap, k=1, which="LM", return_eigenvectors=False)[0])
+    except Exception:  # fallback to dense
+        lambda_max = float(nla.eigvalsh(lap).max())
+
+    if lambda_max == 0:
+        lambda_max = 1.0
+
+    L_hat = (2.0 / lambda_max) * lap - np.eye(lap.shape[0])
+    ts = np.linspace(0, 2 * np.pi, num_points)
+    emb: Dict[int, List[float]] = {n: [] for n in nodes}
+
+    for s in scales:
+        c0 = np.exp(-s * lambda_max / 2.0) * iv(0, s * lambda_max / 2.0)
+        T_prev = np.eye(lap.shape[0])
+        approx = c0 * T_prev
+
+        if order >= 1:
+            c1 = 2 * np.exp(-s * lambda_max / 2.0) * (-1) ** 1 * iv(1, s * lambda_max / 2.0)
+            T_curr = L_hat
+            approx += c1 * T_curr
+
+        for k in range(2, order + 1):
+            Tk = 2 * L_hat @ T_curr - T_prev
+            ck = 2 * np.exp(-s * lambda_max / 2.0) * (-1) ** k * iv(k, s * lambda_max / 2.0)
+            approx += ck * Tk
+            T_prev, T_curr = T_curr, Tk
+
+        heat = approx
+
         for idx, node in enumerate(nodes):
             coeffs = np.exp(1j * np.outer(ts, heat[idx, :])).sum(axis=1)
             emb[node].extend(coeffs.real)

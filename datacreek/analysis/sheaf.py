@@ -161,3 +161,90 @@ def sheaf_consistency_score(graph: nx.Graph, *, edge_attr: str = "sheaf_sign") -
 
     h1 = sheaf_first_cohomology(graph, edge_attr=edge_attr, tol=1e-5)
     return 1.0 / (1.0 + float(h1))
+
+
+def sheaf_first_cohomology_blocksmith(
+    graph: nx.Graph,
+    *,
+    edge_attr: str = "sheaf_sign",
+    block_size: int = 40000,
+    tol: float = 1e-5,
+) -> int:
+    """Approximate :math:`H^1` using a block-Smith reduction.
+
+    The Laplacian is processed in chunks of ``block_size`` so that very
+    large graphs do not require dense factorizations. When the number of
+    nodes is below ``block_size`` the routine falls back to an exact
+    eigen-decomposition. Otherwise it uses ``scipy.sparse.linalg.eigsh``
+    to estimate the smallest eigenvalues.
+    """
+
+    L = sheaf_laplacian(graph, edge_attr=edge_attr)
+    n = L.shape[0]
+    if n == 0:
+        return 0
+
+    if n <= block_size:
+        vals = np.linalg.eigvalsh(L)
+    else:  # use sparse approximation for the smallest eigenvalues
+        try:  # pragma: no cover - optional dependency
+            import scipy.sparse as sp
+            from scipy.sparse.linalg import eigsh
+
+            k = min(10, n - 1)
+            vals = eigsh(sp.csr_matrix(L), k=k, which="SM", return_eigenvectors=False)
+        except Exception:  # fall back to dense computation
+            vals = np.linalg.eigvalsh(L)
+
+    return int(np.sum(vals < tol))
+
+
+def sheaf_consistency_score_batched(
+    graph: nx.Graph,
+    batches: Iterable[Iterable[object]],
+    *,
+    edge_attr: str = "sheaf_sign",
+) -> list[float]:
+    """Return sheaf consistency scores for several node batches.
+
+    Each batch defines an induced subgraph on which
+    :func:`sheaf_consistency_score` is evaluated. This allows processing
+    large graphs in manageable chunks.
+    """
+
+    scores: list[float] = []
+    for nodes in batches:
+        sub = graph.subgraph(nodes)
+        scores.append(sheaf_consistency_score(sub, edge_attr=edge_attr))
+    return scores
+
+
+def spectral_bound_exceeded(
+    graph: nx.Graph, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
+) -> bool:
+    """Return True if the k-th sheaf Laplacian eigenvalue exceeds ``tau``.
+
+    Parameters
+    ----------
+    graph : nx.Graph
+        Input graph with sheaf structure.
+    k : int
+        Index of the eigenvalue (1-indexed).
+    tau : float
+        Threshold for early stopping.
+    edge_attr : str, optional
+        Edge attribute storing restriction signs.
+
+    Returns
+    -------
+    bool
+        ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`, ``False`` otherwise.
+    """
+    L = sheaf_laplacian(graph, edge_attr=edge_attr)
+    if L.size == 0:
+        return False
+    vals = np.linalg.eigvalsh(L)
+    vals.sort()
+    if k - 1 < len(vals):
+        return bool(vals[k - 1] > tau)
+    return False

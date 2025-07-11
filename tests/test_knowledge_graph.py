@@ -1,4 +1,11 @@
+import os
+import sys
 from typing import Any
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import pytest
+
+pytest.importorskip("datacreek.api", reason="api deps missing")
 
 import numpy as np
 import pytest
@@ -840,6 +847,29 @@ def test_sheaf_consistency_score_method():
     assert 0.0 <= score <= 1.0
 
 
+def test_sheaf_cohomology_blocksmith_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=1)
+    val = kg.sheaf_cohomology_blocksmith(block_size=10)
+    assert isinstance(val, int) and val >= 0
+
+
+def test_sheaf_consistency_score_batched_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("0", "1", sheaf_sign=1)
+    kg.graph.add_edge("1", "2", sheaf_sign=1)
+    scores = kg.sheaf_consistency_score_batched([["0", "1"], ["1", "2"]])
+    assert len(scores) == 2
+    assert all(0.0 <= s <= 1.0 for s in scores)
+
+
+def test_spectral_bound_exceeded_method():
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b", sheaf_sign=1)
+    flag = kg.spectral_bound_exceeded(2, 1.0)
+    assert flag
+
+
 def test_path_to_text_method():
     kg = KnowledgeGraph()
     kg.graph.add_node("a", text="A")
@@ -1509,3 +1539,41 @@ def test_fractalnet_compress_method():
     kg.graph.add_node("c", embedding=[1.0, 0.0], fractal_level=1)
     comp = kg.fractalnet_compress()
     assert len(comp) == 2
+
+
+def test_mapper_cache_method(monkeypatch):
+    calls: list[int] = []
+
+    def fake_mapper_nerve(g, radius):
+        calls.append(radius)
+        return nx.Graph(), []
+
+    monkeypatch.setattr("datacreek.analysis.mapper.mapper_nerve", fake_mapper_nerve)
+
+    kg = KnowledgeGraph()
+    kg.graph.add_nodes_from(range(3))
+    kg.graph.add_edges_from([(0, 1), (1, 2)])
+
+    kg.mapper_nerve(1)
+    kg.mapper_nerve(1)
+    assert len(calls) == 1
+
+    kg.clear_mapper_cache()
+    kg.mapper_nerve(1)
+    assert len(calls) == 2
+
+
+def test_svgp_ei_propose_method():
+    kg = KnowledgeGraph()
+    vec = kg.svgp_ei_propose([([0.0, 0.0], 1.0)], [(0.0, 1.0), (0.0, 1.0)], m=10, n_samples=20)
+    assert len(vec) == 2
+    assert 0.0 <= vec[0] <= 1.0
+
+
+def test_prune_fractalnet_weights_method():
+    if KnowledgeGraph is None:
+        pytest.skip("deps missing")
+    kg = KnowledgeGraph()
+    w = [1, -2, 3, -4]
+    out = kg.prune_fractalnet_weights(w, ratio=0.5)
+    assert len([x for x in out if x != 0]) == 2

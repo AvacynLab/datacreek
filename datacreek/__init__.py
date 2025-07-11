@@ -35,6 +35,7 @@ __all__: list[str] = [
     "box_counting_dimension",
     "persistence_entropy",
     "graphwave_embedding",
+    "graphwave_embedding_chebyshev",
     "minimize_bottleneck_distance",
     "bottleneck_distance",
     "mdl_optimal_radius",
@@ -67,6 +68,9 @@ __all__: list[str] = [
     "sheaf_neural_network",
     "sheaf_first_cohomology",
     "resolve_sheaf_obstruction",
+    "sheaf_first_cohomology_blocksmith",
+    "sheaf_consistency_score_batched",
+    "spectral_bound_exceeded",
     "fractal_information_density",
     "fractal_coverage",
     "ensure_fractal_coverage",
@@ -85,6 +89,10 @@ __all__: list[str] = [
     "optimize_topology_iterative",
     "md5_file",
     "caption_image",
+    "partition_files_to_atoms",
+    "transcribe_audio",
+    "blip_caption_image",
+    "parse_code_to_atoms",
     "detect_emotion",
     "detect_modality",
     "fractalize_graph",
@@ -101,9 +109,11 @@ __all__: list[str] = [
     "inverse_mapper",
     "fractal_net_prune",
     "fractalnet_compress",
+    "prune_fractalnet",
     "graphwave_entropy",
     "embedding_entropy",
     "embedding_box_counting_dimension",
+    "colour_box_dimension",
     "ensure_graphwave_entropy",
     "hyper_sagnn_embeddings",
     "select_mdl_motifs",
@@ -111,8 +121,15 @@ __all__: list[str] = [
     "alignment_correlation",
     "average_hyperbolic_radius",
     "scale_bias_wasserstein",
+    "mitigate_bias_wasserstein",
+    "filter_semantic_cycles",
+    "entropy_triangle_threshold",
+    "rollback_gremlin_diff",
+    "SheafSLA",
     "governance_metrics",
     "k_out_randomized_response",
+    "DPBudgetManager",
+    "DPBudget",
     "detect_automorphisms",
     "automorphism_group_order",
     "quotient_by_symmetry",
@@ -138,9 +155,11 @@ __all__: list[str] = [
     "stop_policy_monitor",
     "start_policy_monitor_thread",
     "stop_policy_monitor_thread",
+    "ingest_text_atoms",
     "LLMService",
     "AutoTuneState",
     "autotune_step",
+    "kw_gradient",
     "xor_encrypt",
     "xor_decrypt",
     "encrypt_pii_fields",
@@ -295,6 +314,10 @@ def __getattr__(name: str):
         from .analysis.fractal import box_counting_dimension as _bcd
 
         return _bcd
+    if name == "colour_box_dimension":
+        from .analysis.fractal import colour_box_dimension as _cbd
+
+        return _cbd
     if name == "persistence_entropy":
         from .analysis.fractal import persistence_entropy as _pe
 
@@ -303,6 +326,10 @@ def __getattr__(name: str):
         from .analysis.fractal import graphwave_embedding as _ge
 
         return _ge
+    if name == "graphwave_embedding_chebyshev":
+        from .analysis.fractal import graphwave_embedding_chebyshev as _gec
+
+        return _gec
     if name == "minimize_bottleneck_distance":
         from .analysis.fractal import minimize_bottleneck_distance as _mbd
 
@@ -395,10 +422,22 @@ def __getattr__(name: str):
         from .analysis.sheaf import sheaf_first_cohomology as _sfc
 
         return _sfc
+    if name == "sheaf_first_cohomology_blocksmith":
+        from .analysis.sheaf import sheaf_first_cohomology_blocksmith as _sfcbs
+
+        return _sfcbs
     if name == "resolve_sheaf_obstruction":
         from .analysis.sheaf import resolve_sheaf_obstruction as _rso
 
         return _rso
+    if name == "sheaf_consistency_score_batched":
+        from .analysis.sheaf import sheaf_consistency_score_batched as _scsb
+
+        return _scsb
+    if name == "spectral_bound_exceeded":
+        from .analysis.sheaf import spectral_bound_exceeded as _sbe
+
+        return _sbe
     if name == "quality_check":
         from .core.dataset import DatasetBuilder
 
@@ -511,6 +550,22 @@ def __getattr__(name: str):
         from .utils.checksum import md5_file as _md5
 
         return _md5
+    if name == "partition_files_to_atoms":
+        from .analysis.ingestion import partition_files_to_atoms as _pfa
+
+        return _pfa
+    if name == "transcribe_audio":
+        from .analysis.ingestion import transcribe_audio as _ta
+
+        return _ta
+    if name == "blip_caption_image":
+        from .analysis.ingestion import blip_caption_image as _bci
+
+        return _bci
+    if name == "parse_code_to_atoms":
+        from .analysis.ingestion import parse_code_to_atoms as _pca
+
+        return _pca
     if name == "generate_graph_rnn_like":
         from .analysis.generation import generate_graph_rnn_like as _gg
 
@@ -603,6 +658,10 @@ def __getattr__(name: str):
         from .analysis.fractal import fractal_net_prune as _fp
 
         return _fp
+    if name == "prune_fractalnet":
+        from .analysis.compression import prune_fractalnet as _pf
+
+        return _pf
     if name == "fractalnet_compress":
         from .core.dataset import DatasetBuilder as _DB
 
@@ -639,22 +698,49 @@ def __getattr__(name: str):
         "alignment_correlation",
         "average_hyperbolic_radius",
         "scale_bias_wasserstein",
+        "mitigate_bias_wasserstein",
+        "filter_semantic_cycles",
+        "entropy_triangle_threshold",
+        "rollback_gremlin_diff",
+        "SheafSLA",
         "governance_metrics",
         "k_out_randomized_response",
+        "DPBudgetManager",
+        "DPBudget",
     }:
+        from .analysis import filtering as _flt
         from .analysis import governance as _g
         from .analysis import multiview as _mv
         from .analysis import privacy as _p
+        from .security import dp_budget as _dp
 
         if hasattr(_mv, name):
             return getattr(_mv, name)
         if hasattr(_g, name):
             return getattr(_g, name)
-        return getattr(_p, name)
+        if hasattr(_p, name):
+            return getattr(_p, name)
+        if hasattr(_flt, name):
+            return getattr(_flt, name)
+        if hasattr(_dp, name):
+            return getattr(_dp, name)
+        if name == "rollback_gremlin_diff":
+            from .analysis.rollback import rollback_gremlin_diff as _rgd
+
+            return _rgd
+        if name == "SheafSLA":
+            from .analysis.rollback import SheafSLA as _sla
+
+            return _sla
+        return getattr(_dp, name)
     if name == "embedding_box_counting_dimension":
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.embedding_box_counting_dimension
+    if name == "colour_box_dimension":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.colour_box_dimension
     if name == "ensure_graphwave_entropy":
         from .core.dataset import DatasetBuilder as _DB
 
@@ -671,12 +757,15 @@ def __getattr__(name: str):
         from .analysis.information import mdl_description_length as _mdl
 
         return _mdl
-    if name == "AutoTuneState" or name == "autotune_step":
+    if name in {"AutoTuneState", "autotune_step", "kw_gradient"}:
         from .analysis.autotune import AutoTuneState as _AS
+        from .analysis.autotune import kw_gradient as _kw
         from .core.dataset import DatasetBuilder as _DB
 
         if name == "AutoTuneState":
             return _AS
+        if name == "kw_gradient":
+            return _kw
         return _DB.autotune_step
     if name == "prune_embeddings":
         from .core.dataset import DatasetBuilder as _DB
@@ -727,6 +816,10 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder as _DB
 
         return _DB.stop_policy_monitor_thread
+    if name == "ingest_text_atoms":
+        from .core.dataset import DatasetBuilder as _DB
+
+        return _DB.ingest_text_atoms
     if name in {"detect_automorphisms", "quotient_by_symmetry", "automorphism_group_order"}:
         from .core.dataset import DatasetBuilder as _DB
 

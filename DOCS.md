@@ -76,15 +76,41 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `multiview_contrastive_loss()` | compute InfoNCE loss across the three views |
 | `compute_meta_embeddings()` | generate 64D meta-embeddings via autoencoder |
 | `compute_hyper_sagnn_head_drop_embeddings()` | Hyper-SAGNN embeddings with HEAD-Drop |
+| `compute_graphwave_embeddings(chebyshev_order=m)` | GraphWave using Chebyshev order `m` |
+| `hyper_adamic_adar_scores()` | compute Hyper-Adamic–Adar link scores |
+| `edge_attention_scores()` | mean attention weight per hyperedge |
+| `hybrid_score()` | joint similarity from Node2Vec, Poincaré and GraphWave |
+| `rollback_gremlin_diff()` | export git diff patch for rollback |
+| `SheafSLA` | measure mean time to recovery for sheaf checks |
+| `mapper_nerve(radius)` | compute or fetch cached Mapper nerve |
+| `clear_mapper_cache()` | drop cached Mapper nerve results |
+| `prune_fractalnet(weights, ratio)` | magnitude-based pruning of model weights |
+| `colour_box_dimension(radii)` | GPU-style box counting for fractal dim |
+| `adaptive_triangle_threshold()` | derive triangle cutoff from edge weight entropy |
+| `partition_files_to_atoms(path)` | split file into text atoms |
+| `parse_code_to_atoms(path)` | split Python source into code atoms |
+| `transcribe_audio(path)` | Whisper transcription of audio |
+| `blip_caption_image(path)` | generate image caption with BLIP |
 | `similar_by_hybrid()` | rank nodes by combined hyperbolic/Euclidean/spectral score |
 | `ann_hybrid_search()` | ANN candidate search followed by hybrid ranking |
 | `apply_k_out_privacy()` | apply k-out randomized response to ID lists |
 | `governance_metrics()` | compute alignment, crowding and bias indicators |
+| `mitigate_bias_wasserstein(groups)` | rescale embeddings to reduce group bias |
+| `average_hyperbolic_radius()` | mean radius of Poincaré embeddings |
+| `filter_semantic_cycles()` | remove trivial GraphRNN cycles |
 | `persistence_wasserstein_distance()` | Wasserstein distance between persistence diagrams |
 | `tpl_correct_graph()` | Wasserstein-based topology correction |
 | `sheaf_consistency_score()` | measure sheaf coherence on the graph |
+| `sheaf_cohomology_blocksmith()` | approximate H^1 via block reduction |
+| `sheaf_consistency_score_batched()` | batch version of sheaf score |
+| `spectral_bound_exceeded(k, tau)` | check if λ_k exceeds τ to stop search |
 | `autotune_step()` | update parameters using entropy, MDL and recall@k |
-| `build_faiss_index()` | build a FAISS index for cosine search |
+| `svgp_ei_propose()` | propose new hyperparameters via SVGP-EI |
+| `kw_gradient(f,x,h,n)` | stochastic gradient estimate used in autotuning |
+| `build_faiss_index(method="flat"|"hnsw")` | build a FAISS index |
+| `search_faiss(adaptive=True)` | search with latency-aware HNSW switch |
+| `add_privacy_budget()` | register a DP epsilon budget per user |
+| `consume_privacy_budget(window)` | spend epsilon within a sliding window |
 | `mark_conflicting_facts()` | flag contradictory facts |
 
 **Dataset generation**
@@ -1625,3 +1651,5 @@ scripts/deploy.sh
 
 The script connects via SSH, pulls the images and restarts the stack using the
 `docker-compose.yml` stored on the remote host.
+
+| `recall_at_k()` | compute mean recall@k for query nodes |

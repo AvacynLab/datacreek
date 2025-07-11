@@ -60,3 +60,40 @@ def governance_metrics(
         "hyperbolic_radius": average_hyperbolic_radius(hyp),
         "bias_wasserstein": scale_bias_wasserstein(n2v, gw, hyp),
     }
+
+
+def mitigate_bias_wasserstein(
+    embeddings: Dict[str, Iterable[float]],
+    groups: Dict[str, str],
+) -> Dict[str, np.ndarray]:
+    """Return rescaled embeddings to equalize norm distributions across groups.
+
+    Parameters
+    ----------
+    embeddings:
+        Mapping of node identifier to its embedding vector.
+    groups:
+        Mapping of node identifier to a group label. Nodes without
+        a group are ignored.
+
+    Notes
+    -----
+    The function rescales vectors so that each group's mean norm matches the
+    global mean norm. This simple Wasserstein reweighting mitigates
+    representation bias between communities.
+    """
+    arr = {k: np.asarray(v, dtype=float) for k, v in embeddings.items() if k in groups}
+    if not arr:
+        return {}
+    norms = {g: [] for g in set(groups.values())}
+    for node, vec in arr.items():
+        norms[groups[node]].append(np.linalg.norm(vec))
+    means = {g: np.mean(v) if v else 1.0 for g, v in norms.items()}
+    global_mean = float(np.mean(list(means.values())))
+    factors = {g: (global_mean / m if m > 0 else 1.0) for g, m in means.items()}
+
+    rescaled = {}
+    for node, vec in arr.items():
+        factor = factors.get(groups[node], 1.0)
+        rescaled[node] = vec * factor
+    return rescaled
