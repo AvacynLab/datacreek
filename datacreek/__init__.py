@@ -1,4 +1,4 @@
-"""Datacreek package."""
+"""Datacreek application."""
 
 from typing import TYPE_CHECKING
 

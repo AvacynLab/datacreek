@@ -1,6 +1,6 @@
 """Core components for datacreek.
 
-This module avoids importing heavy dependencies at package import time by
+This module avoids importing heavy dependencies at module import time by
 loading objects lazily via ``__getattr__``.  Only when ``AppContext`` is
 explicitly requested will the full context machinery (and its transitive
 dependencies) be imported.

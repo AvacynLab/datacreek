@@ -8,7 +8,7 @@ import pytest
 try:
     import datacreek
 except Exception:
-    pytest.skip("datacreek package unavailable", allow_module_level=True)
+    pytest.skip("datacreek library unavailable", allow_module_level=True)
 
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 

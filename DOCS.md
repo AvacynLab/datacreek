@@ -70,6 +70,9 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `prune_sources()` | remove unwanted sources |
 | `compute_graph_embeddings()` | build Node2Vec embeddings on nodes |
 | `compute_node2vec_gds()` | Neo4j GDS Node2Vec on the database |
+| `compute_graphsage_embeddings()` | mean-aggregated GraphSAGE vectors |
+| `compute_transe_embeddings()` | TransE-style relation embeddings |
+| `compute_distmult_embeddings()` | DistMult-style relation embeddings |
 | `compute_product_manifold_embeddings()` | fuse Poincaré and Node2Vec vectors |
 | `train_product_manifold_embeddings()` | optimize embeddings with simple product loss |
 | `compute_aligned_cca_embeddings()` | low-rank A-CCA between Node2Vec and GraphWave |
@@ -79,7 +82,7 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `compute_graphwave_embeddings(chebyshev_order=m)` | GraphWave using Chebyshev order `m` |
 | `hyper_adamic_adar_scores()` | compute Hyper-Adamic–Adar link scores |
 | `edge_attention_scores()` | mean attention weight per hyperedge |
-| `hybrid_score()` | joint similarity from Node2Vec, Poincaré and GraphWave |
+| `hybrid_score()` | :math:`\gamma \cos(\text{n2v}) + \eta (1-d_B) + (1-\gamma-\eta)(1-\cos(\text{gw}))` |
 | `rollback_gremlin_diff()` | export git diff patch for rollback |
 | `SheafSLA` | measure mean time to recovery for sheaf checks |
 | `mapper_nerve(radius)` | compute or fetch cached Mapper nerve |
@@ -92,7 +95,8 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `transcribe_audio(path)` | Whisper transcription of audio |
 | `blip_caption_image(path)` | generate image caption with BLIP |
 | `similar_by_hybrid()` | rank nodes by combined hyperbolic/Euclidean/spectral score |
-| `ann_hybrid_search()` | ANN candidate search followed by hybrid ranking |
+| `ann_hybrid_search()` | FAISS pre-filter then :math:`\gamma \cos(\text{n2v}) + \eta (1-d_B) + (1-\gamma-\eta)(1-\cos(\text{gw}))` |
+| `cypher_ann_query()` | run Cypher on ANN results |
 | `apply_k_out_privacy()` | apply k-out randomized response to ID lists |
 | `governance_metrics()` | compute alignment, crowding and bias indicators |
 | `mitigate_bias_wasserstein(groups)` | rescale embeddings to reduce group bias |
@@ -107,11 +111,23 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `autotune_step()` | update parameters using entropy, MDL and recall@k |
 | `svgp_ei_propose()` | propose new hyperparameters via SVGP-EI |
 | `kw_gradient(f,x,h,n)` | stochastic gradient estimate used in autotuning |
+| `recall_at_k()` | compute mean recall@k for query nodes |
 | `build_faiss_index(method="flat"|"hnsw")` | build a FAISS index |
 | `search_faiss(adaptive=True)` | search with latency-aware HNSW switch |
 | `add_privacy_budget()` | register a DP epsilon budget per user |
 | `consume_privacy_budget(window)` | spend epsilon within a sliding window |
 | `mark_conflicting_facts()` | flag contradictory facts |
+| `hyperbolic_neighbors()` | nearest neighbors in Poincaré space |
+| `hyperbolic_reasoning()` | greedy path in hyperbolic space |
+| `hyperbolic_hypergraph_reasoning()` | path using hyperedges and penalty |
+| `hyperbolic_multi_curvature_reasoning()` | reasoning across curvature levels |
+| `predict_hyperedges()` | suggest new hyperedges via similarity |
+| `diversification_score(nodes, radii)` | coverage score for node sets |
+| `select_diverse_nodes(cands, count, radii)` | pick nodes maximizing diversification |
+| `sample_diverse_chunks(count, radii)` | grab chunks from unexplored regions |
+| `dimension_distortion(radii)` | difference between graph and embedding dimensions |
+| `embedding_box_counting_dimension(attr, radii)` | fractal dimension of stored embeddings |
+| `fractal_information_metrics(radii, max_dim)` | entropy and MDL across radii |
 
 **Dataset generation**
 
@@ -162,83 +178,100 @@ Datacreek follows a modular architecture with these main components:
 
 ```mermaid
 graph TD
-    API[REST API] --> Core
-    Core --> Parsers
-    Core --> Generators
-    Core --> LLMClient
-    Core --> FormatConverter
-    
-    Parsers --> PDFParser
-    Parsers --> HTMLParser
-    Parsers --> YouTubeParser
-    Parsers --> DOCXParser
-    Parsers --> PPTParser
-    Parsers --> TXTParser
-    
-    Generators --> QAGenerator
-    Generators --> COTGenerator
-    
+    Server(FastAPI) --> API[REST API]
+    API --> Builder
+    Builder[DatasetBuilder] --> Parsers
+    Builder --> Generators
+    Builder --> LLMClient
+    Builder --> FormatConverter
+    Builder --> Analysis
+    Builder --> Security
+    Builder --> KG[KnowledgeGraph]
+
+    subgraph Parsers
+        PDFParser
+        HTMLParser
+        YouTubeParser
+        DOCXParser
+        PPTParser
+        TXTParser
+        CodeParser
+        ImageParser
+        AudioParser
+        WhisperParser[WhisperAudioParser]
+    end
+
+    subgraph Generators
+        QAGenerator
+        COTGenerator
+        ConversationGenerator
+        KGGenerator
+        VQAGenerator
+        PrefGenerator
+        ToolGenerator
+        MultiToolGenerator
+    end
+
     Config[Configuration] --> API
-    Config --> Core
-    Config --> LLMClient
-    Config --> Generators
-    
-    Utils[Utilities] --> TextProcessing
-    Utils --> LLMProcessing
-    Utils --> ConfigUtils
+    Config --> Builder
+
     Utils --> FormatConverter
-    Utils --> DatasetUtils[HF Dataset Utils]
-    
-    LLMClient --> BatchProcessing[Batch Processing]
-    
-    LLMProcessing --> ParseQAPairs[Parse QA Pairs]
-    LLMProcessing --> ParseRatings[Enhanced Rating Parser]
-    LLMProcessing --> ConversionUtils[Conversation Format Utils]
-    
-    EnvVars[Environment Variables] -.-> Core
-    EnvVars -.-> LLMProcessing
+    Utils --> Security
+
+    %% Batch processing is handled internally, no separate module
+
+    EnvVars[Environment Variables] -.-> Builder
 ```
 
 ### Directory Structure
 
 ```
 datacreek/
-├── datacreek/        # Package source code
-│   ├── __init__.py           # Package initialization
-│   ├── core/                 # Core functionality
+├── datacreek/                  # Application source code
+│   ├── __init__.py
+│   ├── core/                   # Pipeline stages
 │   │   ├── __init__.py
-│   │   ├── context.py        # Application context
-│   │   ├── ingest.py         # Document ingestion
-│   │   ├── create.py         # Content creation
-│   │   ├── cleanup.py        # Content filtering
-│   │   └── save_as.py        # Format conversion
-│   ├── models/               # LLM integration
+│   │   ├── context.py
+│   │   ├── ingest.py
+│   │   ├── create.py
+│   │   ├── cleanup.py
+│   │   ├── curate.py
+│   │   ├── dataset.py
+│   │   └── save_as.py
+│   ├── parsers/                # Document and media parsers
 │   │   ├── __init__.py
-│   │   └── llm_client.py     # VLLM client
-│   ├── parsers/              # Document parsers
-│   │   ├── __init__.py
-│   │   ├── pdf_parser.py     # PDF parser
-│   │   ├── html_parser.py    # HTML parser
-│   │   ├── youtube_parser.py # YouTube parser
-│   │   ├── docx_parser.py    # DOCX parser
-│   │   ├── ppt_parser.py     # PPT parser
-│   │   └── txt_parser.py     # TXT parser
-│   ├── generators/           # Content generators
-│   │   ├── __init__.py
-│   │   └── qa_generator.py   # QA pair generator
-│   └── utils/                # Utilities
-│       ├── __init__.py
-│       ├── config.py         # Config handling
-│       ├── text.py           # Text processing
-│       ├── llm_processing.py # LLM output parsing
-│       └── format_converter.py # Format conversion
-├── configs/                  # Configuration files
-│   └── config.yaml           # Default configuration
-├── data/                     # Database storage (SQLite by default)
-├── setup.py                  # Package setup script
-├── pyproject.toml            # Project metadata
-├── MANIFEST.in               # Package manifest
-└── README.md                 # Project readme
+│   │   ├── pdf_parser.py
+│   │   ├── html_parser.py
+│   │   ├── youtube_parser.py
+│   │   ├── docx_parser.py
+│   │   ├── ppt_parser.py
+│   │   ├── txt_parser.py
+│   │   ├── code_parser.py
+│   │   ├── image_parser.py
+│   │   ├── audio_parser.py
+│   │   └── whisper_audio_parser.py
+│   ├── generators/             # Dataset generators
+│   │   ├── qa_generator.py
+│   │   ├── cot_generator.py
+│   │   ├── vqa_generator.py
+│   │   ├── kg_generator.py
+│   │   ├── pref_generator.py
+│   │   ├── conversation_generator.py
+│   │   ├── tool_generator.py
+│   │   └── multi_tool_generator.py
+│   ├── models/
+│   │   └── llm_client.py
+│   ├── analysis/               # Metrics and math helpers
+│   ├── security/               # Privacy utilities
+│   ├── utils/                  # Shared utilities
+│   └── server/                 # FastAPI app
+├── configs/                    # Configuration files
+│   └── config.yaml
+├── frontend/                   # React web interface
+├── scripts/                    # Utility scripts
+├── docker-compose.yml          # Compose stack for local development
+├── Dockerfile                  # API container image
+└── README.md                   # Project readme
 ```
 
 ### Class Diagram
@@ -366,20 +399,16 @@ sequenceDiagram
 - Python 3.8 or later
 - VLLM for local inference (recommended)
 
-### Installation Methods
+### Installation
 
-#### From PyPI
-
-```bash
-pip install datacreek
-```
-
-#### From Source
+Clone the repository and install the dependencies in a virtual environment:
 
 ```bash
 git clone https://github.com/meta-llama/datacreek.git
 cd datacreek
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 ### Setting Up VLLM
@@ -637,9 +666,8 @@ The `cleanup` stage filters content based on quality.
 ```mermaid
 graph TD
     InputJSON[Input JSON] --> LoadQAPairs[Load QA Pairs]
-    LoadQAPairs --> BatchProcessing[Process in Batches]
-    
-    BatchProcessing --> QualityPrompt[Apply Rating Prompt]
+    %% QA pairs are processed in batches internally
+    LoadQAPairs --> QualityPrompt[Apply Rating Prompt]
     QualityPrompt --> ModelInference[LLM Inference]
     
     ModelInference --> ParseRatings[Parse Ratings with Enhanced Methods]
@@ -776,6 +804,64 @@ deep_data = ds.search_with_links_data("hello", hops=1)
 ds_copy = ds.clone(name="copy")
 ```
 
+### Search Functions
+
+Datacreek exposes several helper methods to query the knowledge graph:
+
+````python
+ds.search("world")                        # lexical search
+ds.graph.search_embeddings("hello")       # embedding search
+ds.graph.search_hybrid("hello")           # lexical + embedding
+ds.ann_hybrid_search(q_n2v, q_gw, q_hyp)  # FAISS + hybrid score
+ds.graph.similar_by_hybrid("c1")          # rank nodes by hybrid similarity
+ds.search_with_links("hello", hops=1)     # expand via graph links
+ds.search_with_links_data("hello", hops=1)  # includes traversal path
+score = ds.hybrid_score("c1", "c2")        # multi-view similarity
+ds.cypher_ann_query(driver, "hello", "MATCH (n) WHERE n.id IN $ids RETURN n")
+ds.hyperbolic_neighbors("c1")               # closest nodes in Poincaré space
+ds.hyperbolic_reasoning("c1", "c5")         # greedy path via embeddings
+````
+
+``cypher_ann_query`` first retrieves the top ``k`` ANN candidates from
+``query`` and runs the supplied Cypher statement with the variable ``ids``
+bound to those identifiers. Use this helper when you need custom graph
+queries but still want to narrow the search via embeddings.
+
+``search_with_links`` performs a hybrid search and then traverses
+``next_chunk`` and ``similar_to`` relations up to ``hops`` deep to gather
+related chunks. ``search_with_links_data`` returns the same results with
+extra fields such as the hop ``depth`` and traversal ``path``.
+
+``ann_hybrid_search`` uses a FAISS index to fetch ``ann_k`` candidates
+based on Node2Vec similarity. Each candidate is scored with the
+multi-view formula below, and the top ``k`` results are returned.
+
+``similar_by_hybrid`` performs the same scoring but compares a query node
+against every candidate in the graph without the FAISS pre-filter.
+
+``hyperbolic_neighbors`` returns the closest nodes according to the
+Poincaré distance :math:`d_{\mathbb{B}}`. ``hyperbolic_reasoning`` then
+links the start node to the goal by greedily selecting the neighbor with
+the smallest hyperbolic distance at each step.
+``hyperbolic_hypergraph_reasoning`` and
+``hyperbolic_multi_curvature_reasoning`` extend this idea by
+respectively traversing hyperedges with a penalty term and mixing
+embeddings of several curvatures.
+
+``hybrid_score`` combines Node2Vec cosine similarity, Poincar\xe9 distance
+and GraphWave similarity. The similarity is
+
+.. math::
+
+    S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+    (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+where ``cos(n2v)`` is the cosine similarity of Node2Vec embeddings,
+``d_{\mathbb{B}}`` is the Poincar\xe9 distance of hyperbolic embeddings and
+``cos(gw)`` is the cosine similarity of GraphWave vectors. ``gamma`` and
+``eta`` in ``[0,1]`` control the weight of the Euclidean and hyperbolic
+terms.
+
 | Dataset type | Compatible trainings |
 |--------------|---------------------|
 | `qa`         | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
@@ -788,6 +874,33 @@ ds_copy = ds.clone(name="copy")
 | `tool`       | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
 | `conversation` | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
 | `multi_tool` | SFT, DPO, ORPO, DPO+SFT, PPO, RRHF, RLAIF, GRPO |
+
+### Fractal Metrics
+
+Functions such as ``embedding_box_counting_dimension`` and
+``dimension_distortion`` evaluate how closely the hyperbolic embeddings
+match the original graph structure. Provide a list of radii ``r`` to compute
+the box counting dimension and the discrepancy between the graph and its
+embedding:
+
+```python
+dim, counts = ds.embedding_box_counting_dimension("poincare_embedding", r)
+dist = ds.dimension_distortion(r)
+```
+
+The distortion corresponds to the absolute difference between the fractal
+dimension ``D_graph`` of the original graph and the dimension ``D_emb`` of its
+Poincaré embedding:
+
+.. math::
+
+    |D_{graph} - D_{emb}|
+
+``diversification_score`` measures how much a set of nodes covers previously
+unexplored regions. ``select_diverse_nodes`` returns the best subset while
+``sample_diverse_chunks`` draws representative chunks. The helper
+``fractal_information_metrics`` summarizes entropy and description length as
+the radius grows.
 
 ### Training-Specific Pipelines
 
@@ -1653,3 +1766,15 @@ The script connects via SSH, pulls the images and restarts the stack using the
 `docker-compose.yml` stored on the remote host.
 
 | `recall_at_k()` | compute mean recall@k for query nodes |
+
+``recall_at_k`` measures how many relevant nodes are retrieved among the
+top ``k`` hybrid search results for each query. Given a query set ``Q``
+and ground truth mapping ``G(q)`` for ``q`` in ``Q``, the metric is
+
+.. math::
+
+    \text{recall@k} = \frac{1}{|Q|} \sum_{q \in Q}
+    \frac{|\text{top}_k(q) \cap G(q)|}{|G(q)|}
+
+where ``top_k(q)`` are the first ``k`` results from
+``search_hybrid``.

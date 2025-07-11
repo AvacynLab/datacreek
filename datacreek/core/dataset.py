@@ -639,7 +639,20 @@ class DatasetBuilder:
         k: int = 5,
         node_type: str = "chunk",
     ) -> List[Dict[str, Any]]:
-        """Wrapper for :meth:`KnowledgeGraph.cypher_ann_query`."""
+        """Wrapper for :meth:`KnowledgeGraph.cypher_ann_query`.
+
+        Parameters mirror :meth:`KnowledgeGraph.cypher_ann_query`:
+
+        - ``driver``: Neo4j driver instance
+        - ``query``: text passed to the ANN search
+        - ``cypher``: query string using ``$ids``
+        - ``k``: number of ANN candidates
+        - ``node_type``: restrict matches to this type
+
+        The FAISS index retrieves up to ``k`` candidate IDs from ``query``.
+        These IDs are bound to the ``ids`` parameter in ``cypher`` so you can
+        execute arbitrary graph queries seeded by the ANN search.
+        """
 
         return self.graph.cypher_ann_query(
             driver,
@@ -797,7 +810,21 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Wrapper for :meth:`KnowledgeGraph.hybrid_score`."""
+        """Wrapper for :meth:`KnowledgeGraph.hybrid_score`.
+
+        Parameters mirror :meth:`KnowledgeGraph.hybrid_score` and the
+        returned value is the multi-view similarity
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}})
+            + (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where ``n2v_attr``, ``gw_attr`` and ``hyper_attr`` name the node
+        properties holding the Node2Vec, GraphWave and Poincar\xe9
+        embeddings. ``gamma`` controls the weight of the Euclidean term
+        while ``eta`` controls the hyperbolic part.
+        """
 
         return self.graph.hybrid_score(
             src,
@@ -821,7 +848,20 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Wrapper for :meth:`KnowledgeGraph.similar_by_hybrid`."""
+        """Return nodes ranked by multi-view similarity to ``node_id``.
+
+        The method delegates to :meth:`KnowledgeGraph.similar_by_hybrid` and
+        computes the same hybrid score
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where the Node2Vec, Poincar\xe9 and GraphWave embeddings are read from
+        ``n2v_attr``, ``hyper_attr`` and ``gw_attr``. ``gamma`` and ``eta``
+        control the Euclidean and hyperbolic contribution respectively.
+        """
 
         return self.graph.similar_by_hybrid(
             node_id,
@@ -849,7 +889,21 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`."""
+        """Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`.
+
+        ``q_n2v``, ``q_gw`` and ``q_hyp`` are the query embeddings in
+        Node2Vec, GraphWave and Poincar\xe9 space. Candidates are fetched
+        from the FAISS index on ``n2v_attr`` and scored with
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where ``gamma`` and ``eta`` weight the Euclidean and hyperbolic parts.
+        ``ann_k`` controls the number of FAISS candidates considered before
+        returning the top ``k`` results.
+        """
 
         return self.graph.ann_hybrid_search(
             q_n2v,
@@ -1757,7 +1811,15 @@ class DatasetBuilder:
         return metrics
 
     def dimension_distortion(self, radii: Iterable[int]) -> float:
-        """Wrapper for :meth:`KnowledgeGraph.dimension_distortion`."""
+        """Return |D_graph - D_embedding| for stored Poincaré embeddings.
+
+        This method forwards ``radii`` to
+        :meth:`KnowledgeGraph.dimension_distortion`, which estimates the fractal
+        dimensions of the graph and its Poincaré embedding using box counting.
+        The returned value is the absolute difference between these dimensions
+        and indicates how faithfully the embedding preserves the graph
+        geometry.
+        """
 
         dist = self.graph.dimension_distortion(radii)
         self._record_event(

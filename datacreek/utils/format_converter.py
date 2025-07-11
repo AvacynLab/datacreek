@@ -64,7 +64,7 @@ def to_hf_dataset(qa_pairs: List[Dict[str, str]]) -> str:
         from datasets import Dataset
     except ImportError:
         raise ImportError(
-            "The 'datasets' package is required for HF dataset format. "
+            "The 'datasets' library is required for HF dataset format. "
             "Install it with: pip install datasets"
         )
 

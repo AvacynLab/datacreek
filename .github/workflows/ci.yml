@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e . fakeredis flask flask-wtf flask-login wtforms pre-commit pytest
+      - run: pip install -r requirements.txt fakeredis flask flask-wtf flask-login wtforms pre-commit pytest
       - id: diff
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then

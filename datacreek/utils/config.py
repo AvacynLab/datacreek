@@ -20,20 +20,20 @@ from datacreek.config_models import (
     VLLMSettings,
 )
 
-# Default config location relative to the package (original)
+# Default config location relative to the project root
 ORIGINAL_CONFIG_PATH = os.path.abspath(
     os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "configs", "config.yaml"
     )
 )
 
-# Add fallback location inside the package (recommended for installed packages)
-PACKAGE_CONFIG_PATH = os.path.abspath(
+# Fallback path within the source tree for bundled deployments
+SOURCE_CONFIG_PATH = os.path.abspath(
     os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
 )
 
-# Use internal package path as default
-DEFAULT_CONFIG_PATH = PACKAGE_CONFIG_PATH
+# Use the bundled path as default
+DEFAULT_CONFIG_PATH = SOURCE_CONFIG_PATH
 # Environment variable pointing to a config file location
 CONFIG_PATH_ENV = "DATACREEK_CONFIG"
 
@@ -51,7 +51,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     if config_path is None:
         # Try each path in order until one exists
-        for path in [PACKAGE_CONFIG_PATH, ORIGINAL_CONFIG_PATH]:
+        for path in [SOURCE_CONFIG_PATH, ORIGINAL_CONFIG_PATH]:
             if os.path.exists(path):
                 config_path = path
                 break

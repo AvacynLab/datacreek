@@ -12,7 +12,7 @@ Fine-Tuning Large Language Models is easy. There are many mature tools that you 
 
 ### Why target data preparation?
 
-Multiple tools support standardized formats. However, most of the times your dataset is not structured in "user", "assistant" threads or in a certain format that plays well with a fine-tuning packages. 
+Multiple tools support standardized formats. However, most of the time your dataset is not structured in "user", "assistant" threads or in a format that plays well with typical fine-tuning tools.
 
 This toolkit simplifies the journey of:
 
@@ -179,33 +179,23 @@ operations are asynchronous and keyed by users:
 
 ### Installation
 
-#### From PyPI
+Create a dedicated environment and install the project dependencies:
 
 ```bash
-# Create a new environment
-
-conda create -n synthetic-data python=3.10 
-
+conda create -n synthetic-data python=3.10
 conda activate synthetic-data
-
-pip install datacreek
+git clone https://github.com/meta-llama/datacreek.git
+cd datacreek
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 Optional helpers such as quantity normalization during text cleanup require
-additional packages:
+additional dependencies:
 
 ```bash
 pip install quantulum3 pint
-```
-
-#### (Alternatively) From Source
-
-```bash
-git clone https://github.com/meta-llama/datacreek.git
-cd datacreek
-pip install -e .
-pip install pre-commit
-pre-commit install
 ```
 
 ### 1. Tool Setup
@@ -263,15 +253,15 @@ setup, test runs) and is not intended for dataset generation.
 
 ### Development build
 
-The stack can be used directly from source when hacking on the project. Install
-the Python package in editable mode and set up pre-commit hooks:
+Use the source tree directly when hacking on the project. Install the
+dependencies from `requirements.txt`:
 
 ```bash
 git clone https://github.com/meta-llama/datacreek.git
 cd datacreek
-pip install -e .
-pip install pre-commit
-pre-commit install
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 The front-end lives in `frontend` and can be started separately for a faster
@@ -599,6 +589,10 @@ fact_id = ds.get_facts_for_chunk("c1")[0]
 print(ds.get_documents_for_fact(fact_id))  # ["doc1"]
 print(ds.find_conflicting_facts())  # check for conflicting information
 
+# Hyperbolic reasoning utilities
+print(ds.hyperbolic_neighbors("c1"))
+print(ds.hyperbolic_reasoning("c1", "c5"))
+
 # After ingestion you can further enrich the graph:
 ds.consolidate_schema()        # normalize labels
 ds.detect_communities()        # cluster chunks
@@ -839,12 +833,16 @@ records.
    the knowledge graph using shortest paths to assign a confidence score.
 6. **Diversification** – `select_diverse_nodes()` picks nodes that maximize the
    `diversification_score()` ensuring coverage of new graph regions.
-7. **Prompt export & coverage** – `export_prompts()` attaches a MD5
+7. **Fractal metrics** – `embedding_box_counting_dimension()` and
+   `dimension_distortion()` measure how well the hyperbolic embeddings
+   capture the topology. Use them with a list of radii to monitor
+   geometry drift.
+8. **Prompt export & coverage** – `export_prompts()` attaches a MD5
    `signature_hash` of the topological signature and a `prompt_hash` so
    duplicates can be detected. Edge traversal is recorded so
    `coverage_stats()` can report how much of the graph has been explored. User
    feedback is stored via `record_feedback()` for continuous improvements.
-8. **LLM service connectors** – `LLMService` centralizes OpenAI/vLLM access and
+9. **LLM service connectors** – `LLMService` centralizes OpenAI/vLLM access and
    provides synchronous and asynchronous batch completions.
 
 ## License

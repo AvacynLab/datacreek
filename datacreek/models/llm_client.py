@@ -34,7 +34,7 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
     logger.warning(
-        "OpenAI package not installed. To use API endpoint provider, install with 'pip install openai>=1.0.0'"
+        "OpenAI library not installed. To use API endpoint provider, install with 'pip install openai>=1.0.0'"
     )
 
 
@@ -82,7 +82,7 @@ class LLMClient:
         if self.provider == "api-endpoint":
             if not OPENAI_AVAILABLE:
                 raise ImportError(
-                    "OpenAI package is not installed. Install with 'pip install openai>=1.0.0'"
+                    "OpenAI library is not installed. Install with 'pip install openai>=1.0.0'"
                 )
 
             # Load API endpoint configuration and apply profile overrides
@@ -626,7 +626,7 @@ class LLMClient:
             from openai import AsyncOpenAI
         except ImportError:
             raise ImportError(
-                "The 'openai' package is required for this functionality. Please install it using 'pip install openai>=1.0.0'."
+                "The 'openai' library is required for this functionality. Please install it using 'pip install openai>=1.0.0'."
             )
 
         # Initialize the async OpenAI client
@@ -828,7 +828,7 @@ class LLMClient:
                 import asyncio
             except ImportError:
                 raise ImportError(
-                    "The 'asyncio' package is required for batch processing. Please ensure you're using Python 3.7+."
+                    "The 'asyncio' library is required for batch processing. Please ensure you're using Python 3.7+."
                 )
 
             # Define async batch processing function

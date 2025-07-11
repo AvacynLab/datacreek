@@ -704,7 +704,18 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Return the multi-view similarity between two nodes.
+        """Return the multi-view similarity between ``src`` and ``tgt``.
+
+        The score mixes cosine similarity in Node2Vec space, Poincar\xe9
+        distance and GraphWave similarity. It is computed as
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta) (1 - \cos(\text{gw}))
+
+        where :math:`d_{\mathbb{B}}` is the Poincar\xe9 distance. ``gamma`` and
+        ``eta`` control the influence of the Node2Vec and Poincar\xe9 terms.
 
         Parameters
         ----------
@@ -775,11 +786,19 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Return top ``k`` nodes by hybrid score using an ANN pre-filter.
+        """Return top ``k`` nodes by the multi-view similarity.
 
-        The FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates
-        which are then ranked with :func:`hybrid_score` against the provided
-        query vectors.
+        A FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates.
+        Each candidate is then scored via
+
+        .. math::
+
+            S = \gamma \cos(\text{n2v}) + \eta (1 - d_{\mathbb{B}}) +
+            (1-\gamma-\eta)(1 - \cos(\text{gw}))
+
+        where the query vectors (``q_n2v``, ``q_gw``, ``q_hyp``) are compared to
+        the stored embeddings. ``gamma`` and ``eta`` control the contribution of
+        the Euclidean and hyperbolic terms.
         """
 
         if self.faiss_index is None:
@@ -812,7 +831,26 @@ class KnowledgeGraph:
         k: int = 5,
         node_type: str = "chunk",
     ) -> List[Dict[str, Any]]:
-        """Return Cypher query results seeded by ANN search."""
+        """Return Cypher query results seeded by ANN search.
+
+        Parameters
+        ----------
+        driver:
+            Neo4j driver used to execute the query.
+        query:
+            Text input searched via the FAISS index.
+        cypher:
+            Cypher statement expecting an ``ids`` parameter.
+        k:
+            Number of ANN candidates fetched from ``query``.
+        node_type:
+            Restrict matches to nodes with this ``type``.
+
+        The query text ``query`` is first used to retrieve up to ``k`` node
+        identifiers via :meth:`search_embeddings`. Those identifiers are passed
+        as ``ids`` to the provided Cypher statement, allowing complex graph
+        queries on a narrow candidate set.
+        """
 
         ids = self.search_embeddings(query, k=k, fetch_neighbors=False, node_type=node_type)
 
@@ -1729,7 +1767,9 @@ class KnowledgeGraph:
         try:
             from node2vec import Node2Vec
         except Exception as e:  # pragma: no cover - dependency missing
-            raise RuntimeError("node2vec package is required") from e
+            raise RuntimeError(
+                "node2vec library is required"
+            ) from e
 
         n2v = Node2Vec(
             self.graph,
@@ -1767,7 +1807,7 @@ class KnowledgeGraph:
         """
 
         if GraphDatabase is None:
-            raise RuntimeError("neo4j package is required")
+            raise RuntimeError("neo4j library is required")
 
         ds = dataset or "kg_n2v_temp"
         self.to_neo4j(driver, dataset=ds, clear=True)
@@ -3226,7 +3266,19 @@ class KnowledgeGraph:
         return chosen
 
     def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
-        """Return ``k`` nearest neighbors in hyperbolic space."""
+        """Return ``k`` nearest neighbors using the Poincar\xe9 distance.
+
+        The neighbors are ranked by :math:`d_{\mathbb{B}}(u,v)` between the
+        query embedding ``node_id`` and every other node with a
+        ``hyperbolic_embedding`` attribute.
+
+        Parameters
+        ----------
+        node_id:
+            Identifier of the query node.
+        k:
+            Number of closest nodes to return.
+        """
 
         if not self.graph.has_node(node_id):
             raise ValueError(f"Unknown node: {node_id}")
@@ -3245,7 +3297,12 @@ class KnowledgeGraph:
         return [(str(n), float(d)) for n, d in neighs]
 
     def hyperbolic_reasoning(self, start: str, goal: str, *, max_steps: int = 5) -> List[str]:
-        """Return a greedy path from ``start`` to ``goal`` in hyperbolic space."""
+        """Return a greedy path from ``start`` to ``goal`` using hyperbolic distance.
+
+        At each step the neighbor minimizing :math:`d_{\mathbb{B}}` to the goal
+        is selected until the path length reaches ``max_steps`` or the goal is
+        found.
+        """
 
         emb = {
             n: self.graph.nodes[n]["hyperbolic_embedding"]
@@ -3265,7 +3322,12 @@ class KnowledgeGraph:
         penalty: float = 1.0,
         max_steps: int = 5,
     ) -> List[str]:
-        """Return a greedy path using hyperedge embeddings."""
+        """Return a greedy path using hyperedge embeddings.
+
+        The search expands through hyperedges weighted by ``penalty`` to
+        discourage long hops. Distances are measured in the Poincar\xe9 ball and
+        the path stops when ``goal`` is reached or ``max_steps`` is exceeded.
+        """
 
         emb = {
             n: self.graph.nodes[n]["hyperbolic_embedding"]
@@ -3330,7 +3392,13 @@ class KnowledgeGraph:
         weights: Optional[Dict[float, float]] = None,
         max_steps: int = 5,
     ) -> List[str]:
-        """Return a greedy path mixing several curvature embeddings."""
+        """Return a greedy path mixing several curvature embeddings.
+
+        Embeddings for each curvature in ``curvatures`` are loaded from node
+        attributes named ``hyperbolic_embedding_{c}``. Optionally ``weights``
+        can adjust the influence of each curvature when ranking neighbors.
+        The path search stops when ``goal`` is reached or ``max_steps`` is hit.
+        """
 
         embeddings: Dict[float, Dict[str, Iterable[float]]] = {}
         for c in curvatures:
@@ -3355,7 +3423,31 @@ class KnowledgeGraph:
         return [str(n) for n in path]
 
     def dimension_distortion(self, radii: Iterable[int]) -> float:
-        """Return difference between graph and embedding fractal dimensions."""
+        """Return difference between graph and embedding fractal dimensions.
+
+        The fractal dimension of the graph is estimated with
+        :func:`box_counting_dimension`. The dimension of the hyperbolic
+        embeddings stored under ``poincare_embedding`` is computed with
+        :func:`embedding_box_counting_dimension`. The distortion is the absolute
+        difference
+
+        .. math::
+
+            |D_{\text{graph}} - D_{\text{emb}}|
+
+        where ``D_{\text{graph}}`` is the dimension of the original graph and
+        ``D_{\text{emb}}`` the dimension of the embedding space.
+
+        Parameters
+        ----------
+        radii:
+            Iterable of ball radii used for the box counting.
+
+        Returns
+        -------
+        float
+            Absolute difference between the two dimensions.
+        """
 
         graph_dim, _ = self.box_counting_dimension(radii)
         coords = {

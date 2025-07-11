@@ -1,0 +1,35 @@
+# Datacreek runtime dependencies
+# Derived from the removed pyproject.toml
+datasets>=2.14.0
+pdfminer-six>=20221105
+pydantic>=2.4.0
+python-docx>=0.8.11
+python-pptx>=0.6.21
+pytube>=15.0.0
+pyyaml>=6.0
+requests>=2.31.0
+rich>=13.4.2
+typer>=0.9.0
+openai>=1.0.0
+fastapi>=0.111.0
+uvicorn>=0.27.0
+networkx>=3.0
+celery>=5.3.6
+SQLAlchemy>=2.0
+scikit-learn>=1.7.0
+redis>=5.0.0
+neo4j>=5.17.0
+flask>=3.1.0
+flask-login>=0.6.3
+flask-wtf>=1.2.0
+wtforms>=3.0
+unstructured>=0.18.1
+SpeechRecognition>=3.14.0
+pocketsphinx>=5.0
+openai-whisper>=20231117
+node2vec>=0.4.6
+gensim>=4.3.0
+gudhi>=3.9.0
+fakeredis>=2.30.0
+beautifulsoup4>=4.12.2
+jsonschema>=4.0.0
