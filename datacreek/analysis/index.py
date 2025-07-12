@@ -12,8 +12,8 @@ except Exception:  # pragma: no cover - optional dependency
     np = None  # type: ignore
     faiss = None  # type: ignore
 
-from .multiview import hybrid_score
 from .monitoring import update_metric
+from .multiview import hybrid_score
 
 
 def search_with_fallback(
@@ -77,7 +77,9 @@ def recall10(
             hyp_u = data.get("poincare_embedding")
             if n2v_u is None or gw_u is None or hyp_u is None:
                 continue
-            s = hybrid_score(n2v_u, n2v_q, gw_u, gw_q, hyp_u, hyp_q, gamma=gamma, eta=eta)
+            s = hybrid_score(
+                n2v_u, n2v_q, gw_u, gw_q, hyp_u, hyp_q, gamma=gamma, eta=eta
+            )
             scores.append((u, s))
 
         scores.sort(key=lambda x: x[1], reverse=True)

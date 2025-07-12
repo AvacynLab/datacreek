@@ -5097,16 +5097,20 @@ class KnowledgeGraph:
                     **params,
                 )
             )
-            att_values = [rec.get("attention") for rec in edge_records if rec.get("attention") is not None]
+            att_values = [
+                rec.get("attention")
+                for rec in edge_records
+                if rec.get("attention") is not None
+            ]
             median_att = float(np.median(att_values)) if att_values else 0.0
             for rec in edge_records:
                 s = rec["src"]
                 t = rec["tgt"]
                 att = rec.get("attention", 0.0)
                 if (
-                    (tri_map.get(s, 0) < triangle_threshold or tri_map.get(t, 0) < triangle_threshold)
-                    and att < median_att
-                ):
+                    tri_map.get(s, 0) < triangle_threshold
+                    or tri_map.get(t, 0) < triangle_threshold
+                ) and att < median_att:
                     session.run(
                         "MATCH (a)-[r]->(b) WHERE id(a)=$s AND id(b)=$t DELETE r",
                         s=s,

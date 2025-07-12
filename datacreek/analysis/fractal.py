@@ -1,7 +1,7 @@
 import logging
 import math
 import random
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 try:  # optional dependency
     import gudhi as gd
@@ -1468,9 +1468,11 @@ def inject_graphrnn_subgraph(
 
         _ = GraphRNN  # only to check import success
         from .generation import generate_graph_rnn_stateful as _gen
+
         motif = _gen(num_nodes, num_edges)
     except Exception:
         from .generation import generate_graph_rnn_like as _gen
+
         motif = _gen(num_nodes, num_edges)
 
     base = max(graph.nodes, default=-1) + 1

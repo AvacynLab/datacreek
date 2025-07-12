@@ -1,7 +1,6 @@
+import math
 import os
 import sys
-
-import math
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -161,7 +160,8 @@ def test_persistence_wasserstein_distance():
     g2 = nx.cycle_graph(4)
     if (
         persistence_wasserstein_distance.__module__ == "datacreek.analysis.fractal"
-        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd")
+        is None
     ):
         pytest.skip("gudhi not available")
     d = persistence_wasserstein_distance(g1, g1)

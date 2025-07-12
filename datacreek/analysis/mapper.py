@@ -183,7 +183,9 @@ def cache_mapper_nerve(
     """Return cached Mapper nerve for ``graph`` or compute it."""
 
     key = f"{radius}_{_hash_graph(graph)}"
-    res = _cache_get(key, redis_client=redis_client, lmdb_path=lmdb_path, ssd_dir=ssd_dir)
+    res = _cache_get(
+        key, redis_client=redis_client, lmdb_path=lmdb_path, ssd_dir=ssd_dir
+    )
     if res is not None:
         return res
 

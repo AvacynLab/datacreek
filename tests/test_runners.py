@@ -37,7 +37,9 @@ def test_node2vec_runner_sets_var_norm(monkeypatch):
         kg.graph.nodes["b"]["embedding"] = [0.0, 1.0]
 
     monkeypatch.setattr(kg, "compute_node2vec_embeddings", fake_compute)
-    monkeypatch.setattr(runners, "load_config", lambda: {"embeddings": {"node2vec": {}}})
+    monkeypatch.setattr(
+        runners, "load_config", lambda: {"embeddings": {"node2vec": {}}}
+    )
     runner = Node2VecRunner(kg)
     runner.run()
     assert "var_norm" in kg.graph.graph

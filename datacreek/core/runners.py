@@ -91,8 +91,9 @@ class PoincareRunner:
         learning_rate: float = 0.1,
         burn_in: int = 10,
     ) -> None:
-        from ..analysis.fractal import poincare_embedding
         import numpy as np
+
+        from ..analysis.fractal import poincare_embedding
 
         emb = poincare_embedding(
             self.graph.graph.to_undirected(),
@@ -116,7 +117,12 @@ class PoincareRunner:
                 for n in self.graph.graph.nodes:
                     if "poincare_embedding" not in self.graph.graph.nodes[n]:
                         continue
-                    v = np.asarray(self.graph.graph.nodes[n]["poincare_embedding"], dtype=float) - center
+                    v = (
+                        np.asarray(
+                            self.graph.graph.nodes[n]["poincare_embedding"], dtype=float
+                        )
+                        - center
+                    )
                     norm = np.linalg.norm(v)
                     if norm >= 1.0:
                         v = v / norm * (1 - 1e-6)

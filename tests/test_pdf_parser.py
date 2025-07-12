@@ -57,15 +57,20 @@ def test_pdf_parser_fallback_ocr(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
     mod_pdf2image = types.ModuleType("pdf2image")
     mod_tesserocr = types.ModuleType("tesserocr")
+
     class API:
         def __init__(self, lang=None):
             self.lang = lang
+
         def __enter__(self):
             return self
+
         def __exit__(self, exc_type, exc, tb):
             pass
+
         def SetImage(self, img):
             self.img = img
+
         def GetUTF8Text(self):
             return "fallback"
 
@@ -85,15 +90,20 @@ def test_pdf_parser_fallback_ocr_elements(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
     mod_pdf2image = types.ModuleType("pdf2image")
     mod_tesserocr = types.ModuleType("tesserocr")
+
     class API:
         def __init__(self, lang=None):
             self.lang = lang
+
         def __enter__(self):
             return self
+
         def __exit__(self, exc_type, exc, tb):
             pass
+
         def SetImage(self, img):
             self.img = img
+
         def GetUTF8Text(self):
             return f"o_{self.img}"
 

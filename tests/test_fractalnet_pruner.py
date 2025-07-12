@@ -21,6 +21,7 @@ def eval_fn(model):
 def test_fractalnet_pruner_simple():
     pruner = FractalNetPruner(lambda_=0.03)
     pruner.model = DummyModel()
+
     def train_fn(model):
         pass
 

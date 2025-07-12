@@ -12,6 +12,7 @@ try:  # optional neo4j dependency
     from neo4j import Driver
 except Exception:  # pragma: no cover - optional
     from typing import Any
+
     Driver = Any  # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,9 @@ def bootstrap_db(graph: KnowledgeGraph, n: int = 30, ratio: float = 0.8) -> list
 
     if dims:
         mean = float(np.mean(dims))
-        sigma = float(np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1)))
+        sigma = float(
+            np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1))
+        )
     else:
         mean = sigma = 0.0
 
@@ -138,4 +141,3 @@ def bootstrap_sigma_db(
     graph.graph.graph["fractal_sigma"] = sigma
     logger.info("fractal_sigma=%.4f", sigma)
     return sigma
-

@@ -133,11 +133,16 @@ def process_file(
     content = parser.parse(file_path, **parse_kwargs)
 
     # Fallback OCR with tesserocr if unstructured extraction returned nothing
-    if isinstance(parser, PDFParser) and isinstance(content, str) and not content.strip():
+    if (
+        isinstance(parser, PDFParser)
+        and isinstance(content, str)
+        and not content.strip()
+    ):
         try:
+            from types import SimpleNamespace
+
             from pdf2image import convert_from_path
             from tesserocr import PyTessBaseAPI
-            from types import SimpleNamespace
 
             lang = cfg.get("ingest", {}).get("ocr_lang", "eng")
             images = convert_from_path(file_path)
