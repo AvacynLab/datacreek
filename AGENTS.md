@@ -242,10 +242,10 @@ Suivre scrupuleusement ce pipeline garantit :
 
 #### 1. **`datacreek/core/ingest.py`**
 
-* [ ] **Ajouter fallback OCR** pour PDF scannés
+* [x] **Ajouter fallback OCR** pour PDF scannés
 
   * utiliser `pytesseract` ; injecter texte OCR dans la partition.
-* [ ] **Externaliser les hyper-paramètres**
+* [x] **Externaliser les hyper-paramètres**
 
   * `CHUNK_SIZE`, `OVERLAP` → `configs/default.yaml` (`ingest.chunk_size`, `ingest.overlap`).
   * mettre en cache `ingest.chunk_overlap` dans métadonnées.
@@ -478,4 +478,5 @@ Suivre scrupuleusement ce pipeline garantit :
 - Imported operational memo and task list.
 - Added fallback OCR elements injection in PDFParser.parse.
 - Added unit test for OCR element parsing.
+- Installed minimal dependencies and ran targeted tests.
 
