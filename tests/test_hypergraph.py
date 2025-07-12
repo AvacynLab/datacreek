@@ -81,3 +81,5 @@ def test_hyper_adamic_adar_triangle():
     assert scores[("x", "y")] == pytest.approx(expected)
     assert scores[("x", "z")] == pytest.approx(expected)
     assert scores[("y", "z")] == pytest.approx(expected)
+    for pair in [("x", "y"), ("x", "z"), ("y", "z")]:
+        assert abs(scores[pair] - 1 / np.log(2)) < 1e-6

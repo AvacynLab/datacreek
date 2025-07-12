@@ -1529,7 +1529,7 @@ def test_autotune_step_method():
     motifs = [kg.graph.subgraph(["a0", "a1"]).copy()]
     labels = {f"a{i}": i % 2 for i in range(3)}
     state = AutoTuneState()
-    res = kg.autotune_step(labels, motifs, state)
+    res = kg.autotune_step(labels, motifs, state, penalty_cfg={"lambda_sigma": 1.0})
     assert "cost" in res
 
 

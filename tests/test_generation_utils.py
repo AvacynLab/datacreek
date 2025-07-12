@@ -1,6 +1,11 @@
 import networkx as nx
 
-from datacreek.analysis.generation import bias_reweighting, sheaf_consistency_real
+from datacreek.analysis.generation import (
+    bias_reweighting,
+    sheaf_consistency_real,
+    sheaf_score,
+    bias_wasserstein,
+)
 
 
 def test_sheaf_consistency_real_simple():
@@ -17,3 +22,21 @@ def test_bias_reweighting_adjusts(tmp_path):
     w = {"A": 1.0, "B": 1.0}
     out = bias_reweighting(neigh, global_d, w, threshold=0.0)
     assert out["B"] > w["B"]
+
+
+def test_sheaf_score_identity():
+    import numpy as np
+    Delta = np.eye(2)
+    score = sheaf_score([0.0, 0.0], Delta)
+    assert score == 1.0
+
+
+def test_bias_wasserstein_rescales():
+    import numpy as np
+    loc = np.array([[0.0], [1.0]], dtype=float)
+    glob = np.array([[0.0], [2.0]], dtype=float)
+    logits = np.array([1.0, 1.0], dtype=float)
+    scaled, W = bias_wasserstein(loc, glob, logits)
+    assert W >= 0.0
+    if W > 0.1:
+        assert np.all(scaled < logits)

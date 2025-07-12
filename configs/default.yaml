@@ -1,25 +1,27 @@
 ingest:
-  # Language codes used by tesserocr OCR fallback
+  # Language codes used by pytesseract OCR fallback
   ocr_lang: "fra+eng"
-  chunk_size: 4000
-  overlap: 200
+  chunk_size: 512
+  chunk_overlap: 64
 cleanup:
   tau: 5           # triangle threshold
   sigma: 0.95      # node similarity threshold
-  k: 2             # min component size
-  lp_sigma: 0.5    # Hyper-AA score threshold
+  k: 4             # min component size
+  lp_sigma: 0.3    # Hyper-AA score threshold
+  lp_topk: 5
+  hub_deg: 500     # hub tagging degree threshold
 tpl:
   eps_w1: 0.05     # Wasserstein-1 cutoff
-  rnn_size: 64     # GraphRNN-Lite subgraph size
+  rnn_size: 128    # GraphRNN-Lite subgraph size
 sheaf:
-  lam_thresh: 1.0  # eigenvalue threshold
+  lam_thresh: 1e-3 # eigenvalue threshold
 embeddings:
   node2vec:
     p: 1.0
     q: 2.0
-    dimension: 128
-  alpha: 0.6       # product-manifold weight
-search:
+    d: 128
+  product_alpha: 0.6
+score:
   gamma: 0.6
   eta: 0.3
 ib:
@@ -27,4 +29,10 @@ ib:
 penalty:
   lambda_sigma: 10 # fractal sigma penalty
   lambda_cov: 5    # coverage fraction penalty
-  w_rec: 1.0       # recall penalty weight
+  w_rec: 5         # recall penalty weight
+
+compression:
+  magnitude: 0.03  # pruning threshold
+
+monitor:
+  port: 8000       # Prometheus metrics port

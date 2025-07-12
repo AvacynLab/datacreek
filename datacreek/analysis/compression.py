@@ -108,17 +108,45 @@ class FractalNetPruner:
         if baseline is None:
             baseline = self._perplexity(eval_fn)
 
-        for name, param in self.model.named_parameters():
+        try:
+            import torch
+            import torch.nn as nn
+        except Exception:  # pragma: no cover - torch missing
+            torch = None  # type: ignore
+            nn = None  # type: ignore
+
+        try:
+            from ..utils.config import load_config
+
+            cfg = load_config()
+            lam = float(cfg.get("compression", {}).get("magnitude", self.lambda_))
+        except Exception:  # pragma: no cover - config missing
+            lam = self.lambda_
+
+        layers = []
+        if torch is not None and nn is not None and hasattr(self.model, "modules"):
+            for mod in self.model.modules():
+                if isinstance(mod, (nn.Linear, nn.Conv2d)):
+                    layers.append(mod)
+        if not layers and hasattr(self.model, "named_parameters"):
+            for _, param in self.model.named_parameters():
+                layers.append(param)
+        if not layers:
+            layers.append(self.model)
+
+        for layer in layers:
+            param = layer.weight if hasattr(layer, "weight") else layer
             try:
                 arr = param.detach().cpu().numpy()
-            except Exception:  # pragma: no cover - torch missing
+            except Exception:  # pragma: no cover - tensor not torch
                 arr = np.asarray(param)
-            mask = np.abs(arr) >= self.lambda_
+            mask = np.abs(arr) >= lam
             arr = arr * mask
-            if hasattr(param, "data") and not isinstance(param, np.ndarray):
-                param.data = type(param.data)(arr)
-            else:  # pragma: no cover - non-torch models
-                setattr(self.model, name, arr)
+            if torch is not None and isinstance(param, torch.Tensor):
+                param.data = torch.tensor(arr, dtype=param.data.dtype)
+            else:
+                setattr(self.model, getattr(layer, "name", "weight"), arr)
+
         if train_fn is not None:
             try:
                 train_fn(self.model)
@@ -126,4 +154,4 @@ class FractalNetPruner:
                 pass
         perplexity = self._perplexity(eval_fn)
         delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
-        return delta < 0.01, perplexity
+        return delta <= 0.01, perplexity

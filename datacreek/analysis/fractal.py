@@ -12,6 +12,13 @@ except Exception:  # pragma: no cover - optional dependency missing
 import networkx as nx
 import numpy as np
 
+try:  # optional
+    from neo4j import Driver
+except Exception:  # pragma: no cover - optional dependency missing
+    from typing import Any
+
+    Driver = Any  # type: ignore
+
 try:
     from scipy.linalg import eigh  # type: ignore
     from scipy.sparse import csgraph  # type: ignore
@@ -264,7 +271,7 @@ def graphwave_embedding(
 
 
 def chebyshev_heat_kernel(L: np.ndarray, t: float, m: int = 7) -> np.ndarray:
-    """Return Chebyshev approximation of ``exp(-t L)``.
+    """Return Chebyshev approximation of ``exp(-t L)`` using 7 terms.
 
     Parameters
     ----------
@@ -281,37 +288,35 @@ def chebyshev_heat_kernel(L: np.ndarray, t: float, m: int = 7) -> np.ndarray:
         Approximated heat kernel matrix.
     """
 
+    import numpy as np
     import numpy.linalg as nla
-    from scipy.special import iv  # modified Bessel function
+    import scipy.sparse as sp
+    from scipy.special import iv
 
-    try:  # pragma: no cover - prefer sparse eigs
+    try:  # pragma: no cover - prefer sparse eigs when available
         from scipy.sparse.linalg import eigsh
 
-        lambda_max = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
-    except Exception:  # fallback to dense
-        lambda_max = float(nla.eigvalsh(L).max())
+        lmax = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
+    except Exception:  # fallback to dense eig
+        lmax = float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
 
-    if lambda_max == 0:
-        lambda_max = 1.0
+    if lmax == 0.0:
+        lmax = 1.0
 
-    L_hat = (2.0 / lambda_max) * L - np.eye(L.shape[0])
+    n = L.shape[0]
+    L_norm = (2.0 / lmax) * L - sp.eye(n, format="csr")
+    ak = [2 * iv(k, t * lmax / 2.0) for k in range(m + 1)]
+    a0, a1 = ak[0], ak[1]
 
-    c0 = np.exp(-t * lambda_max / 2.0) * iv(0, t * lambda_max / 2.0)
-    T_prev = np.eye(L.shape[0])
-    approx = c0 * T_prev
-
-    if m >= 1:
-        c1 = 2 * np.exp(-t * lambda_max / 2.0) * (-1) ** 1 * iv(1, t * lambda_max / 2.0)
-        T_curr = L_hat
-        approx += c1 * T_curr
-
+    Tk_minus = sp.eye(n, format="csr")
+    Tk = L_norm
+    psi = a0 * Tk_minus + a1 * Tk
     for k in range(2, m + 1):
-        Tk = 2 * L_hat @ T_curr - T_prev
-        ck = 2 * np.exp(-t * lambda_max / 2.0) * (-1) ** k * iv(k, t * lambda_max / 2.0)
-        approx += ck * Tk
-        T_prev, T_curr = T_curr, Tk
+        Tk_plus = 2 * L_norm.dot(Tk) - Tk_minus
+        psi = psi + ak[k] * Tk_plus
+        Tk_minus, Tk = Tk, Tk_plus
 
-    return approx
+    return np.exp(-t * lmax / 2.0) * psi
 
 
 def graphwave_embedding_chebyshev(
@@ -1457,19 +1462,16 @@ def inject_graphrnn_subgraph(
 ) -> list[object]:
     """Inject a GraphRNN motif into ``graph`` and return created nodes.
 
-    The function attempts to create a small motif using ``GraphRNN_Lite`` if
-    available.  Because that heavy dependency may be missing during tests, a
-    lightweight NetworkX-based approximation is used as a fallback.  The created
-    nodes are appended to ``graph`` and returned as a list.
+    The routine tries to use :class:`GraphRNN_Lite` from ``torch_geometric_temporal``
+    to sample a small graph. When the dependency is missing a simple NetworkX
+    approximation is used instead.
     """
 
     try:  # pragma: no cover - optional heavy dependency
-        from torch_geometric_temporal.nn.models import GraphRNN  # type: ignore
+        from torch_geometric_temporal.nn.models import GraphRNN_Lite  # type: ignore
 
-        _ = GraphRNN  # only to check import success
-        from .generation import generate_graph_rnn_stateful as _gen
-
-        motif = _gen(num_nodes, num_edges)
+        model = GraphRNN_Lite(input_size=num_nodes, hidden_size=num_nodes)
+        motif = model.sample(num_nodes)
     except Exception:
         from .generation import generate_graph_rnn_like as _gen
 
@@ -1484,7 +1486,12 @@ def inject_graphrnn_subgraph(
 
 
 def inject_and_validate(
-    graph: nx.Graph, num_nodes: int, num_edges: int, *, rollback: bool = True
+    graph: nx.Graph,
+    num_nodes: int,
+    num_edges: int,
+    *,
+    rollback: bool = True,
+    driver: "Driver | None" = None,
 ) -> float:
     """Inject GraphRNN motif and return sheaf consistency score.
 
@@ -1502,17 +1509,36 @@ def inject_and_validate(
     nodes = inject_graphrnn_subgraph(graph, num_nodes, num_edges)
     from .sheaf import validate_section
 
+    if driver is not None and Driver is not None:
+        with driver.session() as session:
+            for n in nodes:
+                session.run("MERGE (p:RNN_PATCH {id:$id})", id=n)
+            for u, v in graph.subgraph(nodes).edges():
+                session.run(
+                    "MATCH (a:RNN_PATCH {id:$u}), (b:RNN_PATCH {id:$v}) MERGE (a)-[:RNN_EDGE]->(b)",
+                    u=u,
+                    v=v,
+                )
+
     score = validate_section(graph, nodes)
     if rollback and score < 0.8:
         graph.remove_nodes_from(nodes)
+        if driver is not None and Driver is not None:
+            with driver.session() as session:
+                session.run(
+                    "MATCH (n:RNN_PATCH) WHERE n.id IN $ids DETACH DELETE n",
+                    ids=nodes,
+                )
     return score
 
 
-def tpl_motif_injection(graph: nx.Graph, cfg: Mapping[str, Any]) -> float:
+def tpl_motif_injection(
+    graph: nx.Graph, cfg: Mapping[str, Any], driver: "Driver | None" = None
+) -> float:
     """Generate and inject a GraphRNN motif based on configuration."""
 
     size = int(cfg.get("tpl", {}).get("rnn_size", 64))
-    return inject_and_validate(graph, size, max(1, size - 1))
+    return inject_and_validate(graph, size, max(1, size - 1), driver=driver)
 
 
 def bootstrap_sigma_db(graph: nx.Graph, radii: Iterable[int]) -> float:

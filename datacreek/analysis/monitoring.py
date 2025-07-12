@@ -25,6 +25,12 @@ _METRICS = {
     "gw_entropy": None,
     "tpl_w1": None,
     "j_cost": None,
+    "autotune_cost": None,
+    # ingestion statistics
+    "atoms_total": None,
+    "avg_chunk_len": None,
+    # embedding statistics
+    "n2v_var_norm": None,
 }
 
 

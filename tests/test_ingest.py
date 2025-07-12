@@ -6,6 +6,7 @@ import pytest
 import datacreek.parsers
 from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 from datacreek.core.ingest import ingest_into_dataset, process_file
+import datacreek.analysis.monitoring
 from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
 from datacreek.utils.config import load_config
@@ -42,14 +43,14 @@ def test_chunk_overlap_metadata(tmp_path):
     text_file.write_text("Hello world")
 
     cfg = load_config()
-    cfg.setdefault("ingest", {})["overlap"] = 5
+    cfg.setdefault("ingest", {})["chunk_overlap"] = 2
     cfg["ingest"]["chunk_size"] = 5
 
     ds = DatasetBuilder(DatasetType.TEXT)
     text = ingest_file(str(text_file))
     to_kg(text, ds, "d1", config=cfg)
     cid = ds.get_chunks_for_document("d1")[0]
-    assert ds.graph.graph.nodes[cid]["overlap"] == 5
+    assert ds.graph.graph.nodes[cid]["overlap"] == 2
 
 
 def test_to_kg_with_pages(tmp_path):
@@ -254,14 +255,21 @@ def test_process_file_unstructured(monkeypatch, tmp_path):
     assert text == "ok"
 
 
-def test_ingest_logs_metrics(tmp_path, caplog):
+def test_ingest_logs_metrics(tmp_path, caplog, monkeypatch):
     f = tmp_path / "doc.txt"
     f.write_text("hello world")
 
     ds = DatasetBuilder(DatasetType.TEXT)
-    with caplog.at_level("DEBUG"):
+    calls = []
+    monkeypatch.setattr(
+        datacreek.analysis.monitoring,
+        "update_metric",
+        lambda n, v: calls.append((n, v)),
+    )
+    with caplog.at_level("INFO"):
         ingest_into_dataset(str(f), ds)
 
-    assert ds.graph.graph.get("n_atoms") == 0
-    assert ds.graph.graph.get("avg_chunk_len", 0) > 0
+    assert ds.graph.graph.graph.get("n_atoms") == 0
+    assert ds.graph.graph.graph.get("avg_chunk_len", 0) > 0
     assert any("n_atoms=" in rec.message for rec in caplog.records)
+    assert ("atoms_total", 0.0) in calls

@@ -56,28 +56,12 @@ def test_pdf_parser_fallback_ocr(monkeypatch, tmp_path):
     module.partition_pdf = lambda filename: [types.SimpleNamespace(text="")]
     monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
     mod_pdf2image = types.ModuleType("pdf2image")
-    mod_tesserocr = types.ModuleType("tesserocr")
-
-    class API:
-        def __init__(self, lang=None):
-            self.lang = lang
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            pass
-
-        def SetImage(self, img):
-            self.img = img
-
-        def GetUTF8Text(self):
-            return "fallback"
+    mod_pytesseract = types.ModuleType("pytesseract")
 
     mod_pdf2image.convert_from_path = lambda p: ["img"]
-    mod_tesserocr.PyTessBaseAPI = API
+    mod_pytesseract.image_to_string = lambda img, lang=None: "fallback"
     monkeypatch.setitem(sys.modules, "pdf2image", mod_pdf2image)
-    monkeypatch.setitem(sys.modules, "tesserocr", mod_tesserocr)
+    monkeypatch.setitem(sys.modules, "pytesseract", mod_pytesseract)
     parser = PDFParser()
     assert "fallback" in parser.parse(str(pdf))
 
@@ -89,28 +73,12 @@ def test_pdf_parser_fallback_ocr_elements(monkeypatch, tmp_path):
     module.partition_pdf = lambda filename: [types.SimpleNamespace(text="")]
     monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
     mod_pdf2image = types.ModuleType("pdf2image")
-    mod_tesserocr = types.ModuleType("tesserocr")
-
-    class API:
-        def __init__(self, lang=None):
-            self.lang = lang
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            pass
-
-        def SetImage(self, img):
-            self.img = img
-
-        def GetUTF8Text(self):
-            return f"o_{self.img}"
+    mod_pytesseract = types.ModuleType("pytesseract")
 
     mod_pdf2image.convert_from_path = lambda p: ["img1", "img2"]
-    mod_tesserocr.PyTessBaseAPI = API
+    mod_pytesseract.image_to_string = lambda img, lang=None: f"o_{img}"
     monkeypatch.setitem(sys.modules, "pdf2image", mod_pdf2image)
-    monkeypatch.setitem(sys.modules, "tesserocr", mod_tesserocr)
+    monkeypatch.setitem(sys.modules, "pytesseract", mod_pytesseract)
     parser = PDFParser()
     els = parser.parse(str(pdf), return_elements=True)
     texts = [getattr(e, "text", "") for e in els]

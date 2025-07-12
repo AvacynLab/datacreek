@@ -25,7 +25,7 @@ class Node2VecRunner:
     ) -> None:
         cfg = load_config()
         emb_cfg = cfg.get("embeddings", {}).get("node2vec", {})
-        dim_val = dimensions or int(emb_cfg.get("dimension", 128))
+        dim_val = int(dimensions or emb_cfg.get("d", 128))
         p_val = float(emb_cfg.get("p", 1.0))
         q_val = float(emb_cfg.get("q", 1.0))
         self.graph.compute_node2vec_embeddings(
@@ -40,15 +40,22 @@ class Node2VecRunner:
         try:
             import numpy as np
 
-            norms = [
-                np.linalg.norm(self.graph.graph.nodes[n]["embedding"])
+            embs = [
+                np.asarray(self.graph.graph.nodes[n]["embedding"], dtype=float)
                 for n in self.graph.graph.nodes
                 if "embedding" in self.graph.graph.nodes[n]
             ]
-            if norms:
+            if embs:
+                norms = np.linalg.norm(np.vstack(embs), axis=1)
                 var_norm = float(np.var(norms))
                 self.graph.graph.graph["var_norm"] = var_norm
                 logger.info("var_norm=%.4f", var_norm)
+                try:
+                    from datacreek.analysis.monitoring import update_metric
+
+                    update_metric("n2v_var_norm", var_norm)
+                except Exception:  # pragma: no cover - optional Prometheus
+                    pass
         except Exception:  # pragma: no cover - optional numpy
             pass
 
@@ -74,6 +81,12 @@ class GraphWaveRunner:
         gw_entropy = self.graph.graphwave_entropy()
         self.graph.graph.graph["gw_entropy"] = gw_entropy
         logger.info("gw_entropy=%.4f", gw_entropy)
+        try:
+            from datacreek.analysis.monitoring import update_metric
+
+            update_metric("gw_entropy", gw_entropy)
+        except Exception:  # pragma: no cover - optional Prometheus
+            pass
 
 
 @dataclass
@@ -105,26 +118,19 @@ class PoincareRunner:
         )
         for node, vec in emb.items():
             self.graph.graph.nodes[node]["poincare_embedding"] = vec.tolist()
-        radius = self.graph.average_hyperbolic_radius()
-        if radius > 0.9:
-            arr = [
-                np.asarray(self.graph.graph.nodes[n]["poincare_embedding"], dtype=float)
-                for n in self.graph.graph.nodes
-                if "poincare_embedding" in self.graph.graph.nodes[n]
-            ]
-            if arr:
-                center = np.mean(arr, axis=0)
-                for n in self.graph.graph.nodes:
-                    if "poincare_embedding" not in self.graph.graph.nodes[n]:
-                        continue
-                    v = (
-                        np.asarray(
-                            self.graph.graph.nodes[n]["poincare_embedding"], dtype=float
-                        )
-                        - center
-                    )
-                    norm = np.linalg.norm(v)
-                    if norm >= 1.0:
-                        v = v / norm * (1 - 1e-6)
-                    self.graph.graph.nodes[n]["poincare_embedding"] = v.tolist()
-            logger.info("recentering Poincare embeddings r_mean=%.3f", radius)
+        norms = [
+            np.linalg.norm(self.graph.graph.nodes[n]["poincare_embedding"], ord=2)
+            for n in self.graph.graph.nodes
+            if "poincare_embedding" in self.graph.graph.nodes[n]
+        ]
+        radius_mean = float(np.mean(norms)) if norms else 0.0
+        if radius_mean > 0.9:
+            for n in self.graph.graph.nodes:
+                if "poincare_embedding" not in self.graph.graph.nodes[n]:
+                    continue
+                v = np.asarray(self.graph.graph.nodes[n]["poincare_embedding"], dtype=float)
+                norm = np.linalg.norm(v) + 1e-8
+                self.graph.graph.nodes[n]["poincare_embedding"] = (
+                    0.8 / norm
+                ) * v
+            logger.info("crowding detected r_mean=%.3f, rescaled", radius_mean)

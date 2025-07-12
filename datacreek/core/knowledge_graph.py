@@ -3073,6 +3073,7 @@ class KnowledgeGraph:
         node_attr: str = "embedding",
         weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
         lr: float = 0.1,
+        penalty_cfg: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """Run one autotuning iteration on the current graph."""
 
@@ -3090,6 +3091,8 @@ class KnowledgeGraph:
             motifs,
             state,
             weights=weights,
+            recall_data=None,
+            penalty_cfg=penalty_cfg,
             lr=lr,
         )
 
@@ -4943,6 +4946,8 @@ class KnowledgeGraph:
         """
 
         lp_sigma = 0.5
+        lp_topk = 5
+        hub_deg = 500
 
         if any(
             v is None
@@ -4959,6 +4964,8 @@ class KnowledgeGraph:
             if triangle_threshold is None:
                 triangle_threshold = int(cleanup_cfg.get("tau", 1))
             lp_sigma = float(cleanup_cfg.get("lp_sigma", lp_sigma))
+            lp_topk = int(cleanup_cfg.get("lp_topk", lp_topk))
+            hub_deg = int(cleanup_cfg.get("hub_deg", hub_deg))
 
         node_query = (
             "MATCH (n"
@@ -5048,9 +5055,11 @@ class KnowledgeGraph:
                         self.graph.add_edge(u, v, relation="suggested", score=score)
 
             session.run(
-                "CALL gds.alpha.hypergraph.linkprediction.adamicAdar.write('kg_qc', "
-                "{relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}, "
-                "writeRelationshipType:'SUGGESTED_HYPER_AA'})"
+                "CALL gds.alpha.hypergraph.linkprediction.adamicAdar.write("
+                "'kg_qc', {writeRelationshipType:'SUGGESTED_HYPER_AA',"
+                " writeProperty:'score', topK:$topk,"
+                " relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}})",
+                topk=lp_topk,
             )
             session.run(
                 "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.score <= $th DELETE r",
@@ -5069,20 +5078,14 @@ class KnowledgeGraph:
                     "YIELD nodeId, triangleCount"
                 )
             )
-            deg_scores = sorted(r["score"] for r in deg_records)
-            bet_scores = sorted(r["score"] for r in bet_records)
             tri_map = {r["nodeId"]: r["triangleCount"] for r in tri_records}
             hubs: List[int] = []
-            if deg_scores:
-                thresh = deg_scores[int(0.9 * len(deg_scores))]
-                hubs.extend(r["nodeId"] for r in deg_records if r["score"] >= thresh)
-            if bet_scores:
-                thresh = bet_scores[int(0.9 * len(bet_scores))]
-                hubs.extend(
-                    r["nodeId"]
-                    for r in bet_records
-                    if r["score"] >= thresh and r["nodeId"] not in hubs
-                )
+            hubs.extend(r["nodeId"] for r in deg_records if r["score"] >= hub_deg)
+            hubs.extend(
+                r["nodeId"]
+                for r in bet_records
+                if r["score"] >= hub_deg and r["nodeId"] not in hubs
+            )
 
             weak_links: List[tuple[int, int]] = []
             triangles_removed = 0

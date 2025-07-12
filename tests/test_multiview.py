@@ -166,5 +166,5 @@ def test_cca_align_persists(tmp_path):
 
     with open(path, "rb") as f:
         w = pickle.load(f)
-    assert len(w) == 2
+    assert set(w) == {"Wn2v", "Wgw"}
     assert set(latent) == {"a", "b"}
