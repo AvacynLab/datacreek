@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Dict
 
 try:
-    from prometheus_client import CollectorRegistry, Gauge, push_to_gateway, start_http_server
+    from prometheus_client import (
+        CollectorRegistry,
+        Gauge,
+        push_to_gateway,
+        start_http_server,
+    )
 except Exception:  # pragma: no cover - optional
     CollectorRegistry = None
     Gauge = None
@@ -32,7 +37,9 @@ def start_metrics_server(port: int = 8000) -> None:
     start_http_server(port)
 
 
-def push_metrics_gateway(metrics: Dict[str, float], gateway: str = "localhost:9091") -> None:
+def push_metrics_gateway(
+    metrics: Dict[str, float], gateway: str = "localhost:9091"
+) -> None:
     """Push ``metrics`` to a Prometheus pushgateway if available."""
     if CollectorRegistry is None or Gauge is None or push_to_gateway is None:
         return

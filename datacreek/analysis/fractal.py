@@ -1,6 +1,6 @@
+import logging
 import math
 import random
-import logging
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 try:  # optional dependency
@@ -833,7 +833,9 @@ def graph_lacunarity(graph: nx.Graph, radius: int = 1) -> float:
     where :math:`M` denotes the local mass.
     """
 
-    masses = [nx.ego_graph(graph, n, radius=radius).number_of_nodes() for n in graph.nodes()]
+    masses = [
+        nx.ego_graph(graph, n, radius=radius).number_of_nodes() for n in graph.nodes()
+    ]
     if not masses:
         return 0.0
     arr = np.asarray(masses, dtype=float)
@@ -1034,7 +1036,9 @@ def poincare_embedding(
     return embeddings
 
 
-def fractalize_graph(graph: nx.Graph, radius: int) -> Tuple[nx.Graph, Dict[object, int]]:
+def fractalize_graph(
+    graph: nx.Graph, radius: int
+) -> Tuple[nx.Graph, Dict[object, int]]:
     """Return a coarse-grained graph obtained via box covering.
 
     Parameters
@@ -1126,14 +1130,21 @@ def build_fractal_hierarchy(
     for _ in range(max_levels):
         coarse, mapping, radius = fractalize_optimal(current, radii)
         levels.append((coarse, mapping, radius))
-        if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
+        if (
+            coarse.number_of_nodes() >= current.number_of_nodes()
+            or coarse.number_of_nodes() <= 1
+        ):
             break
         current = coarse
     return levels
 
 
 def build_mdl_hierarchy(
-    graph: nx.Graph, radii: Iterable[int], *, max_levels: int = 5, slope_tol: float = 0.1
+    graph: nx.Graph,
+    radii: Iterable[int],
+    *,
+    max_levels: int = 5,
+    slope_tol: float = 0.1,
 ) -> List[Tuple[nx.Graph, Dict[object, int], int]]:
     """Return a hierarchy using MDL to stop when description length grows."""
 
@@ -1157,7 +1168,10 @@ def build_mdl_hierarchy(
         radius = counts[idx][0]
         coarse, mapping = fractalize_graph(current, radius)
         levels.append((coarse, mapping, radius))
-        if coarse.number_of_nodes() >= current.number_of_nodes() or coarse.number_of_nodes() <= 1:
+        if (
+            coarse.number_of_nodes() >= current.number_of_nodes()
+            or coarse.number_of_nodes() <= 1
+        ):
             break
         target_dim = _slope(counts[: idx + 1])
         current = coarse
@@ -1440,17 +1454,22 @@ def fractalnet_compress(
     return {lvl: np.mean(vs, axis=0) for lvl, vs in groups.items() if vs}
 
 
-def inject_graphrnn_subgraph(graph: nx.Graph, num_nodes: int, num_edges: int) -> list[object]:
+def inject_graphrnn_subgraph(
+    graph: nx.Graph, num_nodes: int, num_edges: int
+) -> list[object]:
     """Inject a GraphRNN motif into ``graph`` and return created nodes."""
 
     try:  # pragma: no cover - optional heavy dependency
         from torch_geometric_temporal.nn.models import GraphRNN  # type: ignore
+
         _ = GraphRNN  # only to check import success
     except Exception:
         from .generation import generate_graph_rnn_like as _gen
+
         motif = _gen(num_nodes, num_edges)
     else:
         from .generation import generate_graph_rnn_like as _gen
+
         motif = _gen(num_nodes, num_edges)
 
     base = max(graph.nodes, default=-1) + 1
@@ -1498,7 +1517,9 @@ def bootstrap_sigma_db(graph: nx.Graph, radii: Iterable[int]) -> float:
         sigma = 0.0
     else:
         mean = float(np.mean(dims))
-        sigma = float(np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1)))
+        sigma = float(
+            np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1))
+        )
 
     graph.graph["fractal_sigma"] = sigma
     logging.getLogger(__name__).info("fractal_sigma=%.4f", sigma)

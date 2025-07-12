@@ -2,8 +2,8 @@ from __future__ import annotations
 
 """Utilities for detecting speech or writing modality."""
 
-from functools import lru_cache
 import os
+from functools import lru_cache
 from pathlib import Path
 
 _SPOKEN_MARKERS = {

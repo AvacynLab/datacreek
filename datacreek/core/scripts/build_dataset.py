@@ -1,15 +1,13 @@
 import argparse
 from pathlib import Path
+
 import networkx as nx
 
+from datacreek.analysis.autotune import AutoTuneState
+from datacreek.analysis.monitoring import push_metrics_gateway, start_metrics_server
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 from datacreek.utils.config import load_config
-from datacreek.analysis.monitoring import (
-    start_metrics_server,
-    push_metrics_gateway,
-)
-from datacreek.analysis.autotune import AutoTuneState
 
 
 def run_pipeline(input_path: str, config: str, output: str) -> None:
@@ -25,7 +23,9 @@ def run_pipeline(input_path: str, config: str, output: str) -> None:
     ds.gds_quality_check()
 
     # 4 tpl_validate -> persistance & Wasserstein (fix si besoin)
-    ds.tpl_correct_graph(ds.graph.graph, epsilon=float(cfg.get("tpl", {}).get("eps_w1", 0.05)))
+    ds.tpl_correct_graph(
+        ds.graph.graph, epsilon=float(cfg.get("tpl", {}).get("eps_w1", 0.05))
+    )
 
     # 5 fractal_dim -> d_B + σ
     ds.colour_box_dimension([1])
@@ -81,7 +81,9 @@ def run_pipeline(input_path: str, config: str, output: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run datacreek dataset pipeline")
     parser.add_argument("input", help="path to file to ingest")
-    parser.add_argument("--config", default="configs/default.yaml", help="config YAML path")
+    parser.add_argument(
+        "--config", default="configs/default.yaml", help="config YAML path"
+    )
     parser.add_argument("--output", default="dataset.out", help="output marker file")
     args = parser.parse_args()
     run_pipeline(args.input, args.config, args.output)

@@ -1,5 +1,6 @@
 import networkx as nx
-from datacreek.analysis.generation import sheaf_consistency_real, bias_reweighting
+
+from datacreek.analysis.generation import bias_reweighting, sheaf_consistency_real
 
 
 def test_sheaf_consistency_real_simple():

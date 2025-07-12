@@ -174,7 +174,9 @@ def hybrid_score(
     cos_n2v = _cos(n2v_u, n2v_q)
     cos_gw = _cos(gw_u, gw_q)
     dist_h = _poincare_dist(hyp_u, hyp_q)
-    score = gamma * cos_n2v + eta * (1.0 - dist_h) + (1.0 - gamma - eta) * (1.0 - cos_gw)
+    score = (
+        gamma * cos_n2v + eta * (1.0 - dist_h) + (1.0 - gamma - eta) * (1.0 - cos_gw)
+    )
     return float(score)
 
 

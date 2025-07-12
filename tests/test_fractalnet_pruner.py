@@ -1,5 +1,5 @@
-import pytest
 import numpy as np
+import pytest
 
 from datacreek.analysis.compression import FractalNetPruner
 
@@ -14,7 +14,7 @@ class DummyModel:
 
 def eval_fn(model):
     # simple "perplexity" surrogate as sum of squares
-    val = float(np.sum(model.w ** 2))
+    val = float(np.sum(model.w**2))
     return val
 
 

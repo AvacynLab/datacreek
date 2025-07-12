@@ -25,7 +25,9 @@ def prune_fractalnet(weights: "np.ndarray | list[float]", ratio: float = 0.5):
     """
 
     if np is None:
-        flat = [abs(x) for x in (weights if isinstance(weights, list) else list(weights))]
+        flat = [
+            abs(x) for x in (weights if isinstance(weights, list) else list(weights))
+        ]
         k = int(len(flat) * ratio)
         if k <= 0:
             return [0.0 for _ in flat]
@@ -58,10 +60,13 @@ class FractalNetPruner:
         self.lambda_ = float(lambda_)
         self.model = None
 
-    def load(self, repo: str = "facebookresearch/fractalnet", name: str = "fractalnet") -> None:
+    def load(
+        self, repo: str = "facebookresearch/fractalnet", name: str = "fractalnet"
+    ) -> None:
         """Load pretrained model from ``repo`` if possible."""
         try:  # pragma: no cover - heavy optional dependency
             import torch
+
             self.model = torch.hub.load(repo, name, source="github")
         except Exception:
             self.model = None
@@ -107,4 +112,3 @@ class FractalNetPruner:
         perplexity = self._perplexity(eval_fn)
         delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
         return delta < 0.01, perplexity
-

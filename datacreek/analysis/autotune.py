@@ -7,7 +7,11 @@ import networkx as nx
 import numpy as np
 
 from .fractal import bottleneck_distance, fractal_level_coverage
-from .information import graph_information_bottleneck, mdl_description_length, structural_entropy
+from .information import (
+    graph_information_bottleneck,
+    mdl_description_length,
+    structural_entropy,
+)
 from .multiview import hybrid_score
 
 
@@ -99,7 +103,9 @@ def recall_at_k(
             hyp_u = data.get("poincare_embedding")
             if n2v_u is None or gw_u is None or hyp_u is None:
                 continue
-            s = hybrid_score(n2v_u, n2v_q, gw_u, gw_q, hyp_u, hyp_q, gamma=gamma, eta=eta)
+            s = hybrid_score(
+                n2v_u, n2v_q, gw_u, gw_q, hyp_u, hyp_q, gamma=gamma, eta=eta
+            )
             scores.append((u, s))
 
         scores.sort(key=lambda x: x[1], reverse=True)
@@ -150,7 +156,9 @@ def autotune_step(
         1.0,
         1.0,
     ),
-    recall_data: Optional[Tuple[Sequence[object], Dict[object, Sequence[object]]]] = None,
+    recall_data: Optional[
+        Tuple[Sequence[object], Dict[object, Sequence[object]]]
+    ] = None,
     k: int = 10,
     lr: float = 0.1,
 ) -> Dict[str, Any]:
@@ -239,12 +247,16 @@ def autotune_step(
             restart_gp = True
 
     # stochastic KW gradients for tau and eps
-    grad_tau = kw_gradient(lambda t: structural_entropy(graph, int(max(1, t))), state.tau)
+    grad_tau = kw_gradient(
+        lambda t: structural_entropy(graph, int(max(1, t))), state.tau
+    )
     state.tau = max(1, int(state.tau - lr * grad_tau))
 
     if state.prev_graph is not None:
         grad_eps = kw_gradient(
-            lambda e: bottleneck_distance(state.prev_graph, graph, approx_epsilon=max(0.0, e)),
+            lambda e: bottleneck_distance(
+                state.prev_graph, graph, approx_epsilon=max(0.0, e)
+            ),
             state.eps,
             h=0.01,
         )

@@ -30,8 +30,8 @@ import networkx as nx
 import numpy as np
 
 from ..analysis.autotune import AutoTuneState
-from ..utils import push_metrics
 from ..analysis.monitoring import update_metric
+from ..utils import push_metrics
 
 if TYPE_CHECKING:
     from .ingest import IngestOptions
@@ -39,8 +39,9 @@ if TYPE_CHECKING:
 import redis
 from neo4j import Driver
 
-from ..backends import get_redis_graph
 from datacreek.utils.config import load_config
+
+from ..backends import get_redis_graph
 
 try:  # optional redisgraph dependency
     from redisgraph import Edge as RGEdge

@@ -17,7 +17,9 @@ from .generation import generate_graph_rnn_like
 from .sheaf import resolve_sheaf_obstruction
 
 
-def sinkhorn_w1(d1: np.ndarray, d2: np.ndarray, eps: float = 0.1, n_iter: int = 50) -> float:
+def sinkhorn_w1(
+    d1: np.ndarray, d2: np.ndarray, eps: float = 0.1, n_iter: int = 50
+) -> float:
     """Return Sinkhorn approximation of Wasserstein-1 between diagrams.
 
     Uses a Sinkhorn iteration with an infinity-norm cost matrix to
@@ -81,7 +83,9 @@ def tpl_correct_graph(
 
     corrected = False
     if dist_before > epsilon:
-        motif = generate_graph_rnn_like(target.number_of_nodes(), target.number_of_edges())
+        motif = generate_graph_rnn_like(
+            target.number_of_nodes(), target.number_of_edges()
+        )
         mapping = {i: n for i, n in enumerate(graph.nodes())}
         for u, v in motif.edges():
             a = mapping.get(u)

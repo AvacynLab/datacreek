@@ -1,8 +1,9 @@
 import tempfile
+
 import networkx as nx
 import pytest
 
-from datacreek.analysis.mapper import _cache_put, _cache_get
+from datacreek.analysis.mapper import _cache_get, _cache_put
 
 
 def test_hierarchical_cache_roundtrip(tmp_path):
@@ -12,8 +13,17 @@ def test_hierarchical_cache_roundtrip(tmp_path):
     cover = [{0, 1}, {1, 2}]
     lmdb_dir = tmp_path / "lmdb"
     ssd_dir = tmp_path / "ssd"
-    _cache_put("g1", g, cover, redis_client=client, lmdb_path=str(lmdb_dir), ssd_dir=str(ssd_dir))
-    res = _cache_get("g1", redis_client=client, lmdb_path=str(lmdb_dir), ssd_dir=str(ssd_dir))
+    _cache_put(
+        "g1",
+        g,
+        cover,
+        redis_client=client,
+        lmdb_path=str(lmdb_dir),
+        ssd_dir=str(ssd_dir),
+    )
+    res = _cache_get(
+        "g1", redis_client=client, lmdb_path=str(lmdb_dir), ssd_dir=str(ssd_dir)
+    )
     assert res is not None
     nerve, c = res
     assert nerve.number_of_edges() == g.number_of_edges()

@@ -13,13 +13,17 @@ def mapper_cover(graph: nx.Graph, radius: int = 1) -> List[Set[object]]:
     cover: List[Set[object]] = []
     while remaining:
         seed = remaining.pop()
-        ball = set(nx.single_source_shortest_path_length(graph, seed, cutoff=radius).keys())
+        ball = set(
+            nx.single_source_shortest_path_length(graph, seed, cutoff=radius).keys()
+        )
         cover.append(ball | {seed})
         remaining.difference_update(ball)
     return cover
 
 
-def mapper_nerve(graph: nx.Graph, radius: int = 1) -> Tuple[nx.Graph, List[Set[object]]]:
+def mapper_nerve(
+    graph: nx.Graph, radius: int = 1
+) -> Tuple[nx.Graph, List[Set[object]]]:
     """Return the Mapper nerve of ``graph`` and the covering used."""
     cover = mapper_cover(graph, radius)
     nerve = nx.Graph()
@@ -48,6 +52,7 @@ def inverse_mapper(nerve: nx.Graph, cover: Iterable[Set[object]]) -> nx.Graph:
                 if a != b:
                     g.add_edge(a, b)
     return g
+
 
 import pickle
 from pathlib import Path

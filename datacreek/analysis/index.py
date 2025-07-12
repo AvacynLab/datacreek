@@ -6,8 +6,8 @@ import time
 from typing import Iterable, Sequence, Tuple
 
 try:
-    import numpy as np
     import faiss  # type: ignore
+    import numpy as np
 except Exception:  # pragma: no cover - optional dependency
     np = None  # type: ignore
     faiss = None  # type: ignore
@@ -52,9 +52,7 @@ def recall10(
     eta: float = 0.25,
 ) -> float:
     """Compute recall@10 and store it in ``graph.graph['recall10']``."""
-    score = recall_at_k(
-        graph, list(queries), ground_truth, k=10, gamma=gamma, eta=eta
-    )
+    score = recall_at_k(graph, list(queries), ground_truth, k=10, gamma=gamma, eta=eta)
     if hasattr(graph, "graph"):
         graph.graph["recall10"] = score
     else:

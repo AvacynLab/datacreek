@@ -287,11 +287,9 @@ def __getattr__(name: str):
 
         return _sla
     if name in {"start_metrics_server", "push_metrics_gateway", "update_metric"}:
-        from .monitoring import (
-            start_metrics_server as _sms,
-            push_metrics_gateway as _pg,
-            update_metric as _um,
-        )
+        from .monitoring import push_metrics_gateway as _pg
+        from .monitoring import start_metrics_server as _sms
+        from .monitoring import update_metric as _um
 
         return {
             "start_metrics_server": _sms,

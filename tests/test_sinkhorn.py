@@ -1,5 +1,7 @@
 import networkx as nx
-from datacreek.analysis.tpl import sinkhorn_w1, _diagram
+
+from datacreek.analysis.tpl import _diagram, sinkhorn_w1
+
 
 def test_sinkhorn_zero_distance():
     g = nx.path_graph(3)

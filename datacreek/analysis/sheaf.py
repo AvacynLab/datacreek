@@ -248,7 +248,9 @@ def spectral_bound_exceeded(
         import scipy.sparse as sp  # pragma: no cover - optional
         from scipy.sparse.linalg import eigsh
 
-        vals = eigsh(sp.csr_matrix(L), k=min(k, n - 1), which="LM", return_eigenvectors=False)
+        vals = eigsh(
+            sp.csr_matrix(L), k=min(k, n - 1), which="LM", return_eigenvectors=False
+        )
     except Exception:  # fallback to dense eigendecomposition
         vals = np.linalg.eigvalsh(L)
     vals = np.sort(np.asarray(vals))

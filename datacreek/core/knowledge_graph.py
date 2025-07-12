@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
-import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -906,6 +906,7 @@ class KnowledgeGraph:
         """
 
         from ..analysis.autotune import recall_at_k as _recall
+
         score = _recall(
             self.graph,
             queries,
@@ -1938,6 +1939,7 @@ class KnowledgeGraph:
         if not feats:
             return 0.0
         from ..analysis.fractal import graphwave_entropy as _ge
+
         H = _ge(feats)
         self.graph.graph["gw_entropy"] = H
         logger = logging.getLogger(__name__)
@@ -4940,7 +4942,10 @@ class KnowledgeGraph:
             suggested links and hub nodes.
         """
 
-        if any(v is None for v in (min_component_size, similarity_threshold, triangle_threshold)):
+        if any(
+            v is None
+            for v in (min_component_size, similarity_threshold, triangle_threshold)
+        ):
             from ..utils.config import load_config
 
             cfg = load_config()

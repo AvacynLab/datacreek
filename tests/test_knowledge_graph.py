@@ -454,7 +454,9 @@ def test_entity_groups():
     kg.cluster_entities(n_clusters=1)
     kg.summarize_entity_groups()
 
-    groups = [n for n, d in kg.graph.nodes(data=True) if d.get("type") == "entity_group"]
+    groups = [
+        n for n, d in kg.graph.nodes(data=True) if d.get("type") == "entity_group"
+    ]
     assert len(groups) == 1
     gid = groups[0]
     assert "summary" in kg.graph.nodes[gid]
@@ -549,7 +551,14 @@ def test_enrich_entity_dbpedia(monkeypatch):
 
     def fake_get(url, params=None, headers=None, timeout=10):
         return FakeResponse(
-            {"results": [{"id": "http://dbpedia.org/resource/Beethoven", "description": "desc"}]}
+            {
+                "results": [
+                    {
+                        "id": "http://dbpedia.org/resource/Beethoven",
+                        "description": "desc",
+                    }
+                ]
+            }
         )
 
     monkeypatch.setattr(requests, "get", fake_get)
@@ -743,7 +752,8 @@ def test_persistence_wasserstein_distance_method():
 
     if (
         _pwd.__module__ == "datacreek.analysis.fractal"
-        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd")
+        is None
     ):
         pytest.skip("gudhi not available")
     other = nx.path_graph(1)
@@ -985,7 +995,9 @@ def test_optimize_topology_constrained_method():
     target = nx.relabel_nodes(target, mapping)
 
     before = bottleneck_distance(kg.graph.to_undirected(), target)
-    dist, diff = kg.optimize_topology_constrained(target, [1, 2], max_iter=5, seed=0, delta=1.0)
+    dist, diff = kg.optimize_topology_constrained(
+        target, [1, 2], max_iter=5, seed=0, delta=1.0
+    )
     after = bottleneck_distance(kg.graph.to_undirected(), target)
     assert after <= before
     assert dist == pytest.approx(after, rel=1e-9)
@@ -999,7 +1011,8 @@ def test_validate_topology_method():
 
     if (
         bottleneck_distance.__module__ == "datacreek.analysis.fractal"
-        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd")
+        is None
     ):
         pytest.skip("gudhi not available")
     kg = KnowledgeGraph()
@@ -1301,7 +1314,10 @@ class _DummySession:
         if "betweenness.stream" in query:
             return [{"nodeId": 0, "score": 0.8}, {"nodeId": 1, "score": 0.1}]
         if "triangleCount.stream" in query:
-            return [{"nodeId": 0, "triangleCount": 0}, {"nodeId": 1, "triangleCount": 2}]
+            return [
+                {"nodeId": 0, "triangleCount": 0},
+                {"nodeId": 1, "triangleCount": 2},
+            ]
         if "hypergraph.linkprediction" in query:
             return []
         if "MATCH (a)-[r]->(b) RETURN" in query:
@@ -1362,7 +1378,9 @@ def test_graph_information_bottleneck():
     kg.add_document("d", source="s")
     for i in range(4):
         kg.add_atom("d", f"a{i}", str(i), "text")
-    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    kg.compute_node2vec_embeddings(
+        dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0
+    )
     labels = {f"a{i}": i % 2 for i in range(4)}
     loss = kg.graph_information_bottleneck(labels, beta=0.5)
     assert loss > 0
@@ -1403,7 +1421,9 @@ def test_prototype_subgraph():
     kg.add_document("d", source="s")
     for i in range(4):
         kg.add_atom("d", f"a{i}", str(i), "text")
-    kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0)
+    kg.compute_node2vec_embeddings(
+        dimensions=2, walk_length=2, num_walks=5, workers=1, seed=0
+    )
     labels = {f"a{i}": i % 2 for i in range(4)}
     sub = kg.prototype_subgraph(labels, 1, radius=1)
     assert isinstance(sub, nx.Graph)
@@ -1459,7 +1479,9 @@ def test_hyperbolic_multi_curvature_reasoning_method():
                 "hyperbolic_embedding_-0.5": [0.05 * (ord(n) - 96), 0.01],
             },
         )
-    path = kg.hyperbolic_multi_curvature_reasoning("a", "c", curvatures=[-1, -0.5], max_steps=3)
+    path = kg.hyperbolic_multi_curvature_reasoning(
+        "a", "c", curvatures=[-1, -0.5], max_steps=3
+    )
     assert path[0] == "a" and path[-1] == "c"
 
 
@@ -1483,7 +1505,9 @@ def test_cypher_ann_query_method():
     class _Drv(_DummyDriver):
         pass
 
-    res = kg.cypher_ann_query(_Drv(), "hello", "MATCH (n) WHERE id(n) IN $ids RETURN id(n) AS id")
+    res = kg.cypher_ann_query(
+        _Drv(), "hello", "MATCH (n) WHERE id(n) IN $ids RETURN id(n) AS id"
+    )
     assert res and res[0]["id"] == 0
 
 
@@ -1568,7 +1592,9 @@ def test_mapper_cache_method(monkeypatch):
 
 def test_svgp_ei_propose_method():
     kg = KnowledgeGraph()
-    vec = kg.svgp_ei_propose([([0.0, 0.0], 1.0)], [(0.0, 1.0), (0.0, 1.0)], m=10, n_samples=20)
+    vec = kg.svgp_ei_propose(
+        [([0.0, 0.0], 1.0)], [(0.0, 1.0), (0.0, 1.0)], m=10, n_samples=20
+    )
     assert len(vec) == 2
     assert 0.0 <= vec[0] <= 1.0
 

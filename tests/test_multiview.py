@@ -1,8 +1,8 @@
 import numpy as np
 
 from datacreek.analysis import (
-    cca_align,
     aligned_cca,
+    cca_align,
     meta_autoencoder,
     multiview_contrastive_loss,
     product_embedding,
@@ -70,7 +70,8 @@ def test_train_product_manifold():
         return dh + de
 
     before = loss(
-        {k: np.array(v) for k, v in hyper.items()}, {k: np.array(v) for k, v in eucl.items()}
+        {k: np.array(v) for k, v in hyper.items()},
+        {k: np.array(v) for k, v in eucl.items()},
     )
     h_new, e_new = train_product_manifold(hyper, eucl, [("a", "b")], epochs=5, lr=0.1)
     after = loss(h_new, e_new)
@@ -131,8 +132,12 @@ def test_dataset_train_product_manifold():
     ds.add_document("d", source="s")
     ds.add_entity("e1", "A")
     ds.add_entity("e2", "B")
-    ds.graph.graph.nodes["e1"].update({"embedding": [1.0, 0.0], "poincare_embedding": [0.0, 0.5]})
-    ds.graph.graph.nodes["e2"].update({"embedding": [0.0, 1.0], "poincare_embedding": [0.5, 0.0]})
+    ds.graph.graph.nodes["e1"].update(
+        {"embedding": [1.0, 0.0], "poincare_embedding": [0.0, 0.5]}
+    )
+    ds.graph.graph.nodes["e2"].update(
+        {"embedding": [0.0, 1.0], "poincare_embedding": [0.5, 0.0]}
+    )
     before = (
         np.linalg.norm(
             np.array(ds.graph.graph.nodes["e1"]["embedding"])
@@ -149,6 +154,7 @@ def test_dataset_train_product_manifold():
         ** 2
     )
     assert after < before
+
 
 def test_cca_align_persists(tmp_path):
     n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}

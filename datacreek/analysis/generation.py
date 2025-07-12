@@ -2,9 +2,9 @@ from __future__ import annotations
 
 """Graph generation utilities."""
 
-from typing import Dict, Iterable
 import math
 import random
+from typing import Dict, Iterable
 
 import networkx as nx
 import numpy as np
@@ -244,7 +244,9 @@ def generate_netgan_like(
     return new_g
 
 
-def sheaf_consistency_real(graph: nx.Graph, b: Iterable[float], *, edge_attr: str = "sheaf_sign") -> float:
+def sheaf_consistency_real(
+    graph: nx.Graph, b: Iterable[float], *, edge_attr: str = "sheaf_sign"
+) -> float:
     """Return sheaf consistency score solving \Delta_F x = b.
 
     Parameters
@@ -262,6 +264,7 @@ def sheaf_consistency_real(graph: nx.Graph, b: Iterable[float], *, edge_attr: st
         Score ``1/(1 + ||b - \Delta x||_2)`` after a least-squares solve.
     """
     import numpy as np
+
     from .sheaf import sheaf_laplacian
 
     L = sheaf_laplacian(graph, edge_attr=edge_attr)
@@ -286,8 +289,8 @@ def bias_reweighting(
     global demographic distribution is computed. If it exceeds ``threshold`` the
     weights of under-represented groups are upweighted by 20%.
     """
-    from scipy.stats import wasserstein_distance
     import numpy as np
+    from scipy.stats import wasserstein_distance
 
     if not neighbors_demog:
         return weights

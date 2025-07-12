@@ -8,8 +8,8 @@ from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 from datacreek.core.ingest import ingest_into_dataset, process_file
 from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
-from datacreek.utils.modality import detect_modality
 from datacreek.utils.config import load_config
+from datacreek.utils.modality import detect_modality
 
 
 def test_ingest_to_kg(tmp_path):

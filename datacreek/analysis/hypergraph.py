@@ -83,9 +83,15 @@ def hyper_sagnn_head_drop_embeddings(
     feat_dim = node_features.shape[1]
     head_dim = max(1, feat_dim // num_heads)
 
-    W_q = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim))
-    W_k = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim))
-    W_v = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim))
+    W_q = rng.normal(
+        scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim)
+    )
+    W_k = rng.normal(
+        scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim)
+    )
+    W_v = rng.normal(
+        scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim)
+    )
 
     def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
         x_max = x.max(axis=axis, keepdims=True)
