@@ -2658,6 +2658,7 @@ class DatasetBuilder:
         node_attr: str = "embedding",
         weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
         lr: float = 0.1,
+        penalty_cfg: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """Wrapper for :meth:`KnowledgeGraph.autotune_step`."""
 
@@ -2668,9 +2669,11 @@ class DatasetBuilder:
             node_attr=node_attr,
             weights=weights,
             lr=lr,
+            penalty_cfg=penalty_cfg,
         )
         self.graph.graph["j_cost"] = float(res["cost"])
         update_metric("j_cost", float(res["cost"]))
+        update_metric("autotune_cost", float(res["cost"]))
         self._record_event(
             "autotuning_layer",
             "Autotuning iteration executed",

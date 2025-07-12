@@ -132,28 +132,24 @@ def process_file(
             parse_kwargs["return_elements"] = True
     content = parser.parse(file_path, **parse_kwargs)
 
-    # Fallback OCR with tesserocr if unstructured extraction returned nothing
-    if (
-        isinstance(parser, PDFParser)
-        and isinstance(content, str)
-        and not content.strip()
+    # Fallback OCR with pytesseract if unstructured extraction returned nothing
+    if isinstance(parser, PDFParser) and (
+        (isinstance(content, str) and not content.strip())
+        or (isinstance(content, list) and not content)
     ):
         try:
             from types import SimpleNamespace
 
+            import pytesseract
             from pdf2image import convert_from_path
-            from tesserocr import PyTessBaseAPI
 
             lang = cfg.get("ingest", {}).get("ocr_lang", "eng")
             images = convert_from_path(file_path)
-            ocr_texts = []
-            with PyTessBaseAPI(lang=lang) as api:
-                for img in images:
-                    api.SetImage(img)
-                    ocr_texts.append(api.GetUTF8Text())
-            content = "\n".join(ocr_texts)
+            ocr_texts = [pytesseract.image_to_string(img, lang=lang) for img in images]
             if return_elements:
                 content = [SimpleNamespace(text=t) for t in ocr_texts]
+            else:
+                content = "\n".join(ocr_texts)
         except Exception:  # pragma: no cover - optional deps may be missing
             pass
 
@@ -204,7 +200,7 @@ def to_kg(
     gen_cfg = get_generation_config(cfg)
     ingest_cfg = cfg.get("ingest", {})
     chunk_size = ingest_cfg.get("chunk_size", gen_cfg.chunk_size)
-    chunk_overlap = ingest_cfg.get("overlap", gen_cfg.overlap)
+    chunk_overlap = ingest_cfg.get("chunk_overlap", gen_cfg.overlap)
 
     cleaned_text = clean_text(text)
     cleaned_pages = [clean_text(p) for p in pages] if pages else None
@@ -436,9 +432,16 @@ def to_kg(
     chunks = dataset.get_chunks_for_document(doc_id)
     total_len = sum(len(dataset.graph.graph.nodes[c].get("text", "")) for c in chunks)
     avg_len = total_len / len(chunks) if chunks else 0.0
-    dataset.graph.graph["n_atoms"] = n_atoms
-    dataset.graph.graph["avg_chunk_len"] = avg_len
-    logger.debug("n_atoms=%d avg_chunk_len=%.2f", n_atoms, avg_len)
+    dataset.graph.graph.graph["n_atoms"] = n_atoms
+    dataset.graph.graph.graph["avg_chunk_len"] = avg_len
+    logger.info("n_atoms=%d avg_chunk_len=%.2f", n_atoms, avg_len)
+    try:
+        from datacreek.analysis.monitoring import update_metric
+
+        update_metric("atoms_total", float(n_atoms))
+        update_metric("avg_chunk_len", float(avg_len))
+    except Exception:  # pragma: no cover - optional Prometheus
+        pass
 
     if build_index:
         dataset.graph.index.build()

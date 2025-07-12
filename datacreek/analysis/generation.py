@@ -313,3 +313,40 @@ def bias_reweighting(
         if local[keys.index(k)] < global_[keys.index(k)]:
             adjusted[k] = weights.get(k, 0.0) * 1.2
     return adjusted
+
+
+def sheaf_score(b: Iterable[float], Delta) -> float:
+    """Return real sheaf consistency ``1/(1 + ||b - \Delta x||_2)``.
+
+    Parameters
+    ----------
+    b:
+        Right-hand side vector.
+    Delta:
+        Sheaf Laplacian matrix ``\Delta``.
+    """
+
+    import numpy as np
+    from scipy.sparse.linalg import cg
+
+    b_vec = np.asarray(list(b), dtype=float)
+    x, _ = cg(Delta, b_vec, atol=0.0, rtol=1e-5, maxiter=1000)
+    resid = b_vec - Delta @ x
+    return 1.0 / (1.0 + np.linalg.norm(resid))
+
+
+def bias_wasserstein(loc_hist, glob_hist, logits):
+    """Rescale ``logits`` if Wasserstein distance exceeds ``0.1``."""
+
+    import numpy as np
+    import torch
+    from geomloss import SamplesLoss
+
+    loss = SamplesLoss("sinkhorn", blur=0.01)
+    loc_t = torch.as_tensor(loc_hist, dtype=torch.float32)
+    glob_t = torch.as_tensor(glob_hist, dtype=torch.float32)
+    W = float(loss(loc_t, glob_t))
+    scaled = np.array(logits, dtype=float, copy=True)
+    if W > 0.1:
+        scaled *= 0.9
+    return scaled, W

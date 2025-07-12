@@ -8,8 +8,8 @@ from datacreek.analysis.sheaf import block_smith, validate_section
 
 
 def test_block_smith_rank():
-    L = np.array([[2, -1, 0], [-1, 2, -1], [0, -1, 2]])
-    rank = block_smith(L, block_size=2)
+    delta = np.array([[1, 0], [-1, 1], [0, -1]])
+    rank = block_smith(delta, block_size=2)
     assert isinstance(rank, int) and rank >= 0
 
 

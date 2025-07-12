@@ -118,7 +118,7 @@ def cca_align(
     gw: Dict[object, Iterable[float]],
     *,
     n_components: int = 32,
-    path: str = ".cache/cca.pkl",
+    path: str = "cache/cca.pkl",
 ) -> Dict[object, np.ndarray]:
     """Return latent vectors and persist CCA weights for inference.
 
@@ -132,7 +132,7 @@ def cca_align(
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
-        pickle.dump((cca.x_weights_, cca.y_weights_), f)
+        pickle.dump({"Wn2v": cca.x_weights_, "Wgw": cca.y_weights_}, f)
     return latent
 
 

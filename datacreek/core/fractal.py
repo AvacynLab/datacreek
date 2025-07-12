@@ -134,10 +134,20 @@ def bootstrap_sigma_db(
             )
             dim, _ = colour_box_dimension(sampled, radii)
             dims.append(dim)
+
     if not dims:
-        return 0.0
-    mean = float(np.mean(dims))
-    sigma = float(np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1)))
+        mean = sigma = 0.0
+    else:
+        mean = float(np.mean(dims))
+        sigma = float(
+            np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1))
+        )
+
+    graph.graph.graph["fractal_dim"] = mean
     graph.graph.graph["fractal_sigma"] = sigma
-    logger.info("fractal_sigma=%.4f", sigma)
+    logger.info("fractal_dim=%.4f fractal_sigma=%.4f", mean, sigma)
+    try:
+        update_metric("sigma_db", float(sigma))
+    except Exception:  # pragma: no cover - Prometheus optional
+        pass
     return sigma

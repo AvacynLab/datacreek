@@ -53,6 +53,8 @@ class AutoTuneState:
     coverage_min: float = 0.0
     prev_costs: list[float] = field(default_factory=list)
     jitter: float = 0.0
+    likelihood: Any | None = None
+    stagnation: int = 0
 
 
 def recall_at_k(
@@ -159,6 +161,7 @@ def autotune_step(
     recall_data: Optional[
         Tuple[Sequence[object], Dict[object, Sequence[object]]]
     ] = None,
+    penalty_cfg: Optional[Dict[str, float]] = None,
     k: int = 10,
     lr: float = 0.1,
 ) -> Dict[str, Any]:
@@ -189,6 +192,9 @@ def autotune_step(
     recall_data:
         Optional tuple ``(queries, ground_truth)`` for computing recall@k with
         the hybrid similarity score.
+    penalty_cfg:
+        Optional mapping with keys ``lambda_sigma``, ``lambda_cov`` and
+        ``w_rec`` controlling additional penalty terms.
     k:
         Rank cutoff used in the recall metric.
     lr:
@@ -225,26 +231,35 @@ def autotune_step(
         )
 
     sigma_db = float(graph.graph.get("fractal_sigma", 0.0))
+    lambda_sigma = weights[5]
+    lambda_cov = weights[6]
+    w_rec = weights[7]
+    if penalty_cfg is not None:
+        lambda_sigma = float(penalty_cfg.get("lambda_sigma", lambda_sigma))
+        lambda_cov = float(penalty_cfg.get("lambda_cov", lambda_cov))
+        w_rec = float(penalty_cfg.get("w_rec", w_rec))
     J = (
         weights[0] * (-H)
         + weights[1] * D
         + weights[2] * I
         + weights[3] * M
         + weights[4] * (-var_phi)
-        + weights[5] * max(0.0, sigma_db - 0.02)
-        + weights[6] * max(0.0, state.coverage_min - coverage)
-        + weights[7] * max(0.0, 0.9 - recall)
     )
+    J += lambda_sigma * max(0.0, sigma_db - 0.02)
+    J += lambda_cov * max(0.0, state.coverage_min - coverage)
+    J += w_rec * max(0.0, 0.9 - recall)
 
+    if state.prev_costs and abs(J - state.prev_costs[-1]) < 1e-3:
+        state.stagnation += 1
+    else:
+        state.stagnation = 0
     state.prev_costs.append(J)
     restart_gp = False
-    if len(state.prev_costs) > 5:
-        state.prev_costs.pop(0)
-        if max(state.prev_costs) - min(state.prev_costs) < 0.001:
-            # cost stagnates -> increase jitter and restart GP
-            state.jitter += 0.1
-            state.prev_costs.clear()
-            restart_gp = True
+    if state.stagnation >= 5:
+        if state.likelihood is not None and hasattr(state.likelihood, "noise"):
+            state.likelihood.noise += 1e-3
+        restart_gp = True
+        state.stagnation = 0
 
     # stochastic KW gradients for tau and eps
     grad_tau = kw_gradient(

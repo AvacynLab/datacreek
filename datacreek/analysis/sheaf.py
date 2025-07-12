@@ -23,6 +23,35 @@ def sheaf_laplacian(graph: nx.Graph, *, edge_attr: str = "sheaf_sign") -> np.nda
     return L
 
 
+def sheaf_incidence_matrix(
+    graph: nx.Graph, *, edge_attr: str = "sheaf_sign"
+) -> np.ndarray:
+    """Return incidence matrix ``\delta`` for ``graph``.
+
+    Parameters
+    ----------
+    graph:
+        Input graph whose edges may carry ``edge_attr`` signs.
+    edge_attr:
+        Name of the edge attribute storing restriction signs.
+
+    Returns
+    -------
+    numpy.ndarray
+        Incidence matrix with one column per (undirected) edge.
+    """
+
+    nodes = list(graph.nodes())
+    edges = list(graph.to_undirected().edges(data=True))
+    idx = {n: i for i, n in enumerate(nodes)}
+    B = np.zeros((len(nodes), len(edges)), dtype=int)
+    for j, (u, v, data) in enumerate(edges):
+        sign = int(data.get(edge_attr, 1))
+        B[idx[u], j] = 1
+        B[idx[v], j] = -sign
+    return B
+
+
 def sheaf_convolution(
     graph: nx.Graph,
     features: dict[object, np.ndarray],
@@ -180,8 +209,8 @@ def sheaf_first_cohomology_blocksmith(
     to estimate the smallest eigenvalues.
     """
 
-    L = sheaf_laplacian(graph, edge_attr=edge_attr)
-    n = L.shape[0]
+    delta = sheaf_incidence_matrix(graph, edge_attr=edge_attr)
+    n = delta.shape[0]
     if n == 0:
         return 0
 
@@ -191,21 +220,24 @@ def sheaf_first_cohomology_blocksmith(
         cfg = load_config()
         lam_thresh = float(cfg.get("sheaf", {}).get("lam_thresh", 1.0))
 
-    # early exit via spectral bound
-    if spectral_bound_exceeded(graph, 1, lam_thresh, edge_attr=edge_attr):
+    if n == 0:
         return 0
 
     if n <= block_size:
-        vals = np.linalg.eigvalsh(L)
+        Delta = delta.T @ delta
+        vals = np.linalg.eigvalsh(Delta)
+        if any(float(v) > lam_thresh for v in np.sort(np.asarray(vals))[:5]):
+            return 0
         return int(np.sum(vals < tol))
 
     try:  # pragma: no cover - optional dependency
-        inv = block_smith_invariants(L.astype(int), block_size=block_size)
-    except Exception:  # fall back to eigen decomposition
-        vals = np.linalg.eigvalsh(L)
+        return block_smith(
+            delta.astype(int), block_size=block_size, lam_thresh=lam_thresh
+        )
+    except Exception:  # fall back to dense eigendecomposition
+        Delta = delta.T @ delta
+        vals = np.linalg.eigvalsh(Delta)
         return int(np.sum(vals < tol))
-
-    return sum(1 for i in inv if i == 0)
 
 
 def sheaf_consistency_score_batched(
@@ -268,13 +300,13 @@ def spectral_bound_exceeded(
     return False
 
 
-def block_smith_invariants(laplacian: np.ndarray, block_size: int = 40000) -> list[int]:
-    """Return Smith normal form invariants using column blocks.
+def block_smith_invariants(delta: np.ndarray, block_size: int = 40000) -> list[int]:
+    """Return Smith normal form invariants using column blocks of ``delta``.
 
     Parameters
     ----------
-    laplacian:
-        Integer Laplacian matrix ``Δ`` of the sheaf.
+    delta:
+        Integer incidence matrix of the sheaf.
     block_size:
         Number of columns processed per block.
 
@@ -292,13 +324,13 @@ def block_smith_invariants(laplacian: np.ndarray, block_size: int = 40000) -> li
     except Exception as exc:  # pragma: no cover - sympy missing
         raise RuntimeError("sympy required for block_smith") from exc
 
-    m, n = laplacian.shape
+    _, n = delta.shape
     if n == 0:
         return []
 
     invariants: list[int] = []
     for start in range(0, n, block_size):
-        sub = sp.Matrix(laplacian[:, start : start + block_size])
+        sub = sp.Matrix(delta[:, start : start + block_size])
         D, _, _ = smith_normal_form(sub)
         diag = [int(D[i, i]) for i in range(min(D.shape))]
         if not invariants:
@@ -313,24 +345,53 @@ def block_smith_invariants(laplacian: np.ndarray, block_size: int = 40000) -> li
     return invariants
 
 
-def block_smith(delta: np.ndarray, block_size: int = 40000) -> int:
-    """Return the :math:`H^1` rank from a block-Smith reduction.
+def block_smith(
+    delta: np.ndarray, block_size: int = 40000, lam_thresh: float | None = None
+) -> int:
+    """Return the :math:`H^1` rank from a block-Smith reduction on ``delta``.
 
     Parameters
     ----------
     delta:
-        Integer sheaf Laplacian ``\Delta``.
+        Integer incidence matrix ``\delta`` of the sheaf.
     block_size:
         Number of columns processed per block when computing the Smith
         normal form.
+    lam_thresh:
+        Spectral shortcut threshold. If ``None`` it is read from
+        ``configs/default.yaml`` under ``sheaf.lam_thresh``.
 
     Returns
     -------
     int
-        Estimated rank of :math:`H^1`, i.e. the number of zero invariants.
+        Estimated rank of :math:`H^1`, i.e. the number of zero invariants. If
+        the spectral bound is exceeded, ``0`` is returned immediately.
     """
 
-    inv = block_smith_invariants(delta, block_size=block_size)
+    Delta = delta.T @ delta
+    if lam_thresh is None:
+        from ..utils.config import load_config
+
+        cfg = load_config()
+        lam_thresh = float(cfg.get("sheaf", {}).get("lam_thresh", 1e-3))
+
+    try:  # pragma: no cover - optional dependency
+        import scipy.sparse as sp
+        from scipy.sparse.linalg import eigsh
+
+        vals = eigsh(
+            sp.csr_matrix(Delta),
+            k=min(5, Delta.shape[0] - 1),
+            which="SM",
+            return_eigenvectors=False,
+        )
+    except Exception:  # fall back to dense eigendecomposition
+        vals = np.linalg.eigvalsh(Delta)
+
+    if any(float(v) > lam_thresh for v in np.sort(np.asarray(vals))[:5]):
+        return 0
+
+    inv = block_smith_invariants(delta.astype(int), block_size=block_size)
     return sum(1 for i in inv if i == 0)
 
 

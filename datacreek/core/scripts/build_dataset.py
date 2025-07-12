@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 import networkx as nx
@@ -12,8 +13,8 @@ from datacreek.utils.config import load_config
 
 def run_pipeline(source: str, config: str, out: str) -> None:
     """Run the standard dataset pipeline from ingestion to export."""
-    start_metrics_server()
     cfg = load_config(Path(config))
+    start_metrics_server(int(cfg.get("monitor", {}).get("port", 8000)))
     ds = DatasetBuilder(DatasetType.QA, name=Path(source).stem)
 
     # 1 ingest -> atomes/molécules
@@ -50,16 +51,19 @@ def run_pipeline(source: str, config: str, out: str) -> None:
         delta=0.05,
         p=cfg.get("embeddings", {}).get("node2vec", {}).get("p", 1.0),
         q=cfg.get("embeddings", {}).get("node2vec", {}).get("q", 1.0),
-        dim=cfg.get("embeddings", {}).get("node2vec", {}).get("dimension", 64),
+        dim=cfg.get("embeddings", {}).get("node2vec", {}).get("d", 64),
         alpha=cfg.get("embeddings", {}).get("alpha", 0.6),
         gamma=cfg.get("search", {}).get("gamma", 0.6),
         eta=cfg.get("search", {}).get("eta", 0.3),
     )
     labels = {n: 0 for n in ds.graph.graph.nodes()}
-    ds.autotune_step(labels, [], state)
+    penalty_cfg = cfg.get("penalty", {})
+    ds.autotune_step(labels, [], state, penalty_cfg=penalty_cfg)
 
     # 10 generate_llm → prompts + sheaf_check
     ds.run_generation_layer(lambda x: x, query="auto", k=1)
+    if ds.graph.sheaf_consistency_score() < 0.8:
+        sys.exit(1)
 
     # 11 compress_cache → FractalNet + Mapper cache
     ds.prune_embeddings()
@@ -84,12 +88,10 @@ def run_pipeline(source: str, config: str, out: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run datacreek dataset pipeline")
     parser.add_argument("--source", required=True, help="path to file to ingest")
-    parser.add_argument(
-        "--config", default="configs/default.yaml", help="config YAML path"
-    )
-    parser.add_argument("--out", default="dataset.out", help="output marker file")
+    parser.add_argument("--config", required=True, help="config YAML path")
+    parser.add_argument("--output", required=True, help="output marker file")
     args = parser.parse_args()
-    run_pipeline(args.source, args.config, args.out)
+    run_pipeline(args.source, args.config, args.output)
 
 
 if __name__ == "__main__":

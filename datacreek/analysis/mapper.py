@@ -75,7 +75,7 @@ def _cache_put(
     cover: Iterable[set[object]],
     *,
     redis_client: Optional["redis.Redis"] = None,
-    lmdb_path: str = "hot_subgraph",
+    lmdb_path: str = "lmdb/hot_graph.mdb",
     ssd_dir: str = "nerve_cache",
     ttl: int = 3600,
 ) -> None:
@@ -98,8 +98,8 @@ def _cache_put(
             redis_client = None
     if redis_client is not None:
         try:
-            redis_client.hset("recent_nerve", key, data)
-            redis_client.expire("recent_nerve", int(ttl))
+            redis_client.hset("nerve_hash", key, data)
+            redis_client.expire("nerve_hash", int(ttl))
         except Exception:  # pragma: no cover - network errors
             pass
     if lmdb is not None:
@@ -122,7 +122,7 @@ def _cache_get(
     key: str,
     *,
     redis_client: Optional["redis.Redis"] = None,
-    lmdb_path: str = "hot_subgraph",
+    lmdb_path: str = "lmdb/hot_graph.mdb",
     ssd_dir: str = "nerve_cache",
 ) -> Optional[tuple[nx.Graph, list[set[object]]]]:
     """Retrieve cached Mapper nerve from hierarchical caches."""
@@ -134,7 +134,7 @@ def _cache_get(
             redis_client = None
     if redis_client is not None:
         try:
-            blob = redis_client.hget("recent_nerve", key)
+            blob = redis_client.hget("nerve_hash", key)
         except Exception:
             blob = None
     if blob is None and lmdb is not None:
