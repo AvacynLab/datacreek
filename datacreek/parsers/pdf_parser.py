@@ -67,12 +67,21 @@ class PDFParser(BaseParser):
 
         if ocr:
             try:
+                from types import SimpleNamespace
+
                 import pytesseract
                 from pdf2image import convert_from_path
 
                 images = convert_from_path(file_path)
-                ocr_text = "\n".join(pytesseract.image_to_string(img) for img in images)
+                ocr_chunks = [pytesseract.image_to_string(img) for img in images]
+                ocr_text = "\n".join(ocr_chunks)
                 text += "\n" + ocr_text
+                if return_elements:
+                    # also expose OCR text as individual elements so downstream
+                    # atomisation keeps track of chunk overlap
+                    elements = elements or []
+                    for chunk in ocr_chunks:
+                        elements.append(SimpleNamespace(text=chunk))
             except ImportError as exc:
                 raise ImportError(
                     "pdf2image and pytesseract are required for OCR mode. Install them with: pip install pdf2image pytesseract"
