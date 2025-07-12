@@ -4981,13 +4981,23 @@ class KnowledgeGraph:
         )
         params = {"dataset": dataset} if dataset else {}
 
+        rel_proj = {
+            "INSIDE": {"type": "HAS_CHUNK", "orientation": "NATURAL"},
+            "NEXT": {"type": "NEXT_CHUNK", "orientation": "NATURAL"},
+            "HYPER": {
+                "type": "HYPER",
+                "orientation": "UNDIRECTED",
+                "aggregation": "MAX",
+            },
+        }
+
         with driver.session() as session:
             session.run("CALL gds.graph.drop('kg_qc', false)")
             session.run(
-                "CALL gds.graph.project.cypher('kg_qc', $nodeQuery, $relQuery, "
-                "{relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}})",
+                "CALL gds.graph.project.cypher('kg_qc', $nodeQuery, $relQuery, {relationshipProjection:$relProj})",
                 nodeQuery=node_query,
                 relQuery=rel_query,
+                relProj=rel_proj,
                 **params,
             )
 
@@ -5057,9 +5067,9 @@ class KnowledgeGraph:
             session.run(
                 "CALL gds.alpha.hypergraph.linkprediction.adamicAdar.write("
                 "'kg_qc', {writeRelationshipType:'SUGGESTED_HYPER_AA',"
-                " writeProperty:'score', topK:$topk,"
-                " relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}})",
+                " topK:$topk, writeProperty:'score', relationshipProjection:$relProj})",
                 topk=lp_topk,
+                relProj=rel_proj,
             )
             session.run(
                 "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.score <= $th DELETE r",
