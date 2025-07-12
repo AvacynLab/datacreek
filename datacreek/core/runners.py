@@ -37,6 +37,20 @@ class Node2VecRunner:
             p=p_val,
             q=q_val,
         )
+        try:
+            import numpy as np
+
+            norms = [
+                np.linalg.norm(self.graph.graph.nodes[n]["embedding"])
+                for n in self.graph.graph.nodes
+                if "embedding" in self.graph.graph.nodes[n]
+            ]
+            if norms:
+                var_norm = float(np.var(norms))
+                self.graph.graph.graph["var_norm"] = var_norm
+                logger.info("var_norm=%.4f", var_norm)
+        except Exception:  # pragma: no cover - optional numpy
+            pass
 
 
 @dataclass
@@ -58,7 +72,7 @@ class GraphWaveRunner:
             chebyshev_order=order,
         )
         gw_entropy = self.graph.graphwave_entropy()
-        self.graph.graph["gw_entropy"] = gw_entropy
+        self.graph.graph.graph["gw_entropy"] = gw_entropy
         logger.info("gw_entropy=%.4f", gw_entropy)
 
 
@@ -77,6 +91,8 @@ class PoincareRunner:
         learning_rate: float = 0.1,
         burn_in: int = 10,
     ) -> None:
+        import numpy as np
+
         from ..analysis.fractal import poincare_embedding
 
         emb = poincare_embedding(
@@ -89,3 +105,26 @@ class PoincareRunner:
         )
         for node, vec in emb.items():
             self.graph.graph.nodes[node]["poincare_embedding"] = vec.tolist()
+        radius = self.graph.average_hyperbolic_radius()
+        if radius > 0.9:
+            arr = [
+                np.asarray(self.graph.graph.nodes[n]["poincare_embedding"], dtype=float)
+                for n in self.graph.graph.nodes
+                if "poincare_embedding" in self.graph.graph.nodes[n]
+            ]
+            if arr:
+                center = np.mean(arr, axis=0)
+                for n in self.graph.graph.nodes:
+                    if "poincare_embedding" not in self.graph.graph.nodes[n]:
+                        continue
+                    v = (
+                        np.asarray(
+                            self.graph.graph.nodes[n]["poincare_embedding"], dtype=float
+                        )
+                        - center
+                    )
+                    norm = np.linalg.norm(v)
+                    if norm >= 1.0:
+                        v = v / norm * (1 - 1e-6)
+                    self.graph.graph.nodes[n]["poincare_embedding"] = v.tolist()
+            logger.info("recentering Poincare embeddings r_mean=%.3f", radius)

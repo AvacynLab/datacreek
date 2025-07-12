@@ -12,7 +12,8 @@ except Exception:  # pragma: no cover - optional dependency
     np = None  # type: ignore
     faiss = None  # type: ignore
 
-from .autotune import recall_at_k
+from .monitoring import update_metric
+from .multiview import hybrid_score
 
 
 def search_with_fallback(
@@ -51,10 +52,45 @@ def recall10(
     gamma: float = 0.5,
     eta: float = 0.25,
 ) -> float:
-    """Compute recall@10 and store it in ``graph.graph['recall10']``."""
-    score = recall_at_k(graph, list(queries), ground_truth, k=10, gamma=gamma, eta=eta)
+    """Compute recall@10 as ``hits / 10`` and push to Prometheus."""
+
+    hits = 0
+    total = 0
+    for q in queries:
+        rel = set(ground_truth.get(q, []))
+        if not rel:
+            continue
+
+        node_data = graph.nodes[q]
+        n2v_q = node_data.get("embedding")
+        gw_q = node_data.get("graphwave_embedding")
+        hyp_q = node_data.get("poincare_embedding")
+        if n2v_q is None or gw_q is None or hyp_q is None:
+            continue
+
+        scores = []
+        for u, data in graph.nodes(data=True):
+            if u == q:
+                continue
+            n2v_u = data.get("embedding")
+            gw_u = data.get("graphwave_embedding")
+            hyp_u = data.get("poincare_embedding")
+            if n2v_u is None or gw_u is None or hyp_u is None:
+                continue
+            s = hybrid_score(
+                n2v_u, n2v_q, gw_u, gw_q, hyp_u, hyp_q, gamma=gamma, eta=eta
+            )
+            scores.append((u, s))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        retrieved = [u for u, _ in scores[:10]]
+        hits += len(rel.intersection(retrieved))
+        total += 10
+
+    recall = hits / total if total else 0.0
     if hasattr(graph, "graph"):
-        graph.graph["recall10"] = score
+        graph.graph["recall10"] = recall
     else:
-        graph["recall10"] = score
-    return score
+        graph["recall10"] = recall
+    update_metric("recall10", float(recall))
+    return recall

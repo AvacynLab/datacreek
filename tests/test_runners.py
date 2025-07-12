@@ -28,6 +28,24 @@ def test_node2vec_runner_uses_config(monkeypatch):
     assert captured["dimensions"] == 16
 
 
+def test_node2vec_runner_sets_var_norm(monkeypatch):
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b")
+
+    def fake_compute(**kwargs):
+        kg.graph.nodes["a"]["embedding"] = [1.0, 0.0]
+        kg.graph.nodes["b"]["embedding"] = [0.0, 1.0]
+
+    monkeypatch.setattr(kg, "compute_node2vec_embeddings", fake_compute)
+    monkeypatch.setattr(
+        runners, "load_config", lambda: {"embeddings": {"node2vec": {}}}
+    )
+    runner = Node2VecRunner(kg)
+    runner.run()
+    assert "var_norm" in kg.graph.graph
+    assert abs(kg.graph.graph["var_norm"]) < 1e-6
+
+
 def test_graphwave_runner_sets_entropy(monkeypatch):
     kg = KnowledgeGraph()
     kg.graph.add_edge("a", "b")
@@ -35,4 +53,19 @@ def test_graphwave_runner_sets_entropy(monkeypatch):
     monkeypatch.setattr(kg, "graphwave_entropy", lambda: 0.5)
     runner = GraphWaveRunner(kg)
     runner.run([1.0])
-    assert kg.graph["gw_entropy"] == 0.5
+    assert kg.graph.graph["gw_entropy"] == 0.5
+
+
+def test_poincare_runner_recenters(monkeypatch):
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b")
+
+    import numpy as np
+
+    monkeypatch.setattr(
+        "datacreek.analysis.fractal.poincare_embedding",
+        lambda *a, **k: {"a": np.array([0.95, 0.0]), "b": np.array([0.96, 0.0])},
+    )
+    runner = runners.PoincareRunner(kg)
+    runner.run()
+    assert kg.average_hyperbolic_radius() < 0.9

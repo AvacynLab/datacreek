@@ -77,8 +77,19 @@ def _cache_put(
     redis_client: Optional["redis.Redis"] = None,
     lmdb_path: str = "hot_subgraph",
     ssd_dir: str = "nerve_cache",
+    ttl: int = 3600,
 ) -> None:
-    """Store ``nerve`` and ``cover`` in hierarchical caches."""
+    """Store ``nerve`` and ``cover`` in hierarchical caches.
+
+    Parameters
+    ----------
+    key:
+        Identifier for the cached subgraph.
+    nerve, cover:
+        Mapper nerve representation to persist.
+    ttl:
+        Time-to-live in seconds for the Redis entry. Defaults to one hour.
+    """
     data = pickle.dumps((nx.node_link_data(nerve), [list(c) for c in cover]))
     if redis_client is None and redis is not None:  # pragma: no cover - fallback
         try:
@@ -88,6 +99,7 @@ def _cache_put(
     if redis_client is not None:
         try:
             redis_client.hset("recent_nerve", key, data)
+            redis_client.expire("recent_nerve", int(ttl))
         except Exception:  # pragma: no cover - network errors
             pass
     if lmdb is not None:
@@ -144,4 +156,47 @@ def _cache_get(
     nerve_data, cover_data = pickle.loads(blob)
     nerve = nx.node_link_graph(nerve_data)
     cover = [set(c) for c in cover_data]
+    return nerve, cover
+
+
+def _hash_graph(graph: nx.Graph) -> str:
+    """Return SHA1 hash of ``graph`` structure."""
+
+    import hashlib
+
+    edges = sorted((sorted((str(u), str(v))) for u, v in graph.edges()))
+    nodes = sorted(str(n) for n in graph.nodes())
+    h = hashlib.sha1()
+    h.update(pickle.dumps((nodes, edges)))
+    return h.hexdigest()
+
+
+def cache_mapper_nerve(
+    graph: nx.Graph,
+    radius: int,
+    *,
+    redis_client: Optional["redis.Redis"] = None,
+    lmdb_path: str = "hot_subgraph",
+    ssd_dir: str = "nerve_cache",
+    ttl: int = 3600,
+) -> tuple[nx.Graph, list[set[object]]]:
+    """Return cached Mapper nerve for ``graph`` or compute it."""
+
+    key = f"{radius}_{_hash_graph(graph)}"
+    res = _cache_get(
+        key, redis_client=redis_client, lmdb_path=lmdb_path, ssd_dir=ssd_dir
+    )
+    if res is not None:
+        return res
+
+    nerve, cover = mapper_nerve(graph, radius)
+    _cache_put(
+        key,
+        nerve,
+        cover,
+        redis_client=redis_client,
+        lmdb_path=lmdb_path,
+        ssd_dir=ssd_dir,
+        ttl=ttl,
+    )
     return nerve, cover

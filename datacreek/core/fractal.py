@@ -5,14 +5,63 @@ from typing import Iterable
 import numpy as np
 
 from ..analysis.fractal import colour_box_dimension
+from ..analysis.monitoring import update_metric
 from .knowledge_graph import KnowledgeGraph
 
 try:  # optional neo4j dependency
     from neo4j import Driver
 except Exception:  # pragma: no cover - optional
-    Driver = None
+    from typing import Any
+
+    Driver = Any  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+
+def bootstrap_db(graph: KnowledgeGraph, n: int = 30, ratio: float = 0.8) -> list[float]:
+    """Return bootstrap estimates of the fractal dimension ``d_B``.
+
+    Parameters
+    ----------
+    graph:
+        KnowledgeGraph whose undirected structure is sampled.
+    n:
+        Number of bootstrap samples.
+    ratio:
+        Fraction of nodes included in each sample.
+
+    Returns
+    -------
+    list[float]
+        List of ``d_B`` estimates for each bootstrap sample. The mean of this
+        list is stored in ``graph.graph['fractal_dim']`` and the standard
+        deviation in ``graph.graph['fractal_sigma']``.
+    """
+
+    nodes = list(graph.graph.nodes())
+    dims: list[float] = []
+    for _ in range(max(1, n)):
+        sample = random.sample(nodes, max(1, int(ratio * len(nodes))))
+        sub = graph.graph.subgraph(sample)
+        dim, _ = colour_box_dimension(sub, [1, 2])
+        dims.append(dim)
+
+    if dims:
+        mean = float(np.mean(dims))
+        sigma = float(
+            np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1))
+        )
+    else:
+        mean = sigma = 0.0
+
+    graph.graph.graph["fractal_dim"] = mean
+    graph.graph.graph["fractal_sigma"] = sigma
+    logger.info("fractal_dim=%.4f fractal_sigma=%.4f", mean, sigma)
+    try:
+        update_metric("sigma_db", float(sigma))
+    except Exception:  # pragma: no cover - Prometheus optional
+        pass
+    return dims
 
 
 def bootstrap_sigma_db(

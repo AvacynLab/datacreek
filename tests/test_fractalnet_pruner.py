@@ -21,6 +21,10 @@ def eval_fn(model):
 def test_fractalnet_pruner_simple():
     pruner = FractalNetPruner(lambda_=0.03)
     pruner.model = DummyModel()
-    ok, perp = pruner.prune(eval_fn)
+
+    def train_fn(model):
+        pass
+
+    ok, perp = pruner.prune(eval_fn, train_fn)
     assert ok
     assert perp <= eval_fn(pruner.model) + 1e-9

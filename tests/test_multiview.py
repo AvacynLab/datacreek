@@ -159,8 +159,12 @@ def test_dataset_train_product_manifold():
 def test_cca_align_persists(tmp_path):
     n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
     gw = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
-    path = tmp_path / "cca"
+    path = tmp_path / "cca.pkl"
     latent = cca_align(n2v, gw, n_components=1, path=str(path))
-    assert (path.with_name("cca_Wn2v.pkl")).exists()
-    assert (path.with_name("cca_Wgw.pkl")).exists()
+    assert path.exists()
+    import pickle
+
+    with open(path, "rb") as f:
+        w = pickle.load(f)
+    assert len(w) == 2
     assert set(latent) == {"a", "b"}

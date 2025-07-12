@@ -1321,7 +1321,7 @@ class _DummySession:
         if "hypergraph.linkprediction" in query:
             return []
         if "MATCH (a)-[r]->(b) RETURN" in query:
-            return [{"src": 0, "tgt": 1}]
+            return [{"src": 0, "tgt": 1, "attention": 0.05}]
         if "id(n) IN $ids" in query:
             return [{"id": 0}]
         return []

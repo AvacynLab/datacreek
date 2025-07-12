@@ -57,7 +57,7 @@ def test_hyper_sagnn_head_drop():
 def test_hyper_adamic_adar_simple():
     edges = [["a", "b"], ["a", "c"]]
     scores = hyper_adamic_adar_scores(edges)
-    w = 1.0  # 1/(|H|-1) with |H|=2
+    w = 0.0  # log(1) -> 0, score defaults to 0
     assert scores[("a", "b")] == pytest.approx(w)
     assert scores[("a", "c")] == pytest.approx(w)
     assert ("b", "c") not in scores
@@ -77,6 +77,7 @@ def test_hyper_adamic_adar_on_graph():
 def test_hyper_adamic_adar_triangle():
     edges = [["x", "y", "z"]]
     scores = hyper_adamic_adar_scores(edges)
-    assert scores[("x", "y")] == pytest.approx(0.5)
-    assert scores[("x", "z")] == pytest.approx(0.5)
-    assert scores[("y", "z")] == pytest.approx(0.5)
+    expected = 1.0 / math.log(2)
+    assert scores[("x", "y")] == pytest.approx(expected)
+    assert scores[("x", "z")] == pytest.approx(expected)
+    assert scores[("y", "z")] == pytest.approx(expected)

@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 
@@ -15,6 +16,7 @@ from datacreek.analysis.fractal import (
     graph_fourier_transform,
     graphwave_embedding,
     graphwave_embedding_chebyshev,
+    graphwave_entropy,
     inverse_graph_fourier_transform,
     mdl_optimal_radius,
     persistence_diagrams,
@@ -158,9 +160,17 @@ def test_persistence_wasserstein_distance():
     g2 = nx.cycle_graph(4)
     if (
         persistence_wasserstein_distance.__module__ == "datacreek.analysis.fractal"
-        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd")
+        is None
     ):
         pytest.skip("gudhi not available")
     d = persistence_wasserstein_distance(g1, g1)
     assert d == pytest.approx(0.0, abs=1e-9)
     assert persistence_wasserstein_distance(g1, g2) > 0.0
+
+
+def test_graphwave_entropy_formula():
+    emb = {0: [3.0, 4.0], 1: [0.0, 1.0]}
+    val = graphwave_entropy(emb)
+    expected = -0.5 * (math.log(5.0) + math.log(1.0))
+    assert val == pytest.approx(expected)

@@ -118,17 +118,21 @@ def cca_align(
     gw: Dict[object, Iterable[float]],
     *,
     n_components: int = 32,
-    path: str = "cca_weights",
+    path: str = ".cache/cca.pkl",
 ) -> Dict[object, np.ndarray]:
-    """Return latent vectors and persist CCA weights for inference."""
+    """Return latent vectors and persist CCA weights for inference.
+
+    The matrices ``(Wn2v, Wgw)`` are pickled together at ``path`` so
+    that subsequent runs can reuse the transformation.
+    """
 
     latent, cca = aligned_cca(n2v, gw, n_components=n_components)
+    import os
     import pickle
 
-    with open(f"{path}_Wn2v.pkl", "wb") as f:
-        pickle.dump(cca.x_weights_, f)
-    with open(f"{path}_Wgw.pkl", "wb") as f:
-        pickle.dump(cca.y_weights_, f)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        pickle.dump((cca.x_weights_, cca.y_weights_), f)
     return latent
 
 

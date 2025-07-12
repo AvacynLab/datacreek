@@ -264,6 +264,8 @@ def sheaf_consistency_real(
         Score ``1/(1 + ||b - \Delta x||_2)`` after a least-squares solve.
     """
     import numpy as np
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.linalg import cg
 
     from .sheaf import sheaf_laplacian
 
@@ -271,8 +273,9 @@ def sheaf_consistency_real(
     if L.size == 0:
         return 1.0
     b_vec = np.asarray(list(b), dtype=float)
-    x, *_ = np.linalg.lstsq(L, b_vec, rcond=None)
-    resid = b_vec - L @ x
+    A = csr_matrix(L)
+    x, _ = cg(A, b_vec, atol=1e-6)
+    resid = b_vec - A @ x
     return 1.0 / (1.0 + float(np.linalg.norm(resid)))
 
 

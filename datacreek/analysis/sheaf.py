@@ -169,6 +169,7 @@ def sheaf_first_cohomology_blocksmith(
     edge_attr: str = "sheaf_sign",
     block_size: int = 40000,
     tol: float = 1e-5,
+    lam_thresh: float | None = None,
 ) -> int:
     """Approximate :math:`H^1` using a block-Smith reduction.
 
@@ -184,19 +185,27 @@ def sheaf_first_cohomology_blocksmith(
     if n == 0:
         return 0
 
+    if lam_thresh is None:
+        from ..utils.config import load_config
+
+        cfg = load_config()
+        lam_thresh = float(cfg.get("sheaf", {}).get("lam_thresh", 1.0))
+
+    # early exit via spectral bound
+    if spectral_bound_exceeded(graph, 1, lam_thresh, edge_attr=edge_attr):
+        return 0
+
     if n <= block_size:
         vals = np.linalg.eigvalsh(L)
-    else:  # use sparse approximation for the smallest eigenvalues
-        try:  # pragma: no cover - optional dependency
-            import scipy.sparse as sp
-            from scipy.sparse.linalg import eigsh
+        return int(np.sum(vals < tol))
 
-            k = min(10, n - 1)
-            vals = eigsh(sp.csr_matrix(L), k=k, which="SM", return_eigenvectors=False)
-        except Exception:  # fall back to dense computation
-            vals = np.linalg.eigvalsh(L)
+    try:  # pragma: no cover - optional dependency
+        inv = block_smith_invariants(L.astype(int), block_size=block_size)
+    except Exception:  # fall back to eigen decomposition
+        vals = np.linalg.eigvalsh(L)
+        return int(np.sum(vals < tol))
 
-    return int(np.sum(vals < tol))
+    return sum(1 for i in inv if i == 0)
 
 
 def sheaf_consistency_score_batched(
@@ -259,7 +268,7 @@ def spectral_bound_exceeded(
     return False
 
 
-def block_smith(laplacian: np.ndarray, block_size: int = 40000) -> list[int]:
+def block_smith_invariants(laplacian: np.ndarray, block_size: int = 40000) -> list[int]:
     """Return Smith normal form invariants using column blocks.
 
     Parameters
@@ -302,6 +311,27 @@ def block_smith(laplacian: np.ndarray, block_size: int = 40000) -> list[int]:
             invariants = [int(np.gcd(a, b)) for a, b in zip(invariants, diag)]
 
     return invariants
+
+
+def block_smith(delta: np.ndarray, block_size: int = 40000) -> int:
+    """Return the :math:`H^1` rank from a block-Smith reduction.
+
+    Parameters
+    ----------
+    delta:
+        Integer sheaf Laplacian ``\Delta``.
+    block_size:
+        Number of columns processed per block when computing the Smith
+        normal form.
+
+    Returns
+    -------
+    int
+        Estimated rank of :math:`H^1`, i.e. the number of zero invariants.
+    """
+
+    inv = block_smith_invariants(delta, block_size=block_size)
+    return sum(1 for i in inv if i == 0)
 
 
 def validate_section(graph: nx.Graph, nodes: Iterable) -> float:
