@@ -1,19 +1,25 @@
 import types
+
 import networkx as nx
-from datacreek.core.knowledge_graph import KnowledgeGraph
-from datacreek.core.runners import Node2VecRunner, GraphWaveRunner
 
 import datacreek.core.runners as runners
+from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.core.runners import GraphWaveRunner, Node2VecRunner
+
 
 def test_node2vec_runner_uses_config(monkeypatch):
     kg = KnowledgeGraph()
     kg.graph.add_edge("a", "b")
     captured = {}
+
     def fake_compute(**kwargs):
         captured.update(kwargs)
+
     monkeypatch.setattr(kg, "compute_node2vec_embeddings", fake_compute)
     monkeypatch.setattr(
-        runners, "load_config", lambda: {"embeddings": {"node2vec": {"p": 3.0, "q": 4.0, "dimension": 16}}}
+        runners,
+        "load_config",
+        lambda: {"embeddings": {"node2vec": {"p": 3.0, "q": 4.0, "dimension": 16}}},
     )
     runner = Node2VecRunner(kg)
     runner.run()

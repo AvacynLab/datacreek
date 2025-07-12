@@ -43,9 +43,7 @@ def bootstrap_sigma_db(
         try:
             graph.to_neo4j(driver, dataset=ds, clear=True)
             node_q = "MATCH (n {dataset:$ds}) RETURN id(n) AS id"
-            rel_q = (
-                "MATCH (n {dataset:$ds})-[r]->(m {dataset:$ds}) RETURN id(n) AS source, id(m) AS target"
-            )
+            rel_q = "MATCH (n {dataset:$ds})-[r]->(m {dataset:$ds}) RETURN id(n) AS source, id(m) AS target"
             with driver.session() as session:
                 session.run("CALL gds.graph.drop('kg_bs', false)")
                 session.run(

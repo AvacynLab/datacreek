@@ -2,8 +2,8 @@ import logging
 from dataclasses import dataclass
 from typing import Iterable
 
-from .knowledge_graph import KnowledgeGraph
 from ..utils.config import load_config
+from .knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
