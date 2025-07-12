@@ -4,20 +4,23 @@ from pathlib import Path
 import networkx as nx
 
 from datacreek.analysis.autotune import AutoTuneState
-from datacreek.analysis.monitoring import push_metrics_gateway, start_metrics_server
+from datacreek.analysis.monitoring import (
+    push_metrics_gateway,
+    start_metrics_server,
+)
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 from datacreek.utils.config import load_config
 
 
-def run_pipeline(input_path: str, config: str, output: str) -> None:
+def run_pipeline(source: str, config: str, out: str) -> None:
     """Run the standard dataset pipeline from ingestion to export."""
     start_metrics_server()
     cfg = load_config(Path(config))
-    ds = DatasetBuilder(DatasetType.QA, name=Path(input_path).stem)
+    ds = DatasetBuilder(DatasetType.QA, name=Path(source).stem)
 
     # 1 ingest -> atomes/molécules
-    ds.ingest_file(input_path, config=cfg.get("ingest", {}))
+    ds.ingest_file(source, config=cfg.get("ingest", {}))
 
     # 3 cleanup -> WCC, triangles, similarity, LP
     ds.gds_quality_check()
@@ -58,6 +61,9 @@ def run_pipeline(input_path: str, config: str, output: str) -> None:
     labels = {n: 0 for n in ds.graph.graph.nodes()}
     ds.autotune_step(labels, [], state)
 
+    # 10 generate_llm → prompts + sheaf_check
+    ds.run_generation_layer(lambda x: x, query="auto", k=1)
+
     # 11 compress_cache → FractalNet + Mapper cache
     ds.prune_embeddings()
 
@@ -75,18 +81,18 @@ def run_pipeline(input_path: str, config: str, output: str) -> None:
 
     ds.mark_exported()
     ds.save_neo4j()
-    Path(output).write_text("completed")
+    Path(out).write_text("completed")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run datacreek dataset pipeline")
-    parser.add_argument("input", help="path to file to ingest")
+    parser.add_argument("--source", required=True, help="path to file to ingest")
     parser.add_argument(
         "--config", default="configs/default.yaml", help="config YAML path"
     )
-    parser.add_argument("--output", default="dataset.out", help="output marker file")
+    parser.add_argument("--out", default="dataset.out", help="output marker file")
     args = parser.parse_args()
-    run_pipeline(args.input, args.config, args.output)
+    run_pipeline(args.source, args.config, args.out)
 
 
 if __name__ == "__main__":

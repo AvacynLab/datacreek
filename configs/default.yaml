@@ -1,23 +1,30 @@
 ingest:
+  # Language codes used by tesserocr OCR fallback
+  ocr_lang: "fra+eng"
   chunk_size: 4000
   overlap: 200
 cleanup:
-  tau: 5
-  sigma: 0.95
-  k: 2
+  tau: 5           # triangle threshold
+  sigma: 0.95      # node similarity threshold
+  k: 2             # min component size
+  lp_sigma: 0.5    # Hyper-AA score threshold
 tpl:
-  eps_w1: 0.05
+  eps_w1: 0.05     # Wasserstein-1 cutoff
+  rnn_size: 64     # GraphRNN-Lite subgraph size
+sheaf:
+  lam_thresh: 1.0  # eigenvalue threshold
 embeddings:
   node2vec:
     p: 1.0
     q: 2.0
     dimension: 128
-  alpha: 0.6
+  alpha: 0.6       # product-manifold weight
 search:
   gamma: 0.6
   eta: 0.3
 ib:
   beta: 0.01
-penalties:
-  lambda_sigma: 10
-  lambda_cov: 5
+penalty:
+  lambda_sigma: 10 # fractal sigma penalty
+  lambda_cov: 5    # coverage fraction penalty
+  w_rec: 1.0       # recall penalty weight

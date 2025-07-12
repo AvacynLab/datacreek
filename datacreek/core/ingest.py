@@ -132,8 +132,34 @@ def process_file(
             parse_kwargs["return_elements"] = True
     content = parser.parse(file_path, **parse_kwargs)
 
+    # Fallback OCR with tesserocr if unstructured extraction returned nothing
+    if isinstance(parser, PDFParser) and isinstance(content, str) and not content.strip():
+        try:
+            from pdf2image import convert_from_path
+            from tesserocr import PyTessBaseAPI
+            from types import SimpleNamespace
+
+            lang = cfg.get("ingest", {}).get("ocr_lang", "eng")
+            images = convert_from_path(file_path)
+            ocr_texts = []
+            with PyTessBaseAPI(lang=lang) as api:
+                for img in images:
+                    api.SetImage(img)
+                    ocr_texts.append(api.GetUTF8Text())
+            content = "\n".join(ocr_texts)
+            if return_elements:
+                content = [SimpleNamespace(text=t) for t in ocr_texts]
+        except Exception:  # pragma: no cover - optional deps may be missing
+            pass
+
     if return_pages and isinstance(content, tuple):
         text, pages = content
+    elif return_elements and isinstance(content, list):
+        elements = content
+        text = "\n".join(
+            getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+        )
+        pages = None
     else:
         text = content
         pages = None
@@ -400,6 +426,14 @@ def to_kg(
             )
             if progress_callback:
                 progress_callback(i + 1)
+
+    n_atoms = len(dataset.get_atoms_for_document(doc_id))
+    chunks = dataset.get_chunks_for_document(doc_id)
+    total_len = sum(len(dataset.graph.graph.nodes[c].get("text", "")) for c in chunks)
+    avg_len = total_len / len(chunks) if chunks else 0.0
+    dataset.graph.graph["n_atoms"] = n_atoms
+    dataset.graph.graph["avg_chunk_len"] = avg_len
+    logger.debug("n_atoms=%d avg_chunk_len=%.2f", n_atoms, avg_len)
 
     if build_index:
         dataset.graph.index.build()

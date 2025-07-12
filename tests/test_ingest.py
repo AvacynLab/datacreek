@@ -252,3 +252,16 @@ def test_process_file_unstructured(monkeypatch, tmp_path):
     monkeypatch.setattr(datacreek.core.ingest, "determine_parser", lambda f, c: Dummy())
     text = process_file(str(pdf), use_unstructured=True)
     assert text == "ok"
+
+
+def test_ingest_logs_metrics(tmp_path, caplog):
+    f = tmp_path / "doc.txt"
+    f.write_text("hello world")
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    with caplog.at_level("DEBUG"):
+        ingest_into_dataset(str(f), ds)
+
+    assert ds.graph.graph.get("n_atoms") == 0
+    assert ds.graph.graph.get("avg_chunk_len", 0) > 0
+    assert any("n_atoms=" in rec.message for rec in caplog.records)

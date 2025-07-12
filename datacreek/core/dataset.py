@@ -310,6 +310,7 @@ class DatasetBuilder:
             "tpl_w1": float(self.graph.graph.get("tpl_w1", 0.0)),
             "j_cost": float(self.graph.graph.get("j_cost", 0.0)),
         }
+        metrics["fractal_sigma"] = metrics["sigma_db"]
         logger.debug(
             "sigma_dB=%.4f coverage_frac=%.3f H_wave=%.4f sheaf_score=%.4f recall10=%.3f tpl_w1=%.4f j_cost=%.4f",
             metrics["sigma_db"],

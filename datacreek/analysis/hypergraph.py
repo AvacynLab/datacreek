@@ -126,9 +126,10 @@ def hyper_adamic_adar_scores(
 ) -> dict[tuple[object, object], float]:
     """Return Hyper-Adamic\N{EN DASH}Adar scores between pairs of nodes.
 
-    Each hyperedge contributes :math:`1/(|H|-1)` to every pair of
-    its incident nodes. This generalizes the classical Adamic--Adar index
-    to higher-order interactions.
+    Each hyperedge contributes :math:`1/\log(|H|-1)` to every pair of its
+    incident nodes. This generalizes the classical Adamic--Adar index
+    to higher-order interactions by penalising larger hyperedges via the
+    logarithm of their size minus one.
 
     Parameters
     ----------
@@ -148,8 +149,12 @@ def hyper_adamic_adar_scores(
         nodes = list(dict.fromkeys(edge))
         if len(nodes) < 2:
             continue
-        # Weight inversely with hyperedge size minus one
-        weight = 1.0 / max(1, len(nodes) - 1)
+        # Weight following Hyper-AA: 1 / log(|H|-1)
+        denom = max(2, len(nodes)) - 1
+        if denom <= 1:
+            weight = 0.0
+        else:
+            weight = 1.0 / math.log(denom)
         for u, v in combinations(nodes, 2):
             pair = (u, v) if u <= v else (v, u)
             scores[pair] = scores.get(pair, 0.0) + weight

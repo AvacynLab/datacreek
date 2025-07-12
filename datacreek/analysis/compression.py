@@ -75,13 +75,21 @@ class FractalNetPruner:
         """Return perplexity computed by ``eval_fn``."""
         return float(eval_fn(self.model))
 
-    def prune(self, eval_fn, *, baseline: float | None = None) -> tuple[bool, float]:
-        """Prune model weights and check perplexity variation.
+    def prune(
+        self,
+        eval_fn,
+        train_fn=None,
+        *,
+        baseline: float | None = None,
+    ) -> tuple[bool, float]:
+        """Prune model weights, fine-tune briefly and check perplexity change.
 
         Parameters
         ----------
         eval_fn:
             Callable taking the model and returning a perplexity estimate.
+        train_fn:
+            Optional callable performing a single fine-tuning epoch on the model.
         baseline:
             Optional pre-computed baseline perplexity. If ``None`` the
             perplexity is obtained via ``eval_fn`` before pruning.
@@ -100,15 +108,22 @@ class FractalNetPruner:
         if baseline is None:
             baseline = self._perplexity(eval_fn)
 
-        for _, param in self.model.named_parameters():
+        for name, param in self.model.named_parameters():
             try:
                 arr = param.detach().cpu().numpy()
             except Exception:  # pragma: no cover - torch missing
                 arr = np.asarray(param)
             mask = np.abs(arr) >= self.lambda_
             arr = arr * mask
-            if hasattr(param, "data"):
+            if hasattr(param, "data") and not isinstance(param, np.ndarray):
                 param.data = type(param.data)(arr)
+            else:  # pragma: no cover - non-torch models
+                setattr(self.model, name, arr)
+        if train_fn is not None:
+            try:
+                train_fn(self.model)
+            except Exception:  # pragma: no cover - training optional
+                pass
         perplexity = self._perplexity(eval_fn)
         delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
         return delta < 0.01, perplexity

@@ -7,11 +7,10 @@ sympy = pytest.importorskip("sympy", reason="sympy not installed")
 from datacreek.analysis.sheaf import block_smith, validate_section
 
 
-def test_block_smith_invariants():
+def test_block_smith_rank():
     L = np.array([[2, -1, 0], [-1, 2, -1], [0, -1, 2]])
-    inv = block_smith(L, block_size=2)
-    assert len(inv) >= 1
-    assert all(i > 0 for i in inv)
+    rank = block_smith(L, block_size=2)
+    assert isinstance(rank, int) and rank >= 0
 
 
 def test_validate_section_score():

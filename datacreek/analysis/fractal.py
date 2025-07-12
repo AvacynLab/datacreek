@@ -1,7 +1,7 @@
 import logging
 import math
 import random
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Mapping
 
 try:  # optional dependency
     import gudhi as gd
@@ -362,20 +362,22 @@ def graphwave_embedding_chebyshev(
 
 
 def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
-    """Return differential entropy of GraphWave ``embeddings``.
+    """Return GraphWave entropy based on embedding norms.
 
-    The vectors are assumed to follow a continuous distribution approximated
-    by a multivariate Gaussian.  The entropy then reads
+    The differential entropy used for autotuning is computed as
 
-    .. math:: H = \tfrac{1}{2}\log\bigl((2\pi e)^d \det \Sigma\bigr)
+    .. math::
 
-    where ``d`` is the embedding dimension and ``\Sigma`` the covariance
-    matrix.
+       H_{\text{wave}} = -\frac{1}{N} \sum_{u} \log \|\psi_u\|_2,
+
+    where ``N`` is the number of embeddings and ``\psi_u`` the vector for node
+    ``u``.  This avoids an expensive covariance estimate while providing a
+    stable measure of spread.
 
     Parameters
     ----------
     embeddings:
-        Mapping of nodes to their embedding vectors.
+        Mapping of nodes to embedding vectors.
 
     Returns
     -------
@@ -386,12 +388,8 @@ def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
     arr = np.vstack([np.asarray(v, dtype=float) for v in embeddings.values()])
     if arr.size == 0:
         return 0.0
-    cov = np.cov(arr, rowvar=False)
-    d = cov.shape[0]
-    sign, logdet = np.linalg.slogdet(cov + 1e-8 * np.eye(d))
-    if sign <= 0:
-        return float("nan")
-    return 0.5 * (logdet + d * math.log(2 * math.pi * math.e))
+    norms = np.linalg.norm(arr, axis=1) + 1e-12
+    return float(-np.log(norms).mean())
 
 
 def embedding_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
@@ -1457,19 +1455,22 @@ def fractalnet_compress(
 def inject_graphrnn_subgraph(
     graph: nx.Graph, num_nodes: int, num_edges: int
 ) -> list[object]:
-    """Inject a GraphRNN motif into ``graph`` and return created nodes."""
+    """Inject a GraphRNN motif into ``graph`` and return created nodes.
+
+    The function attempts to create a small motif using ``GraphRNN_Lite`` if
+    available.  Because that heavy dependency may be missing during tests, a
+    lightweight NetworkX-based approximation is used as a fallback.  The created
+    nodes are appended to ``graph`` and returned as a list.
+    """
 
     try:  # pragma: no cover - optional heavy dependency
         from torch_geometric_temporal.nn.models import GraphRNN  # type: ignore
 
         _ = GraphRNN  # only to check import success
+        from .generation import generate_graph_rnn_stateful as _gen
+        motif = _gen(num_nodes, num_edges)
     except Exception:
         from .generation import generate_graph_rnn_like as _gen
-
-        motif = _gen(num_nodes, num_edges)
-    else:
-        from .generation import generate_graph_rnn_like as _gen
-
         motif = _gen(num_nodes, num_edges)
 
     base = max(graph.nodes, default=-1) + 1
@@ -1480,13 +1481,36 @@ def inject_graphrnn_subgraph(
     return list(mapping.values())
 
 
-def inject_and_validate(graph: nx.Graph, num_nodes: int, num_edges: int) -> float:
-    """Inject GraphRNN motif and return sheaf consistency score of section."""
+def inject_and_validate(
+    graph: nx.Graph, num_nodes: int, num_edges: int, *, rollback: bool = True
+) -> float:
+    """Inject GraphRNN motif and return sheaf consistency score.
+
+    Parameters
+    ----------
+    graph:
+        Graph to augment.
+    num_nodes, num_edges:
+        Size of the motif to generate and insert.
+    rollback:
+        If ``True`` and the sheaf score is below ``0.8`` the injected nodes are
+        removed again.
+    """
 
     nodes = inject_graphrnn_subgraph(graph, num_nodes, num_edges)
     from .sheaf import validate_section
 
-    return validate_section(graph, nodes)
+    score = validate_section(graph, nodes)
+    if rollback and score < 0.8:
+        graph.remove_nodes_from(nodes)
+    return score
+
+
+def tpl_motif_injection(graph: nx.Graph, cfg: Mapping[str, Any]) -> float:
+    """Generate and inject a GraphRNN motif based on configuration."""
+
+    size = int(cfg.get("tpl", {}).get("rnn_size", 64))
+    return inject_and_validate(graph, size, max(1, size - 1))
 
 
 def bootstrap_sigma_db(graph: nx.Graph, radii: Iterable[int]) -> float:

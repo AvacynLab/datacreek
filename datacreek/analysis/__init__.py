@@ -50,6 +50,7 @@ __all__ = [
     "quotient_graph",
     "mapper_nerve",
     "inverse_mapper",
+    "bootstrap_db",
     "bootstrap_sigma_db",
     "fractal_net_prune",
     "fractalnet_compress",
@@ -65,6 +66,7 @@ __all__ = [
     "product_embedding",
     "train_product_manifold",
     "aligned_cca",
+    "cca_align",
     "hybrid_score",
     "multiview_contrastive_loss",
     "meta_autoencoder",
@@ -126,6 +128,7 @@ def __getattr__(name: str):
         "embedding_entropy",
         "embedding_box_counting_dimension",
         "colour_box_dimension",
+        "bootstrap_db",
         "bootstrap_sigma_db",
     }:
         from . import fractal as _f
@@ -162,6 +165,7 @@ def __getattr__(name: str):
         "product_embedding",
         "train_product_manifold",
         "aligned_cca",
+        "cca_align",
         "hybrid_score",
         "multiview_contrastive_loss",
         "meta_autoencoder",
@@ -171,11 +175,12 @@ def __getattr__(name: str):
         "scale_bias_wasserstein",
         "governance_metrics",
     }:
-        from . import governance as _g
         from . import multiview as _mv
 
-        if hasattr(_mv, name):
+        if name == "cca_align" or hasattr(_mv, name):
             return getattr(_mv, name)
+        from . import governance as _g
+
         return getattr(_g, name)
     if name == "tpl_correct_graph":
         from .tpl import tpl_correct_graph as _tcg

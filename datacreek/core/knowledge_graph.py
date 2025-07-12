@@ -4942,6 +4942,8 @@ class KnowledgeGraph:
             suggested links and hub nodes.
         """
 
+        lp_sigma = 0.5
+
         if any(
             v is None
             for v in (min_component_size, similarity_threshold, triangle_threshold)
@@ -4956,6 +4958,7 @@ class KnowledgeGraph:
                 similarity_threshold = float(cleanup_cfg.get("sigma", 0.95))
             if triangle_threshold is None:
                 triangle_threshold = int(cleanup_cfg.get("tau", 1))
+            lp_sigma = float(cleanup_cfg.get("lp_sigma", lp_sigma))
 
         node_query = (
             "MATCH (n"
@@ -4974,7 +4977,8 @@ class KnowledgeGraph:
         with driver.session() as session:
             session.run("CALL gds.graph.drop('kg_qc', false)")
             session.run(
-                "CALL gds.graph.project.cypher('kg_qc', $nodeQuery, $relQuery)",
+                "CALL gds.graph.project.cypher('kg_qc', $nodeQuery, $relQuery, "
+                "{relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}})",
                 nodeQuery=node_query,
                 relQuery=rel_query,
                 **params,
@@ -5048,6 +5052,10 @@ class KnowledgeGraph:
                 "{relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}, "
                 "writeRelationshipType:'SUGGESTED_HYPER_AA'})"
             )
+            session.run(
+                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.score <= $th DELETE r",
+                th=lp_sigma,
+            )
 
             deg_records = list(
                 session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score")
@@ -5078,21 +5086,26 @@ class KnowledgeGraph:
 
             weak_links: List[tuple[int, int]] = []
             triangles_removed = 0
-            edge_records = session.run(
-                "MATCH (a)-[r]->(b) RETURN id(a) AS src, id(b) AS tgt"
-                + (
-                    ""
-                    if not dataset
-                    else " WHERE a.dataset=$dataset AND b.dataset=$dataset"
-                ),
-                **params,
+            edge_records = list(
+                session.run(
+                    "MATCH (a)-[r]->(b) RETURN id(a) AS src, id(b) AS tgt, r.attention AS attention"
+                    + (
+                        ""
+                        if not dataset
+                        else " WHERE a.dataset=$dataset AND b.dataset=$dataset"
+                    ),
+                    **params,
+                )
             )
+            att_values = [rec.get("attention") for rec in edge_records if rec.get("attention") is not None]
+            median_att = float(np.median(att_values)) if att_values else 0.0
             for rec in edge_records:
                 s = rec["src"]
                 t = rec["tgt"]
+                att = rec.get("attention", 0.0)
                 if (
-                    tri_map.get(s, 0) < triangle_threshold
-                    or tri_map.get(t, 0) < triangle_threshold
+                    (tri_map.get(s, 0) < triangle_threshold or tri_map.get(t, 0) < triangle_threshold)
+                    and att < median_att
                 ):
                     session.run(
                         "MATCH (a)-[r]->(b) WHERE id(a)=$s AND id(b)=$t DELETE r",
