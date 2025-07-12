@@ -50,9 +50,11 @@ __all__ = [
     "quotient_graph",
     "mapper_nerve",
     "inverse_mapper",
+    "bootstrap_sigma_db",
     "fractal_net_prune",
     "fractalnet_compress",
     "prune_fractalnet",
+    "FractalNetPruner",
     "graphwave_entropy",
     "embedding_entropy",
     "hyper_sagnn_embeddings",
@@ -66,6 +68,8 @@ __all__ = [
     "hybrid_score",
     "multiview_contrastive_loss",
     "meta_autoencoder",
+    "search_with_fallback",
+    "recall10",
     "tpl_correct_graph",
     "alignment_correlation",
     "average_hyperbolic_radius",
@@ -80,6 +84,9 @@ __all__ = [
     "entropy_triangle_threshold",
     "rollback_gremlin_diff",
     "SheafSLA",
+    "start_metrics_server",
+    "push_metrics_gateway",
+    "update_metric",
 ]
 
 
@@ -114,14 +121,24 @@ def __getattr__(name: str):
         "fractal_net_prune",
         "fractalnet_compress",
         "prune_fractalnet",
+        "FractalNetPruner",
         "graphwave_entropy",
         "embedding_entropy",
         "embedding_box_counting_dimension",
         "colour_box_dimension",
+        "bootstrap_sigma_db",
     }:
         from . import fractal as _f
 
         return getattr(_f, name)
+    if name == "FractalNetPruner":
+        from .compression import FractalNetPruner as _fp
+
+        return _fp
+    if name in {"search_with_fallback", "recall10"}:
+        from . import index as _idx
+
+        return getattr(_idx, name)
     if name in {
         "hyper_sagnn_embeddings",
         "hyper_sagnn_head_drop_embeddings",
@@ -269,4 +286,16 @@ def __getattr__(name: str):
         from .rollback import SheafSLA as _sla
 
         return _sla
+    if name in {"start_metrics_server", "push_metrics_gateway", "update_metric"}:
+        from .monitoring import (
+            start_metrics_server as _sms,
+            push_metrics_gateway as _pg,
+            update_metric as _um,
+        )
+
+        return {
+            "start_metrics_server": _sms,
+            "push_metrics_gateway": _pg,
+            "update_metric": _um,
+        }[name]
     raise AttributeError(name)

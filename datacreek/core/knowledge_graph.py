@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -228,6 +229,7 @@ class KnowledgeGraph:
         emotion: str | None = None,
         modality: str | None = None,
         entities: list[str] | None = None,
+        chunk_overlap: int | None = None,
     ) -> None:
         """Insert a chunk node linked to ``doc_id``."""
         if source is None:
@@ -255,6 +257,7 @@ class KnowledgeGraph:
             text=text,
             source=source,
             page=page,
+            overlap=chunk_overlap,
         )
         if emotion:
             self.graph.nodes[chunk_id]["emotion"] = emotion
@@ -903,8 +906,7 @@ class KnowledgeGraph:
         """
 
         from ..analysis.autotune import recall_at_k as _recall
-
-        return _recall(
+        score = _recall(
             self.graph,
             queries,
             ground_truth,
@@ -912,6 +914,9 @@ class KnowledgeGraph:
             gamma=gamma,
             eta=eta,
         )
+        if k == 10:
+            self.graph.graph["recall10"] = score
+        return score
 
     def search_with_links(
         self,
@@ -1933,8 +1938,11 @@ class KnowledgeGraph:
         if not feats:
             return 0.0
         from ..analysis.fractal import graphwave_entropy as _ge
-
-        return _ge(feats)
+        H = _ge(feats)
+        self.graph.graph["gw_entropy"] = H
+        logger = logging.getLogger(__name__)
+        logger.debug("gw_entropy=%.4f", H)
+        return H
 
     def build_faiss_index(
         self, node_attr: str = "embedding", *, method: str = "flat"
@@ -2037,6 +2045,7 @@ class KnowledgeGraph:
             noisy = [float(s) + np.random.uniform(-0.1, 0.1) for s in scales]
             self.compute_graphwave_embeddings(noisy, num_points)
             H = self.graphwave_entropy()
+        self.graph.graph["gw_entropy"] = H
         return H
 
     def embedding_entropy(self, node_attr: str = "embedding") -> float:
@@ -4897,9 +4906,9 @@ class KnowledgeGraph:
         driver: Driver,
         *,
         dataset: str | None = None,
-        min_component_size: int = 2,
-        similarity_threshold: float = 0.95,
-        triangle_threshold: int = 1,
+        min_component_size: int | None = None,
+        similarity_threshold: float | None = None,
+        triangle_threshold: int | None = None,
         link_threshold: float = 0.0,
     ) -> Dict[str, Any]:
         """Run Neo4j GDS quality checks and cleanup.
@@ -4911,9 +4920,15 @@ class KnowledgeGraph:
         dataset:
             Optional dataset label used to filter nodes.
         min_component_size:
-            Components smaller than this size are removed.
+            Components smaller than this size are removed. ``None`` loads the
+            default from ``configs/default.yaml`` (``cleanup.k``) so autotuning
+            can adapt it.
         similarity_threshold:
             Cosine similarity above which nodes are flagged as duplicates.
+            ``None`` loads ``cleanup.sigma`` from the config.
+        triangle_threshold:
+            Nodes with fewer triangles than this value are incident to edges
+            pruned during cleanup. ``None`` loads ``cleanup.tau`` from the config.
         link_threshold:
             Minimum score for a suggested link to be added to the in-memory
             graph.
@@ -4924,6 +4939,18 @@ class KnowledgeGraph:
             Summary dictionary with lists of removed nodes, duplicate pairs,
             suggested links and hub nodes.
         """
+
+        if any(v is None for v in (min_component_size, similarity_threshold, triangle_threshold)):
+            from ..utils.config import load_config
+
+            cfg = load_config()
+            cleanup_cfg = cfg.get("cleanup", {})
+            if min_component_size is None:
+                min_component_size = int(cleanup_cfg.get("k", 2))
+            if similarity_threshold is None:
+                similarity_threshold = float(cleanup_cfg.get("sigma", 0.95))
+            if triangle_threshold is None:
+                triangle_threshold = int(cleanup_cfg.get("tau", 1))
 
         node_query = (
             "MATCH (n"
@@ -5011,6 +5038,12 @@ class KnowledgeGraph:
                     if u and v and not self.graph.has_edge(u, v):
                         self.graph.add_edge(u, v, relation="suggested", score=score)
 
+            session.run(
+                "CALL gds.alpha.hypergraph.linkprediction.adamicAdar.write('kg_qc', "
+                "{relationshipProjection:{HYPER:{type:'HYPER', orientation:'UNDIRECTED', aggregation:'MAX'}}, "
+                "writeRelationshipType:'SUGGESTED_HYPER_AA'})"
+            )
+
             deg_records = list(
                 session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score")
             )
@@ -5019,7 +5052,8 @@ class KnowledgeGraph:
             )
             tri_records = list(
                 session.run(
-                    "CALL gds.triangleCount.stream('kg_qc') YIELD nodeId, triangleCount"
+                    "CALL gds.triangleCount.stream('kg_qc', {relationshipWeightProperty:'attention'}) "
+                    "YIELD nodeId, triangleCount"
                 )
             )
             deg_scores = sorted(r["score"] for r in deg_records)
@@ -5038,6 +5072,7 @@ class KnowledgeGraph:
                 )
 
             weak_links: List[tuple[int, int]] = []
+            triangles_removed = 0
             edge_records = session.run(
                 "MATCH (a)-[r]->(b) RETURN id(a) AS src, id(b) AS tgt"
                 + (
@@ -5060,6 +5095,7 @@ class KnowledgeGraph:
                         t=t,
                     )
                     weak_links.append((s, t))
+                    triangles_removed += 1
 
             session.run("CALL gds.graph.drop('kg_qc')")
 
@@ -5069,6 +5105,7 @@ class KnowledgeGraph:
             "suggested_links": suggestions,
             "hubs": hubs,
             "weak_links": weak_links,
+            "triangles_removed": triangles_removed,
         }
 
     def node_similarity(

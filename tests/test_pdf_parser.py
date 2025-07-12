@@ -47,3 +47,19 @@ def test_pdf_parser_ocr(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "pytesseract", mod_pytesseract)
     parser = PDFParser()
     assert "ocr" in parser.parse(str(pdf), ocr=True)
+
+
+def test_pdf_parser_fallback_ocr(monkeypatch, tmp_path):
+    pdf = tmp_path / "sample.pdf"
+    pdf.write_bytes(b"%PDF-1.4 test")
+    module = types.ModuleType("unstructured.partition.pdf")
+    module.partition_pdf = lambda filename: [types.SimpleNamespace(text="")]
+    monkeypatch.setitem(sys.modules, "unstructured.partition.pdf", module)
+    mod_pdf2image = types.ModuleType("pdf2image")
+    mod_pytesseract = types.ModuleType("pytesseract")
+    mod_pdf2image.convert_from_path = lambda p: ["img"]
+    mod_pytesseract.image_to_string = lambda img: "fallback"
+    monkeypatch.setitem(sys.modules, "pdf2image", mod_pdf2image)
+    monkeypatch.setitem(sys.modules, "pytesseract", mod_pytesseract)
+    parser = PDFParser()
+    assert "fallback" in parser.parse(str(pdf))

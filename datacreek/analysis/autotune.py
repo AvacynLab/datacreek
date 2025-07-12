@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
 
 import networkx as nx
@@ -47,6 +47,8 @@ class AutoTuneState:
     eta: float = 0.25
     prev_graph: Optional[nx.Graph] = None
     coverage_min: float = 0.0
+    prev_costs: list[float] = field(default_factory=list)
+    jitter: float = 0.0
 
 
 def recall_at_k(
@@ -138,7 +140,16 @@ def autotune_step(
     motifs: Iterable[nx.Graph],
     state: AutoTuneState,
     *,
-    weights: Tuple[float, float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+    weights: Tuple[float, float, float, float, float, float, float, float] = (
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+    ),
     recall_data: Optional[Tuple[Sequence[object], Dict[object, Sequence[object]]]] = None,
     k: int = 10,
     lr: float = 0.1,
@@ -165,9 +176,8 @@ def autotune_step(
     state:
         Mutable autotuning state.
     weights:
-        Weights ``(w1, w2, w3, w4, w5, w6)`` of the multi-objective cost. ``w5``
-        controls the penalty on the variance of the Node2Vec norms and ``w6``
-        weights the negative recall term.
+        Weights ``(w1, w2, w3, w4, w5, w_sigma, w_cov, w_rec)`` of the
+        multi-objective cost.
     recall_data:
         Optional tuple ``(queries, ground_truth)`` for computing recall@k with
         the hybrid similarity score.
@@ -206,14 +216,27 @@ def autotune_step(
             eta=state.eta,
         )
 
+    sigma_db = float(graph.graph.get("fractal_sigma", 0.0))
     J = (
         weights[0] * (-H)
         + weights[1] * D
         + weights[2] * I
         + weights[3] * M
         + weights[4] * (-var_phi)
-        + weights[5] * (-recall)
+        + weights[5] * max(0.0, sigma_db - 0.02)
+        + weights[6] * max(0.0, state.coverage_min - coverage)
+        + weights[7] * max(0.0, 0.9 - recall)
     )
+
+    state.prev_costs.append(J)
+    restart_gp = False
+    if len(state.prev_costs) > 5:
+        state.prev_costs.pop(0)
+        if max(state.prev_costs) - min(state.prev_costs) < 0.001:
+            # cost stagnates -> increase jitter and restart GP
+            state.jitter += 0.1
+            state.prev_costs.clear()
+            restart_gp = True
 
     # stochastic KW gradients for tau and eps
     grad_tau = kw_gradient(lambda t: structural_entropy(graph, int(max(1, t))), state.tau)
@@ -250,7 +273,9 @@ def autotune_step(
         "var_phi": var_phi,
         "recall": recall,
         "cost": J,
+        "jitter": state.jitter,
         "tau": state.tau,
+        "restart_gp": restart_gp,
         "eps": state.eps,
         "beta": state.beta,
         "delta": state.delta,

@@ -113,6 +113,25 @@ def aligned_cca(
     return {n: X_c[i] for i, n in enumerate(nodes)}, cca
 
 
+def cca_align(
+    n2v: Dict[object, Iterable[float]],
+    gw: Dict[object, Iterable[float]],
+    *,
+    n_components: int = 32,
+    path: str = "cca_weights",
+) -> Dict[object, np.ndarray]:
+    """Return latent vectors and persist CCA weights for inference."""
+
+    latent, cca = aligned_cca(n2v, gw, n_components=n_components)
+    import pickle
+
+    with open(f"{path}_Wn2v.pkl", "wb") as f:
+        pickle.dump(cca.x_weights_, f)
+    with open(f"{path}_Wgw.pkl", "wb") as f:
+        pickle.dump(cca.y_weights_, f)
+    return latent
+
+
 def hybrid_score(
     n2v_u: Iterable[float],
     n2v_q: Iterable[float],

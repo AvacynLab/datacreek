@@ -1302,6 +1302,8 @@ class _DummySession:
             return [{"nodeId": 0, "score": 0.8}, {"nodeId": 1, "score": 0.1}]
         if "triangleCount.stream" in query:
             return [{"nodeId": 0, "triangleCount": 0}, {"nodeId": 1, "triangleCount": 2}]
+        if "hypergraph.linkprediction" in query:
+            return []
         if "MATCH (a)-[r]->(b) RETURN" in query:
             return [{"src": 0, "tgt": 1}]
         if "id(n) IN $ids" in query:
@@ -1332,6 +1334,7 @@ def test_gds_quality_check_method():
     assert res["suggested_links"]
     assert 0 in res["hubs"]
     assert res["weak_links"] == [(0, 1)]
+    assert res["triangles_removed"] == 1
 
 
 def test_quality_check_method():

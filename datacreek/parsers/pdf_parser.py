@@ -54,10 +54,16 @@ class PDFParser(BaseParser):
 
                 elements = partition_pdf(filename=file_path)
                 text = "\n".join(
-                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+                    getattr(el, "text", str(el))
+                    for el in elements
+                    if getattr(el, "text", None)
                 )
             except Exception as exc:  # pragma: no cover - unexpected failures
                 raise RuntimeError("Failed to parse PDF with unstructured") from exc
+
+            if not text.strip():
+                # Fallback OCR if no text was extracted (likely scanned PDF)
+                ocr = True
 
         if ocr:
             try:

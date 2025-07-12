@@ -1,0 +1,23 @@
+ingest:
+  chunk_size: 4000
+  overlap: 200
+cleanup:
+  tau: 5
+  sigma: 0.95
+  k: 2
+tpl:
+  eps_w1: 0.05
+embeddings:
+  node2vec:
+    p: 1.0
+    q: 2.0
+    dimension: 128
+  alpha: 0.6
+search:
+  gamma: 0.6
+  eta: 0.3
+ib:
+  beta: 0.01
+penalties:
+  lambda_sigma: 10
+  lambda_cov: 5

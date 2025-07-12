@@ -1,5 +1,6 @@
 import math
 import random
+import logging
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 try:  # optional dependency
@@ -262,6 +263,57 @@ def graphwave_embedding(
     return {n: np.asarray(v, dtype=float) for n, v in emb.items()}
 
 
+def chebyshev_heat_kernel(L: np.ndarray, t: float, m: int = 7) -> np.ndarray:
+    """Return Chebyshev approximation of ``exp(-t L)``.
+
+    Parameters
+    ----------
+    L:
+        Laplacian matrix.
+    t:
+        Diffusion scale.
+    m:
+        Order of the approximation.
+
+    Returns
+    -------
+    np.ndarray
+        Approximated heat kernel matrix.
+    """
+
+    import numpy.linalg as nla
+    from scipy.special import iv  # modified Bessel function
+
+    try:  # pragma: no cover - prefer sparse eigs
+        from scipy.sparse.linalg import eigsh
+
+        lambda_max = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
+    except Exception:  # fallback to dense
+        lambda_max = float(nla.eigvalsh(L).max())
+
+    if lambda_max == 0:
+        lambda_max = 1.0
+
+    L_hat = (2.0 / lambda_max) * L - np.eye(L.shape[0])
+
+    c0 = np.exp(-t * lambda_max / 2.0) * iv(0, t * lambda_max / 2.0)
+    T_prev = np.eye(L.shape[0])
+    approx = c0 * T_prev
+
+    if m >= 1:
+        c1 = 2 * np.exp(-t * lambda_max / 2.0) * (-1) ** 1 * iv(1, t * lambda_max / 2.0)
+        T_curr = L_hat
+        approx += c1 * T_curr
+
+    for k in range(2, m + 1):
+        Tk = 2 * L_hat @ T_curr - T_prev
+        ck = 2 * np.exp(-t * lambda_max / 2.0) * (-1) ** k * iv(k, t * lambda_max / 2.0)
+        approx += ck * Tk
+        T_prev, T_curr = T_curr, Tk
+
+    return approx
+
+
 def graphwave_embedding_chebyshev(
     graph: nx.Graph,
     scales: Iterable[float],
@@ -293,44 +345,13 @@ def graphwave_embedding_chebyshev(
         Mapping of node to embedding vectors.
     """
 
-    import numpy.linalg as nla
-    from scipy.special import iv  # modified Bessel function
-
     nodes = list(graph.nodes())
     lap = _laplacian(graph, normed=False)
-
-    # Estimate the largest eigenvalue to scale the Laplacian in [-1, 1]
-    try:  # pragma: no cover - prefer sparse eigs when available
-        from scipy.sparse.linalg import eigsh
-
-        lambda_max = float(eigsh(lap, k=1, which="LM", return_eigenvectors=False)[0])
-    except Exception:  # fallback to dense
-        lambda_max = float(nla.eigvalsh(lap).max())
-
-    if lambda_max == 0:
-        lambda_max = 1.0
-
-    L_hat = (2.0 / lambda_max) * lap - np.eye(lap.shape[0])
     ts = np.linspace(0, 2 * np.pi, num_points)
     emb: Dict[int, List[float]] = {n: [] for n in nodes}
 
     for s in scales:
-        c0 = np.exp(-s * lambda_max / 2.0) * iv(0, s * lambda_max / 2.0)
-        T_prev = np.eye(lap.shape[0])
-        approx = c0 * T_prev
-
-        if order >= 1:
-            c1 = 2 * np.exp(-s * lambda_max / 2.0) * (-1) ** 1 * iv(1, s * lambda_max / 2.0)
-            T_curr = L_hat
-            approx += c1 * T_curr
-
-        for k in range(2, order + 1):
-            Tk = 2 * L_hat @ T_curr - T_prev
-            ck = 2 * np.exp(-s * lambda_max / 2.0) * (-1) ** k * iv(k, s * lambda_max / 2.0)
-            approx += ck * Tk
-            T_prev, T_curr = T_curr, Tk
-
-        heat = approx
+        heat = chebyshev_heat_kernel(lap, s, m=order)
 
         for idx, node in enumerate(nodes):
             coeffs = np.exp(1j * np.outer(ts, heat[idx, :])).sum(axis=1)
@@ -1003,6 +1024,13 @@ def poincare_embedding(
         key = str(node)
         if key in model.kv:
             embeddings[node] = np.asarray(model.kv[key], dtype=float)
+
+    if embeddings:
+        r_mean = float(np.mean([np.linalg.norm(v) for v in embeddings.values()]))
+        if r_mean > 0.9:
+            logging.getLogger(__name__).warning(
+                "Poincare embedding crowding detected: r_mean=%.3f", r_mean
+            )
     return embeddings
 
 
@@ -1410,3 +1438,68 @@ def fractalnet_compress(
             continue
         groups.setdefault(int(lvl), []).append(np.asarray(vec, dtype=float))
     return {lvl: np.mean(vs, axis=0) for lvl, vs in groups.items() if vs}
+
+
+def inject_graphrnn_subgraph(graph: nx.Graph, num_nodes: int, num_edges: int) -> list[object]:
+    """Inject a GraphRNN motif into ``graph`` and return created nodes."""
+
+    try:  # pragma: no cover - optional heavy dependency
+        from torch_geometric_temporal.nn.models import GraphRNN  # type: ignore
+        _ = GraphRNN  # only to check import success
+    except Exception:
+        from .generation import generate_graph_rnn_like as _gen
+        motif = _gen(num_nodes, num_edges)
+    else:
+        from .generation import generate_graph_rnn_like as _gen
+        motif = _gen(num_nodes, num_edges)
+
+    base = max(graph.nodes, default=-1) + 1
+    mapping = {n: base + i for i, n in enumerate(motif.nodes())}
+    graph.add_nodes_from(mapping.values())
+    for u, v, data in motif.edges(data=True):
+        graph.add_edge(mapping[u], mapping[v], **data)
+    return list(mapping.values())
+
+
+def inject_and_validate(graph: nx.Graph, num_nodes: int, num_edges: int) -> float:
+    """Inject GraphRNN motif and return sheaf consistency score of section."""
+
+    nodes = inject_graphrnn_subgraph(graph, num_nodes, num_edges)
+    from .sheaf import validate_section
+
+    return validate_section(graph, nodes)
+
+
+def bootstrap_sigma_db(graph: nx.Graph, radii: Iterable[int]) -> float:
+    """Return bootstrap standard deviation of the fractal dimension.
+
+    This mirrors the COLOUR-box GPU estimation but uses
+    simple NetworkX operations. Thirty random 80% subgraphs of ``graph``
+    are sampled. The fractal dimension of each is computed with
+    :func:`colour_box_dimension`. The standard deviation
+
+    .. math::
+
+       \sigma_{d_B}=\sqrt{\tfrac1{29}\sum_i(d_B^i-\bar d_B)^2}
+
+    is stored in ``graph.graph['fractal_sigma']``. A value above ``0.02``
+    will later increase the autotuning cost (see :mod:`datacreek.analysis.autotune`).
+    """
+
+    dims: list[float] = []
+    nodes = list(graph.nodes())
+    for _ in range(30):
+        sample = random.sample(nodes, max(1, int(0.8 * len(nodes))))
+        sub = graph.subgraph(sample)
+        dim, _ = colour_box_dimension(sub, radii)
+        dims.append(dim)
+
+    if not dims:
+        sigma = 0.0
+    else:
+        mean = float(np.mean(dims))
+        sigma = float(np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1)))
+
+    graph.graph["fractal_sigma"] = sigma
+    logging.getLogger(__name__).info("fractal_sigma=%.4f", sigma)
+    return sigma

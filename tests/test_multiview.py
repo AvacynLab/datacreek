@@ -1,6 +1,7 @@
 import numpy as np
 
 from datacreek.analysis import (
+    cca_align,
     aligned_cca,
     meta_autoencoder,
     multiview_contrastive_loss,
@@ -148,3 +149,12 @@ def test_dataset_train_product_manifold():
         ** 2
     )
     assert after < before
+
+def test_cca_align_persists(tmp_path):
+    n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    gw = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    path = tmp_path / "cca"
+    latent = cca_align(n2v, gw, n_components=1, path=str(path))
+    assert (path.with_name("cca_Wn2v.pkl")).exists()
+    assert (path.with_name("cca_Wgw.pkl")).exists()
+    assert set(latent) == {"a", "b"}

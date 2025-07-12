@@ -25,13 +25,13 @@ ORIGINAL_CONFIG_PATH = os.path.abspath(
     os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
         "configs",
-        "config.yaml",
+        "default.yaml",
     )
 )
 
 # Fallback path within the source tree for bundled deployments
 SOURCE_CONFIG_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "default.yaml")
 )
 
 # Use the bundled path as default

@@ -18,7 +18,12 @@ from pydantic import BaseModel
 
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
-from datacreek.parsers import HTMLParser, PDFParser, YouTubeParser, get_parser_for_extension
+from datacreek.parsers import (
+    HTMLParser,
+    PDFParser,
+    YouTubeParser,
+    get_parser_for_extension,
+)
 from datacreek.utils.config import get_generation_config, load_config
 from datacreek.utils.modality import detect_modality
 from datacreek.utils.text import clean_text, split_into_chunks
@@ -166,11 +171,16 @@ def to_kg(
 
     cfg = config or load_config()
     gen_cfg = get_generation_config(cfg)
+    ingest_cfg = cfg.get("ingest", {})
+    chunk_size = ingest_cfg.get("chunk_size", gen_cfg.chunk_size)
+    chunk_overlap = ingest_cfg.get("overlap", gen_cfg.overlap)
 
     cleaned_text = clean_text(text)
     cleaned_pages = [clean_text(p) for p in pages] if pages else None
 
-    dataset.add_document(doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum)
+    dataset.add_document(
+        doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum
+    )
 
     if elements:
         chunk_idx = 0
@@ -180,7 +190,10 @@ def to_kg(
         img_idx = 0
         current_page = 1
         for el in elements:
-            page = getattr(getattr(el, "metadata", None), "page_number", None) or current_page
+            page = (
+                getattr(getattr(el, "metadata", None), "page_number", None)
+                or current_page
+            )
             if page != current_page and atoms:
                 mol_id = f"{doc_id}_molecule_{molecule_idx}"
                 dataset.add_molecule(doc_id, mol_id, atoms)
@@ -249,8 +262,8 @@ def to_kg(
             atom_idx += 1
             chunks = split_into_chunks(
                 cleaned_el,
-                chunk_size=gen_cfg.chunk_size,
-                overlap=gen_cfg.overlap,
+                chunk_size=chunk_size,
+                overlap=chunk_overlap,
                 method=gen_cfg.chunk_method,
                 similarity_drop=gen_cfg.similarity_drop,
             )
@@ -288,6 +301,7 @@ def to_kg(
                     emotion=emotion,
                     modality=modality,
                     entities=entities,
+                    chunk_overlap=chunk_overlap,
                 )
                 chunk_idx += 1
                 if progress_callback:
@@ -300,8 +314,8 @@ def to_kg(
         for page_num, page_text in enumerate(cleaned_pages, start=1):
             page_chunks = split_into_chunks(
                 page_text,
-                chunk_size=gen_cfg.chunk_size,
-                overlap=gen_cfg.overlap,
+                chunk_size=chunk_size,
+                overlap=chunk_overlap,
                 method=gen_cfg.chunk_method,
                 similarity_drop=gen_cfg.similarity_drop,
             )
@@ -339,6 +353,7 @@ def to_kg(
                     emotion=emotion,
                     modality=modality,
                     entities=entities,
+                    chunk_overlap=chunk_overlap,
                 )
                 chunk_idx += 1
                 if progress_callback:
@@ -346,8 +361,8 @@ def to_kg(
     else:
         chunks = split_into_chunks(
             cleaned_text,
-            chunk_size=gen_cfg.chunk_size,
-            overlap=gen_cfg.overlap,
+            chunk_size=chunk_size,
+            overlap=chunk_overlap,
             method=gen_cfg.chunk_method,
             similarity_drop=gen_cfg.similarity_drop,
         )
@@ -381,6 +396,7 @@ def to_kg(
                 emotion=emotion,
                 modality=modality,
                 entities=entities,
+                chunk_overlap=chunk_overlap,
             )
             if progress_callback:
                 progress_callback(i + 1)

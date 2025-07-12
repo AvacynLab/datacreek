@@ -43,3 +43,68 @@ def prune_fractalnet(weights: "np.ndarray | list[float]", ratio: float = 0.5):
     thresh = np.partition(np.abs(flat), -k)[-k]
     mask = np.abs(weights) >= thresh
     return weights * mask
+
+
+class FractalNetPruner:
+    """Utility to prune a FractalNet model by magnitude.
+
+    Parameters
+    ----------
+    lambda_ : float, optional
+        Threshold below which weights are zeroed. Default ``0.03``.
+    """
+
+    def __init__(self, lambda_: float = 0.03) -> None:
+        self.lambda_ = float(lambda_)
+        self.model = None
+
+    def load(self, repo: str = "facebookresearch/fractalnet", name: str = "fractalnet") -> None:
+        """Load pretrained model from ``repo`` if possible."""
+        try:  # pragma: no cover - heavy optional dependency
+            import torch
+            self.model = torch.hub.load(repo, name, source="github")
+        except Exception:
+            self.model = None
+
+    def _perplexity(self, eval_fn) -> float:
+        """Return perplexity computed by ``eval_fn``."""
+        return float(eval_fn(self.model))
+
+    def prune(self, eval_fn, *, baseline: float | None = None) -> tuple[bool, float]:
+        """Prune model weights and check perplexity variation.
+
+        Parameters
+        ----------
+        eval_fn:
+            Callable taking the model and returning a perplexity estimate.
+        baseline:
+            Optional pre-computed baseline perplexity. If ``None`` the
+            perplexity is obtained via ``eval_fn`` before pruning.
+
+        Returns
+        -------
+        tuple
+            ``(accepted, perplexity)`` with acceptance boolean and the
+            perplexity after pruning.
+        """
+        if self.model is None:
+            self.load()
+            if self.model is None:
+                raise RuntimeError("FractalNet model unavailable")
+
+        if baseline is None:
+            baseline = self._perplexity(eval_fn)
+
+        for _, param in self.model.named_parameters():
+            try:
+                arr = param.detach().cpu().numpy()
+            except Exception:  # pragma: no cover - torch missing
+                arr = np.asarray(param)
+            mask = np.abs(arr) >= self.lambda_
+            arr = arr * mask
+            if hasattr(param, "data"):
+                param.data = type(param.data)(arr)
+        perplexity = self._perplexity(eval_fn)
+        delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
+        return delta < 0.01, perplexity
+

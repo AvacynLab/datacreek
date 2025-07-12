@@ -31,6 +31,7 @@ import numpy as np
 
 from ..analysis.autotune import AutoTuneState
 from ..utils import push_metrics
+from ..analysis.monitoring import update_metric
 
 if TYPE_CHECKING:
     from .ingest import IngestOptions
@@ -39,6 +40,7 @@ import redis
 from neo4j import Driver
 
 from ..backends import get_redis_graph
+from datacreek.utils.config import load_config
 
 try:  # optional redisgraph dependency
     from redisgraph import Edge as RGEdge
@@ -295,6 +297,34 @@ class DatasetBuilder:
 
         self._persist()
 
+    def log_cycle_metrics(self) -> None:
+        """Emit debug metrics and push to Prometheus."""
+
+        metrics = {
+            "sigma_db": float(self.graph.graph.get("fractal_sigma", 0.0)),
+            "coverage_frac": float(self.graph.fractal_coverage()),
+            "H_wave": float(self.graph.graph.get("gw_entropy", 0.0)),
+            "sheaf_score": float(self.graph.sheaf_consistency_score()),
+            "recall10": float(self.graph.graph.get("recall10", 0.0)),
+            "tpl_w1": float(self.graph.graph.get("tpl_w1", 0.0)),
+            "j_cost": float(self.graph.graph.get("j_cost", 0.0)),
+        }
+        logger.debug(
+            "sigma_dB=%.4f coverage_frac=%.3f H_wave=%.4f sheaf_score=%.4f recall10=%.3f tpl_w1=%.4f j_cost=%.4f",
+            metrics["sigma_db"],
+            metrics["coverage_frac"],
+            metrics["H_wave"],
+            metrics["sheaf_score"],
+            metrics["recall10"],
+            metrics["tpl_w1"],
+            metrics["j_cost"],
+        )
+        for k, v in metrics.items():
+            try:
+                update_metric(k, float(v))
+            except Exception:
+                pass
+
     @monitor_after()
     def add_document(
         self,
@@ -356,8 +386,16 @@ class DatasetBuilder:
         emotion: str | None = None,
         modality: str | None = None,
         entities: list[str] | None = None,
+        chunk_overlap: int | None = None,
     ) -> None:
-        """Insert a chunk node in the dataset graph."""
+        """Insert a chunk node in the dataset graph.
+
+        Parameters
+        ----------
+        chunk_overlap:
+            Overlap used when splitting the source text. Stored for
+            provenance during later processing steps.
+        """
 
         self.graph.add_chunk(
             doc_id,
@@ -369,6 +407,7 @@ class DatasetBuilder:
             emotion=emotion,
             modality=modality,
             entities=entities,
+            chunk_overlap=chunk_overlap,
         )
         self._record_event(
             "add_chunk",
@@ -1201,30 +1240,35 @@ class DatasetBuilder:
 
     def compute_graph_embeddings(
         self,
-        dimensions: int = 64,
+        dimensions: int | None = None,
         walk_length: int = 10,
         num_walks: int = 50,
         seed: int = 0,
         workers: int = 1,
         *,
-        p: float = 1.0,
-        q: float = 1.0,
+        p: float | None = None,
+        q: float | None = None,
     ) -> None:
         """Generate Node2Vec embeddings for all nodes."""
+        cfg = load_config()
+        embed_cfg = cfg.get("embeddings", {}).get("node2vec", {})
+        dim_val = dimensions or int(embed_cfg.get("dimension", 64))
+        p_val = p if p is not None else float(embed_cfg.get("p", 1.0))
+        q_val = q if q is not None else float(embed_cfg.get("q", 1.0))
 
         self.graph.compute_node2vec_embeddings(
-            dimensions=dimensions,
+            dimensions=dim_val,
             walk_length=walk_length,
             num_walks=num_walks,
             workers=workers,
             seed=seed,
-            p=p,
-            q=q,
+            p=p_val,
+            q=q_val,
         )
         self._record_event(
             "compute_graph_embeddings",
             "Graph embeddings computed",
-            dimensions=dimensions,
+            dimensions=dim_val,
             walk_length=walk_length,
             num_walks=num_walks,
             workers=workers,
@@ -1235,34 +1279,40 @@ class DatasetBuilder:
         self,
         driver: "Driver",
         *,
-        dimensions: int = 128,
+        dimensions: int | None = None,
         walk_length: int = 40,
         walks_per_node: int = 10,
-        p: float = 1.0,
-        q: float = 1.0,
+        p: float | None = None,
+        q: float | None = None,
         dataset: str | None = None,
         write_property: str = "embedding",
     ) -> None:
         """Run Neo4j GDS Node2Vec and store embeddings on the graph."""
 
+        cfg = load_config()
+        embed_cfg = cfg.get("embeddings", {}).get("node2vec", {})
+        dim_val = dimensions or int(embed_cfg.get("dimension", 128))
+        p_val = p if p is not None else float(embed_cfg.get("p", 1.0))
+        q_val = q if q is not None else float(embed_cfg.get("q", 1.0))
+
         self.graph.compute_node2vec_gds(
             driver,
-            dimensions=dimensions,
+            dimensions=dim_val,
             walk_length=walk_length,
             walks_per_node=walks_per_node,
-            p=p,
-            q=q,
+            p=p_val,
+            q=q_val,
             dataset=dataset,
             write_property=write_property,
         )
         self._record_event(
             "compute_node2vec_gds",
             "Neo4j Node2Vec embeddings computed",
-            dimensions=dimensions,
+            dimensions=dim_val,
             walk_length=walk_length,
             walks_per_node=walks_per_node,
-            p=p,
-            q=q,
+            p=p_val,
+            q=q_val,
         )
 
     def compute_graphwave_embeddings(
@@ -1488,6 +1538,8 @@ class DatasetBuilder:
             gamma=gamma,
             eta=eta,
         )
+        if k == 10:
+            self.graph.graph["recall10"] = score
         self._record_event(
             "recall_at_k",
             "Recall@k computed",
@@ -2615,6 +2667,8 @@ class DatasetBuilder:
             weights=weights,
             lr=lr,
         )
+        self.graph.graph["j_cost"] = float(res["cost"])
+        update_metric("j_cost", float(res["cost"]))
         self._record_event(
             "autotuning_layer",
             "Autotuning iteration executed",
@@ -2630,6 +2684,10 @@ class DatasetBuilder:
                     "autotune_eps": float(res["eps"]),
                 }
             )
+        except Exception:
+            pass
+        try:
+            self.log_cycle_metrics()
         except Exception:
             pass
         return res
@@ -3618,6 +3676,8 @@ class DatasetBuilder:
             order=order,
             max_iter=max_iter,
         )
+        self.graph.graph["tpl_w1"] = float(res["distance_after"])
+        update_metric("tpl_w1", float(res["distance_after"]))
         self._record_event(
             "tpl_correct_graph",
             "Wasserstein-based topology correction",
@@ -3625,6 +3685,7 @@ class DatasetBuilder:
             dimension=dimension,
             order=order,
             corrected=res["corrected"],
+            distance_after=float(res["distance_after"]),
         )
         return res
 
@@ -4160,6 +4221,12 @@ class DatasetBuilder:
         if not driver:
             raise ValueError("Neo4j driver required")
 
+        cfg = load_config()
+        cleanup_cfg = cfg.get("cleanup", {})
+        min_component_size = cleanup_cfg.get("k", min_component_size)
+        similarity_threshold = cleanup_cfg.get("sigma", similarity_threshold)
+        triangle_threshold = cleanup_cfg.get("tau", triangle_threshold)
+
         result = self.graph.gds_quality_check(
             driver,
             dataset=self.name,
@@ -4175,6 +4242,7 @@ class DatasetBuilder:
             similarity_threshold=similarity_threshold,
             triangle_threshold=triangle_threshold,
             link_threshold=link_threshold,
+            triangles_removed=result.get("triangles_removed", 0),
             freeze_version=freeze_version,
         )
         if freeze_version:

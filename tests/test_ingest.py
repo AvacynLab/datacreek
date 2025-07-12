@@ -9,6 +9,7 @@ from datacreek.core.ingest import ingest_into_dataset, process_file
 from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
 from datacreek.utils.modality import detect_modality
+from datacreek.utils.config import load_config
 
 
 def test_ingest_to_kg(tmp_path):
@@ -36,6 +37,21 @@ def test_to_kg_no_index_build(tmp_path):
     assert ds.search_chunks("Hello") == ["doc1_chunk_0"]
 
 
+def test_chunk_overlap_metadata(tmp_path):
+    text_file = tmp_path / "sample.txt"
+    text_file.write_text("Hello world")
+
+    cfg = load_config()
+    cfg.setdefault("ingest", {})["overlap"] = 5
+    cfg["ingest"]["chunk_size"] = 5
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    text = ingest_file(str(text_file))
+    to_kg(text, ds, "d1", config=cfg)
+    cid = ds.get_chunks_for_document("d1")[0]
+    assert ds.graph.graph.nodes[cid]["overlap"] == 5
+
+
 def test_to_kg_with_pages(tmp_path):
     text_file = tmp_path / "sample.txt"
     text_file.write_text("Page1\fPage2")
@@ -52,7 +68,9 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
         def __init__(self, text=None, image_path=None, page_number=1):
             self.text = text
             self.image_path = image_path
-            self.metadata = types.SimpleNamespace(page_number=page_number, image_path=image_path)
+            self.metadata = types.SimpleNamespace(
+                page_number=page_number, image_path=image_path
+            )
 
     elements = [
         El("Hello", page_number=1),
@@ -79,7 +97,9 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
     ]
     from datacreek.utils.modality import detect_modality
 
-    assert ds.graph.graph.nodes["doc1_atom_0"].get("modality") == detect_modality("Hello")
+    assert ds.graph.graph.nodes["doc1_atom_0"].get("modality") == detect_modality(
+        "Hello"
+    )
     chunk_id = ds.get_chunks_for_document("doc1")[0]
     assert ds.graph.graph.nodes[chunk_id].get("modality") == detect_modality("Hello")
 
@@ -92,7 +112,9 @@ def test_ingest_audio(tmp_path, monkeypatch):
         def parse(self, file_path: str) -> str:
             return "hello world"
 
-    monkeypatch.setattr(datacreek.core.ingest, "determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr(
+        datacreek.core.ingest, "determine_parser", lambda f, c: DummyParser()
+    )
     ds = DatasetBuilder(DatasetType.TEXT)
     ingest_into_dataset(str(audio_file), ds, doc_id="a1")
 
