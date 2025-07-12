@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+from typing import Dict, Iterable
 
 import networkx as nx
 import numpy as np
@@ -241,3 +242,71 @@ def generate_netgan_like(
             current = nxt
 
     return new_g
+
+
+def sheaf_consistency_real(
+    graph: nx.Graph, b: Iterable[float], *, edge_attr: str = "sheaf_sign"
+) -> float:
+    """Return sheaf consistency score solving \Delta_F x = b.
+
+    Parameters
+    ----------
+    graph:
+        Input graph carrying sheaf restrictions in ``edge_attr``.
+    b:
+        Constraint vector for nodes ordered as in ``graph.nodes``.
+    edge_attr:
+        Name of the edge attribute storing restriction signs.
+
+    Returns
+    -------
+    float
+        Score ``1/(1 + ||b - \Delta x||_2)`` after a least-squares solve.
+    """
+    import numpy as np
+
+    from .sheaf import sheaf_laplacian
+
+    L = sheaf_laplacian(graph, edge_attr=edge_attr)
+    if L.size == 0:
+        return 1.0
+    b_vec = np.asarray(list(b), dtype=float)
+    x, *_ = np.linalg.lstsq(L, b_vec, rcond=None)
+    resid = b_vec - L @ x
+    return 1.0 / (1.0 + float(np.linalg.norm(resid)))
+
+
+def bias_reweighting(
+    neighbors_demog: Dict[str, int],
+    global_demog: Dict[str, int],
+    weights: Dict[str, float],
+    *,
+    threshold: float = 0.1,
+) -> Dict[str, float]:
+    """Return reweighted sampling probabilities based on demographics.
+
+    The Wasserstein distance between the local neighbor distribution and the
+    global demographic distribution is computed. If it exceeds ``threshold`` the
+    weights of under-represented groups are upweighted by 20%.
+    """
+    import numpy as np
+    from scipy.stats import wasserstein_distance
+
+    if not neighbors_demog:
+        return weights
+    keys = sorted(set(global_demog) | set(neighbors_demog))
+    local = np.array([neighbors_demog.get(k, 0) for k in keys], dtype=float)
+    global_ = np.array([global_demog.get(k, 0) for k in keys], dtype=float)
+    if global_.sum() == 0:
+        return weights
+    local /= max(local.sum(), 1.0)
+    global_ /= global_.sum()
+    w_dist = wasserstein_distance(local, global_)
+    if w_dist <= threshold:
+        return weights
+
+    adjusted = dict(weights)
+    for k in keys:
+        if local[keys.index(k)] < global_[keys.index(k)]:
+            adjusted[k] = weights.get(k, 0.0) * 1.2
+    return adjusted

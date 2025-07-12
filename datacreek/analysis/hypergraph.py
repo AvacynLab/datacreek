@@ -83,9 +83,15 @@ def hyper_sagnn_head_drop_embeddings(
     feat_dim = node_features.shape[1]
     head_dim = max(1, feat_dim // num_heads)
 
-    W_q = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim))
-    W_k = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim))
-    W_v = rng.normal(scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim))
+    W_q = rng.normal(
+        scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim)
+    )
+    W_k = rng.normal(
+        scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim)
+    )
+    W_v = rng.normal(
+        scale=1.0 / math.sqrt(feat_dim), size=(num_heads, feat_dim, head_dim)
+    )
 
     def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
         x_max = x.max(axis=axis, keepdims=True)
@@ -120,7 +126,7 @@ def hyper_adamic_adar_scores(
 ) -> dict[tuple[object, object], float]:
     """Return Hyper-Adamic\N{EN DASH}Adar scores between pairs of nodes.
 
-    Each hyperedge contributes :math:`1 / \log |H|` to every pair of
+    Each hyperedge contributes :math:`1/(|H|-1)` to every pair of
     its incident nodes. This generalizes the classical Adamic--Adar index
     to higher-order interactions.
 
@@ -142,7 +148,8 @@ def hyper_adamic_adar_scores(
         nodes = list(dict.fromkeys(edge))
         if len(nodes) < 2:
             continue
-        weight = 1.0 / math.log(len(nodes))
+        # Weight inversely with hyperedge size minus one
+        weight = 1.0 / max(1, len(nodes) - 1)
         for u, v in combinations(nodes, 2):
             pair = (u, v) if u <= v else (v, u)
             scores[pair] = scores.get(pair, 0.0) + weight

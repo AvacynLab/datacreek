@@ -54,19 +54,34 @@ class PDFParser(BaseParser):
 
                 elements = partition_pdf(filename=file_path)
                 text = "\n".join(
-                    getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)
+                    getattr(el, "text", str(el))
+                    for el in elements
+                    if getattr(el, "text", None)
                 )
             except Exception as exc:  # pragma: no cover - unexpected failures
                 raise RuntimeError("Failed to parse PDF with unstructured") from exc
 
+            if not text.strip():
+                # Fallback OCR if no text was extracted (likely scanned PDF)
+                ocr = True
+
         if ocr:
             try:
+                from types import SimpleNamespace
+
                 import pytesseract
                 from pdf2image import convert_from_path
 
                 images = convert_from_path(file_path)
-                ocr_text = "\n".join(pytesseract.image_to_string(img) for img in images)
+                ocr_chunks = [pytesseract.image_to_string(img) for img in images]
+                ocr_text = "\n".join(ocr_chunks)
                 text += "\n" + ocr_text
+                if return_elements:
+                    # also expose OCR text as individual elements so downstream
+                    # atomisation keeps track of chunk overlap
+                    elements = elements or []
+                    for chunk in ocr_chunks:
+                        elements.append(SimpleNamespace(text=chunk))
             except ImportError as exc:
                 raise ImportError(
                     "pdf2image and pytesseract are required for OCR mode. Install them with: pip install pdf2image pytesseract"

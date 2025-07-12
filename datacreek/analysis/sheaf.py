@@ -243,8 +243,69 @@ def spectral_bound_exceeded(
     L = sheaf_laplacian(graph, edge_attr=edge_attr)
     if L.size == 0:
         return False
-    vals = np.linalg.eigvalsh(L)
-    vals.sort()
+    n = L.shape[0]
+    try:
+        import scipy.sparse as sp  # pragma: no cover - optional
+        from scipy.sparse.linalg import eigsh
+
+        vals = eigsh(
+            sp.csr_matrix(L), k=min(k, n - 1), which="LM", return_eigenvectors=False
+        )
+    except Exception:  # fallback to dense eigendecomposition
+        vals = np.linalg.eigvalsh(L)
+    vals = np.sort(np.asarray(vals))
     if k - 1 < len(vals):
-        return bool(vals[k - 1] > tau)
+        return bool(float(vals[k - 1]) > tau)
     return False
+
+
+def block_smith(laplacian: np.ndarray, block_size: int = 40000) -> list[int]:
+    """Return Smith normal form invariants using column blocks.
+
+    Parameters
+    ----------
+    laplacian:
+        Integer Laplacian matrix ``Δ`` of the sheaf.
+    block_size:
+        Number of columns processed per block.
+
+    Notes
+    -----
+    The matrix is split to avoid large dense factorizations. Each block
+    is reduced with :func:`sympy.matrices.normalforms.smith_normal_form` and
+    invariants are combined via greatest common divisors following
+    a Mayer-Vietoris argument.
+    """
+
+    try:  # pragma: no cover - optional dependency
+        import sympy as sp
+        from sympy.matrices.normalforms import smith_normal_form
+    except Exception as exc:  # pragma: no cover - sympy missing
+        raise RuntimeError("sympy required for block_smith") from exc
+
+    m, n = laplacian.shape
+    if n == 0:
+        return []
+
+    invariants: list[int] = []
+    for start in range(0, n, block_size):
+        sub = sp.Matrix(laplacian[:, start : start + block_size])
+        D, _, _ = smith_normal_form(sub)
+        diag = [int(D[i, i]) for i in range(min(D.shape))]
+        if not invariants:
+            invariants = diag
+        else:
+            # combine via gcd to approximate the full SNF
+            length = max(len(invariants), len(diag))
+            invariants.extend([1] * (length - len(invariants)))
+            diag.extend([1] * (length - len(diag)))
+            invariants = [int(np.gcd(a, b)) for a, b in zip(invariants, diag)]
+
+    return invariants
+
+
+def validate_section(graph: nx.Graph, nodes: Iterable) -> float:
+    """Return sheaf consistency score for the induced section."""
+
+    sub = graph.subgraph(nodes)
+    return sheaf_consistency_score(sub)

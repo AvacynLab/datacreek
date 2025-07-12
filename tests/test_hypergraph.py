@@ -34,16 +34,22 @@ def test_dataset_hyper_sagnn_wrapper():
     assert len(result["h1"]) == 2
     assert any(e.operation == "compute_hyper_sagnn_embeddings" for e in ds.events)
 
-    result_hd = ds.compute_hyper_sagnn_head_drop_embeddings(num_heads=2, threshold=0.0, seed=0)
+    result_hd = ds.compute_hyper_sagnn_head_drop_embeddings(
+        num_heads=2, threshold=0.0, seed=0
+    )
     assert "h1" in result_hd
     assert len(result_hd["h1"]) == 1
-    assert any(e.operation == "compute_hyper_sagnn_head_drop_embeddings" for e in ds.events)
+    assert any(
+        e.operation == "compute_hyper_sagnn_head_drop_embeddings" for e in ds.events
+    )
 
 
 def test_hyper_sagnn_head_drop():
     edges = [[0, 1, 2], [2, 3]]
     feats = np.random.RandomState(0).randn(4, 4)
-    emb = hyper_sagnn_head_drop_embeddings(edges, feats, num_heads=2, threshold=0.0, seed=0)
+    emb = hyper_sagnn_head_drop_embeddings(
+        edges, feats, num_heads=2, threshold=0.0, seed=0
+    )
     assert emb.shape[0] == 2
     assert emb.shape[1] == 2
 
@@ -51,7 +57,7 @@ def test_hyper_sagnn_head_drop():
 def test_hyper_adamic_adar_simple():
     edges = [["a", "b"], ["a", "c"]]
     scores = hyper_adamic_adar_scores(edges)
-    w = 1 / math.log(2)
+    w = 1.0  # 1/(|H|-1) with |H|=2
     assert scores[("a", "b")] == pytest.approx(w)
     assert scores[("a", "c")] == pytest.approx(w)
     assert ("b", "c") not in scores
@@ -66,3 +72,11 @@ def test_hyper_adamic_adar_on_graph():
     kg.add_hyperedge("h2", ["c1", "c3"])
     scores = kg.hyper_adamic_adar_scores()
     assert ("c1", "c2") in scores
+
+
+def test_hyper_adamic_adar_triangle():
+    edges = [["x", "y", "z"]]
+    scores = hyper_adamic_adar_scores(edges)
+    assert scores[("x", "y")] == pytest.approx(0.5)
+    assert scores[("x", "z")] == pytest.approx(0.5)
+    assert scores[("y", "z")] == pytest.approx(0.5)
