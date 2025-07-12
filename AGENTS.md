@@ -507,3 +507,5 @@ Variables :
 - Installé les dépendances manquantes et exécuté les tests unitaires
 - Installé networkx, numpy, pydantic, scikit-learn, rich, requests, python-dateutil pour faire tourner les tests.
 - Vérifié les implémentations, aucune tâche manquante; tests bootstrap_db et runners ok.
+- Corrigé le formatage de `build_dataset.py` avec isort et black suite aux erreurs
+  du hook pre-commit.

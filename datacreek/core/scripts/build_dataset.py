@@ -4,10 +4,7 @@ from pathlib import Path
 import networkx as nx
 
 from datacreek.analysis.autotune import AutoTuneState
-from datacreek.analysis.monitoring import (
-    push_metrics_gateway,
-    start_metrics_server,
-)
+from datacreek.analysis.monitoring import push_metrics_gateway, start_metrics_server
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.pipelines import DatasetType
 from datacreek.utils.config import load_config
