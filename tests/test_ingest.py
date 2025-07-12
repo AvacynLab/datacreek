@@ -3,10 +3,10 @@ import types
 
 import pytest
 
+import datacreek.analysis.monitoring
 import datacreek.parsers
 from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
 from datacreek.core.ingest import ingest_into_dataset, process_file
-import datacreek.analysis.monitoring
 from datacreek.parsers import ImageParser, WhisperAudioParser
 from datacreek.parsers.pdf_parser import PDFParser
 from datacreek.utils.config import load_config

@@ -2,9 +2,9 @@ import networkx as nx
 
 from datacreek.analysis.generation import (
     bias_reweighting,
+    bias_wasserstein,
     sheaf_consistency_real,
     sheaf_score,
-    bias_wasserstein,
 )
 
 
@@ -26,6 +26,7 @@ def test_bias_reweighting_adjusts(tmp_path):
 
 def test_sheaf_score_identity():
     import numpy as np
+
     Delta = np.eye(2)
     score = sheaf_score([0.0, 0.0], Delta)
     assert score == 1.0
@@ -33,6 +34,7 @@ def test_sheaf_score_identity():
 
 def test_bias_wasserstein_rescales():
     import numpy as np
+
     loc = np.array([[0.0], [1.0]], dtype=float)
     glob = np.array([[0.0], [2.0]], dtype=float)
     logits = np.array([1.0, 1.0], dtype=float)

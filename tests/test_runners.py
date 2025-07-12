@@ -2,8 +2,8 @@ import types
 
 import networkx as nx
 
-import datacreek.core.runners as runners
 import datacreek.analysis.monitoring
+import datacreek.core.runners as runners
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.core.runners import GraphWaveRunner, Node2VecRunner
 
@@ -84,6 +84,7 @@ def test_poincare_runner_recenters(monkeypatch):
     runner = runners.PoincareRunner(kg)
     runner.run()
     import numpy as np
+
     norms = [
         np.linalg.norm(kg.graph.nodes[n]["poincare_embedding"]) for n in kg.graph.nodes
     ]

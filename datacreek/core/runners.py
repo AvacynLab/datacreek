@@ -128,9 +128,9 @@ class PoincareRunner:
             for n in self.graph.graph.nodes:
                 if "poincare_embedding" not in self.graph.graph.nodes[n]:
                     continue
-                v = np.asarray(self.graph.graph.nodes[n]["poincare_embedding"], dtype=float)
+                v = np.asarray(
+                    self.graph.graph.nodes[n]["poincare_embedding"], dtype=float
+                )
                 norm = np.linalg.norm(v) + 1e-8
-                self.graph.graph.nodes[n]["poincare_embedding"] = (
-                    0.8 / norm
-                ) * v
+                self.graph.graph.nodes[n]["poincare_embedding"] = (0.8 / norm) * v
             logger.info("crowding detected r_mean=%.3f, rescaled", radius_mean)

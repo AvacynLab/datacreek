@@ -14,10 +14,16 @@ def test_autotune_state_defaults():
 def test_recall_and_autotune_step():
     g = nx.Graph()
     g.add_node(
-        "a", embedding=[1.0, 0.0], graphwave_embedding=[1.0, 0.0], poincare_embedding=[0.0, 0.5]
+        "a",
+        embedding=[1.0, 0.0],
+        graphwave_embedding=[1.0, 0.0],
+        poincare_embedding=[0.0, 0.5],
     )
     g.add_node(
-        "b", embedding=[0.0, 1.0], graphwave_embedding=[0.0, 1.0], poincare_embedding=[0.0, 0.6]
+        "b",
+        embedding=[0.0, 1.0],
+        graphwave_embedding=[0.0, 1.0],
+        poincare_embedding=[0.0, 0.6],
     )
     g.add_edge("a", "b")
 

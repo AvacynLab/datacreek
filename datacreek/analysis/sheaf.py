@@ -23,7 +23,9 @@ def sheaf_laplacian(graph: nx.Graph, *, edge_attr: str = "sheaf_sign") -> np.nda
     return L
 
 
-def sheaf_incidence_matrix(graph: nx.Graph, *, edge_attr: str = "sheaf_sign") -> np.ndarray:
+def sheaf_incidence_matrix(
+    graph: nx.Graph, *, edge_attr: str = "sheaf_sign"
+) -> np.ndarray:
     """Return incidence matrix ``\delta`` for ``graph``.
 
     Parameters
@@ -229,7 +231,9 @@ def sheaf_first_cohomology_blocksmith(
         return int(np.sum(vals < tol))
 
     try:  # pragma: no cover - optional dependency
-        return block_smith(delta.astype(int), block_size=block_size, lam_thresh=lam_thresh)
+        return block_smith(
+            delta.astype(int), block_size=block_size, lam_thresh=lam_thresh
+        )
     except Exception:  # fall back to dense eigendecomposition
         Delta = delta.T @ delta
         vals = np.linalg.eigvalsh(Delta)
@@ -341,7 +345,9 @@ def block_smith_invariants(delta: np.ndarray, block_size: int = 40000) -> list[i
     return invariants
 
 
-def block_smith(delta: np.ndarray, block_size: int = 40000, lam_thresh: float | None = None) -> int:
+def block_smith(
+    delta: np.ndarray, block_size: int = 40000, lam_thresh: float | None = None
+) -> int:
     """Return the :math:`H^1` rank from a block-Smith reduction on ``delta``.
 
     Parameters

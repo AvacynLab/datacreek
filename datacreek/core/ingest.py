@@ -133,12 +133,9 @@ def process_file(
     content = parser.parse(file_path, **parse_kwargs)
 
     # Fallback OCR with pytesseract if unstructured extraction returned nothing
-    if (
-        isinstance(parser, PDFParser)
-        and (
-            (isinstance(content, str) and not content.strip())
-            or (isinstance(content, list) and not content)
-        )
+    if isinstance(parser, PDFParser) and (
+        (isinstance(content, str) and not content.strip())
+        or (isinstance(content, list) and not content)
     ):
         try:
             from types import SimpleNamespace
@@ -148,9 +145,7 @@ def process_file(
 
             lang = cfg.get("ingest", {}).get("ocr_lang", "eng")
             images = convert_from_path(file_path)
-            ocr_texts = [
-                pytesseract.image_to_string(img, lang=lang) for img in images
-            ]
+            ocr_texts = [pytesseract.image_to_string(img, lang=lang) for img in images]
             if return_elements:
                 content = [SimpleNamespace(text=t) for t in ocr_texts]
             else:
