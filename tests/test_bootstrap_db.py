@@ -46,3 +46,5 @@ def test_bootstrap_db_writes_neo4j(monkeypatch):
     )
     bootstrap_db(kg, n=2, ratio=0.5, driver=driver, dataset="tmp")
     assert any("GraphMeta" in q for q in driver.log)
+    assert any("fractal_dim" in q for q in driver.log)
+    assert any("fractal_sigma" in q for q in driver.log)
