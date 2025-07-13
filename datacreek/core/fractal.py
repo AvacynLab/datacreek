@@ -114,22 +114,13 @@ def bootstrap_db(
     else:
         mean = sigma = 0.0
 
-    graph.graph.graph["fractal_dim"] = mean
-    graph.graph.graph["fractal_sigma"] = sigma
+    graph.set_property("fractal_dim", mean, driver=driver, dataset=dataset)
+    graph.set_property("fractal_sigma", sigma, driver=driver, dataset=dataset)
     logger.info("fractal_dim=%.4f fractal_sigma=%.4f", mean, sigma)
     try:
         update_metric("sigma_db", float(sigma))
     except Exception:  # pragma: no cover - Prometheus optional
         pass
-    if driver is not None and Driver is not None:
-        with driver.session() as session:
-            session.run(
-                "MERGE (m:GraphMeta {dataset:$ds}) "
-                "SET m.fractal_dim=$dim, m.fractal_sigma=$sigma",
-                ds=dataset or "default",
-                dim=mean,
-                sigma=sigma,
-            )
     return dims
 
 
@@ -212,8 +203,8 @@ def bootstrap_sigma_db(
             np.sqrt(sum((d - mean) ** 2 for d in dims) / max(1, len(dims) - 1))
         )
 
-    graph.graph.graph["fractal_dim"] = mean
-    graph.graph.graph["fractal_sigma"] = sigma
+    graph.set_property("fractal_dim", mean, driver=driver, dataset=dataset)
+    graph.set_property("fractal_sigma", sigma, driver=driver, dataset=dataset)
     logger.info("fractal_dim=%.4f fractal_sigma=%.4f", mean, sigma)
     try:
         update_metric("sigma_db", float(sigma))

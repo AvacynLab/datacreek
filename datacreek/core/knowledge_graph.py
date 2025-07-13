@@ -4799,6 +4799,26 @@ class KnowledgeGraph:
                     parts.append(text)
         return "\n\n".join(parts)
 
+    def set_property(
+        self,
+        key: str,
+        value: Any,
+        *,
+        driver: Driver | None = None,
+        dataset: str | None = None,
+    ) -> None:
+        """Store a global graph property and optionally persist to Neo4j."""
+
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise ValueError(f"invalid property name: {key}")
+
+        self.graph.graph[key] = value
+
+        if driver is not None and Driver is not None:
+            query = f"MERGE (m:GraphMeta {{dataset:$ds}}) SET m.{key}=$val"
+            with driver.session() as session:
+                session.run(query, ds=dataset or "default", val=value)
+
     # ------------------------------------------------------------------
     # Neo4j helpers
     # ------------------------------------------------------------------
