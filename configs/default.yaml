@@ -6,10 +6,10 @@ ingest:
 cleanup:
   tau: 5           # triangle threshold
   sigma: 0.95      # node similarity threshold
-  k: 4             # min component size
+  k_min: 5         # min component size
   lp_sigma: 0.3    # Hyper-AA score threshold
   lp_topk: 5
-  hub_deg: 500     # hub tagging degree threshold
+  hub_deg: 1000    # hub tagging degree threshold
 tpl:
   eps_w1: 0.05     # Wasserstein-1 cutoff
   rnn_size: 128    # GraphRNN-Lite subgraph size

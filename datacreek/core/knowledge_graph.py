@@ -4926,7 +4926,7 @@ class KnowledgeGraph:
             Optional dataset label used to filter nodes.
         min_component_size:
             Components smaller than this size are removed. ``None`` loads the
-            default from ``configs/default.yaml`` (``cleanup.k``) so autotuning
+            default from ``configs/default.yaml`` (``cleanup.k_min``) so autotuning
             can adapt it.
         similarity_threshold:
             Cosine similarity above which nodes are flagged as duplicates.
@@ -4958,7 +4958,7 @@ class KnowledgeGraph:
             cfg = load_config()
             cleanup_cfg = cfg.get("cleanup", {})
             if min_component_size is None:
-                min_component_size = int(cleanup_cfg.get("k", 2))
+                min_component_size = int(cleanup_cfg.get("k_min", 2))
             if similarity_threshold is None:
                 similarity_threshold = float(cleanup_cfg.get("sigma", 0.95))
             if triangle_threshold is None:
