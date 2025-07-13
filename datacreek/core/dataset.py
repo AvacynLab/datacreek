@@ -3366,7 +3366,9 @@ class DatasetBuilder:
             Whether to rely on Neo4j. ``None`` means auto-detect based on
             ``neo4j_driver``.
         min_component_size:
-            Components smaller than this size are removed.
+            Components smaller than this size are removed. ``None`` loads the
+            default from ``configs/default.yaml`` (``cleanup.k_min``) so
+            autotuning can adjust the parameter.
         similarity_threshold:
             Duplicate nodes above this value are merged.
         triangle_threshold:
@@ -4228,7 +4230,7 @@ class DatasetBuilder:
 
         cfg = load_config()
         cleanup_cfg = cfg.get("cleanup", {})
-        min_component_size = cleanup_cfg.get("k", min_component_size)
+        min_component_size = cleanup_cfg.get("k_min", min_component_size)
         similarity_threshold = cleanup_cfg.get("sigma", similarity_threshold)
         triangle_threshold = cleanup_cfg.get("tau", triangle_threshold)
 
