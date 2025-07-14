@@ -30,8 +30,8 @@
 | Tâche                         | Assertions à coder                                                                                                | Notes                            | Status |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------ |
 | **5-A Exécution CLI dry-run** | • `sheaf_score >= 0.8` • `recall10 >= 0.9` • `tpl_w1 <= cfg.tpl.eps_w1` • `(index_type=="HNSW") == (latency>0.1)` | Utiliser dataset `samples/mini`. | [ ] |
-| **5-B Intégration CI**        | Ajouter job `pipeline-e2e` dans `.github/workflows/python.yml`.                                                   |                                  | [ ] |
-
+| **5-B Intégration CI**        | Ajouter job `pipeline-e2e` dans `.github/workflows/python.yml`.                                                   |
+|                       | [x] |
 ## 6 │ `core/knowledge_graph.py` (validation)
 
 | Tâche               | Étapes                                                                                                                      | Maths | Status |
@@ -64,3 +64,4 @@ cache:
 ## History
 - Reset tasks and fixed CI YAML workflow syntax
 - Installed dependencies and ran tests
+- Restored separate CI workflows for unit and e2e tests with correct YAML quoting
