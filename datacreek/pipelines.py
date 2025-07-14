@@ -22,7 +22,7 @@ from datacreek.backends import get_redis_client as backend_get_redis_client
 from datacreek.core.cleanup import cleanup_knowledge_graph
 from datacreek.core.create import process_file, process_file_async
 from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
-from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.core.knowledge_graph import KnowledgeGraph, verify_thresholds
 from datacreek.core.save_as import convert_format
 from datacreek.models.content_type import ContentType
 from datacreek.models.qa import QAPair
@@ -86,6 +86,7 @@ class PipelineStep(str, Enum):
     INGEST = "ingest"
     TO_KG = "to_kg"
     KG_CLEANUP = "kg_cleanup"
+    VERIFY_THRESHOLDS = "verify_thresholds"
     GENERATE_QA = "generate_qa"
     GENERATE_COT = "generate_cot"
     GENERATE_VQA = "generate_vqa"
@@ -435,6 +436,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_QA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -457,6 +459,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_COT,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -476,6 +479,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_VQA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -495,6 +499,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_FROM_KG,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -517,6 +522,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.LABEL_PAIRS,
             PipelineStep.SAVE,
@@ -536,6 +542,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.RANK_RESPONSES,
             PipelineStep.SAVE,
@@ -549,6 +556,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_TOOL_CALL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -571,6 +579,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_CONVERSATION,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -593,6 +602,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_MULTI_TOOL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -907,6 +917,7 @@ async def _run_generation_pipeline_impl(
         ),
         PipelineStep.LABEL_PAIRS: _identity,
         PipelineStep.RANK_RESPONSES: _identity,
+        PipelineStep.VERIFY_THRESHOLDS: lambda d: (verify_thresholds() or d),
         PipelineStep.KG_CLEANUP: _kg_cleanup,
         PipelineStep.CURATE: _curate,
         PipelineStep.SAVE: _save,

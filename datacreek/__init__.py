@@ -843,3 +843,9 @@ def __getattr__(name: str):
             name
         ]
     raise AttributeError(name)
+
+
+from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watcher
+
+# Start config watcher when the package is imported
+_start_cleanup_watcher()

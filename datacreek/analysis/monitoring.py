@@ -17,15 +17,26 @@ except Exception:  # pragma: no cover - optional
     push_to_gateway = None
     start_http_server = None
 
+if Gauge is not None:
+    tpl_w1 = Gauge('tpl_w1', 'Wasserstein-1 TPL')
+    sheaf_score = Gauge('sheaf_score', 'Sheaf consistency score')
+    gw_entropy = Gauge('gw_entropy', 'GraphWave entropy')
+    autotune_cost = Gauge('autotune_cost', 'Current J(theta)')
+else:  # pragma: no cover - optional dependency missing
+    tpl_w1 = None
+    sheaf_score = None
+    gw_entropy = None
+    autotune_cost = None
+
 
 _METRICS = {
     "sigma_db": None,
     "recall10": None,
-    "sheaf_score": None,
-    "gw_entropy": None,
-    "tpl_w1": None,
+    "sheaf_score": sheaf_score,
+    "gw_entropy": gw_entropy,
+    "tpl_w1": tpl_w1,
     "j_cost": None,
-    "autotune_cost": None,
+    "autotune_cost": autotune_cost,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

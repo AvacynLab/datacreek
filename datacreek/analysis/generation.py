@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Graph generation utilities."""
 
+import logging
 import math
 import random
 from typing import Dict, Iterable
@@ -332,7 +333,15 @@ def sheaf_score(b: Iterable[float], Delta) -> float:
     b_vec = np.asarray(list(b), dtype=float)
     x, _ = cg(Delta, b_vec, atol=0.0, rtol=1e-5, maxiter=1000)
     resid = b_vec - Delta @ x
-    return 1.0 / (1.0 + np.linalg.norm(resid))
+    score = 1.0 / (1.0 + np.linalg.norm(resid))
+    try:
+        from .monitoring import sheaf_score as _sheaf_score_gauge
+
+        if _sheaf_score_gauge is not None:
+            _sheaf_score_gauge.set(float(score))
+    except Exception:
+        pass
+    return score
 
 
 def bias_wasserstein(loc_hist, glob_hist, logits):
@@ -349,3 +358,34 @@ def bias_wasserstein(loc_hist, glob_hist, logits):
     beta = float(np.exp(-W))
     scaled = np.array(logits, dtype=float, copy=True) * beta
     return scaled, W
+
+
+def apply_logit_bias(payload, loc_hist, glob_hist):
+    """Apply Wasserstein bias mitigation to LLM ``payload`` logits.
+
+    Parameters
+    ----------
+    payload:
+        Dictionary containing at least a ``"logits"`` entry.
+    loc_hist:
+        Local histogram of observed classes.
+    glob_hist:
+        Global reference histogram.
+
+    Returns
+    -------
+    float
+        The Wasserstein distance ``W`` between ``loc_hist`` and ``glob_hist``.
+    """
+
+    import numpy as np
+
+    if "logits" not in payload:
+        raise KeyError("payload missing 'logits'")
+
+    scaled_logits, W = bias_wasserstein(loc_hist, glob_hist, payload["logits"])
+    payload["logits"] = np.asarray(scaled_logits, dtype=float).tolist()
+    logging.getLogger(__name__).info(
+        "Bias factor β=%.3f applied; W=%.4f", float(np.exp(-W)), float(W)
+    )
+    return W

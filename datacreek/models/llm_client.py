@@ -10,7 +10,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import requests
 
@@ -236,6 +236,10 @@ class LLMClient:
         frequency_penalty: float = None,
         presence_penalty: float = None,
         stop: Optional[List[str]] = None,
+        *,
+        loc_hist: Iterable | None = None,
+        glob_hist: Iterable | None = None,
+        logits: Iterable | None = None,
     ) -> str:
         """Generate a chat completion using the selected provider
 
@@ -296,6 +300,9 @@ class LLMClient:
                 presence_penalty,
                 stop,
                 verbose,
+                loc_hist=loc_hist,
+                glob_hist=glob_hist,
+                logits=logits,
             )
 
     def _openai_chat_completion(
@@ -479,6 +486,10 @@ class LLMClient:
         presence_penalty: float,
         stop: Optional[List[str]],
         verbose: bool,
+        *,
+        loc_hist: Iterable | None = None,
+        glob_hist: Iterable | None = None,
+        logits: Iterable | None = None,
     ) -> str:
         """Generate a chat completion using the VLLM OpenAI-compatible API"""
         data = {
@@ -491,6 +502,17 @@ class LLMClient:
             "presence_penalty": presence_penalty,
             "stop": stop,
         }
+
+        if logits is not None:
+            data["logits"] = list(logits)
+
+        if loc_hist is not None and glob_hist is not None and "logits" in data:
+            try:
+                from datacreek.analysis.generation import apply_logit_bias
+
+                apply_logit_bias(data, loc_hist, glob_hist)
+            except Exception:
+                logger.exception("Failed to apply logit bias")
 
         for attempt in range(self.max_retries):
             try:

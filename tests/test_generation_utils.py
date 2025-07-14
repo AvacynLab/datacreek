@@ -4,6 +4,7 @@ import numpy as np
 from datacreek.analysis.generation import (
     bias_reweighting,
     bias_wasserstein,
+    apply_logit_bias,
     sheaf_consistency_real,
     sheaf_score,
 )
@@ -55,3 +56,13 @@ def test_bias_wasserstein_majority_drop():
     scaled, W = bias_wasserstein(loc, glob, logits)
     assert W > 0.0
     assert scaled[0] < logits[0]
+
+
+def test_apply_logit_bias():
+    loc = np.array([[9.0], [1.0]], dtype=float)
+    glob = np.array([[5.0], [5.0]], dtype=float)
+    payload = {"logits": [0.9, 0.1]}
+
+    W = apply_logit_bias(payload, loc, glob)
+    assert W > 0
+    assert payload["logits"][0] < 0.9

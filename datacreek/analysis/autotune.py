@@ -262,6 +262,13 @@ def autotune_step(
         state.stagnation = 0
     state.prev_costs.append(J)
     update_metric("autotune_cost", float(J))
+    try:
+        from .monitoring import autotune_cost as _autotune_gauge
+
+        if _autotune_gauge is not None:
+            _autotune_gauge.set(float(J))
+    except Exception:
+        pass
     restart_gp = False
     if state.stagnation >= 5:
         if state.likelihood is not None and hasattr(state.likelihood, "noise"):
