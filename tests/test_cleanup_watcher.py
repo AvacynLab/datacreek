@@ -26,3 +26,27 @@ def test_cleanup_watcher_reload(tmp_path):
     vals = get_cleanup_cfg()
     stop_cleanup_watcher()
     assert vals["sigma"] == 0.8
+
+
+def test_default_config_reload(caplog, tmp_path):
+    """Cleanup thresholds should update when the default YAML changes."""
+    import yaml
+    from pathlib import Path
+
+    cfg_src = Path("configs/default.yaml")
+    cfg_file = tmp_path / "default.yaml"
+    cfg_file.write_text(cfg_src.read_text())
+    os.environ["DATACREEK_CONFIG"] = str(cfg_file)
+    stop_cleanup_watcher()
+    caplog.set_level("INFO")
+    start_cleanup_watcher()
+    time.sleep(0.3)
+    orig = get_cleanup_cfg()["tau"]
+    cfg = yaml.safe_load(cfg_file.read_text())
+    cfg["cleanup"]["tau"] = orig + 1
+    cfg_file.write_text(yaml.dump(cfg))
+    time.sleep(0.3)
+    vals = get_cleanup_cfg()
+    stop_cleanup_watcher()
+    assert vals["tau"] == orig + 1
+    assert any("cleanup thresholds updated" in r.message for r in caplog.records)

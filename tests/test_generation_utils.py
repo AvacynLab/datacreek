@@ -54,7 +54,7 @@ def test_bias_wasserstein_majority_drop():
     glob = np.array([[5.0], [5.0]], dtype=float)
     logits = np.array([0.8, 0.2], dtype=float)
     scaled, W = bias_wasserstein(loc, glob, logits)
-    assert W > 0.0
+    assert W > 0.1
     assert scaled[0] < logits[0]
 
 

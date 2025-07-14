@@ -116,15 +116,27 @@ def verify_thresholds() -> None:
     assert vals.get("tau") == CleanupConfig.tau
 
 
-def start_cleanup_watcher(interval: float = 300.0) -> None:
-    """Start filesystem watcher reloading cleanup thresholds."""
+def start_cleanup_watcher(
+    cfg_path: str | os.PathLike | None = None, interval: float = 300.0
+) -> None:
+    """Start filesystem watcher reloading cleanup thresholds.
+
+    Parameters
+    ----------
+    cfg_path:
+        Optional path to the YAML configuration. When ``None`` the value of
+        ``DATACREEK_CONFIG`` is used and defaults to ``configs/default.yaml``.
+    interval:
+        Polling interval for the :class:`watchdog.observers.Observer`.
+    """
 
     global _observer, _cfg_path
     if _observer is not None:
         return
 
-    cfg_path = Path(os.environ.get("DATACREEK_CONFIG", "configs/default.yaml"))
-    _cfg_path = cfg_path.resolve()
+    env_path = os.environ.get("DATACREEK_CONFIG", "configs/default.yaml")
+    cfg_file = Path(cfg_path or env_path)
+    _cfg_path = cfg_file.resolve()
     _load_cleanup()
     apply_cleanup_config()
     handler = ConfigReloader(_cfg_path)
@@ -132,6 +144,7 @@ def start_cleanup_watcher(interval: float = 300.0) -> None:
     observer.schedule(handler, str(_cfg_path.parent), recursive=False)
     observer.daemon = True
     observer.start()
+    logging.getLogger(__name__).info("CFG-HOT watcher started")
     _observer = observer
 
 

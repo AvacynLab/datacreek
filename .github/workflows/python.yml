@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 jobs:
-  test-e2e:
+  pipeline-e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

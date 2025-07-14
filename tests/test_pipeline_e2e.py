@@ -3,6 +3,7 @@ from pathlib import Path
 
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 from datacreek.core.scripts import build_dataset
+from datacreek.utils.config import load_config
 
 
 def test_pipeline_end_to_end(monkeypatch, tmp_path):
@@ -10,8 +11,8 @@ def test_pipeline_end_to_end(monkeypatch, tmp_path):
 
     def fake_run_pipeline(source, config, out, *, dry_run=False):
         ds = DatasetBuilder(DatasetType.QA, name="mini")
-        ds.graph.graph.graph["fractal_sigma"] = 0.01
         ds.graph.graph.graph["recall10"] = 0.95
+        ds.graph.graph.graph["tpl_w1"] = 0.03
         ds.graph.index.type = "HNSW"
         ds.graph.index.latency = 0.2
         monkeypatch.setattr(ds.graph, "sheaf_consistency_score", lambda: 0.85)
@@ -32,8 +33,8 @@ def test_pipeline_end_to_end(monkeypatch, tmp_path):
     build_dataset.main()
 
     ds = metrics["ds"]
-    assert ds.graph.graph.graph["recall10"] >= 0.9
+    cfg = load_config("configs/default.yaml")
     assert ds.graph.sheaf_consistency_score() >= 0.8
-    if ds.graph.index.latency > 0.1:
-        assert ds.graph.index.type == "HNSW"
-    assert ds.graph.graph.graph["fractal_sigma"] < 0.02
+    assert ds.graph.graph.graph["recall10"] >= 0.9
+    assert ds.graph.graph.graph["tpl_w1"] <= float(cfg.get("tpl", {}).get("eps_w1", 0))
+    assert (ds.graph.index.type == "HNSW") == (ds.graph.index.latency > 0.1)
