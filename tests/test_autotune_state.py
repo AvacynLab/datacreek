@@ -41,6 +41,7 @@ def test_recall_and_autotune_step():
         state,
         recall_data=(["a"], {"a": ["b"]}),
         k=1,
-        penalty_cfg={"lambda_sigma": 1.0, "lambda_cov": 1.0, "w_rec": 1.0},
+        penalty_cfg={"lambda_sigma": 1.0, "lambda_cov": 1.0, "w_rec": 1.0, "w_lat": 1.0},
+        latency=0.2,
     )
     assert res["recall"] == 1.0

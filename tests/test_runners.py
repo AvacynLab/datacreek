@@ -89,3 +89,25 @@ def test_poincare_runner_recenters(monkeypatch):
         np.linalg.norm(kg.graph.nodes[n]["poincare_embedding"]) for n in kg.graph.nodes
     ]
     assert max(norms) <= 0.81
+
+def test_graphwave_runner_components(monkeypatch):
+    kg = KnowledgeGraph()
+    for i in range(1002):
+        kg.graph.add_node(f"a{i}")
+    for i in range(1001):
+        kg.graph.add_edge(f"a{i}", f"a{i+1}")
+    for i in range(1002, 2004):
+        kg.graph.add_node(f"b{i}")
+    for i in range(1002, 2003):
+        kg.graph.add_edge(f"b{i}", f"b{i+1}")
+    calls = []
+    import numpy as np
+
+    monkeypatch.setattr(
+        "datacreek.analysis.fractal.graphwave_embedding_chebyshev",
+        lambda g, *a, **k: {n: np.zeros(1) for n in g.nodes()} if not calls.append(len(g)) else {n: np.zeros(1) for n in g.nodes()},
+    )
+    monkeypatch.setattr(kg, "graphwave_entropy", lambda: 0.0)
+    runner = GraphWaveRunner(kg)
+    runner.run([1.0], num_points=4, order=3)
+    assert len(calls) == 2

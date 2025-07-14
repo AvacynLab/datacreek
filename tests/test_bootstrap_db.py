@@ -48,3 +48,17 @@ def test_bootstrap_db_writes_neo4j(monkeypatch):
     assert any("GraphMeta" in q for q in driver.log)
     assert any("fractal_dim" in q for q in driver.log)
     assert any("fractal_sigma" in q for q in driver.log)
+
+def test_bootstrap_db_records_seed(monkeypatch):
+    kg = KnowledgeGraph()
+    kg.graph.add_edge("a", "b")
+    called = []
+    monkeypatch.setattr("numpy.random.seed", lambda s: called.append(s))
+    monkeypatch.setattr(kg, "to_neo4j", lambda *a, **k: None)
+    driver = DummyDriver()
+    monkeypatch.setattr(
+        "datacreek.core.fractal.colour_box_dimension", lambda g, r: (1.0, None)
+    )
+    bootstrap_db(kg, n=1, ratio=0.5, driver=driver, dataset="tmp")
+    assert called
+    assert any("fractal_seed" in q for q in driver.log)

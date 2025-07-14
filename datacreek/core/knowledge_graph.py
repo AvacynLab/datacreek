@@ -16,6 +16,8 @@ import requests
 from dateutil import parser
 
 from ..analysis.autotune import AutoTuneState
+from ..utils.config import load_config
+import threading
 
 try:
     from neo4j import Driver, GraphDatabase
@@ -33,6 +35,61 @@ except Exception:  # pragma: no cover - optional dependency for tests
     PCA = None
 
 from ..utils.retrieval import EmbeddingIndex
+
+# ---------------------------------------------------------------------------
+# Cleanup config hot-reload support
+# ---------------------------------------------------------------------------
+_cleanup_cfg: Dict[str, float | int] = {}
+_cleanup_lock = threading.Lock()
+_cleanup_event = threading.Event()
+_cleanup_thread: threading.Thread | None = None
+
+
+def _load_cleanup() -> None:
+    """Load cleanup parameters from YAML configuration."""
+    cfg = load_config()
+    cleanup = cfg.get("cleanup", {})
+    data = {
+        "tau": int(cleanup.get("tau", 5)),
+        "sigma": float(cleanup.get("sigma", 0.95)),
+        "k_min": int(cleanup.get("k_min", 5)),
+        "lp_sigma": float(cleanup.get("lp_sigma", 0.3)),
+        "lp_topk": int(cleanup.get("lp_topk", 5)),
+        "hub_deg": int(cleanup.get("hub_deg", 1000)),
+    }
+    with _cleanup_lock:
+        _cleanup_cfg.update(data)
+
+
+def get_cleanup_cfg() -> Dict[str, float | int]:
+    """Return the currently loaded cleanup configuration."""
+    with _cleanup_lock:
+        return dict(_cleanup_cfg)
+
+
+def start_cleanup_watcher(interval: float = 300.0) -> None:
+    """Start background thread reloading cleanup config every ``interval`` seconds."""
+
+    def watcher() -> None:
+        while not _cleanup_event.wait(interval):
+            try:
+                _load_cleanup()
+            except Exception:
+                logging.getLogger(__name__).exception("cleanup reload failed")
+
+    global _cleanup_thread
+    if _cleanup_thread is None or not _cleanup_thread.is_alive():
+        _load_cleanup()
+        _cleanup_event.clear()
+        _cleanup_thread = threading.Thread(target=watcher, daemon=True)
+        _cleanup_thread.start()
+
+
+def stop_cleanup_watcher() -> None:
+    """Stop the background cleanup watcher."""
+    _cleanup_event.set()
+    if _cleanup_thread is not None:
+        _cleanup_thread.join(timeout=0.5)
 
 
 @dataclass
@@ -59,6 +116,14 @@ class KnowledgeGraph:
         self.faiss_index_type = None
         self.faiss_node_attr = None
         self._mapper_cache = {}
+
+    def has_label(self, label: str) -> bool:
+        """Return ``True`` if any node has ``label`` as a string label."""
+
+        return any(
+            data.get("label") == label or label in data.get("labels", [])
+            for _, data in self.graph.nodes(data=True)
+        )
 
     def add_document(
         self,
@@ -3074,6 +3139,7 @@ class KnowledgeGraph:
         weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
         lr: float = 0.1,
         penalty_cfg: Optional[Dict[str, float]] = None,
+        latency: float = 0.0,
     ) -> Dict[str, Any]:
         """Run one autotuning iteration on the current graph."""
 
@@ -3094,6 +3160,7 @@ class KnowledgeGraph:
             recall_data=None,
             penalty_cfg=penalty_cfg,
             lr=lr,
+            latency=latency,
         )
 
     def svgp_ei_propose(
@@ -4965,27 +5032,17 @@ class KnowledgeGraph:
             suggested links and hub nodes.
         """
 
-        lp_sigma = 0.5
-        lp_topk = 5
-        hub_deg = 500
+        cfg_vals = get_cleanup_cfg()
+        lp_sigma = float(cfg_vals.get("lp_sigma", 0.5))
+        lp_topk = int(cfg_vals.get("lp_topk", 5))
+        hub_deg = int(cfg_vals.get("hub_deg", 500))
 
-        if any(
-            v is None
-            for v in (min_component_size, similarity_threshold, triangle_threshold)
-        ):
-            from ..utils.config import load_config
-
-            cfg = load_config()
-            cleanup_cfg = cfg.get("cleanup", {})
-            if min_component_size is None:
-                min_component_size = int(cleanup_cfg.get("k_min", 2))
-            if similarity_threshold is None:
-                similarity_threshold = float(cleanup_cfg.get("sigma", 0.95))
-            if triangle_threshold is None:
-                triangle_threshold = int(cleanup_cfg.get("tau", 1))
-            lp_sigma = float(cleanup_cfg.get("lp_sigma", lp_sigma))
-            lp_topk = int(cleanup_cfg.get("lp_topk", lp_topk))
-            hub_deg = int(cleanup_cfg.get("hub_deg", hub_deg))
+        if min_component_size is None:
+            min_component_size = int(cfg_vals.get("k_min", 2))
+        if similarity_threshold is None:
+            similarity_threshold = float(cfg_vals.get("sigma", 0.95))
+        if triangle_threshold is None:
+            triangle_threshold = int(cfg_vals.get("tau", 1))
 
         node_query = (
             "MATCH (n"
@@ -5087,12 +5144,12 @@ class KnowledgeGraph:
             session.run(
                 "CALL gds.alpha.hypergraph.linkprediction.adamicAdar.write("
                 "'kg_qc', {writeRelationshipType:'SUGGESTED_HYPER_AA',"
-                " topK:$topk, writeProperty:'score', relationshipProjection:$relProj})",
+                " writeProperty:'haa_score', topK:$topk, relationshipProjection:$relProj})",
                 topk=lp_topk,
                 relProj=rel_proj,
             )
             session.run(
-                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.score <= $th DELETE r",
+                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.haa_score <= $th DELETE r",
                 th=lp_sigma,
             )
 
@@ -5246,3 +5303,7 @@ class KnowledgeGraph:
             session.run("CALL gds.graph.drop('kg_sim')")
 
         return matches
+
+# start cleanup watcher on import
+start_cleanup_watcher()
+

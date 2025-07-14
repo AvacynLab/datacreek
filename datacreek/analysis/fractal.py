@@ -45,6 +45,37 @@ def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
     return lap
 
 
+def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:
+    """Return largest eigenvalue estimate using power iteration.
+
+    Parameters
+    ----------
+    L:
+        Symmetric positive semidefinite matrix.
+    iters:
+        Number of Lanczos iterations. More iterations yield a more accurate
+        estimate at the cost of additional matrix-vector multiplications.
+    """
+    import numpy as np
+
+    n = L.shape[0]
+    if n <= 1000:
+        try:
+            import scipy.sparse as sp
+            import numpy.linalg as nla
+
+            return float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
+        except Exception:
+            pass
+
+    q = np.random.rand(n)
+    q /= np.linalg.norm(q)
+    for _ in range(iters):
+        z = L.dot(q)
+        q = z / (np.linalg.norm(z) + 1e-12)
+    return float(q.dot(L.dot(q)))
+
+
 def box_cover(graph: nx.Graph, radius: int) -> List[set[int]]:
     """Return a box covering of ``graph`` with radius ``radius``.
 
@@ -296,7 +327,10 @@ def chebyshev_heat_kernel(L: np.ndarray, t: float, m: int = 7) -> np.ndarray:
     try:  # pragma: no cover - prefer sparse eigs when available
         from scipy.sparse.linalg import eigsh
 
-        lmax = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
+        if L.shape[0] > 2_000_000:
+            lmax = lanczos_lmax(L, iters=5)
+        else:
+            lmax = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
     except Exception:  # fallback to dense eig
         lmax = float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
 
@@ -1479,7 +1513,7 @@ def inject_graphrnn_subgraph(
 
     base = max(graph.nodes, default=-1) + 1
     mapping = {n: base + i for i, n in enumerate(motif.nodes())}
-    graph.add_nodes_from(mapping.values())
+    graph.add_nodes_from((m, {"label": "RNN_PATCH"}) for m in mapping.values())
     for u, v, data in motif.edges(data=True):
         graph.add_edge(mapping[u], mapping[v], **data)
     return list(mapping.values())
@@ -1538,7 +1572,9 @@ def tpl_motif_injection(
     """Generate and inject a GraphRNN motif based on configuration."""
 
     size = int(cfg.get("tpl", {}).get("rnn_size", 64))
-    return inject_and_validate(graph, size, max(1, size - 1), driver=driver)
+    return inject_and_validate(
+        graph, size, max(1, size - 1), rollback=False, driver=driver
+    )
 
 
 def bootstrap_sigma_db(graph: nx.Graph, radii: Iterable[int]) -> float:

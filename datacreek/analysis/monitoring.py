@@ -38,8 +38,9 @@ def start_metrics_server(port: int = 8000) -> None:
     """Start an HTTP server exposing Prometheus gauges."""
     if start_http_server is None or Gauge is None:
         return
-    for name in _METRICS:
-        _METRICS[name] = Gauge(name, f"{name} metric")
+    for name, g in _METRICS.items():
+        if g is None:
+            _METRICS[name] = Gauge(name, f"{name} metric")
     start_http_server(port)
 
 
@@ -67,3 +68,8 @@ def update_metric(name: str, value: float) -> None:
             g.set(value)
         except Exception:  # pragma: no cover
             pass
+
+from ..utils.config import load_config
+cfg = load_config()
+start_metrics_server(int(cfg.get("monitor", {}).get("port", 8000)))
+

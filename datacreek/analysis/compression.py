@@ -2,10 +2,33 @@
 
 from __future__ import annotations
 
+import pickle
+from pathlib import Path
+
 try:
     import numpy as np
 except Exception:  # pragma: no cover - optional dependency
     np = None  # type: ignore
+
+
+def save_checkpoint(path: str, model: object) -> None:
+    """Persist ``model`` to ``path`` using pickle."""
+
+    try:
+        with open(Path(path), "wb") as fh:
+            pickle.dump(model, fh)
+    except Exception:  # pragma: no cover - disk errors
+        pass
+
+
+def restore_checkpoint(path: str = "fractal.bak") -> object | None:
+    """Return model loaded from ``path`` if present."""
+
+    try:
+        with open(Path(path), "rb") as fh:
+            return pickle.load(fh)
+    except Exception:  # pragma: no cover - missing file
+        return None
 
 
 def prune_fractalnet(weights: "np.ndarray | list[float]", ratio: float = 0.5):
@@ -108,6 +131,9 @@ class FractalNetPruner:
         if baseline is None:
             baseline = self._perplexity(eval_fn)
 
+        # backup checkpoint before pruning
+        save_checkpoint("fractal.bak", self.model)
+
         try:
             import torch
             import torch.nn as nn
@@ -153,5 +179,16 @@ class FractalNetPruner:
             except Exception:  # pragma: no cover - training optional
                 pass
         perplexity = self._perplexity(eval_fn)
+
+        # Rollback if perplexity worsened by more than 1% and persist otherwise
+        if perplexity > 1.01 * baseline:
+            restored = restore_checkpoint("fractal.bak")
+            if restored is not None:
+                self.model = restored
+            accepted = False
+        else:
+            save_checkpoint("pruned.ok", self.model)
+            accepted = True
+
         delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
-        return delta <= 0.01, perplexity
+        return accepted and delta <= 0.01, perplexity
