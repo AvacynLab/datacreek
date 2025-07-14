@@ -1334,8 +1334,11 @@ class _DummySession:
 
 
 class _DummyDriver:
+    def __init__(self) -> None:
+        self.session_obj = _DummySession()
+
     def session(self) -> _DummySession:
-        return _DummySession()
+        return self.session_obj
 
 
 def test_gds_quality_check_method():
@@ -1344,13 +1347,15 @@ def test_gds_quality_check_method():
     kg.add_chunk("d", "c1", "hello")
     kg.add_chunk("d", "c2", "world")
 
-    res = kg.gds_quality_check(_DummyDriver())
+    driver = _DummyDriver()
+    res = kg.gds_quality_check(driver)
     assert set(res["removed_nodes"]) == {0, 1}
     assert res["duplicates"]
     assert res["suggested_links"]
     assert 0 in res["hubs"]
     assert res["weak_links"] == [(0, 1)]
     assert res["triangles_removed"] == 1
+    assert any("haa_score" in q for q in driver.session_obj.queries)
 
 
 def test_quality_check_method():

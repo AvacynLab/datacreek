@@ -132,8 +132,40 @@ def cca_align(
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as f:
-        pickle.dump({"Wn2v": cca.x_weights_, "Wgw": cca.y_weights_}, f)
+        # store weights using protocol 4 for compatibility
+        pickle.dump({"Wn2v": cca.x_weights_, "Wgw": cca.y_weights_}, f, protocol=4)
     return latent
+
+
+def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
+    """Return CCA weights ``(Wn2v, Wgw)`` previously persisted by :func:`cca_align`.
+
+    Parameters
+    ----------
+    path:
+        Location of the pickled weights.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        ``(Wn2v, Wgw)`` matrices.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``path`` does not exist.
+    """
+
+    import os
+    import pickle
+
+    import numpy as np
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"CCA weights not found at {path}")
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    return np.asarray(data["Wn2v"]), np.asarray(data["Wgw"])
 
 
 def hybrid_score(

@@ -98,15 +98,23 @@ def _cache_put(
             redis_client = None
     if redis_client is not None:
         try:
-            redis_client.hset("nerve_hash", key, data)
-            redis_client.expire("nerve_hash", int(ttl))
+            redis_client.setex(key, int(ttl), data)
         except Exception:  # pragma: no cover - network errors
             pass
     if lmdb is not None:
         try:
-            env = lmdb.open(lmdb_path, map_size=10_485_760)
+            from ..utils.config import load_config
+
+            cfg = load_config()
+            limit_mb = int(cfg.get("cache", {}).get("l2_max_mb", 256))
+            env = lmdb.open(lmdb_path, map_size=limit_mb * 1024 * 1024)
             with env.begin(write=True) as txn:
                 txn.put(key.encode(), data)
+                size = Path(lmdb_path).stat().st_size / (1024 * 1024)
+                if size > limit_mb:
+                    cursor = txn.cursor()
+                    if cursor.first():
+                        txn.delete(cursor.key())
             env.close()
         except Exception:  # pragma: no cover - disk errors
             pass

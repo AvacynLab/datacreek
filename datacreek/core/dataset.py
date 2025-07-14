@@ -2659,6 +2659,7 @@ class DatasetBuilder:
         weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
         lr: float = 0.1,
         penalty_cfg: Optional[Dict[str, float]] = None,
+        latency: float = 0.0,
     ) -> Dict[str, Any]:
         """Wrapper for :meth:`KnowledgeGraph.autotune_step`."""
 
@@ -2670,6 +2671,7 @@ class DatasetBuilder:
             weights=weights,
             lr=lr,
             penalty_cfg=penalty_cfg,
+            latency=latency,
         )
         self.graph.graph["j_cost"] = float(res["cost"])
         update_metric("j_cost", float(res["cost"]))

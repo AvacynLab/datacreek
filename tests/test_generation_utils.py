@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 
 from datacreek.analysis.generation import (
     bias_reweighting,
@@ -40,5 +41,4 @@ def test_bias_wasserstein_rescales():
     logits = np.array([1.0, 1.0], dtype=float)
     scaled, W = bias_wasserstein(loc, glob, logits)
     assert W >= 0.0
-    if W > 0.1:
-        assert np.all(scaled < logits)
+    assert np.allclose(scaled, logits * np.exp(-W))

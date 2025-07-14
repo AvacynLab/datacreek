@@ -57,3 +57,23 @@ def test_cache_mapper_nerve_build(tmp_path):
     )
     assert nx.is_isomorphic(nerve2, nerve)
     assert cover2 == cover
+
+
+def test_cache_put_ttl(tmp_path):
+    fakeredis = pytest.importorskip("fakeredis")
+    client = fakeredis.FakeRedis()
+    g = nx.path_graph(3)
+    cover = [{0, 1}, {1, 2}]
+    lmdb_dir = tmp_path / "lmdb"
+    ssd_dir = tmp_path / "ssd"
+    _cache_put(
+        "ttl",
+        g,
+        cover,
+        redis_client=client,
+        lmdb_path=str(lmdb_dir),
+        ssd_dir=str(ssd_dir),
+        ttl=5,
+    )
+    ttl_left = client.ttl("ttl")
+    assert ttl_left is not None and ttl_left > 0

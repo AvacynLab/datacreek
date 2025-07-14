@@ -12,6 +12,7 @@ from .information import (
     mdl_description_length,
     structural_entropy,
 )
+from .monitoring import update_metric
 from .multiview import hybrid_score
 
 
@@ -164,6 +165,7 @@ def autotune_step(
     penalty_cfg: Optional[Dict[str, float]] = None,
     k: int = 10,
     lr: float = 0.1,
+    latency: float = 0.0,
 ) -> Dict[str, Any]:
     """Perform one step of the autotuning procedure.
 
@@ -199,6 +201,8 @@ def autotune_step(
         Rank cutoff used in the recall metric.
     lr:
         Learning rate for the gradient heuristics.
+    latency:
+        Search latency (seconds) used for the FAISS penalty term.
 
     Returns
     -------
@@ -234,10 +238,12 @@ def autotune_step(
     lambda_sigma = weights[5]
     lambda_cov = weights[6]
     w_rec = weights[7]
+    w_lat = 0.0
     if penalty_cfg is not None:
         lambda_sigma = float(penalty_cfg.get("lambda_sigma", lambda_sigma))
         lambda_cov = float(penalty_cfg.get("lambda_cov", lambda_cov))
         w_rec = float(penalty_cfg.get("w_rec", w_rec))
+        w_lat = float(penalty_cfg.get("w_lat", w_lat))
     J = (
         weights[0] * (-H)
         + weights[1] * D
@@ -248,12 +254,14 @@ def autotune_step(
     J += lambda_sigma * max(0.0, sigma_db - 0.02)
     J += lambda_cov * max(0.0, state.coverage_min - coverage)
     J += w_rec * max(0.0, 0.9 - recall)
+    J += w_lat * max(0.0, latency - 0.1)
 
     if state.prev_costs and abs(J - state.prev_costs[-1]) < 1e-3:
         state.stagnation += 1
     else:
         state.stagnation = 0
     state.prev_costs.append(J)
+    update_metric("autotune_cost", float(J))
     restart_gp = False
     if state.stagnation >= 5:
         if state.likelihood is not None and hasattr(state.likelihood, "noise"):

@@ -13,6 +13,13 @@ except Exception:  # pragma: no cover - optional dependency
     faiss = None  # type: ignore
 
 from .monitoring import update_metric
+
+try:  # optional Prometheus gauge
+    from prometheus_client import Gauge
+
+    recall_gauge = Gauge("recall10", "ANN recall@10")
+except Exception:  # pragma: no cover - optional
+    recall_gauge = None  # type: ignore
 from .multiview import hybrid_score
 
 
@@ -93,4 +100,9 @@ def recall10(
     else:
         graph["recall10"] = recall
     update_metric("recall10", float(recall))
+    if recall_gauge is not None:
+        try:
+            recall_gauge.set(float(recall))
+        except Exception:  # pragma: no cover
+            pass
     return recall

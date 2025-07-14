@@ -73,11 +73,26 @@ class GraphWaveRunner:
         num_points: int = 10,
         order: int = 7,
     ) -> None:
-        self.graph.compute_graphwave_embeddings(
-            scales=scales,
-            num_points=num_points,
-            chebyshev_order=order,
-        )
+        import networkx as nx
+
+        from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
+
+        G = self.graph.graph.to_undirected()
+        comps = list(nx.connected_components(G))
+        if len(comps) == 1:
+            self.graph.compute_graphwave_embeddings(
+                scales=scales,
+                num_points=num_points,
+                chebyshev_order=order,
+            )
+        else:
+            for comp in comps:
+                if len(comp) <= 1000:
+                    continue
+                sub = G.subgraph(comp)
+                emb = _gwc(sub, scales, num_points=num_points, order=order)
+                for node, vec in emb.items():
+                    self.graph.graph.nodes[node]["graphwave_embedding"] = vec.tolist()
         gw_entropy = self.graph.graphwave_entropy()
         self.graph.graph.graph["gw_entropy"] = gw_entropy
         logger.info("gw_entropy=%.4f", gw_entropy)

@@ -336,7 +336,7 @@ def sheaf_score(b: Iterable[float], Delta) -> float:
 
 
 def bias_wasserstein(loc_hist, glob_hist, logits):
-    """Rescale ``logits`` if Wasserstein distance exceeds ``0.1``."""
+    """Return logits scaled by ``exp(-W)`` where ``W`` is the Wasserstein distance."""
 
     import numpy as np
     import torch
@@ -346,7 +346,6 @@ def bias_wasserstein(loc_hist, glob_hist, logits):
     loc_t = torch.as_tensor(loc_hist, dtype=torch.float32)
     glob_t = torch.as_tensor(glob_hist, dtype=torch.float32)
     W = float(loss(loc_t, glob_t))
-    scaled = np.array(logits, dtype=float, copy=True)
-    if W > 0.1:
-        scaled *= 0.9
+    beta = float(np.exp(-W))
+    scaled = np.array(logits, dtype=float, copy=True) * beta
     return scaled, W

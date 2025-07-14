@@ -32,3 +32,5 @@ def test_recall10_property():
     score = index.recall10(G, ["a"], {"a": ["b"]})
     assert 0.0 <= score <= 1.0
     assert G.graph.get("recall10") == score
+    if index.recall_gauge is not None:
+        assert index.recall_gauge._value.get() == score

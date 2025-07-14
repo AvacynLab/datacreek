@@ -30,6 +30,13 @@ penalty:
   lambda_sigma: 10 # fractal sigma penalty
   lambda_cov: 5    # coverage fraction penalty
   w_rec: 5         # recall penalty weight
+  w_lat: 3         # FAISS latency penalty weight
+
+fractal:
+  bootstrap_seed: 123
+
+cache:
+  l2_max_mb: 256
 
 compression:
   magnitude: 0.03  # pruning threshold

@@ -51,6 +51,13 @@ def bootstrap_db(
         node labeled with ``dataset``.
     """
 
+    from ..utils.config import load_config
+
+    cfg = load_config()
+    seed = int(cfg.get("fractal", {}).get("bootstrap_seed", 0))
+    np.random.seed(seed)
+    graph.set_property("fractal_seed", seed, driver=driver, dataset=dataset)
+
     dims: list[float] = []
     if driver is not None and Driver is not None:
         ds = dataset or "kg_bd_tmp"

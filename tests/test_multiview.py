@@ -1,8 +1,10 @@
 import numpy as np
+import pytest
 
 from datacreek.analysis import (
     aligned_cca,
     cca_align,
+    load_cca,
     meta_autoencoder,
     multiview_contrastive_loss,
     product_embedding,
@@ -168,3 +170,19 @@ def test_cca_align_persists(tmp_path):
         w = pickle.load(f)
     assert set(w) == {"Wn2v", "Wgw"}
     assert set(latent) == {"a", "b"}
+
+
+def test_load_cca_roundtrip(tmp_path):
+    n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    gw = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    path = tmp_path / "cca.pkl"
+    cca_align(n2v, gw, n_components=1, path=str(path))
+    W1, W2 = load_cca(str(path))
+    assert W1.shape[0] == 2
+    assert W2.shape[0] == 2
+
+
+def test_load_cca_missing(tmp_path):
+    missing = tmp_path / "none.pkl"
+    with pytest.raises(FileNotFoundError):
+        load_cca(str(missing))
