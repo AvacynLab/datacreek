@@ -355,6 +355,9 @@ def dataset_cleanup_task(name: str, params: dict | None = None, user_id: int | N
         client.hset(key, "cleanup_params", json.dumps(params))
 
     try:
+        from datacreek.core.knowledge_graph import verify_thresholds
+
+        verify_thresholds()
         removed, cleaned = ds.cleanup_graph(**params)
         _update_status(client, key, TaskStatus.CLEANUP, 0.5)
         try:

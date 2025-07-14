@@ -1,4 +1,4 @@
-name: test: units
+name: ci
 
 on:
   push:
@@ -70,6 +70,16 @@ jobs:
           context: ./frontend
           push: true
           tags: ghcr.io/${{ env.FRONTEND_IMAGE_NAME }}:latest
+  pipeline-e2e:
+    needs: test-units
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt fakeredis requests python-dateutil pydantic==2.4.0 rich scikit-learn watchdog PyYAML
+      - run: pytest tests/test_pipeline_e2e.py -q
   deploy:
     needs: docker-build
     if: github.ref == 'refs/heads/main'

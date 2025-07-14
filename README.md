@@ -429,8 +429,9 @@ Most options can also be overridden with environment variables. For example set
 ### Hot-reload config
 
 Set the environment variable `DATACREEK_CONFIG` to point to your YAML
-configuration file. Datacreek watches this file and applies new cleanup
-thresholds automatically whenever it changes.
+configuration file. Datacreek watches this file and reloads the `cleanup.*`
+section automatically every five minutes, so threshold updates are applied
+without restarting the application.
 
 ### Model Profiles
 

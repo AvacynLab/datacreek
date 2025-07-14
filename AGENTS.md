@@ -1,136 +1,66 @@
-# AGENTS Checklist
+# Agent Tasks
 
-### \ud83d\udccb Checklist “Version Finale” – Tout ce qu’il reste à livrer
+## 1 │ `datacreek/core/knowledge_graph.py`
 
-*(structure identique à tes précédentes listes : fichier → tâches → sous-tâches / maths / variables)*
+| Tâche                              | Sous-étapes détaillées                                                                                                                                            | Maths / variables                                                  | Status |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------ |
+| **1-A Démarrer le watcher YAML**   | 1. Dans `datacreek/__init__.py` (ou point d’entrée CLI), appeler `start_cleanup_watcher(cfg_path)`. 2. Log INFO : "CFG-HOT watcher started" ([PyPI][1])        | `cfg_path = os.getenv("DATACREEK_CONFIG", "configs/default.yaml")` | [ ] |
+| **1-B Vérification seuils actifs** | 1. Ajouter `verify_thresholds()` juste avant chaque appel `cleanup_graph`. 2. Lever `RuntimeError` si `CleanupConfig.tau` ne correspond plus aux valeurs en BDD. |                                                                    | [ ] |
 
----
+## 2 │ `datacreek/analysis/generation.py`
 
-## 1 \u2502 `datacreek/core/knowledge_graph.py`
+| Tâche                                 | Sous-étapes                                                                                                                                                                           | Formule / var.                              | Status |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------ |
+| **2-A Appliquer les logits corrigés** | 1. Dans `generate_chatml` et `generate_alpaca`, remplacer `payload["logits"]` par `scaled_logits` retourné par `bias_wasserstein`. 2. Ajouter test ▶ logits majoritaire ↓ si `W>0.1`. | $β = e^{-W}$ → `scaled_logits = logits * β` | [ ] |
 
-### 1-A  Watcher YAML (rechargement à chaud)
+## 3 │ `datacreek/analysis/monitoring.py`
 
-* [ ] **Créer le watcher**
+| Tâche                          | Sous-étapes                                                                                                                                             | Var. | Status |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------ |
+| **3-A Activer gauge `j_cost`** | 1. Déclarer `j_cost = Gauge('autotune_cost','Current J(theta)')` ([prometheus.github.io][2]). 2. Dans `autotune.update_theta`, appeler `j_cost.set(J)`. |      | [ ] |
 
-  1. `from watchdog.observers import Observer, FileSystemEventHandler`.
-  2. Classe `ConfigReloader(FileSystemEventHandler)` : si `on_modified`, appeler `load_config()` puis `apply_cleanup_config()`.
-* [ ] **Fonction `apply_cleanup_config()`**
+## 4 │ `datacreek/analysis/mapper.py`
 
-  * Mettre à jour les attributs du singleton `CleanupConfig` : `tau`, `sigma`, `k_min`, `lp_sigma`, `hub_deg`.
-  * Log INFO : « [CFG-HOT] cleanup thresholds updated at {timestamp} ».
-* [ ] **Thread de fond**
+| Tâche                    | Sous-étapes                                                                                                                                                                                        | Réf.                                                                      | Status |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| **4-A Eviction L2 LMDB** | 1. Après chaque écriture, vérifier `env.stat()['psize'] * env.info()['map_size'] > cfg.cache.l2_max_mb<<20` (Mo). 2. Si dépassement, supprimer la plus ancienne clé via curseur puis `env.sync()`. | LMDB map_size & freelist pages ([Stack Overflow][3])([Google Groups][4]) | [ ] |
 
-  * Démarrer l’`Observer` dans `__init__.py` du package.
-  * Config YAML path : `cfg_path = os.environ.get("DATACREEK_CONFIG", "configs/default.yaml")`.
+## 5 │ `tests/test_pipeline_e2e.py`
 
-### 1-B  Revalidation seuils actifs
+| Tâche                         | Assertions à coder                                                                                                | Notes                            | Status |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------ |
+| **5-A Exécution CLI dry-run** | • `sheaf_score >= 0.8` • `recall10 >= 0.9` • `tpl_w1 <= cfg.tpl.eps_w1` • `(index_type=="HNSW") == (latency>0.1)` | Utiliser dataset `samples/mini`. | [ ] |
+| **5-B Intégration CI**        | Ajouter job `pipeline-e2e` dans `.github/workflows/python.yml`.                                                   |                                  | [ ] |
 
-* [ ] Ajouter dans le pipeline un step « `verify_thresholds()` » qui assert :
+## 6 │ `core/knowledge_graph.py` (validation)
 
-  ```python
-  assert cleanup.tau == CleanupConfig.tau
-  ```
+| Tâche               | Étapes                                                                                                                      | Maths | Status |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----- | ------ |
+| **6-A Reload test** | 1. Modifier `configs/default.yaml` (tau +=1). 2. Vérifier via log que la modification est prise en compte sans redémarrage. | —     | [ ] |
 
----
+## 7 │ Docs & Config
 
-## 2 \u2502 `datacreek/analysis/generation.py`
+| Tâche                       | Contenu                                                                                                     | Status |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
+| **7-A README – Hot reload** | • Décrire la variable `DATACREEK_CONFIG`. • Expliquer que le watcher recharge `cleanup.*` toutes les 5 min. | [ ] |
 
-### 2-A  Application effective des logits rescalés
+### Variables / Paramètres à ajouter
+```yaml
+watcher:
+  enabled: true
+cache:
+  l2_max_mb: 256  # taille max LMDB avant eviction
+```
 
-* [ ] **Modifier la fonction appelant le LLM**
+### Références rapides
+- [watchdog](https://stackoverflow.com/questions/73406981/restart-a-file-on-change-python-watchdog?utm_source=chatgpt.com)
+- [Redis SETEX](https://redis.io/docs/latest/commands/setex/?utm_source=chatgpt.com)
+- [Prometheus Gauge](https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com)
+- [LMDB size / eviction](https://stackoverflow.com/questions/63552889/maximum-lmdb-value-size?utm_source=chatgpt.com) ([Google Groups](https://groups.google.com/g/caffe-users/c/0RKsTTYRGpQ?utm_source=chatgpt.com))
+- [FAISS HNSW](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes?utm_source=chatgpt.com)
+- [GraphRNN in PyG](https://pytorch-geometric.readthedocs.io/en/2.5.1/modules/nn.html?utm_source=chatgpt.com)
+- [NumPy seed](https://numpy.org/doc/2.2/reference/random/generated/numpy.random.seed.html?utm_source=chatgpt.com)
 
-  1. Récupérer `scaled_logits` et `W`.
-  2. Remplacer la clé `logits` du payload par `scaled_logits` **avant** l’appel modèle.
-* [ ] **Log du facteur de biais**
-
-  * `logger.info(f"Bias factor \u03b2={np.exp(-W):.3f} applied; W={W:.4f}")`.
-
-### 2-B  Test unitaire « bias \u2192 logits »
-
-* [ ] Données factices : distribution locale 90 \% A / 10 \% B, globale 50 \% / 50 \%.
-* [ ] Vérifier : `\u03b2 < 1` et `scaled_logits[A] < logits[A]`.
-
----
-
-## 3 \u2502 `tests/test_pipeline_e2e.py`
-
-### 3-A  Mini-dataset & dry-run
-
-* [ ] Créer un dossier `samples/mini/` (3 PDF, 2 images, 1 audio).
-* [ ] Exécuter :
-
-  ```bash
-  python -m datacreek.build_dataset \
-         --source samples/mini \
-         --config configs/default.yaml \
-         --output /tmp/out \
-         --dry-run
-  ```
-
-### 3-B  Assertions automatisées
-
-1. `assert sheaf_score >= 0.8`.
-2. `assert recall10 >= 0.9`.
-3. `if latency > 0.1: assert index.type == "HNSW"`.
-4. Vérifier écriture : `fractal_sigma < 0.02`.
-
-### 3-C  CI hook
-
-* [ ] Ajouter à `.github/workflows/python.yml` : job « pipeline-e2e ».
-
----
-
-## 4 \u2502 `datacreek/analysis/monitoring.py`
-
-### 4-A  Gauges manquants
-
-* [ ] Déclarer :
-
-  ```python
-  tpl_w1       = Gauge('tpl_w1',       'Wasserstein-1 TPL')
-  sheaf_score  = Gauge('sheaf_score',  'Sheaf consistency score')
-  gw_entropy   = Gauge('gw_entropy',   'GraphWave entropy')
-  autotune_cost= Gauge('autotune_cost','Current J(theta)')
-  ```
-* [ ] **Push** dans :
-
-  * `tpl.run_tpl` \u2192 `tpl_w1.set(W1)`
-  * sheaf solver CG \u2192 `sheaf_score.set(score)`
-  * GraphWaveRunner \u2192 `gw_entropy.set(H_wave)`
-  * Autotuner update \u2192 `autotune_cost.set(J)`
-
----
-
-## 5 \u2502 Docs & Config
-
-### 5-A  YAML nouvelles clés
-
-* [ ] Ajouter :
-
-  ```yaml
-  watcher:
-    enabled: true
-  ```
-
-### 5-B  README mise à jour
-
-* [ ] Section « Hot-reload config » expliquant la variable `DATACREEK_CONFIG`.
-
----
-
-### \u{231a} Rappels mathématiques
-
-| Variable      | Formule                                        | Contexte                                       |
-| ------------- | ---------------------------------------------- | ---------------------------------------------- |
-| `\u03b2`           | $\u03b2 = e^{-W}$                                   | Ré-pondération des logits après biais Sinkhorn |
-| `J(\u03b8)`        | $+\; w_{\text{lat}}\max(0,\text{latency}-0.1)$ | Nouvelle pénalité latence                      |
-| `sheaf_score` | $1/(1+\|b-\u0394x\|_2)$                             | Surveillance CG                                |
-
----
-
-**Livrables attendus :**
-
-* Code 100 % opérationnel (aucun `TODO`, aucun placeholder).
-* Tests unitaires couvrant hot-reload, bias logits, pipeline end-to-end.
-* CI GitHub Actions verte.
-
+## History
+- Reset tasks and fixed CI YAML workflow syntax
+- Installed dependencies and ran tests
