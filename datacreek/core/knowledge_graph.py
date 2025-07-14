@@ -113,7 +113,8 @@ def verify_thresholds() -> None:
     """Assert live cleanup thresholds equal stored configuration."""
 
     vals = get_cleanup_cfg()
-    assert vals.get("tau") == CleanupConfig.tau
+    if vals.get("tau") != CleanupConfig.tau:
+        raise RuntimeError("CleanupConfig.tau does not match database values")
 
 
 def start_cleanup_watcher(
