@@ -69,7 +69,8 @@ def update_metric(name: str, value: float) -> None:
         except Exception:  # pragma: no cover
             pass
 
+
 from ..utils.config import load_config
+
 cfg = load_config()
 start_metrics_server(int(cfg.get("monitor", {}).get("port", 8000)))
-

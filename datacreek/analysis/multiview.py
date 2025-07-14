@@ -158,6 +158,7 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
 
     import os
     import pickle
+
     import numpy as np
 
     if not os.path.exists(path):

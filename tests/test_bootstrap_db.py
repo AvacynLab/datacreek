@@ -49,6 +49,7 @@ def test_bootstrap_db_writes_neo4j(monkeypatch):
     assert any("fractal_dim" in q for q in driver.log)
     assert any("fractal_sigma" in q for q in driver.log)
 
+
 def test_bootstrap_db_records_seed(monkeypatch):
     kg = KnowledgeGraph()
     kg.graph.add_edge("a", "b")

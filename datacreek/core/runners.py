@@ -74,6 +74,7 @@ class GraphWaveRunner:
         order: int = 7,
     ) -> None:
         import networkx as nx
+
         from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
 
         G = self.graph.graph.to_undirected()

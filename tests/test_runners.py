@@ -90,6 +90,7 @@ def test_poincare_runner_recenters(monkeypatch):
     ]
     assert max(norms) <= 0.81
 
+
 def test_graphwave_runner_components(monkeypatch):
     kg = KnowledgeGraph()
     for i in range(1002):
@@ -105,7 +106,11 @@ def test_graphwave_runner_components(monkeypatch):
 
     monkeypatch.setattr(
         "datacreek.analysis.fractal.graphwave_embedding_chebyshev",
-        lambda g, *a, **k: {n: np.zeros(1) for n in g.nodes()} if not calls.append(len(g)) else {n: np.zeros(1) for n in g.nodes()},
+        lambda g, *a, **k: (
+            {n: np.zeros(1) for n in g.nodes()}
+            if not calls.append(len(g))
+            else {n: np.zeros(1) for n in g.nodes()}
+        ),
     )
     monkeypatch.setattr(kg, "graphwave_entropy", lambda: 0.0)
     runner = GraphWaveRunner(kg)

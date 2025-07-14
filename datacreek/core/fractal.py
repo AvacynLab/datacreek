@@ -52,6 +52,7 @@ def bootstrap_db(
     """
 
     from ..utils.config import load_config
+
     cfg = load_config()
     seed = int(cfg.get("fractal", {}).get("bootstrap_seed", 0))
     np.random.seed(seed)

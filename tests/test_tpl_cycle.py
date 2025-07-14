@@ -1,9 +1,9 @@
 import networkx as nx
 
-from datacreek.analysis.tpl import tpl_correct_graph
 from datacreek.analysis.fractal import tpl_motif_injection
-from datacreek.analysis.sheaf import sheaf_laplacian
 from datacreek.analysis.generation import sheaf_score
+from datacreek.analysis.sheaf import sheaf_laplacian
+from datacreek.analysis.tpl import tpl_correct_graph
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 

@@ -1,4 +1,5 @@
 import numpy as np
+
 from datacreek.analysis.fractal import lanczos_lmax
 
 

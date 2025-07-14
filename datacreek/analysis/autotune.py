@@ -12,8 +12,8 @@ from .information import (
     mdl_description_length,
     structural_entropy,
 )
-from .multiview import hybrid_score
 from .monitoring import update_metric
+from .multiview import hybrid_score
 
 
 @dataclass

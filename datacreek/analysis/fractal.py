@@ -61,8 +61,8 @@ def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:
     n = L.shape[0]
     if n <= 1000:
         try:
-            import scipy.sparse as sp
             import numpy.linalg as nla
+            import scipy.sparse as sp
 
             return float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
         except Exception:

@@ -67,7 +67,13 @@ def test_cache_put_ttl(tmp_path):
     lmdb_dir = tmp_path / "lmdb"
     ssd_dir = tmp_path / "ssd"
     _cache_put(
-        "ttl", g, cover, redis_client=client, lmdb_path=str(lmdb_dir), ssd_dir=str(ssd_dir), ttl=5
+        "ttl",
+        g,
+        cover,
+        redis_client=client,
+        lmdb_path=str(lmdb_dir),
+        ssd_dir=str(ssd_dir),
+        ttl=5,
     )
     ttl_left = client.ttl("ttl")
     assert ttl_left is not None and ttl_left > 0

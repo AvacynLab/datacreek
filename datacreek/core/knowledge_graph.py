@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -17,7 +18,6 @@ from dateutil import parser
 
 from ..analysis.autotune import AutoTuneState
 from ..utils.config import load_config
-import threading
 
 try:
     from neo4j import Driver, GraphDatabase
@@ -5304,6 +5304,6 @@ class KnowledgeGraph:
 
         return matches
 
+
 # start cleanup watcher on import
 start_cleanup_watcher()
-
