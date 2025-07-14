@@ -401,7 +401,7 @@ def graphwave_embedding_chebyshev(
 
 
 def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
-    """Return GraphWave entropy based on embedding norms.
+    r"""Return GraphWave entropy based on embedding norms.
 
     The differential entropy used for autotuning is computed as
 
@@ -432,7 +432,7 @@ def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
 
 
 def embedding_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
-    """Return differential entropy for an embedding dictionary.
+    r"""Return differential entropy for an embedding dictionary.
 
     This is a generic variant of :func:`graphwave_entropy` that applies to any
     set of embedding vectors. The computation assumes a multivariate Gaussian
@@ -639,7 +639,7 @@ def dichotomic_radius(counts: List[Tuple[int, int]], target: float) -> int:
 def spectral_dimension(
     graph: nx.Graph, times: Iterable[float]
 ) -> Tuple[float, List[Tuple[float, float]]]:
-    """Estimate the spectral dimension of ``graph`` using heat trace scaling.
+    r"""Estimate the spectral dimension of ``graph`` using heat trace scaling.
 
     The heat trace :math:`\mathrm{Tr}(e^{-tL})` of the graph Laplacian
     asymptotically scales like ``t**(-d/2)`` where ``d`` is the spectral
@@ -802,7 +802,7 @@ def spectral_gap(graph: nx.Graph, *, normed: bool = True) -> float:
 
 
 def laplacian_energy(graph: nx.Graph, *, normed: bool = True) -> float:
-    """Return the Laplacian energy of ``graph``.
+    r"""Return the Laplacian energy of ``graph``.
 
     The Laplacian energy is defined as
 
@@ -859,7 +859,7 @@ def spectral_density(
 
 
 def graph_lacunarity(graph: nx.Graph, radius: int = 1) -> float:
-    """Return lacunarity of ``graph`` for neighborhood radius ``radius``.
+    r"""Return lacunarity of ``graph`` for neighborhood radius ``radius``.
 
     The lacunarity measures the heterogeneity of mass distribution
     at a given scale. For each node we count the number of nodes
@@ -1578,7 +1578,7 @@ def tpl_motif_injection(
 
 
 def bootstrap_sigma_db(graph: nx.Graph, radii: Iterable[int]) -> float:
-    """Return bootstrap standard deviation of the fractal dimension.
+    r"""Return bootstrap standard deviation of the fractal dimension.
 
     This mirrors the COLOUR-box GPU estimation but uses
     simple NetworkX operations. Thirty random 80% subgraphs of ``graph``

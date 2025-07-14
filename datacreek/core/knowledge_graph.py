@@ -848,7 +848,7 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Return the multi-view similarity between ``src`` and ``tgt``.
+        r"""Return the multi-view similarity between ``src`` and ``tgt``.
 
         The score mixes cosine similarity in Node2Vec space, Poincar\xe9
         distance and GraphWave similarity. It is computed as
@@ -937,7 +937,7 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Return top ``k`` nodes by the multi-view similarity.
+        r"""Return top ``k`` nodes by the multi-view similarity.
 
         A FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates.
         Each candidate is then scored via
@@ -2981,7 +2981,7 @@ class KnowledgeGraph:
     def spectral_bound_exceeded(
         self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
     ) -> bool:
-        """Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
+        r"""Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
 
         Parameters
         ----------
@@ -3489,7 +3489,7 @@ class KnowledgeGraph:
         return chosen
 
     def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
-        """Return ``k`` nearest neighbors using the Poincar\xe9 distance.
+        r"""Return ``k`` nearest neighbors using the Poincar\xe9 distance.
 
         The neighbors are ranked by :math:`d_{\mathbb{B}}(u,v)` between the
         query embedding ``node_id`` and every other node with a
@@ -3522,7 +3522,7 @@ class KnowledgeGraph:
     def hyperbolic_reasoning(
         self, start: str, goal: str, *, max_steps: int = 5
     ) -> List[str]:
-        """Return a greedy path from ``start`` to ``goal`` using hyperbolic distance.
+        r"""Return a greedy path from ``start`` to ``goal`` using hyperbolic distance.
 
         At each step the neighbor minimizing :math:`d_{\mathbb{B}}` to the goal
         is selected until the path length reaches ``max_steps`` or the goal is

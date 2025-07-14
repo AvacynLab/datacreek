@@ -866,7 +866,7 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Wrapper for :meth:`KnowledgeGraph.hybrid_score`.
+        r"""Wrapper for :meth:`KnowledgeGraph.hybrid_score`.
 
         Parameters mirror :meth:`KnowledgeGraph.hybrid_score` and the
         returned value is the multi-view similarity
@@ -904,7 +904,7 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Return nodes ranked by multi-view similarity to ``node_id``.
+        r"""Return nodes ranked by multi-view similarity to ``node_id``.
 
         The method delegates to :meth:`KnowledgeGraph.similar_by_hybrid` and
         computes the same hybrid score
@@ -945,7 +945,7 @@ class DatasetBuilder:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`.
+        r"""Wrapper for :meth:`KnowledgeGraph.ann_hybrid_search`.
 
         ``q_n2v``, ``q_gw`` and ``q_hyp`` are the query embeddings in
         Node2Vec, GraphWave and Poincar\xe9 space. Candidates are fetched
@@ -3177,7 +3177,7 @@ class DatasetBuilder:
         *,
         interval: float = 60.0,
     ) -> None:
-        """Periodically enforce invariant limits in the background.
+        r"""Periodically enforce invariant limits in the background.
 
         The loop calls :meth:`_enforce_policy` every ``interval`` seconds so the
         entropy :math:`H`, fractal dimension :math:`d_B` and Laplacian gap
