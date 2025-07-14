@@ -42,3 +42,16 @@ def test_bias_wasserstein_rescales():
     scaled, W = bias_wasserstein(loc, glob, logits)
     assert W >= 0.0
     assert np.allclose(scaled, logits * np.exp(-W))
+
+
+def test_bias_wasserstein_majority_drop():
+    """Majority group logits should decrease when local histogram is skewed."""
+
+    import numpy as np
+
+    loc = np.array([[9.0], [1.0]], dtype=float)
+    glob = np.array([[5.0], [5.0]], dtype=float)
+    logits = np.array([0.8, 0.2], dtype=float)
+    scaled, W = bias_wasserstein(loc, glob, logits)
+    assert W > 0.0
+    assert scaled[0] < logits[0]
