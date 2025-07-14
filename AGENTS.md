@@ -44,6 +44,12 @@
 | --------------------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
 | **7-A README – Hot reload** | • Décrire la variable `DATACREEK_CONFIG`. • Expliquer que le watcher recharge `cleanup.*` toutes les 5 min. | [x] |
 
+## 8 │ GitHub Actions
+
+| Tâche              | Sous-étapes détaillées                                                                              | Status |
+| ------------------ | --------------------------------------------------------------------------------------------------- | ------ |
+| **8-A CI unifiée** | 1. Fusionner tous les jobs dans `.github/workflows/ci.yml`. 2. Supprimer `python.yml`. 3. Vérifier que les tests tournent sur `pull_request`. | [ ] |
+
 ### Variables / Paramètres ajoutés
 ```yaml
 watcher:
@@ -65,3 +71,4 @@ cache:
 - Initial integration of YAML watcher, verify_thresholds checks, logit scaling and monitoring gauge.
 - Implemented LMDB eviction, pipeline dry-run tests and CI job.
 - Added hot reload documentation and config parameters.
+- Unified CI workflows into `ci.yml` with e2e tests.
