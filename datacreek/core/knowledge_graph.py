@@ -11,13 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
-
 import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from ..utils.config import load_config
 
@@ -5357,5 +5356,3 @@ class KnowledgeGraph:
             session.run("CALL gds.graph.drop('kg_sim')")
 
         return matches
-
-

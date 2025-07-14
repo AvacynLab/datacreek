@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
 
-from datacreek.core.scripts import build_dataset
 from datacreek.core.dataset import DatasetBuilder, DatasetType
+from datacreek.core.scripts import build_dataset
 
 
 def test_pipeline_end_to_end(monkeypatch, tmp_path):

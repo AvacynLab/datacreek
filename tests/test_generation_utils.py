@@ -2,9 +2,9 @@ import networkx as nx
 import numpy as np
 
 from datacreek.analysis.generation import (
+    apply_logit_bias,
     bias_reweighting,
     bias_wasserstein,
-    apply_logit_bias,
     sheaf_consistency_real,
     sheaf_score,
 )
