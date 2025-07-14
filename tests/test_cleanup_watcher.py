@@ -15,7 +15,7 @@ def test_cleanup_watcher_reload(tmp_path):
     )
     os.environ["DATACREEK_CONFIG"] = str(cfg_file)
     stop_cleanup_watcher()
-    start_cleanup_watcher(interval=0.1)
+    start_cleanup_watcher()
     time.sleep(0.2)
     vals = get_cleanup_cfg()
     assert vals["sigma"] == 0.5

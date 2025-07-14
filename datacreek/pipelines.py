@@ -22,7 +22,7 @@ from datacreek.backends import get_redis_client as backend_get_redis_client
 from datacreek.core.cleanup import cleanup_knowledge_graph
 from datacreek.core.create import process_file, process_file_async
 from datacreek.core.curate import curate_qa_pairs, curate_qa_pairs_async
-from datacreek.core.knowledge_graph import KnowledgeGraph
+from datacreek.core.knowledge_graph import KnowledgeGraph, verify_thresholds
 from datacreek.core.save_as import convert_format
 from datacreek.models.content_type import ContentType
 from datacreek.models.qa import QAPair
@@ -35,7 +35,11 @@ from datacreek.models.results import (
     PrefPairResult,
     QAGenerationResult,
 )
-from datacreek.utils.config import get_format_settings, get_redis_config, load_config_with_overrides
+from datacreek.utils.config import (
+    get_format_settings,
+    get_redis_config,
+    load_config_with_overrides,
+)
 from datacreek.utils.progress import create_progress
 
 logger = logging.getLogger(__name__)
@@ -86,6 +90,7 @@ class PipelineStep(str, Enum):
     INGEST = "ingest"
     TO_KG = "to_kg"
     KG_CLEANUP = "kg_cleanup"
+    VERIFY_THRESHOLDS = "verify_thresholds"
     GENERATE_QA = "generate_qa"
     GENERATE_COT = "generate_cot"
     GENERATE_VQA = "generate_vqa"
@@ -224,7 +229,9 @@ STEP_FIELDS = {
 }
 
 
-def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result: Any) -> Any:
+def _validate_step_result(
+    dataset_type: DatasetType, step: PipelineStep, result: Any
+) -> Any:
     """Validate ``result`` for ``step`` and return it unchanged.
 
     Dataclass instances are accepted and preserved so later steps can rely on
@@ -234,7 +241,9 @@ def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result:
     step_name = step.value
     expected_cls = STEP_DATACLASSES.get(step)
     if step is PipelineStep.GENERATE_CANDIDATES:
-        expected_cls = PrefPairResult if dataset_type == DatasetType.PREF_PAIR else PrefListResult
+        expected_cls = (
+            PrefPairResult if dataset_type == DatasetType.PREF_PAIR else PrefListResult
+        )
 
     is_dc = is_dataclass(result)
     if is_dc:
@@ -249,7 +258,9 @@ def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result:
     expected_fields = STEP_FIELDS.get(step)
     if expected_fields:
         if not isinstance(result_dict, dict):
-            raise ValueError(f"{step_name}: expected mapping, got {type(result).__name__}")
+            raise ValueError(
+                f"{step_name}: expected mapping, got {type(result).__name__}"
+            )
         if step is PipelineStep.GENERATE_CANDIDATES:
             if not ("pairs" in result_dict or "responses" in result_dict):
                 raise ValueError(
@@ -270,7 +281,9 @@ def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result:
                         elif isinstance(item, dict):
                             item_dict = item
                         else:
-                            raise ValueError(f"{step_name}: qa_pairs items must be mappings")
+                            raise ValueError(
+                                f"{step_name}: qa_pairs items must be mappings"
+                            )
                         if (
                             "question" not in item_dict
                             or "answer" not in item_dict
@@ -290,7 +303,9 @@ def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result:
                         elif isinstance(item, dict):
                             item_dict = item
                         else:
-                            raise ValueError(f"{step_name}: cot_examples items must be mappings")
+                            raise ValueError(
+                                f"{step_name}: cot_examples items must be mappings"
+                            )
                         required = {"question", "reasoning", "answer"}
                         if (
                             any(k not in item_dict for k in required)
@@ -323,15 +338,21 @@ def _validate_step_result(dataset_type: DatasetType, step: PipelineStep, result:
                     raise ValueError(f"{step_name}: field 'responses' must be a list")
                 for resp in responses:
                     if not isinstance(resp, dict):
-                        raise ValueError(f"{step_name}: responses items must be mappings")
+                        raise ValueError(
+                            f"{step_name}: responses items must be mappings"
+                        )
                     if not str(resp.get("question", "")).strip():
                         raise ValueError(f"{step_name}: response question is empty")
                     answers = resp.get("answers")
                     if not isinstance(answers, list) or not answers:
-                        raise ValueError(f"{step_name}: response answers must be a non-empty list")
+                        raise ValueError(
+                            f"{step_name}: response answers must be a non-empty list"
+                        )
                     for ans in answers:
                         if not isinstance(ans, dict):
-                            raise ValueError(f"{step_name}: answers items must be mappings")
+                            raise ValueError(
+                                f"{step_name}: answers items must be mappings"
+                            )
                         if not str(ans.get("text", "")).strip():
                             raise ValueError(f"{step_name}: answer text is empty")
 
@@ -373,7 +394,9 @@ class PipelineExecutionError(RuntimeError):
     def __init__(self, step: PipelineStep, original_exception: Exception):
         tb = "".join(
             traceback.format_exception(
-                type(original_exception), original_exception, original_exception.__traceback__
+                type(original_exception),
+                original_exception,
+                original_exception.__traceback__,
             )
         )
         self.info = StepError(
@@ -412,7 +435,9 @@ def load_pipelines_from_file(path: Path) -> Dict[DatasetType, GenerationPipeline
     return pipelines
 
 
-DEFAULT_PIPELINES_PATH = Path(__file__).resolve().parents[1] / "configs" / "pipelines.yaml"
+DEFAULT_PIPELINES_PATH = (
+    Path(__file__).resolve().parents[1] / "configs" / "pipelines.yaml"
+)
 PIPELINE_CONFIG_ENV = "DATACREEK_PIPELINES_CONFIG"
 
 
@@ -435,6 +460,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_QA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -457,6 +483,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_COT,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -476,6 +503,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_VQA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -495,6 +523,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_FROM_KG,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -517,6 +546,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.LABEL_PAIRS,
             PipelineStep.SAVE,
@@ -536,6 +566,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.RANK_RESPONSES,
             PipelineStep.SAVE,
@@ -549,6 +580,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_TOOL_CALL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -571,6 +603,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_CONVERSATION,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -593,6 +626,7 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
             PipelineStep.KG_CLEANUP,
+            PipelineStep.VERIFY_THRESHOLDS,
             PipelineStep.GENERATE_MULTI_TOOL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -643,7 +677,9 @@ def get_pipelines_for_training(goal: TrainingGoal) -> List[GenerationPipeline]:
     """Return generation pipelines compatible with the given training goal."""
 
     return [
-        pipeline for pipeline in load_pipelines().values() if goal in pipeline.compatible_trainings
+        pipeline
+        for pipeline in load_pipelines().values()
+        if goal in pipeline.compatible_trainings
     ]
 
 
@@ -692,12 +728,16 @@ async def _run_generation_pipeline_impl(
     # The TEXT dataset does not include generation after the knowledge graph,
     # so it remains unsupported by this helper.
     if dataset_type == DatasetType.TEXT:
-        raise ValueError("run_generation_pipeline does not support the TEXT dataset type")
+        raise ValueError(
+            "run_generation_pipeline does not support the TEXT dataset type"
+        )
 
     if document_text is None:
         document_text = kg.to_text()
 
-    cfg = load_config_with_overrides(str(config_path) if config_path else None, overrides)
+    cfg = load_config_with_overrides(
+        str(config_path) if config_path else None, overrides
+    )
     fmt_cfg = get_format_settings(cfg)
 
     options = ProcessOptions(
@@ -770,7 +810,9 @@ async def _run_generation_pipeline_impl(
                 document_text=text,
                 kg=options.kg,
                 config_overrides=options.overrides,
-                multi_answer=options.multi_answer if ct is ContentType.FROM_KG else False,
+                multi_answer=(
+                    options.multi_answer if ct is ContentType.FROM_KG else False
+                ),
             )
         return await asyncio.to_thread(
             process_file,
@@ -851,7 +893,8 @@ async def _run_generation_pipeline_impl(
         # Convert plain dictionaries to a CurationResult for consistency
         if isinstance(result, dict):
             qa_pairs = [
-                QAPair(**p) if isinstance(p, dict) else p for p in result.get("qa_pairs", [])
+                QAPair(**p) if isinstance(p, dict) else p
+                for p in result.get("qa_pairs", [])
             ]
             rated_pairs = (
                 [QAPair(**p) for p in result.get("rated_pairs", [])]
@@ -886,17 +929,25 @@ async def _run_generation_pipeline_impl(
             dedup_similarity=dedup_similarity,
         )
         if verbose:
-            logger.info("  KG cleanup - removed:%d cleaned:%d", stats.removed, stats.cleaned)
+            logger.info(
+                "  KG cleanup - removed:%d cleaned:%d", stats.removed, stats.cleaned
+            )
         return d
 
     handlers = {
         PipelineStep.GENERATE_QA: lambda d: _generate(ContentType.QA, d),
         PipelineStep.GENERATE_COT: lambda d: _generate(ContentType.COT, d),
-        PipelineStep.GENERATE_VQA: lambda d: _generate(ContentType.VQA_ADD_REASONING, d),
+        PipelineStep.GENERATE_VQA: lambda d: _generate(
+            ContentType.VQA_ADD_REASONING, d
+        ),
         PipelineStep.GENERATE_FROM_KG: lambda d: _generate(ContentType.FROM_KG, d),
         PipelineStep.GENERATE_TOOL_CALL: lambda d: _generate(ContentType.TOOL_CALL, d),
-        PipelineStep.GENERATE_CONVERSATION: lambda d: _generate(ContentType.CONVERSATION, d),
-        PipelineStep.GENERATE_MULTI_TOOL: lambda d: _generate(ContentType.MULTI_TOOL, d),
+        PipelineStep.GENERATE_CONVERSATION: lambda d: _generate(
+            ContentType.CONVERSATION, d
+        ),
+        PipelineStep.GENERATE_MULTI_TOOL: lambda d: _generate(
+            ContentType.MULTI_TOOL, d
+        ),
         PipelineStep.GENERATE_CANDIDATES: lambda d: _generate(
             (
                 ContentType.PREF_PAIR
@@ -907,6 +958,7 @@ async def _run_generation_pipeline_impl(
         ),
         PipelineStep.LABEL_PAIRS: _identity,
         PipelineStep.RANK_RESPONSES: _identity,
+        PipelineStep.VERIFY_THRESHOLDS: lambda d: (verify_thresholds() or d),
         PipelineStep.KG_CLEANUP: _kg_cleanup,
         PipelineStep.CURATE: _curate,
         PipelineStep.SAVE: _save,
@@ -917,7 +969,9 @@ async def _run_generation_pipeline_impl(
         start_idx = pipeline.steps.index(start_step)
 
     exec_steps = [
-        s for s in pipeline.steps[start_idx:] if s not in {PipelineStep.INGEST, PipelineStep.TO_KG}
+        s
+        for s in pipeline.steps[start_idx:]
+        if s not in {PipelineStep.INGEST, PipelineStep.TO_KG}
     ]
     if start_step is PipelineStep.CURATE and PipelineStep.SAVE in exec_steps:
         exec_steps.remove(PipelineStep.SAVE)

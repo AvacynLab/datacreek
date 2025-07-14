@@ -426,6 +426,12 @@ Most options can also be overridden with environment variables. For example set
 | `DATASET_MAX_VERSIONS` | Maximum versions kept per dataset |
 | `SDK_DEBUG` | Log full model responses |
 
+### Hot-reload config
+
+Set the environment variable `DATACREEK_CONFIG` to point to your YAML
+configuration file. Datacreek watches this file and applies new cleanup
+thresholds automatically whenever it changes.
+
 ### Model Profiles
 
 Define multiple model profiles in your configuration to easily switch between

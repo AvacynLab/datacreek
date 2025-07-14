@@ -1,0 +1,17 @@
+name: test: e2e
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  test-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt fakeredis requests python-dateutil pydantic==2.4.0 rich scikit-learn watchdog PyYAML
+      - run: pytest tests/test_pipeline_e2e.py -q

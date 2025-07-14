@@ -29,7 +29,6 @@ from typing import (
 import networkx as nx
 import numpy as np
 
-from ..analysis.autotune import AutoTuneState
 from ..analysis.monitoring import update_metric
 from ..utils import push_metrics
 
@@ -2653,7 +2652,7 @@ class DatasetBuilder:
         self,
         labels: Dict[str, int],
         motifs: Iterable[nx.Graph],
-        state: AutoTuneState,
+        state: "AutoTuneState",
         *,
         node_attr: str = "embedding",
         weights: tuple[float, float, float, float, float] = (1.0, 1.0, 1.0, 1.0, 1.0),
@@ -3687,6 +3686,13 @@ class DatasetBuilder:
         )
         self.graph.graph["tpl_w1"] = float(res["distance_after"])
         update_metric("tpl_w1", float(res["distance_after"]))
+        try:
+            from datacreek.analysis.monitoring import tpl_w1 as _tpl_w1_gauge
+
+            if _tpl_w1_gauge is not None:
+                _tpl_w1_gauge.set(float(res["distance_after"]))
+        except Exception:
+            pass
         self._record_event(
             "tpl_correct_graph",
             "Wasserstein-based topology correction",

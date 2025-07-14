@@ -98,8 +98,11 @@ class GraphWaveRunner:
         logger.info("gw_entropy=%.4f", gw_entropy)
         try:
             from datacreek.analysis.monitoring import update_metric
+            from datacreek.analysis.monitoring import gw_entropy as _gw_entropy_gauge
 
             update_metric("gw_entropy", gw_entropy)
+            if _gw_entropy_gauge is not None:
+                _gw_entropy_gauge.set(float(gw_entropy))
         except Exception:  # pragma: no cover - optional Prometheus
             pass
 

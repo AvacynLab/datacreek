@@ -10,6 +10,8 @@ cleanup:
   lp_sigma: 0.3    # Hyper-AA score threshold
   lp_topk: 5
   hub_deg: 1000    # hub tagging degree threshold
+watcher:
+  enabled: true
 tpl:
   eps_w1: 0.05     # Wasserstein-1 cutoff
   rnn_size: 128    # GraphRNN-Lite subgraph size

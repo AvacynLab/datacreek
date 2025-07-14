@@ -15,8 +15,9 @@ import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
-from ..analysis.autotune import AutoTuneState
 from ..utils.config import load_config
 
 try:
@@ -41,8 +42,8 @@ from ..utils.retrieval import EmbeddingIndex
 # ---------------------------------------------------------------------------
 _cleanup_cfg: Dict[str, float | int] = {}
 _cleanup_lock = threading.Lock()
-_cleanup_event = threading.Event()
-_cleanup_thread: threading.Thread | None = None
+_observer: Observer | None = None
+_cfg_path: Path | None = None
 
 
 def _load_cleanup() -> None:
@@ -67,29 +68,81 @@ def get_cleanup_cfg() -> Dict[str, float | int]:
         return dict(_cleanup_cfg)
 
 
-def start_cleanup_watcher(interval: float = 300.0) -> None:
-    """Start background thread reloading cleanup config every ``interval`` seconds."""
+@dataclass
+class CleanupConfig:
+    """Current cleanup thresholds used across the application."""
 
-    def watcher() -> None:
-        while not _cleanup_event.wait(interval):
+    tau: int = 5
+    sigma: float = 0.95
+    k_min: int = 5
+    lp_sigma: float = 0.3
+    hub_deg: int = 1000
+
+
+def apply_cleanup_config() -> None:
+    """Update :class:`CleanupConfig` with freshly loaded values."""
+
+    vals = get_cleanup_cfg()
+    CleanupConfig.tau = int(vals.get("tau", CleanupConfig.tau))
+    CleanupConfig.sigma = float(vals.get("sigma", CleanupConfig.sigma))
+    CleanupConfig.k_min = int(vals.get("k_min", CleanupConfig.k_min))
+    CleanupConfig.lp_sigma = float(vals.get("lp_sigma", CleanupConfig.lp_sigma))
+    CleanupConfig.hub_deg = int(vals.get("hub_deg", CleanupConfig.hub_deg))
+    logging.getLogger(__name__).info(
+        "[CFG-HOT] cleanup thresholds updated at %s",
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+
+class ConfigReloader(FileSystemEventHandler):
+    """Watch a YAML file and reload cleanup thresholds on changes."""
+
+    def __init__(self, cfg_path: Path) -> None:
+        self.cfg_path = Path(cfg_path).resolve()
+
+    def on_modified(self, event) -> None:  # type: ignore[override]
+        if Path(event.src_path).resolve() == self.cfg_path:
             try:
                 _load_cleanup()
+                apply_cleanup_config()
             except Exception:
                 logging.getLogger(__name__).exception("cleanup reload failed")
 
-    global _cleanup_thread
-    if _cleanup_thread is None or not _cleanup_thread.is_alive():
-        _load_cleanup()
-        _cleanup_event.clear()
-        _cleanup_thread = threading.Thread(target=watcher, daemon=True)
-        _cleanup_thread.start()
+
+def verify_thresholds() -> None:
+    """Assert live cleanup thresholds equal stored configuration."""
+
+    vals = get_cleanup_cfg()
+    assert vals.get("tau") == CleanupConfig.tau
+
+
+def start_cleanup_watcher(interval: float = 300.0) -> None:
+    """Start filesystem watcher reloading cleanup thresholds."""
+
+    global _observer, _cfg_path
+    if _observer is not None:
+        return
+
+    cfg_path = Path(os.environ.get("DATACREEK_CONFIG", "configs/default.yaml"))
+    _cfg_path = cfg_path.resolve()
+    _load_cleanup()
+    apply_cleanup_config()
+    handler = ConfigReloader(_cfg_path)
+    observer = Observer()
+    observer.schedule(handler, str(_cfg_path.parent), recursive=False)
+    observer.daemon = True
+    observer.start()
+    _observer = observer
 
 
 def stop_cleanup_watcher() -> None:
-    """Stop the background cleanup watcher."""
-    _cleanup_event.set()
-    if _cleanup_thread is not None:
-        _cleanup_thread.join(timeout=0.5)
+    """Stop the cleanup configuration watcher."""
+
+    global _observer
+    if _observer is not None:
+        _observer.stop()
+        _observer.join(timeout=0.5)
+        _observer = None
 
 
 @dataclass
@@ -5303,7 +5356,3 @@ class KnowledgeGraph:
             session.run("CALL gds.graph.drop('kg_sim')")
 
         return matches
-
-
-# start cleanup watcher on import
-start_cleanup_watcher()
