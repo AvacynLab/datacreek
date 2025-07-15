@@ -34,6 +34,10 @@ def cleanup_knowledge_graph(
     dedup_similarity:
         Similarity threshold for deduplicating chunk text.
     """
+    from .knowledge_graph import verify_thresholds
+
+    verify_thresholds()
+
     if dataset_builder is not None:
         removed, cleaned = dataset_builder.cleanup_graph(
             resolve_threshold=resolve_threshold,

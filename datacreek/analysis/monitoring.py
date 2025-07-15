@@ -22,11 +22,13 @@ if Gauge is not None:
     sheaf_score = Gauge("sheaf_score", "Sheaf consistency score")
     gw_entropy = Gauge("gw_entropy", "GraphWave entropy")
     autotune_cost = Gauge("autotune_cost", "Current J(theta)")
+    j_cost = autotune_cost
 else:  # pragma: no cover - optional dependency missing
     tpl_w1 = None
     sheaf_score = None
     gw_entropy = None
     autotune_cost = None
+    j_cost = None
 
 
 _METRICS = {
@@ -35,7 +37,7 @@ _METRICS = {
     "sheaf_score": sheaf_score,
     "gw_entropy": gw_entropy,
     "tpl_w1": tpl_w1,
-    "j_cost": None,
+    "j_cost": j_cost,
     "autotune_cost": autotune_cost,
     # ingestion statistics
     "atoms_total": None,

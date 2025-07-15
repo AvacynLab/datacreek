@@ -113,18 +113,31 @@ def verify_thresholds() -> None:
     """Assert live cleanup thresholds equal stored configuration."""
 
     vals = get_cleanup_cfg()
-    assert vals.get("tau") == CleanupConfig.tau
+    if vals.get("tau") != CleanupConfig.tau:
+        raise RuntimeError("CleanupConfig.tau does not match database values")
 
 
-def start_cleanup_watcher(interval: float = 300.0) -> None:
-    """Start filesystem watcher reloading cleanup thresholds."""
+def start_cleanup_watcher(
+    cfg_path: str | os.PathLike | None = None, interval: float = 300.0
+) -> None:
+    """Start filesystem watcher reloading cleanup thresholds.
+
+    Parameters
+    ----------
+    cfg_path:
+        Optional path to the YAML configuration. When ``None`` the value of
+        ``DATACREEK_CONFIG`` is used and defaults to ``configs/default.yaml``.
+    interval:
+        Polling interval for the :class:`watchdog.observers.Observer`.
+    """
 
     global _observer, _cfg_path
     if _observer is not None:
         return
 
-    cfg_path = Path(os.environ.get("DATACREEK_CONFIG", "configs/default.yaml"))
-    _cfg_path = cfg_path.resolve()
+    env_path = os.environ.get("DATACREEK_CONFIG", "configs/default.yaml")
+    cfg_file = Path(cfg_path or env_path)
+    _cfg_path = cfg_file.resolve()
     _load_cleanup()
     apply_cleanup_config()
     handler = ConfigReloader(_cfg_path)
@@ -132,6 +145,7 @@ def start_cleanup_watcher(interval: float = 300.0) -> None:
     observer.schedule(handler, str(_cfg_path.parent), recursive=False)
     observer.daemon = True
     observer.start()
+    logging.getLogger(__name__).info("CFG-HOT watcher started")
     _observer = observer
 
 
@@ -834,7 +848,7 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> float:
-        """Return the multi-view similarity between ``src`` and ``tgt``.
+        r"""Return the multi-view similarity between ``src`` and ``tgt``.
 
         The score mixes cosine similarity in Node2Vec space, Poincar\xe9
         distance and GraphWave similarity. It is computed as
@@ -923,7 +937,7 @@ class KnowledgeGraph:
         gamma: float = 0.5,
         eta: float = 0.25,
     ) -> List[Tuple[str, float]]:
-        """Return top ``k`` nodes by the multi-view similarity.
+        r"""Return top ``k`` nodes by the multi-view similarity.
 
         A FAISS index built on ``n2v_attr`` retrieves ``ann_k`` candidates.
         Each candidate is then scored via
@@ -2967,7 +2981,7 @@ class KnowledgeGraph:
     def spectral_bound_exceeded(
         self, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
     ) -> bool:
-        """Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
+        r"""Return ``True`` if :math:`\lambda_k^\mathcal{F} > \tau`.
 
         Parameters
         ----------
@@ -3475,7 +3489,7 @@ class KnowledgeGraph:
         return chosen
 
     def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:
-        """Return ``k`` nearest neighbors using the Poincar\xe9 distance.
+        r"""Return ``k`` nearest neighbors using the Poincar\xe9 distance.
 
         The neighbors are ranked by :math:`d_{\mathbb{B}}(u,v)` between the
         query embedding ``node_id`` and every other node with a
@@ -3508,7 +3522,7 @@ class KnowledgeGraph:
     def hyperbolic_reasoning(
         self, start: str, goal: str, *, max_steps: int = 5
     ) -> List[str]:
-        """Return a greedy path from ``start`` to ``goal`` using hyperbolic distance.
+        r"""Return a greedy path from ``start`` to ``goal`` using hyperbolic distance.
 
         At each step the neighbor minimizing :math:`d_{\mathbb{B}}` to the goal
         is selected until the path length reaches ``max_steps`` or the goal is

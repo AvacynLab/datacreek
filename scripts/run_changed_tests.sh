@@ -24,11 +24,11 @@ set +e
 docker run --rm \
   -v "$DIR":/workspace \
   -w /workspace datacreek:test \
-  bash -c "pip install pytest && (${cmd[*]} -vv 2>&1 | tee /workspace/$log_file)"
+  bash -c "pip install pytest && PYTHONPATH=/workspace ${cmd[*]} -vv 2>&1 | tee /workspace/$log_file"
 status=$?
 set -e
 if [ $status -ne 0 ]; then
-  echo 'Tests failed. Last lines of log:'
-  tail -n 20 "$log_file"
+  echo 'Tests failed. Output:'
+  cat "$log_file"
 fi
 exit $status

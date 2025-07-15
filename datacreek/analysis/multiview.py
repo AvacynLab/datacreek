@@ -179,7 +179,7 @@ def hybrid_score(
     gamma: float = 0.5,
     eta: float = 0.25,
 ) -> float:
-    """Return the hybrid similarity score between two nodes.
+    r"""Return the hybrid similarity score between two nodes.
 
     The score mixes Node2Vec cosine similarity, Poincar\xe9 distance and
     GraphWave cosine similarity following the formula

@@ -35,3 +35,5 @@ fakeredis>=2.30.0
 beautifulsoup4>=4.12.2
 jsonschema>=4.0.0
 watchdog>=3.0.0
+geomloss>=0.2.6
+torch==2.7.1

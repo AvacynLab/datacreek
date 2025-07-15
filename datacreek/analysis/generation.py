@@ -389,3 +389,20 @@ def apply_logit_bias(payload, loc_hist, glob_hist):
         "Bias factor β=%.3f applied; W=%.4f", float(np.exp(-W)), float(W)
     )
     return W
+
+
+# -- Format generation helpers --
+
+
+def generate_chatml(payload, loc_hist, glob_hist):
+    """Return ChatML payload with logits scaled by :func:`bias_wasserstein`."""
+    scaled_logits, _W = bias_wasserstein(loc_hist, glob_hist, payload["logits"])
+    payload["logits"] = list(scaled_logits)
+    return payload
+
+
+def generate_alpaca(payload, loc_hist, glob_hist):
+    """Return Alpaca payload with logits scaled by :func:`bias_wasserstein`."""
+    scaled_logits, _W = bias_wasserstein(loc_hist, glob_hist, payload["logits"])
+    payload["logits"] = list(scaled_logits)
+    return payload

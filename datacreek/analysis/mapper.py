@@ -107,14 +107,17 @@ def _cache_put(
 
             cfg = load_config()
             limit_mb = int(cfg.get("cache", {}).get("l2_max_mb", 256))
-            env = lmdb.open(lmdb_path, map_size=limit_mb * 1024 * 1024)
+            env = lmdb.open(lmdb_path, map_size=limit_mb << 20)
             with env.begin(write=True) as txn:
                 txn.put(key.encode(), data)
-                size = Path(lmdb_path).stat().st_size / (1024 * 1024)
-                if size > limit_mb:
+                stats = env.stat()
+                info = env.info()
+                used = stats["psize"] * info["map_size"]
+                if used > (limit_mb << 20):
                     cursor = txn.cursor()
                     if cursor.first():
                         txn.delete(cursor.key())
+                env.sync()
             env.close()
         except Exception:  # pragma: no cover - disk errors
             pass
