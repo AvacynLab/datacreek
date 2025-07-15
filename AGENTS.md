@@ -97,7 +97,7 @@ cache:
 
 ## Historique
 
-*(empty)*
+- Fixed `scripts/run_changed_tests.sh` to remove editable install and set `PYTHONPATH` so tests run without packaging
 
 [1]: https://pypi.org/project/watchdog/?utm_source=chatgpt.com "watchdog - PyPI"
 [2]: https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com "Gauge | client_python - Prometheus"
