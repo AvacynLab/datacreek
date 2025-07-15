@@ -126,9 +126,7 @@ def _cache_put(
                                 break
                             stat = env.stat()
                             info = env.info()
-                            current_mb = (stat["psize"] * info["map_size"]) / (
-                                1 << 20
-                            )
+                            current_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
                     env.sync()
                     logging.getLogger(__name__).info(
                         "[L2-EVICT] %d keys purged (%.1f MB→%.1f MB)",
