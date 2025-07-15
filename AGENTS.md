@@ -85,19 +85,19 @@ cache:
 
 ## Checklist
 
-- [x] 1-A Démarrer le watcher YAML
-- [x] 1-B Vérification seuils actifs
-- [x] 2-A Appliquer les logits corrigés
-- [x] 3-A Activer gauge `j_cost`
-- [x] 4-A Eviction L2 LMDB
-- [x] 5-A Exécution CLI dry-run
-- [x] 5-B Intégration CI
-- [x] 6-A Reload test
-- [x] 7-A README – Hot reload
+- [ ] 1-A Démarrer le watcher YAML
+- [ ] 1-B Vérification seuils actifs
+- [ ] 2-A Appliquer les logits corrigés
+- [ ] 3-A Activer gauge `j_cost`
+- [ ] 4-A Eviction L2 LMDB
+- [ ] 5-A Exécution CLI dry-run
+- [ ] 5-B Intégration CI
+- [ ] 6-A Reload test
+- [ ] 7-A README – Hot reload
 
 ## Historique
 
-*- Hot reload watcher, bias scaling, monitoring gauge, LMDB eviction, and e2e CI tests implemented.*
+*(empty)*
 
 [1]: https://pypi.org/project/watchdog/?utm_source=chatgpt.com "watchdog - PyPI"
 [2]: https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com "Gauge | client_python - Prometheus"
