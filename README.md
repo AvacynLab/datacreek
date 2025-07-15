@@ -25,11 +25,49 @@ This toolkit simplifies the journey of:
 - Images are captioned with BLIP and stored with the caption as `alt_text`
 - Audio files are transcribed via Whisper and linked back to the originating chunk
 - Quantities are converted to SI units when `quantulum3` and `pint` are installed
+- Mapper operations use a hierarchical cache. Results are stored in Redis and
+  LMDB with an on-disk fallback. The LMDB layer enforces
+  `cache.l2_max_mb` and purges old entries when this limit is exceeded,
+  emitting an `[L2-EVICT]` log message with the number of removed keys.
 - Optionally extracting named entities and standalone facts during ingestion
 - Advanced chunking options including semantic, contextual and summarized splitting
 - Creating synthetic datasets
 - Extracting standalone facts into a knowledge graph
 - Supporting various formats of post-training fine-tuning
+- Asynchronous tasks are executed via Celery with status stored in Redis
+- Datasets persist graphs in Redis and Neo4j and keep a version history
+- Dataset progress and history endpoints expose current status and past versions via `/datasets/<name>/progress`, `/datasets/<name>/history` and `/datasets/<name>/versions`
+- Neo4j indexes are created on startup to speed up queries
+  (`NEO4J_INIT_INDEXES=0` disables this step)
+- Datasets can be cloned to experiment with different cleaning steps
+- Optional RedisGraph integration for fast local queries
+- Continuous monitoring with an `InvariantPolicy` enforces entropy and
+  spectral limits at each stage
+- Configuration files are hot-reloaded by a watcher so threshold updates are
+  applied without restarting
+- Before each cleanup run `verify_thresholds()` checks that the in-memory
+  values match the YAML configuration and raises an error on mismatch
+- The watcher logs `[CFG-HOT] cleanup thresholds updated at <timestamp>` whenever the YAML values change
+- Exports can optionally be uploaded to S3 for convenient remote storage
+  when `S3_BUCKET`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are configured
+- A policy monitor thread periodically enforces the `InvariantPolicy`
+- An async orchestrator (`run_orchestrator_async()`) runs the full pipeline with
+  concurrent LLM calls
+- Graph maintenance utilities dynamically reconfigure fractal levels and add
+  hypergraph relations via `run_hypergraph_layer()`
+- A topological perception layer refines embeddings with
+  `run_topological_perception_layer()`
+- A semantic perception helper `apply_perception()` updates nodes and runs
+  `node_similarity()` to detect duplicates. Use
+  `apply_perception_all_nodes()` to transform the entire graph and validate
+  uniqueness in bulk
+  - Prompts may optionally encrypt PII fields when passed
+    an `encrypt_key` to `export_prompts()`, ensuring author and
+    organization metadata are not stored in plaintext
+  - `export_prompts()` records the `topological_signature_hash` of
+    the knowledge graph and tracks traversal counts.
+    Call `coverage_stats()` to identify unexplored regions of the graph
+    and target them in future generation runs.
 
 ## Workflow Overview
 
@@ -123,14 +161,16 @@ step:
 8. **Hypergraph layer** – `run_hypergraph_layer()` computes Hyper‑SAGNN
    embeddings and inserts predicted hyperedges via
    `update_hypergraph_structure()`.
-9. **Policy enforcement** – `_enforce_policy()` wraps dynamic reconfiguration,
+9. **Topological perception** – `run_topological_perception_layer()` adjusts the
+   graph topology using sheaf constraints and updates fractal levels.
+10. **Policy enforcement** – `_enforce_policy()` wraps dynamic reconfiguration,
    hypergraph suggestions and invariant monitoring so each pipeline stage
    remains within entropy, fractal and spectral limits.
-10. **Automatic triggers** – dataset mutations decorated with
+11. **Automatic triggers** – dataset mutations decorated with
    `monitor_after()` enforce the policy right after each update.
-11. **Background monitor** – `start_policy_monitor()` periodically applies the
+12. **Background monitor** – `start_policy_monitor()` periodically applies the
    policy in an asynchronous loop until `stop_policy_monitor()` is called.
-12. **Threaded monitoring** – `start_policy_monitor_thread()` runs the same
+13. **Threaded monitoring** – `start_policy_monitor_thread()` runs the same
    loop in a separate thread when `auto_monitor=True`.
    ```python
    from datacreek import DatasetBuilder, DatasetType, InvariantPolicy, start_policy_monitor_thread
@@ -140,13 +180,18 @@ step:
    ds.policy = InvariantPolicy(entropy_max=6.0, gap_min=0.1)
    start_policy_monitor_thread(ds, [1], interval=120.0)
    ```
-13. **Async orchestration** – `run_orchestrator_async()` executes the full
+14. **Async orchestration** – `run_orchestrator_async()` executes the full
    pipeline with concurrent LLM calls via `run_generation_layer_async`.
-9. **Semantic perception** – `apply_perception()` modifies node text and now
+15. **Semantic perception** – `apply_perception()` modifies node text and now
    automatically triggers `node_similarity()` to flag near duplicates.
-11. **Export & datasets** – `run_generation_pipeline()` produces QA pairs or
+16. **Export & datasets** – `run_generation_pipeline()` produces QA pairs or
    other dataset types which are curated via `curate.py` and saved through
    `save_as.py`.
+17. **Dataset progress** – monitor status via `/datasets/<name>/progress`,
+   view past events via `/datasets/<name>/history` and manage stored
+   versions through `/datasets/<name>/versions`.
+18. **Remote upload** – exported datasets can be uploaded to S3 when
+   `S3_BUCKET`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set.
 
 ## Fractal metrics and confidence
 
@@ -235,6 +280,65 @@ attempt. List them via `/datasets/<name>/versions`, fetch a single run with
 summary information for that generation. Every request must include an
 `X-API-Key` header issued when creating a user via `/users`.
 Datasets are persisted in Redis and Neo4j only. Use `DatasetBuilder.to_redis` and `save_neo4j` for persistence.
+
+### Architecture Overview
+
+```mermaid
+graph TD
+    Server(FastAPI) --> API[REST API]
+    API --> Builder
+    API --> Celery(Celery Worker)
+    Celery --> Builder
+    Builder[DatasetBuilder] --> Parsers
+    Builder --> Generators
+    Builder --> LLMClient
+    Builder --> FormatConverter
+    FormatConverter --> S3[(S3 Storage)]
+    Builder --> Analysis
+    Builder --> Perception
+    Builder --> Security
+    Builder --> Cache[(Redis/LMDB Cache)]
+    Builder --> KG[KnowledgeGraph]
+    KG --> Redis[(Redis DB)]
+    KG --> Neo4j[(Neo4j)]
+
+    subgraph Parsers
+        PDFParser
+        HTMLParser
+        YouTubeParser
+        DOCXParser
+        PPTParser
+        TXTParser
+        CodeParser
+        ImageParser
+        AudioParser
+        WhisperParser[WhisperAudioParser]
+    end
+
+    subgraph Generators
+        QAGenerator
+        COTGenerator
+        ConversationGenerator
+        KGGenerator
+        VQAGenerator
+        PrefGenerator
+        ToolGenerator
+        MultiToolGenerator
+    end
+
+    Config[Configuration] --> API
+    Config --> Builder
+
+    Utils --> FormatConverter
+    Utils --> Security
+
+    %% Batch processing is handled internally, no separate module
+
+    EnvVars[Environment Variables] -.-> Builder
+    ConfigWatcher[[Config Watcher]] -.-> Builder
+    PolicyMonitor[[Policy Monitor]] -.-> Builder
+```
+
 ## Configuration
 
 The toolkit uses a YAML configuration file (default: `configs/config.yaml`).
@@ -394,44 +498,58 @@ The `generation` section now exposes advanced chunking and retrieval options:
 Most options can also be overridden with environment variables. For example set
 `GEN_TEMPERATURE=0.5` to change the default temperature.
 
-| Variable | Description |
-|----------|-------------|
-| `GEN_TEMPERATURE` | Default sampling temperature |
-| `GEN_TOP_P` | Default top-p value |
-| `GEN_CHUNK_SIZE` | Override chunk size |
-| `GEN_OVERLAP` | Override overlap between chunks |
-| `GEN_CHUNK_METHOD` | Chunking method (`basic`, `sliding`, `semantic, contextual, summary`) |
-| `GEN_SIMILARITY_DROP` | Similarity threshold for semantic splits |
-| `GEN_RETRIEVAL_TOP_K` | Top-k chunks retrieved |
-| `GEN_NUM_PAIRS` | Default number of QA pairs |
-| `GEN_NUM_COT_EXAMPLES` | Default number of CoT examples |
-| `GEN_NUM_COT_ENHANCE_EXAMPLES` | Max conversations to enhance |
-| `GEN_BATCH_SIZE` | Batch size for generation |
-| `GEN_MAX_TOKENS` | Maximum tokens in completions |
-| `GEN_FREQUENCY_PENALTY` | Sampling frequency penalty |
-| `GEN_PRESENCE_PENALTY` | Sampling presence penalty |
-| `GEN_SUMMARY_TEMPERATURE` | Temperature for summaries |
-| `GEN_SUMMARY_MAX_TOKENS` | Max tokens for summaries |
-| `SDK_VERBOSE` | Enable detailed logs |
-| `DATACREEK_CONFIG` | Path to YAML configuration file |
-| `DATACREEK_PIPELINES_CONFIG` | Path to pipeline definitions |
-| `REDIS_HOST` | Redis hostname |
-| `REDIS_PORT` | Redis port |
-| `S3_BUCKET` | Upload dataset exports to this bucket |
-| `S3_PREFIX` | Optional prefix for uploaded objects |
-| `S3_ENDPOINT_URL` | Custom S3-compatible endpoint |
-| `AWS_ACCESS_KEY_ID` | AWS credential for S3 uploads |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret for S3 uploads |
-| `USE_REDIS_GRAPH` | Enable RedisGraph integration |
-| `DATASET_MAX_VERSIONS` | Maximum versions kept per dataset |
-| `SDK_DEBUG` | Log full model responses |
-
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `SDK_VERBOSE` | Enable verbose output for all operations | `false` | `export SDK_VERBOSE=true` |
+| `SDK_BATCH_SIZE` | Override batch size for curate command | Config setting | `export SDK_BATCH_SIZE=1` |
+| `LLM_PROVIDER` | Choose underlying LLM provider | – | `export LLM_PROVIDER=vllm` |
+| `LLM_API_BASE` | Base URL for the LLM API | – | `export LLM_API_BASE=http://localhost:8000/v1` |
+| `LLM_MODEL` | Model name for LLM calls | – | `export LLM_MODEL=meta-llama/Llama-3.3-70B-Instruct` |
+| `LLM_MAX_RETRIES` | Max retries for LLM requests | `3` | `export LLM_MAX_RETRIES=5` |
+| `LLM_RETRY_DELAY` | Delay between retries | `1.0` | `export LLM_RETRY_DELAY=2` |
+| `API_ENDPOINT_KEY` | API key for external provider | – | `export API_ENDPOINT_KEY=sk-abc` |
+| `DATACREEK_CONFIG` | Path to YAML configuration file (hot-reloaded) | – | `export DATACREEK_CONFIG=config.yaml` |
+| `DATACREEK_PIPELINES_CONFIG` | Path to pipeline definitions | – | `export DATACREEK_PIPELINES_CONFIG=pipelines.yaml` |
+| `REDIS_HOST` | Redis hostname | `localhost` | `export REDIS_HOST=redis` |
+| `REDIS_PORT` | Redis port | `6379` | `export REDIS_PORT=6379` |
+| `S3_BUCKET` | Upload dataset exports to this bucket | – | `export S3_BUCKET=my-bucket` |
+| `S3_PREFIX` | Optional prefix for uploaded objects | – | `export S3_PREFIX=demo/` |
+| `S3_ENDPOINT_URL` | Custom S3-compatible endpoint | – | `export S3_ENDPOINT_URL=https://s3.example.com` |
+| `AWS_ACCESS_KEY_ID` | AWS credential for S3 uploads | – | `export AWS_ACCESS_KEY_ID=abc` |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret for S3 uploads | – | `export AWS_SECRET_ACCESS_KEY=xyz` |
+| `USE_REDIS_GRAPH` | Enable RedisGraph integration | `false` | `export USE_REDIS_GRAPH=1` |
+| `DATACREEK_REQUIRE_PERSISTENCE` | Require Redis and Neo4j backends | `1` | `export DATACREEK_REQUIRE_PERSISTENCE=0` |
+| `DATACREEK_UPLOAD_DIR` | Restrict ingestion to this directory | – | `export DATACREEK_UPLOAD_DIR=/tmp/uploads` |
+| `DATABASE_URL` | SQLAlchemy database URL | `sqlite:///datacreek.db` | `export DATABASE_URL=postgresql://user:pass@host/db` |
+| `NEO4J_URI` | URI of the Neo4j database | `bolt://localhost:7687` | `export NEO4J_URI=bolt://neo4j:7687` |
+| `NEO4J_USER` | Username for Neo4j | `neo4j` | `export NEO4J_USER=neo4j` |
+| `NEO4J_PASSWORD` | Password for Neo4j | `neo4j` | `export NEO4J_PASSWORD=pass` |
+| `NEO4J_INIT_INDEXES` | Create indexes on startup | `1` | `export NEO4J_INIT_INDEXES=0` |
+| `CELERY_BROKER_URL` | Celery message broker | `redis://localhost/0` | `export CELERY_BROKER_URL=redis://redis:6379/0` |
+| `CELERY_RESULT_BACKEND` | Celery result backend | `redis://localhost/0` | `export CELERY_RESULT_BACKEND=redis://redis:6379/0` |
+| `PORT` | Flask backend port | `5000` | `export PORT=8000` |
+| `SECRET_KEY` | Flask secret key | – | `export SECRET_KEY=change-me` |
+| `HOST` | Bind address for the FastAPI server | `0.0.0.0` | `export HOST=127.0.0.1` |
+| `DEBUG` | Enable FastAPI debug mode | `false` | `export DEBUG=true` |
+| `API_KEY` | Default API key for the web interface | – | `export API_KEY=mykey` |
+| `IMAGE_NAME` | Container image for the API | – | `export IMAGE_NAME=ghcr.io/org/app` |
+| `FRONTEND_IMAGE_NAME` | Container image for the front-end | – | `export FRONTEND_IMAGE_NAME=ghcr.io/org/front` |
+| `DEPLOY_HOST` | Remote host used by `deploy.sh` | – | `export DEPLOY_HOST=example.com` |
+| `DEPLOY_USER` | SSH user for deployment | – | `export DEPLOY_USER=ubuntu` |
+| `DEPLOY_PATH` | Target directory on the remote host | – | `export DEPLOY_PATH=/opt/datacreek` |
+| `DEPLOY_KEY` | SSH key used for the connection | – | `export DEPLOY_KEY=~/.ssh/id_rsa` |
+| `LOCAL_BUILD` | Build images locally instead of pulling | `false` | `export LOCAL_BUILD=true` |
+| `DATASET_MAX_VERSIONS` | Maximum versions kept per dataset | – | `export DATASET_MAX_VERSIONS=5` |
+| `SDK_DEBUG` | Log full model responses | – | `export SDK_DEBUG=1` |
 ### Hot-reload config
 
 Set the environment variable `DATACREEK_CONFIG` to point to your YAML
 configuration file. Datacreek watches this file and reloads the `cleanup.*`
 section automatically every five minutes, so threshold updates are applied
-without restarting the application.
+without restarting the application. A log message `CFG-HOT watcher started`
+is emitted on startup. Before each cleanup run the pipeline calls
+`verify_thresholds()` to ensure the live values match the YAML file. A mismatch
+raises a `RuntimeError`.
 
 ### Model Profiles
 
@@ -847,7 +965,8 @@ records.
 8. **Prompt export & coverage** – `export_prompts()` attaches a MD5
    `signature_hash` of the topological signature and a `prompt_hash` so
    duplicates can be detected. Edge traversal is recorded so
-   `coverage_stats()` can report how much of the graph has been explored. User
+   `coverage_stats()` can report how much of the graph has been explored.
+   Supplying an `encrypt_key` masks PII in the exported records. User
    feedback is stored via `record_feedback()` for continuous improvements.
 9. **LLM service connectors** – `LLMService` centralizes OpenAI/vLLM access and
    provides synchronous and asynchronous batch completions.

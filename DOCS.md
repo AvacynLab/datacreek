@@ -33,6 +33,9 @@ Background jobs are handled by Celery. Configure `CELERY_BROKER_URL` and `CELERY
 4. **Curation** – apply an initial filter to discard low quality samples.
 5. **Dataset operations** – launch additional cleanup steps (deduplicate chunks, normalize dates, link entities, …) if needed.
 6. **Export** – download the dataset locally or push it to external storage such as Hugging Face.
+7. **Monitor progress** – inspect `/datasets/<name>/progress` for status,
+   `/datasets/<name>/history` for past actions and `/datasets/<name>/versions`
+   to manage multiple generation runs.
 
 ### Detailed SaaS Workflow
 
@@ -43,7 +46,7 @@ Background jobs are handled by Celery. Configure `CELERY_BROKER_URL` and `CELERY
 | **Dataset generation** | Dataset types (QA, CoT, VQA, etc.), specify training goal and output format. | The app picks the proper pipeline, generates content and formats it accordingly. |
 | **Initial curation** | Quality threshold and batch size. | Quickly discard low-quality pairs right after generation. |
 | **Dataset operations** | Same helpers as graph operations plus functions like `normalize_date_fields` or `compute_graph_embeddings`. | Further clean up the dataset before exporting. |
-| **Export** | Download locally or push to Hugging Face; JSONL, Alpaca, ChatML, OpenAI fine-tuning formats. | Save the final dataset in the desired location and format. |
+| **Export** | Download locally, push to Hugging Face or upload to S3. Optional PII encryption via `encrypt_key`. JSONL, Alpaca, ChatML or OpenAI FT formats. | Save the final dataset in the desired location and format, recording coverage metrics. |
 
 ### Step Reference
 
@@ -87,6 +90,7 @@ Each stage exposes a number of operations. The tables below summarize the most i
 | `SheafSLA` | measure mean time to recovery for sheaf checks |
 | `mapper_nerve(radius)` | compute or fetch cached Mapper nerve |
 | `clear_mapper_cache()` | drop cached Mapper nerve results |
+| `LMDB cache` | Stored nerves are kept in an LMDB database with automatic LRU eviction when `cache.l2_max_mb` is exceeded |
 | `prune_fractalnet(weights, ratio)` | magnitude-based pruning of model weights |
 | `colour_box_dimension(radii)` | GPU-style box counting for fractal dim |
 | `adaptive_triangle_threshold()` | derive triangle cutoff from edge weight entropy |
@@ -169,6 +173,32 @@ Each stage exposes a number of operations. The tables below summarize the most i
 - **Format Conversion**: Export to various training formats (JSONL, Alpaca, OpenAI FT, ChatML)
 - **Configurable**: All aspects controlled via YAML configuration
 - **Extensible**: Easy to add new parsers, generators, or output formats
+- **Asynchronous**: Long-running tasks are dispatched to Celery with results persisted in Redis
+- **Persistent**: Knowledge graphs and datasets are saved to Redis and Neo4j with version history
+- **Progress Endpoints**: Track dataset state through `/datasets/<name>/progress`, `/datasets/<name>/history` and `/datasets/<name>/versions`
+- **Index Initialization**: Neo4j indexes are created on startup
+  (`NEO4J_INIT_INDEXES=0` disables this)
+- **Hierarchical Cache**: Mapper and embedding results are cached in Redis and LMDB with LRU eviction
+- **Cache Eviction Log**: The LMDB layer emits `[L2-EVICT]` when `cache.l2_max_mb` (YAML `cache.l2_max_mb`) is exceeded
+- **Continuous Monitoring**: An `InvariantPolicy` enforces entropy, fractal and spectral limits
+- **Hot Reload**: A watcher reloads cleanup thresholds every five minutes when `watcher.enabled` is true and `watcher.interval` is set. The helper `verify_thresholds()` ensures the live values match the YAML file. A log message `[CFG-HOT] cleanup thresholds updated at <timestamp>` confirms each refresh
+- **Dynamic Reconfiguration**: `dynamic_reconfigure()` adjusts fractal levels and resolves sheaf obstructions
+- **Hypergraph Layer**: `run_hypergraph_layer()` predicts hyperedges via Hyper-SAGNN
+- **Topological Perception**: `run_topological_perception_layer()` refines embeddings and updates fractal levels
+- **S3 Export**: Final datasets can be uploaded to S3 using configured credentials. Set `S3_BUCKET`,
+  `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to enable this remote storage
+- **PII Encryption**: `export_prompts()` can encrypt author and organization fields
+  when provided an `encrypt_key`
+- **Coverage Tracking**: `export_prompts()` stores the
+  `topological_signature_hash` and traversal counts.
+  Use `coverage_stats()` to locate unexplored graph regions and
+  guide future dataset generation.
+- **Dataset Cloning**: Datasets can be cloned to try alternate cleaning strategies
+- **Policy Monitor**: `start_policy_monitor_thread()` enforces entropy and spectral limits asynchronously
+- **Async Orchestration**: `run_orchestrator_async()` performs concurrent LLM calls
+- **Semantic Perception**: `apply_perception()` updates nodes and checks similarity automatically.
+  `apply_perception_all_nodes()` transforms every node in bulk and verifies
+  uniqueness with `node_similarity()`
 
 ## 2. Architecture
 
@@ -180,13 +210,20 @@ Datacreek follows a modular architecture with these main components:
 graph TD
     Server(FastAPI) --> API[REST API]
     API --> Builder
+    API --> Celery(Celery Worker)
+    Celery --> Builder
     Builder[DatasetBuilder] --> Parsers
     Builder --> Generators
     Builder --> LLMClient
     Builder --> FormatConverter
+    FormatConverter --> S3[(S3 Storage)]
     Builder --> Analysis
+    Builder --> Perception
     Builder --> Security
+    Builder --> Cache[(Redis/LMDB Cache)]
     Builder --> KG[KnowledgeGraph]
+    KG --> Redis[(Redis DB)]
+    KG --> Neo4j[(Neo4j)]
 
     subgraph Parsers
         PDFParser
@@ -221,6 +258,8 @@ graph TD
     %% Batch processing is handled internally, no separate module
 
     EnvVars[Environment Variables] -.-> Builder
+    ConfigWatcher[[Config Watcher]] -.-> Builder
+    PolicyMonitor[[Policy Monitor]] -.-> Builder
 ```
 
 ### Directory Structure
@@ -717,6 +756,14 @@ The system includes several advanced features:
 4. **Robust JSON Parsing**: Multiple parsing methods to handle different LLM output formats
 5. **Verbose Mode: Enable detailed diagnostics with the `SDK_VERBOSE` environment variable
 
+### Continuous Monitoring
+
+`monitor_and_remediate()` checks graph metrics after each major step. Thresholds
+for entropy, spectral gap and fractal dimension are stored in an
+`InvariantPolicy` dataclass. Cleanup loops run until the graph statistics fall
+within the configured limits. The helper `start_policy_monitor_thread()` can run
+this policy periodically in a background thread.
+
 ### Stage 4: Format Conversion (Save-as)
 
 The `save-as` stage converts the content to different formats.
@@ -739,10 +786,15 @@ graph TD
     StorageSelection -->|JSON| SaveJSONFile[Save as JSON File]
     StorageSelection -->|HF Dataset| CreateHFDataset[Create HF Dataset]
     CreateHFDataset --> SaveArrow[Save in Arrow Format]
-    
+
     SaveJSONFile --> OutputFile[Output File]
     SaveArrow --> OutputDir[Output Directory]
+    OutputFile --> S3Upload[S3 Upload]
+    OutputDir --> S3Upload
 ```
+
+Exports saved locally can then be uploaded to S3 (or any compatible service)
+using the credentials provided in the environment variables.
 
 #### Format Converter Logic
 
@@ -1189,6 +1241,45 @@ The toolkit supports these environment variables for debugging and configuration
 |----------|-------------|---------|---------|
 | `SDK_VERBOSE` | Enable verbose output for all operations | `false` | `export SDK_VERBOSE=true` |
 | `SDK_BATCH_SIZE` | Override batch size for curate command | Config setting | `export SDK_BATCH_SIZE=1` |
+| `LLM_PROVIDER` | Choose underlying LLM provider | – | `export LLM_PROVIDER=vllm` |
+| `LLM_API_BASE` | Base URL for the LLM API | – | `export LLM_API_BASE=http://localhost:8000/v1` |
+| `LLM_MODEL` | Model name for LLM calls | – | `export LLM_MODEL=meta-llama/Llama-3.3-70B-Instruct` |
+| `LLM_MAX_RETRIES` | Max retries for LLM requests | `3` | `export LLM_MAX_RETRIES=5` |
+| `LLM_RETRY_DELAY` | Delay between retries | `1.0` | `export LLM_RETRY_DELAY=2` |
+| `API_ENDPOINT_KEY` | API key for external provider | – | `export API_ENDPOINT_KEY=sk-abc` |
+| `DATACREEK_CONFIG` | Path to YAML configuration file (hot-reloaded) | – | `export DATACREEK_CONFIG=config.yaml` |
+| `DATACREEK_PIPELINES_CONFIG` | Path to pipeline definitions | – | `export DATACREEK_PIPELINES_CONFIG=pipelines.yaml` |
+| `REDIS_HOST` | Redis hostname | `localhost` | `export REDIS_HOST=redis` |
+| `REDIS_PORT` | Redis port | `6379` | `export REDIS_PORT=6379` |
+| `S3_BUCKET` | Upload dataset exports to this bucket | – | `export S3_BUCKET=my-bucket` |
+| `S3_PREFIX` | Optional prefix for uploaded objects | – | `export S3_PREFIX=demo/` |
+| `S3_ENDPOINT_URL` | Custom S3-compatible endpoint | – | `export S3_ENDPOINT_URL=https://s3.example.com` |
+| `AWS_ACCESS_KEY_ID` | AWS credential for S3 uploads | – | `export AWS_ACCESS_KEY_ID=abc` |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret for S3 uploads | – | `export AWS_SECRET_ACCESS_KEY=xyz` |
+| `USE_REDIS_GRAPH` | Enable RedisGraph integration | `false` | `export USE_REDIS_GRAPH=1` |
+| `DATACREEK_REQUIRE_PERSISTENCE` | Require Redis and Neo4j backends | `1` | `export DATACREEK_REQUIRE_PERSISTENCE=0` |
+| `DATACREEK_UPLOAD_DIR` | Restrict ingestion to this directory | – | `export DATACREEK_UPLOAD_DIR=/tmp/uploads` |
+| `DATABASE_URL` | SQLAlchemy database URL | `sqlite:///datacreek.db` | `export DATABASE_URL=postgresql://user:pass@host/db` |
+| `NEO4J_URI` | URI of the Neo4j database | `bolt://localhost:7687` | `export NEO4J_URI=bolt://neo4j:7687` |
+| `NEO4J_USER` | Username for Neo4j | `neo4j` | `export NEO4J_USER=neo4j` |
+| `NEO4J_PASSWORD` | Password for Neo4j | `neo4j` | `export NEO4J_PASSWORD=pass` |
+| `NEO4J_INIT_INDEXES` | Create indexes on startup | `1` | `export NEO4J_INIT_INDEXES=0` |
+| `CELERY_BROKER_URL` | Celery message broker | `redis://localhost/0` | `export CELERY_BROKER_URL=redis://redis:6379/0` |
+| `CELERY_RESULT_BACKEND` | Celery result backend | `redis://localhost/0` | `export CELERY_RESULT_BACKEND=redis://redis:6379/0` |
+| `PORT` | Flask backend port | `5000` | `export PORT=8000` |
+| `SECRET_KEY` | Flask secret key | – | `export SECRET_KEY=change-me` |
+| `HOST` | Bind address for the FastAPI server | `0.0.0.0` | `export HOST=127.0.0.1` |
+| `DEBUG` | Enable FastAPI debug mode | `false` | `export DEBUG=true` |
+| `API_KEY` | Default API key for the web interface | – | `export API_KEY=mykey` |
+| `IMAGE_NAME` | Container image for the API | – | `export IMAGE_NAME=ghcr.io/org/app` |
+| `FRONTEND_IMAGE_NAME` | Container image for the front-end | – | `export FRONTEND_IMAGE_NAME=ghcr.io/org/front` |
+| `DEPLOY_HOST` | Remote host used by `deploy.sh` | – | `export DEPLOY_HOST=example.com` |
+| `DEPLOY_USER` | SSH user for deployment | – | `export DEPLOY_USER=ubuntu` |
+| `DEPLOY_PATH` | Target directory on the remote host | – | `export DEPLOY_PATH=/opt/datacreek` |
+| `DEPLOY_KEY` | SSH key used for the connection | – | `export DEPLOY_KEY=~/.ssh/id_rsa` |
+| `LOCAL_BUILD` | Build images locally instead of pulling | `false` | `export LOCAL_BUILD=true` |
+| `DATASET_MAX_VERSIONS` | Maximum versions kept per dataset | – | `export DATASET_MAX_VERSIONS=5` |
+| `SDK_DEBUG` | Log full model responses | – | `export SDK_DEBUG=1` |
 
 Setting these variables can help with debugging and performance tuning:
 
@@ -1210,9 +1301,10 @@ export DATACREEK_CONFIG=configs/cleanup_prod.yaml
 make run
 ```
 
-Un watcher vérifie toutes les cinq minutes si le fichier a changé. Au démarrage,
-un message log « CFG‑HOT watcher started » apparaît. Les valeurs `tau`, `sigma`,
-`k_min`, `lp_sigma` et `hub_deg` sont alors mises à jour sans redémarrage.
+Un watcher vérifie toutes les cinq minutes si le fichier a changé. Au démarrage, un message log « CFG-HOT watcher started » apparaît. À chaque actualisation un message log `[CFG-HOT] cleanup thresholds updated at <timestamp>` confirme la mise à jour. Les valeurs `tau`, `sigma`, `k_min`, `lp_sigma` et `hub_deg` sont alors mises à jour sans redémarrage.
+Avant chaque appel à `cleanup_graph`, la fonction `verify_thresholds()`
+vérifie que les seuils actifs correspondent au fichier YAML et lève une
+`RuntimeError` en cas désynchronisation.
 
 ## 10. Workflow Examples
 
