@@ -1199,6 +1199,21 @@ export SDK_BATCH_SIZE=1
 curl -X POST localhost:8000/curate -d "ds_key=dataset:results"
 ```
 
+### ♻ Hot reload des paramètres de nettoyage
+
+Datacreek peut recharger automatiquement certains seuils utilisés lors du
+`cleanup_graph`. Placez le chemin vers votre fichier YAML dans la variable
+`DATACREEK_CONFIG` :
+
+```bash
+export DATACREEK_CONFIG=configs/cleanup_prod.yaml
+make run
+```
+
+Un watcher vérifie toutes les cinq minutes si le fichier a changé. Au démarrage,
+un message log « CFG‑HOT watcher started » apparaît. Les valeurs `tau`, `sigma`,
+`k_min`, `lp_sigma` et `hub_deg` sont alors mises à jour sans redémarrage.
+
 ## 10. Workflow Examples
 
 ### Basic Workflow

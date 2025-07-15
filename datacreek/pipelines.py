@@ -459,8 +459,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_QA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -482,8 +482,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_COT,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -502,8 +502,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_VQA,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -522,8 +522,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_FROM_KG,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -545,8 +545,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.LABEL_PAIRS,
             PipelineStep.SAVE,
@@ -565,8 +565,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_CANDIDATES,
             PipelineStep.RANK_RESPONSES,
             PipelineStep.SAVE,
@@ -579,8 +579,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_TOOL_CALL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -602,8 +602,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_CONVERSATION,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
@@ -625,8 +625,8 @@ DEFAULT_PIPELINES: Dict[DatasetType, GenerationPipeline] = {
         steps=[
             PipelineStep.INGEST,
             PipelineStep.TO_KG,
-            PipelineStep.KG_CLEANUP,
             PipelineStep.VERIFY_THRESHOLDS,
+            PipelineStep.KG_CLEANUP,
             PipelineStep.GENERATE_MULTI_TOOL,
             PipelineStep.CURATE,
             PipelineStep.SAVE,
