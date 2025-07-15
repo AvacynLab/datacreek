@@ -400,6 +400,7 @@ def generate_chatml(payload, loc_hist, glob_hist):
     payload["logits"] = list(scaled_logits)
     return payload
 
+
 def generate_alpaca(payload, loc_hist, glob_hist):
     """Return Alpaca payload with logits scaled by :func:`bias_wasserstein`."""
     scaled_logits, _W = bias_wasserstein(loc_hist, glob_hist, payload["logits"])

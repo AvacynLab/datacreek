@@ -30,8 +30,9 @@ def test_cleanup_watcher_reload(tmp_path):
 
 def test_default_config_reload(caplog, tmp_path):
     """Cleanup thresholds should update when the default YAML changes."""
-    import yaml
     from pathlib import Path
+
+    import yaml
 
     cfg_src = Path("configs/default.yaml")
     cfg_file = tmp_path / "default.yaml"

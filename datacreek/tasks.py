@@ -12,7 +12,12 @@ from pathlib import Path
 import redis
 from celery import Celery
 
-from datacreek.backends import get_neo4j_driver, get_redis_client, get_redis_graph, get_s3_storage
+from datacreek.backends import (
+    get_neo4j_driver,
+    get_redis_client,
+    get_redis_graph,
+    get_s3_storage,
+)
 from datacreek.core.create import process_file as generate_data
 from datacreek.core.curate import curate_qa_pairs
 from datacreek.core.dataset import DatasetBuilder
@@ -39,7 +44,9 @@ celery_app = Celery("datacreek", broker=CELERY_BROKER_URL, backend=CELERY_BACKEN
 celery_app.conf.accept_content = ["json"]
 celery_app.conf.task_serializer = "json"
 celery_app.conf.result_serializer = "json"
-celery_app.conf.task_always_eager = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "false").lower() in {
+celery_app.conf.task_always_eager = os.environ.get(
+    "CELERY_TASK_ALWAYS_EAGER", "false"
+).lower() in {
     "1",
     "true",
 }
@@ -122,7 +129,9 @@ def ingest_task(
     extract_facts: bool = False,
 ) -> dict:
     with SessionLocal() as db:
-        content = ingest_file(path, high_res=high_res, ocr=ocr, use_unstructured=use_unstructured)
+        content = ingest_file(
+            path, high_res=high_res, ocr=ocr, use_unstructured=use_unstructured
+        )
         ents = extract_entities_func(content) if extract_entities else None
         facts = extract_facts_func(content) if extract_facts else None
         src = create_source(
@@ -190,7 +199,9 @@ def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
         if not ds or ds.owner_id != user_id:
             raise RuntimeError("Dataset not found")
         data = json.loads(ds.content or "{}")
-        result = curate_qa_pairs(data, threshold, None, None, None, False, async_mode=False)
+        result = curate_qa_pairs(
+            data, threshold, None, None, None, False, async_mode=False
+        )
         ds.content = json.dumps(result)
         db.commit()
         db.refresh(ds)
@@ -214,7 +225,9 @@ def save_task(user_id: int, ds_id: int, fmt: ExportFormat) -> dict:
 
 
 @celery_app.task
-def dataset_ingest_task(name: DatasetName, path: str, user_id: int | None = None, **kwargs) -> dict:
+def dataset_ingest_task(
+    name: DatasetName, path: str, user_id: int | None = None, **kwargs
+) -> dict:
     """Ingest a file into a persisted dataset."""
     client = get_redis_client()
     driver = get_neo4j_driver()
@@ -337,7 +350,9 @@ def dataset_generate_task(
 
 
 @celery_app.task
-def dataset_cleanup_task(name: str, params: dict | None = None, user_id: int | None = None) -> dict:
+def dataset_cleanup_task(
+    name: str, params: dict | None = None, user_id: int | None = None
+) -> dict:
     """Run cleanup operations on a persisted dataset."""
 
     client = get_redis_client()
@@ -382,7 +397,9 @@ def dataset_cleanup_task(name: str, params: dict | None = None, user_id: int | N
 
 @celery_app.task
 def dataset_export_task(
-    name: DatasetName, fmt: ExportFormat = ExportFormat.JSONL, user_id: int | None = None
+    name: DatasetName,
+    fmt: ExportFormat = ExportFormat.JSONL,
+    user_id: int | None = None,
 ) -> dict:
     """Format the latest generation result and mark the dataset exported."""
 
@@ -498,7 +515,9 @@ def dataset_load_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
 
 
 @celery_app.task
-def dataset_save_redis_graph_task(name: DatasetName, user_id: int | None = None) -> dict:
+def dataset_save_redis_graph_task(
+    name: DatasetName, user_id: int | None = None
+) -> dict:
     """Persist the dataset graph to RedisGraph."""
 
     client = get_redis_client()
@@ -531,7 +550,9 @@ def dataset_save_redis_graph_task(name: DatasetName, user_id: int | None = None)
 
 
 @celery_app.task
-def dataset_load_redis_graph_task(name: DatasetName, user_id: int | None = None) -> dict:
+def dataset_load_redis_graph_task(
+    name: DatasetName, user_id: int | None = None
+) -> dict:
     """Load the dataset graph from RedisGraph."""
 
     client = get_redis_client()
@@ -565,7 +586,10 @@ def dataset_load_redis_graph_task(name: DatasetName, user_id: int | None = None)
 
 @celery_app.task
 def dataset_operation_task(
-    name: DatasetName, operation: str, params: dict | None = None, user_id: int | None = None
+    name: DatasetName,
+    operation: str,
+    params: dict | None = None,
+    user_id: int | None = None,
 ) -> dict:
     """Run an arbitrary dataset method and persist the result."""
 
@@ -637,7 +661,9 @@ def dataset_prune_versions_task(
 
 
 @celery_app.task
-def dataset_restore_version_task(name: DatasetName, index: int, user_id: int | None = None) -> dict:
+def dataset_restore_version_task(
+    name: DatasetName, index: int, user_id: int | None = None
+) -> dict:
     """Restore ``index`` for ``name`` as the latest dataset version."""
 
     client = get_redis_client()
@@ -671,7 +697,9 @@ def dataset_restore_version_task(name: DatasetName, index: int, user_id: int | N
 
 
 @celery_app.task
-def dataset_delete_version_task(name: DatasetName, index: int, user_id: int | None = None) -> dict:
+def dataset_delete_version_task(
+    name: DatasetName, index: int, user_id: int | None = None
+) -> dict:
     """Delete ``index`` from ``name`` and persist the dataset."""
 
     client = get_redis_client()
@@ -712,7 +740,9 @@ def datasets_prune_versions_task(limit: int | None = None) -> dict:
     if client is None:
         raise RuntimeError("Redis unavailable")
 
-    names = [n.decode() if isinstance(n, bytes) else n for n in client.smembers("datasets")]
+    names = [
+        n.decode() if isinstance(n, bytes) else n for n in client.smembers("datasets")
+    ]
     total_removed = 0
     details: dict[str, int] = {}
 
@@ -738,7 +768,9 @@ def datasets_prune_stale_task(days: int = 30) -> dict:
         raise RuntimeError("Redis unavailable")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    names = [n.decode() if isinstance(n, bytes) else n for n in client.smembers("datasets")]
+    names = [
+        n.decode() if isinstance(n, bytes) else n for n in client.smembers("datasets")
+    ]
     removed: list[str] = []
 
     for name in names:

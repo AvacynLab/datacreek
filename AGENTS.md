@@ -83,8 +83,6 @@ cache:
 
 ---
 
-Coche chaque case avec implémentation et test ; l’application atteindra alors 100 % de conformité.
-
 ## Checklist
 
 - [x] 1-A Démarrer le watcher YAML
@@ -99,7 +97,7 @@ Coche chaque case avec implémentation et test ; l’application atteindra alors
 
 ## Historique
 
-- Liste importée et tâches implémentées, ajout de `update_theta` avec gauge `j_cost`.
+*- Hot reload watcher, bias scaling, monitoring gauge, LMDB eviction, and e2e CI tests implemented.*
 
 [1]: https://pypi.org/project/watchdog/?utm_source=chatgpt.com "watchdog - PyPI"
 [2]: https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com "Gauge | client_python - Prometheus"
