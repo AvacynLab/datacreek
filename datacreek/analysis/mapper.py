@@ -1,3 +1,4 @@
+import logging
 from typing import Iterable, List, Set, Tuple
 
 import networkx as nx
@@ -110,14 +111,33 @@ def _cache_put(
             env = lmdb.open(lmdb_path, map_size=limit_mb << 20)
             with env.begin(write=True) as txn:
                 txn.put(key.encode(), data)
-                stats = env.stat()
+                stat = env.stat()
                 info = env.info()
-                used = stats["psize"] * info["map_size"]
-                if used > (limit_mb << 20):
-                    cursor = txn.cursor()
-                    if cursor.first():
-                        txn.delete(cursor.key())
-                env.sync()
+                current_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+                if current_mb > limit_mb:
+                    cur = txn.cursor()
+                    n_deleted = 0
+                    prev_mb = current_mb
+                    if cur.first():
+                        while current_mb > limit_mb:
+                            cur.delete()
+                            n_deleted += 1
+                            if not cur.next():
+                                break
+                            stat = env.stat()
+                            info = env.info()
+                            current_mb = (stat["psize"] * info["map_size"]) / (
+                                1 << 20
+                            )
+                    env.sync()
+                    logging.getLogger(__name__).info(
+                        "[L2-EVICT] %d keys purged (%.1f MB→%.1f MB)",
+                        n_deleted,
+                        prev_mb,
+                        current_mb,
+                    )
+                else:
+                    env.sync()
             env.close()
         except Exception:  # pragma: no cover - disk errors
             pass

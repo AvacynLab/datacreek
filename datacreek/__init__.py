@@ -852,4 +852,3 @@ from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watche
 
 # Start config watcher when the package is imported
 _start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", "configs/default.yaml"))
-logging.getLogger(__name__).info("CFG-HOT watcher started")

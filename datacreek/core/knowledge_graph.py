@@ -110,11 +110,22 @@ class ConfigReloader(FileSystemEventHandler):
 
 
 def verify_thresholds() -> None:
-    """Assert live cleanup thresholds equal stored configuration."""
+    """Assert live cleanup thresholds match the YAML configuration.
 
-    vals = get_cleanup_cfg()
-    if vals.get("tau") != CleanupConfig.tau:
-        raise RuntimeError("CleanupConfig.tau does not match database values")
+    This loads the cleanup section from the current YAML config file and
+    compares each value against :class:`CleanupConfig`. A mismatch indicates
+    the hot-reload watcher failed to update live parameters.
+    """
+
+    cfg = load_config()
+    expected = cfg.get("cleanup", {})
+    for key in ["tau", "sigma", "k_min", "lp_sigma", "hub_deg"]:
+        yaml_val = expected.get(key)
+        if yaml_val is None:
+            continue
+        curr_val = getattr(CleanupConfig, key)
+        if curr_val != yaml_val:
+            raise RuntimeError(f"CFG-HOT mismatch: {key}\u2260{yaml_val}")
 
 
 def start_cleanup_watcher(
