@@ -324,6 +324,32 @@ def autotune_step(
     }
 
 
+def update_theta(state: AutoTuneState, metrics: Dict[str, float]) -> None:
+    """Update ``state`` with new parameters and record the autotuning cost.
+
+    Parameters
+    ----------
+    state:
+        Mutable autotuning state to update.
+    metrics:
+        Dictionary returned by :func:`autotune_step`.
+    """
+
+    from .monitoring import j_cost
+
+    J = float(metrics.get("cost", 0.0))
+    if j_cost is not None:
+        try:
+            j_cost.set(J)
+        except Exception:
+            pass
+    state.tau = int(metrics.get("tau", state.tau))
+    state.eps = float(metrics.get("eps", state.eps))
+    state.beta = float(metrics.get("beta", state.beta))
+    state.delta = float(metrics.get("delta", state.delta))
+    state.jitter = float(metrics.get("jitter", state.jitter))
+
+
 def svgp_ei_propose(
     params: Sequence[Sequence[float]],
     scores: Sequence[float],

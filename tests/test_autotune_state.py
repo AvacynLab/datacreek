@@ -50,3 +50,28 @@ def test_recall_and_autotune_step():
         latency=0.2,
     )
     assert res["recall"] == 1.0
+
+
+def test_update_theta_sets_gauge(monkeypatch):
+    state = AutoTuneState()
+    metrics = {
+        "cost": 0.5,
+        "tau": 3,
+        "eps": 0.1,
+        "beta": 0.2,
+        "delta": 0.05,
+        "jitter": 0.1,
+    }
+
+    from datacreek.analysis import monitoring
+    from datacreek.analysis.autotune import update_theta
+
+    called = {}
+    monkeypatch.setattr(
+        monitoring,
+        "j_cost",
+        type("G", (), {"set": lambda self, v: called.setdefault("v", v)})(),
+    )
+    update_theta(state, metrics)
+    assert called["v"] == 0.5
+    assert state.tau == 3

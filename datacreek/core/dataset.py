@@ -2672,6 +2672,9 @@ class DatasetBuilder:
             penalty_cfg=penalty_cfg,
             latency=latency,
         )
+        from ..analysis.autotune import update_theta as _update_theta
+
+        _update_theta(state, res)
         self.graph.graph["j_cost"] = float(res["cost"])
         update_metric("j_cost", float(res["cost"]))
         update_metric("autotune_cost", float(res["cost"]))
