@@ -1,12 +1,10 @@
 name: "CI"
 
 on:
-  push:
   pull_request:
 
 jobs:
   test-units:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     services:
       redis:
@@ -46,7 +44,6 @@ jobs:
             ${{ steps.diff.outputs.head }}
 
   pipeline-e2e:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

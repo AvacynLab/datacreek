@@ -104,6 +104,7 @@ Coche chaque case avec implémentation et test ; l’application atteindra alors
 - Eviction LMDB par taille maximale et tests e2e en CI
 - Adjusted CI to run tests only on pull_request events
 
+- Removed push trigger to avoid duplicates
 [1]: https://pypi.org/project/watchdog/?utm_source=chatgpt.com "watchdog - PyPI"
 [2]: https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com "Gauge | client_python - Prometheus"
 [3]: https://stackoverflow.com/questions/63552889/maximum-lmdb-value-size?utm_source=chatgpt.com "Maximum LMDB value size - python - Stack Overflow"
