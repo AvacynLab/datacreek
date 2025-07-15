@@ -102,6 +102,7 @@ Coche chaque case avec implémentation et test ; l’application atteindra alors
 - Intégration complète du watcher YAML et validation dynamique
 - Ajout du rescaling des logits et du suivi `j_cost`
 - Eviction LMDB par taille maximale et tests e2e en CI
+- Adjusted CI to run tests only on pull_request events
 
 [1]: https://pypi.org/project/watchdog/?utm_source=chatgpt.com "watchdog - PyPI"
 [2]: https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com "Gauge | client_python - Prometheus"
