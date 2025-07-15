@@ -85,6 +85,24 @@ cache:
 
 Coche chaque case avec implémentation et test ; l’application atteindra alors 100 % de conformité.
 
+## Checklist
+
+- [x] 1-A Démarrer le watcher YAML
+- [x] 1-B Vérification seuils actifs
+- [x] 2-A Appliquer les logits corrigés
+- [x] 3-A Activer gauge `j_cost`
+- [x] 4-A Eviction L2 LMDB
+- [x] 5-A Exécution CLI dry-run
+- [x] 5-B Intégration CI
+- [x] 6-A Reload test
+- [x] 7-A README – Hot reload
+
+## Historique
+
+- Intégration complète du watcher YAML et validation dynamique
+- Ajout du rescaling des logits et du suivi `j_cost`
+- Eviction LMDB par taille maximale et tests e2e en CI
+
 [1]: https://pypi.org/project/watchdog/?utm_source=chatgpt.com "watchdog - PyPI"
 [2]: https://prometheus.github.io/client_python/instrumenting/gauge/?utm_source=chatgpt.com "Gauge | client_python - Prometheus"
 [3]: https://stackoverflow.com/questions/63552889/maximum-lmdb-value-size?utm_source=chatgpt.com "Maximum LMDB value size - python - Stack Overflow"
