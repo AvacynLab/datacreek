@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Tuple
 
+import logging
+
 import numpy as np
 from sklearn.cross_decomposition import CCA
 
@@ -158,14 +160,21 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
 
     import os
     import pickle
-
+    import hashlib
     import numpy as np
 
     if not os.path.exists(path):
         raise FileNotFoundError(f"CCA weights not found at {path}")
     with open(path, "rb") as f:
-        data = pickle.load(f)
-    return np.asarray(data["Wn2v"]), np.asarray(data["Wgw"])
+        blob = f.read()
+    h = hashlib.sha256(blob).hexdigest()
+    data = pickle.loads(blob)
+    W1 = np.asarray(data["Wn2v"])
+    W2 = np.asarray(data["Wgw"])
+    W1.setflags(write=False)
+    W2.setflags(write=False)
+    logging.getLogger(__name__).info("cca_sha=%s", h)
+    return W1, W2
 
 
 def hybrid_score(

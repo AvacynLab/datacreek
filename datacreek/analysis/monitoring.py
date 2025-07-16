@@ -7,6 +7,7 @@ from typing import Dict
 try:
     from prometheus_client import (
         CollectorRegistry,
+        Counter,
         Gauge,
         push_to_gateway,
         start_http_server,
@@ -22,12 +23,18 @@ if Gauge is not None:
     sheaf_score = Gauge("sheaf_score", "Sheaf consistency score")
     gw_entropy = Gauge("gw_entropy", "GraphWave entropy")
     autotune_cost = Gauge("autotune_cost", "Current J(theta)")
+    bias_wasserstein_last = Gauge(
+        "bias_wasserstein_last", "Latest Wasserstein distance used"
+    )
+    haa_edges_total = Counter("haa_edges_total", "Hyper-AA edges written")
     j_cost = autotune_cost
 else:  # pragma: no cover - optional dependency missing
     tpl_w1 = None
     sheaf_score = None
     gw_entropy = None
     autotune_cost = None
+    bias_wasserstein_last = None
+    haa_edges_total = None
     j_cost = None
 
 
@@ -39,6 +46,8 @@ _METRICS = {
     "tpl_w1": tpl_w1,
     "j_cost": j_cost,
     "autotune_cost": autotune_cost,
+    "bias_wasserstein_last": bias_wasserstein_last,
+    "haa_edges_total": haa_edges_total,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

@@ -8,7 +8,7 @@ cleanup:
   sigma: 0.95      # node similarity threshold
   k_min: 5         # min component size
   lp_sigma: 0.3    # Hyper-AA score threshold
-  lp_topk: 5
+  lp_topk: 50
   hub_deg: 1000    # hub tagging degree threshold
 watcher:
   enabled: true
@@ -38,7 +38,8 @@ fractal:
   bootstrap_seed: 123
 
 cache:
-  l2_max_mb: 256
+  l2_max_size_mb: 2048
+  l2_ttl_hours: 24
 
 compression:
   magnitude: 0.03  # pruning threshold

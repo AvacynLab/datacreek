@@ -55,7 +55,7 @@ def _load_cleanup() -> None:
         "sigma": float(cleanup.get("sigma", 0.95)),
         "k_min": int(cleanup.get("k_min", 5)),
         "lp_sigma": float(cleanup.get("lp_sigma", 0.3)),
-        "lp_topk": int(cleanup.get("lp_topk", 5)),
+        "lp_topk": int(cleanup.get("lp_topk", 50)),
         "hub_deg": int(cleanup.get("hub_deg", 1000)),
     }
     with _cleanup_lock:
@@ -76,6 +76,7 @@ class CleanupConfig:
     sigma: float = 0.95
     k_min: int = 5
     lp_sigma: float = 0.3
+    lp_topk: int = 50
     hub_deg: int = 1000
 
 
@@ -87,6 +88,7 @@ def apply_cleanup_config() -> None:
     CleanupConfig.sigma = float(vals.get("sigma", CleanupConfig.sigma))
     CleanupConfig.k_min = int(vals.get("k_min", CleanupConfig.k_min))
     CleanupConfig.lp_sigma = float(vals.get("lp_sigma", CleanupConfig.lp_sigma))
+    CleanupConfig.lp_topk = int(vals.get("lp_topk", CleanupConfig.lp_topk))
     CleanupConfig.hub_deg = int(vals.get("hub_deg", CleanupConfig.hub_deg))
     logging.getLogger(__name__).info(
         "[CFG-HOT] cleanup thresholds updated at %s",
@@ -119,7 +121,7 @@ def verify_thresholds() -> None:
 
     cfg = load_config()
     expected = cfg.get("cleanup", {})
-    for key in ["tau", "sigma", "k_min", "lp_sigma", "hub_deg"]:
+    for key in ["tau", "sigma", "k_min", "lp_sigma", "lp_topk", "hub_deg"]:
         yaml_val = expected.get(key)
         if yaml_val is None:
             continue
@@ -5112,7 +5114,7 @@ class KnowledgeGraph:
 
         cfg_vals = get_cleanup_cfg()
         lp_sigma = float(cfg_vals.get("lp_sigma", 0.5))
-        lp_topk = int(cfg_vals.get("lp_topk", 5))
+        lp_topk = int(cfg_vals.get("lp_topk", 50))
         hub_deg = int(cfg_vals.get("hub_deg", 500))
 
         if min_component_size is None:
@@ -5222,14 +5224,27 @@ class KnowledgeGraph:
             session.run(
                 "CALL gds.alpha.hypergraph.linkprediction.adamicAdar.write("
                 "'kg_qc', {writeRelationshipType:'SUGGESTED_HYPER_AA',"
-                " writeProperty:'haa_score', topK:$topk, relationshipProjection:$relProj})",
+                " writeProperty:'score', topK:$topk, relationshipProjection:$relProj})",
                 topk=lp_topk,
                 relProj=rel_proj,
             )
             session.run(
-                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.haa_score <= $th DELETE r",
+                "CREATE INDEX haa_score_index IF NOT EXISTS FOR ()-[r:SUGGESTED_HYPER_AA]-() ON (r.score)"
+            )
+            session.run(
+                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() WHERE r.score <= $th DELETE r",
                 th=lp_sigma,
             )
+            count_rec = session.run(
+                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() RETURN count(r) AS c"
+            ).single()
+            try:
+                from ..analysis.monitoring import haa_edges_total as _haa_counter
+
+                if count_rec and _haa_counter is not None:
+                    _haa_counter.inc(int(count_rec["c"]))
+            except Exception:  # pragma: no cover - optional metrics
+                pass
 
             deg_records = list(
                 session.run("CALL gds.degree.stream('kg_qc') YIELD nodeId, score")
