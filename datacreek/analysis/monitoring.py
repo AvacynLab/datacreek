@@ -30,9 +30,7 @@ if Gauge is not None:
     gp_jitter_restarts_total = Counter(
         "gp_jitter_restarts_total", "SVGP restarts due to jitter"
     )
-    prune_reverts_total = Counter(
-        "prune_reverts_total", "FractalNet pruning rollbacks"
-    )
+    prune_reverts_total = Counter("prune_reverts_total", "FractalNet pruning rollbacks")
     redis_hit_ratio = Gauge("redis_hit_ratio", "Redis L1 hit ratio")
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing

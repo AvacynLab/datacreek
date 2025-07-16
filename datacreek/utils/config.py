@@ -6,13 +6,13 @@
 # Config Utilities
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
-import threading
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 
 import yaml
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from datacreek.config_models import (
     CurateSettings,

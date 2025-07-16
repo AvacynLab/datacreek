@@ -1,7 +1,7 @@
+import hashlib
 import logging
 import math
 import os
-import hashlib
 import random
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
@@ -31,8 +31,9 @@ except Exception:  # pragma: no cover - optional dependency missing
     csgraph = None  # type: ignore
 
 
-def ensure_graphrnn_checkpoint(cfg: Mapping[str, Any] | None = None,
-                               cache_dir: str | os.PathLike | None = None) -> Path | None:
+def ensure_graphrnn_checkpoint(
+    cfg: Mapping[str, Any] | None = None, cache_dir: str | os.PathLike | None = None
+) -> Path | None:
     """Download GraphRNN checkpoint from S3 if configured.
 
     Parameters
@@ -422,7 +423,7 @@ def chebyshev_heat_kernel(L: np.ndarray, t: float, m: int = 7) -> np.ndarray:
     eig_maxit = int(cfg.get("spectral", {}).get("eig_maxit", 2000))
 
     try:  # pragma: no cover - prefer sparse eigs when available
-        from scipy.sparse.linalg import eigsh, ArpackNoConvergence
+        from scipy.sparse.linalg import ArpackNoConvergence, eigsh
 
         if L.shape[0] > 2_000_000:
             lmax = lanczos_lmax(L, iters=5)

@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
-import os
 
 import numpy as np
 from sklearn.cross_decomposition import CCA
@@ -145,7 +145,9 @@ def cca_align(
     return latent
 
 
-def load_cca(path: str = os.path.join(CACHE_ROOT, "cca.pkl")) -> tuple[np.ndarray, np.ndarray]:
+def load_cca(
+    path: str = os.path.join(CACHE_ROOT, "cca.pkl")
+) -> tuple[np.ndarray, np.ndarray]:
     """Return CCA weights ``(Wn2v, Wgw)`` previously persisted by :func:`cca_align`.
 
     Parameters

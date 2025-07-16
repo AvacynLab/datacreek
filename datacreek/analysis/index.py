@@ -13,6 +13,7 @@ except Exception:  # pragma: no cover - optional dependency
     faiss = None  # type: ignore
 
 from contextlib import nullcontext
+
 from .monitoring import update_metric
 
 try:  # optional Prometheus metrics

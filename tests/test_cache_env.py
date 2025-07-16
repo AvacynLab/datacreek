@@ -1,8 +1,9 @@
 import importlib.util
 import os
 import sys
-from pathlib import Path
 import types
+from pathlib import Path
+
 import numpy as np
 
 
@@ -29,4 +30,3 @@ def test_cache_env(monkeypatch, tmp_path):
     spec.loader.exec_module(mv)
     assert mv.CACHE_ROOT == str(tmp_path)
     assert os.path.join(str(tmp_path), "cca.pkl") == mv.load_cca.__defaults__[0]
-

@@ -1,6 +1,8 @@
 import networkx as nx
-from datacreek.analysis.autotune import AutoTuneState, autotune_step
+
 import datacreek.analysis.autotune as auto
+from datacreek.analysis.autotune import AutoTuneState, autotune_step
+
 
 def test_jitter_restart_counter(monkeypatch):
     state = AutoTuneState()
@@ -18,6 +20,7 @@ def test_jitter_restart_counter(monkeypatch):
     monkeypatch.setattr(auto, "hybrid_score", lambda *a, **k: 0.0)
     called = {"n": 0}
     import datacreek.analysis.monitoring as monitoring
+
     monkeypatch.setattr(
         monitoring,
         "gp_jitter_restarts_total",

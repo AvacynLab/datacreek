@@ -1,8 +1,8 @@
+import importlib.util
 import os
 import sys
 import time
 from pathlib import Path
-import importlib.util
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -17,7 +17,11 @@ for name in [
     "OpenAISettings",
     "VLLMSettings",
 ]:
-    cls = type(name, (), {"__dataclass_fields__": {}, "from_dict": classmethod(lambda cls, d: cls())})
+    cls = type(
+        name,
+        (),
+        {"__dataclass_fields__": {}, "from_dict": classmethod(lambda cls, d: cls())},
+    )
     setattr(stub, name, cls)
 sys.modules["datacreek.config_models"] = stub
 spec = importlib.util.spec_from_file_location(

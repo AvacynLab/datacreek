@@ -6,6 +6,7 @@ import os
 import re
 import threading
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +18,6 @@ import requests
 from dateutil import parser
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-from contextlib import nullcontext
 
 try:
     from ..analysis.index import ann_latency

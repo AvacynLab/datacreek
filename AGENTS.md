@@ -220,3 +220,4 @@
 - Introduced reproducible fractal bootstrap seed and marked e2e tests in CI.
 - Marked bias_wasserstein_last gauge as complete after verifying monitoring update.
 - Installed runtime dependencies and re-ran focused tests to confirm checklist completion.
+- Ran pre-commit formatting on updated files and installed missing test dependencies.
