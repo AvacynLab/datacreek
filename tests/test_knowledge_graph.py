@@ -1321,12 +1321,14 @@ class _DummySession:
         if "hypergraph.linkprediction" in query:
             return []
         if "RETURN count(r) AS c" in query:
+
             class _Rec(dict):
                 def single(self):
                     return {"c": 2}
 
             return _Rec()
         if "RETURN n.id AS name" in query:
+
             class _Rec(dict):
                 def single(self):
                     return {"name": "n"}

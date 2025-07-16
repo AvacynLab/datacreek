@@ -8,9 +8,8 @@ can run without heavy dependencies.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, Tuple
-
 import logging
+from typing import Dict, Iterable, Tuple
 
 import numpy as np
 from sklearn.cross_decomposition import CCA
@@ -158,9 +157,10 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
         If ``path`` does not exist.
     """
 
+    import hashlib
     import os
     import pickle
-    import hashlib
+
     import numpy as np
 
     if not os.path.exists(path):

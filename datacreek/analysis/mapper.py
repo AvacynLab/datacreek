@@ -56,8 +56,8 @@ def inverse_mapper(nerve: nx.Graph, cover: Iterable[Set[object]]) -> nx.Graph:
 
 
 import pickle
-import time
 import threading
+import time
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -229,7 +229,7 @@ def cache_mapper_nerve(
     lmdb_path: str = "hot_subgraph",
     ssd_dir: str = "nerve_cache",
     ttl: int = 3600,
-    ) -> tuple[nx.Graph, list[set[object]]]:
+) -> tuple[nx.Graph, list[set[object]]]:
     """Return cached Mapper nerve for ``graph`` or compute it."""
 
     key = f"{radius}_{_hash_graph(graph)}"

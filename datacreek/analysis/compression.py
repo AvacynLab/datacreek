@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pickle
 import logging
+import pickle
 from pathlib import Path
 
 try:
