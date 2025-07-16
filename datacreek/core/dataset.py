@@ -1731,6 +1731,7 @@ class DatasetBuilder:
         n2v_attr: str = "embedding",
         gw_attr: str = "graphwave_embedding",
         write_property: str = "acca_embedding",
+        path: str = "cache/cca.pkl",
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_aligned_cca_embeddings`."""
 
@@ -1739,6 +1740,7 @@ class DatasetBuilder:
             n2v_attr=n2v_attr,
             gw_attr=gw_attr,
             write_property=write_property,
+            path=path,
         )
         self._record_event(
             "compute_aligned_cca_embeddings",

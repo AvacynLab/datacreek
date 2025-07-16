@@ -2718,10 +2718,13 @@ class KnowledgeGraph:
         n2v_attr: str = "embedding",
         gw_attr: str = "graphwave_embedding",
         write_property: str = "acca_embedding",
+        path: str = "cache/cca.pkl",
     ) -> None:
         """Compute A-CCA latent vectors between Node2Vec and GraphWave."""
 
-        from ..analysis import aligned_cca as _acca
+        from ..analysis import aligned_cca as _acca, load_cca, cca_align
+        import numpy as np
+        import os
 
         n2v = {
             n: data[n2v_attr]
@@ -2733,7 +2736,14 @@ class KnowledgeGraph:
             for n, data in self.graph.nodes(data=True)
             if n2v_attr in data and gw_attr in data
         }
-        latent, _ = _acca(n2v, gw, n_components=n_components)
+        if os.path.exists(path):
+            W1, _ = load_cca(path)
+            nodes = list(n2v)
+            X = np.vstack([np.asarray(n2v[n], dtype=float) for n in nodes])
+            X_c = X @ W1
+            latent = {nodes[i]: X_c[i] for i in range(len(nodes))}
+        else:
+            latent = cca_align(n2v, gw, n_components=n_components, path=path)
         for node, vec in latent.items():
             self.graph.nodes[node][write_property] = vec.tolist()
 

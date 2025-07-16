@@ -9,7 +9,10 @@ can run without heavy dependencies.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, Iterable, Tuple
+
+import hashlib
 
 import numpy as np
 from sklearn.cross_decomposition import CCA
@@ -135,6 +138,8 @@ def cca_align(
     with open(path, "wb") as f:
         # store weights using protocol 4 for compatibility
         pickle.dump({"Wn2v": cca.x_weights_, "Wgw": cca.y_weights_}, f, protocol=4)
+    sha = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    logging.getLogger(__name__).info("cca_sha=%s", sha)
     return latent
 
 
@@ -157,7 +162,6 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
         If ``path`` does not exist.
     """
 
-    import hashlib
     import os
     import pickle
 
