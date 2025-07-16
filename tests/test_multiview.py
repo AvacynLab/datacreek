@@ -194,7 +194,40 @@ def test_load_cca_logs_sha(tmp_path, caplog):
     assert any("cca_sha=" in r.message for r in caplog.records)
 
 
+def test_cca_align_logs_sha(tmp_path, caplog):
+    n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    gw = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    path = tmp_path / "cca.pkl"
+    caplog.set_level("INFO")
+    cca_align(n2v, gw, n_components=1, path=str(path))
+    assert any("cca_sha=" in r.message for r in caplog.records)
+
+
 def test_load_cca_missing(tmp_path):
     missing = tmp_path / "none.pkl"
     with pytest.raises(FileNotFoundError):
         load_cca(str(missing))
+
+
+def test_compute_aligned_cca_embeddings_cache(monkeypatch, tmp_path):
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds.add_document("d", source="s")
+    ds.add_entity("e1", "E")
+    ds.add_entity("e2", "E")
+    for node in ["e1", "e2"]:
+        ds.graph.graph.nodes[node]["embedding"] = (
+            [1.0, 0.0] if node == "e1" else [0.0, 1.0]
+        )
+        ds.graph.graph.nodes[node]["graphwave_embedding"] = (
+            [1.0, 0.0] if node == "e1" else [0.0, 1.0]
+        )
+    path = tmp_path / "cca.pkl"
+    ds.compute_aligned_cca_embeddings(n_components=1, path=str(path))
+    assert path.exists()
+
+    def fail(*a, **k):
+        raise AssertionError("aligned_cca should not run")
+
+    monkeypatch.setattr("datacreek.analysis.multiview.aligned_cca", fail)
+    ds.compute_aligned_cca_embeddings(n_components=1, path=str(path))
+    assert "acca_embedding" in ds.graph.graph.nodes["e1"]

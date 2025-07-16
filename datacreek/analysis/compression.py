@@ -192,10 +192,12 @@ class FractalNetPruner:
             save_checkpoint("pruned.ok", self.model)
 
         delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
-        logging.getLogger(__name__).info(
+        logger = logging.getLogger(__name__)
+        logger.info(
             "prune_ratio=%.4f ppl_delta=%.4f was_reverted=%s",
             ratio,
             delta,
             was_reverted,
         )
+        logger.info("PRUNE_REVERTED=%s", str(was_reverted).lower())
         return not was_reverted and delta <= 0.01, perplexity
