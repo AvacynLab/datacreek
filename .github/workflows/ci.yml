@@ -61,8 +61,8 @@ jobs:
       - run: >-
           pip install -r requirements.txt fakeredis requests python-dateutil
           pydantic==2.4.0 rich scikit-learn watchdog PyYAML pytest geomloss boto3
-          httpx
-      - run: PYTHONPATH=. pytest -m "e2e" -q
+          httpx numpy
+      - run: PYTHONPATH=. pytest tests/test_pipeline_e2e.py -q
   docker-build:
     runs-on: ubuntu-latest
     permissions:

@@ -9,7 +9,7 @@
 
 ### 1.1  Fallback eigsh → Lanczos‑5
 
-* [x] **Condition timeout**
+* [ ] **Condition timeout**
 
   ```python
   try:
@@ -17,12 +17,12 @@
   except ConvergenceError:
       lmax = lanczos_top_eigenvalue(L, k=5)
   ```
-* [x] **Implémenter `lanczos_top_eigenvalue`** (5 itérations, orthogonalisation)
+* [ ] **Implémenter `lanczos_top_eigenvalue`** (5 itérations, orthogonalisation)
 
   $$
     l_{\max}\approx \frac{v_5^\top L v_5}{v_5^\top v_5}
   $$
-* [x] **Paramètres YAML**
+* [ ] **Paramètres YAML**
 
   ```yaml
   spectral:
@@ -31,14 +31,14 @@
 
 ### 1.2  Histogramme latence FAISS/HNSW
 
-* [x] Ajouter histogramme Prometheus
+* [ ] Ajouter histogramme Prometheus
 
   ```python
   ann_latency = Histogram(
       'ann_latency_seconds', 'ANN query latency',
       buckets=(0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10))
   ```
-* [x] Décorer chaque appel `index.search` :
+* [ ] Décorer chaque appel `index.search` :
 
   ```python
   with ann_latency.time():
@@ -51,8 +51,8 @@
 
 ### 2.1  TTL adaptatif Redis L1
 
-* [x] **Ajout métrique `redis_hit_ratio`**.
-* [x] **Ré‑évaluer TTL** toutes les 5 min :
+* [ ] **Ajout métrique `redis_hit_ratio`**.
+* [ ] **Ré‑évaluer TT L** toutes les 5 min :
 
   ```
   if hit_ratio < 0.2: ttl *= 0.5
@@ -62,8 +62,8 @@
 
 ### 2.2  Limite taille LMDB L2
 
-* [x] Fixer `set_mapsize(cfg.cache.l2_max_size_mb*1024**2)`.
-* [x] Boucle éviction :
+* [ ] Fixer `set_mapsize(cfg.cache.l2_max_size_mb*1024**2)`.
+* [ ] Boucle éviction :
 
   ```python
   if lmdb_stat()['psize_mb'] > cfg.cache.l2_max_size_mb:
@@ -76,7 +76,7 @@
 
 ### 3.1  Clamp Wasserstein
 
-* [x] Avant re‑pondération :
+* [ ] Avant re‑pondération :
 
   ```python
   W = min(W, 0.5)      # clamp
@@ -85,7 +85,7 @@
 
 ### 3.2  Exporter métrique
 
-* [x] Gauge `bias_wasserstein_last`.
+* [ ] Gauge `bias_wasserstein_last`.
 
 ---
 
@@ -100,7 +100,7 @@
 
 ## 5  | Indexation Neo4j – composite sur Hyper‑AA
 
-* [x] Créer index :
+* [ ] Créer index :
 
   ```cypher
   CREATE INDEX haa_pair IF NOT EXISTS
@@ -114,13 +114,13 @@
 
 ### 6.1  File watcher
 
-* [x] Utiliser **watchdog** :
+* [ ] Utiliser **watchdog** :
 
   ```python
   def on_modified(event):
       Config.reload()
   ```
-* [x] Protège par verrou lecteur/écrivain pour la config globale.
+* [ ] Protège par verrou lecteur/écrivain pour la config globale.
 
 ---
 
@@ -128,17 +128,17 @@
 
 ### 7.1  Variable d’environnement cache
 
-* [x] Préfixer tous les chemins `cache/` par `os.environ.get("DATACREEK_CACHE", "./cache")`.
+* [ ] Préfixer tous les chemins `cache/` par `os.environ.get("DATACREEK_CACHE", "./cache")`.
 
 ### 7.2  Checkpoint GraphRNN sur S3
 
-* [x] Télécharger au boot :
+* [ ] Télécharger au boot :
 
   ```python
   s3 = boto3.client('s3')
   s3.download_file(bucket, key, local_path, ExtraArgs={'ChecksumMode':'ENABLED'})
   ```
-* [x] Vérifier `hashlib.sha256(local).hexdigest()==cfg.tpl.rnn_ckpt_sha`.
+* [ ] Vérifier `hashlib.sha256(local).hexdigest()==cfg.tpl.rnn_ckpt_sha`.
 
 ---
 
@@ -153,13 +153,13 @@
 
 ## 9  | Seed reproductible – fractal bootstrap
 
-* [x] Clé YAML :
+* [ ] Clé YAML :
 
   ```yaml
   fractal:
     bootstrap_seed: 42
   ```
-* [x] Avant sampling :
+* [ ] Avant sampling :
 
   ```python
   random.seed(cfg.fractal.bootstrap_seed)
@@ -172,11 +172,11 @@
 
 ### 10.1  Readme
 
-* [x] Ajouter tableau « Rollback policy » (prune + DP).
+* [ ] Ajouter tableau « Rollback policy » (prune + DP).
 
 ### 10.2  GitHub Actions
 
-* [x] Spin‑up Neo4j container, run `pytest -m "e2e"` sur un mini‑graph 50 k edges.
+* [ ] Spin‑up Neo4j container, run `pytest -m "e2e"` sur un mini‑graph 50 k edges.
 
 ---
 
@@ -199,26 +199,17 @@
 * CI passe e2e, ANN latence < 0.2 s P95, no eigsh timeout.
 
 ## Checklist
-- [x] Stabilité & performance des algos spectraux
-- [x] Caching – gérer la croissance
-- [x] Bias mitigation raffinée
-- [x] Observabilité – métriques manquantes
-- [x] Indexation Neo4j – composite sur Hyper‑AA
-- [x] Reload Hot‑YAML
-- [x] Portabilité / dev‑experience
-- [x] Pruner FractalNet – rollback sécurisé
-- [x] Seed reproductible – fractal bootstrap
-- [x] Docs & CI
+
+- [ ] Stabilité & performance des algos spectraux
+- [ ] Caching – gérer la croissance
+- [ ] Bias mitigation raffinée
+- [ ] Observabilité – métriques manquantes
+- [ ] Indexation Neo4j – composite sur Hyper‑AA
+- [ ] Reload Hot‑YAML
+- [ ] Portabilité / dev‑experience
+- [ ] Pruner FractalNet – rollback sécurisé
+- [ ] Seed reproductible – fractal bootstrap
+- [ ] Docs & CI
 
 ## History
-- Reset tasks list to Mega-Checklist.
-- Added DATACREEK_CACHE env support and ANN latency metric context manager.
-- Implemented eigsh fallback with Lanczos and clamped Wasserstein bias.
-- Added adaptive Redis TTL and LMDB size checks with monitoring counters.
-- Created Neo4j index for Hyper-AA pairs and implemented config reload watcher.
-- Added S3 checkpoint download, rollback counter, and README rollback table.
-- Introduced reproducible fractal bootstrap seed and marked e2e tests in CI.
-- Marked bias_wasserstein_last gauge as complete after verifying monitoring update.
-- Installed runtime dependencies and re-ran focused tests to confirm checklist completion.
-- Ran pre-commit formatting on updated files and installed missing test dependencies.
-- Handled missing GraphRNN dependencies in `__init__` to prevent import failures.
+- Reset tasks list.
