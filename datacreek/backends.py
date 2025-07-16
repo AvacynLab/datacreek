@@ -6,11 +6,22 @@ except Exception:  # pragma: no cover - handled gracefully for tests
     boto3 = None
 from functools import lru_cache
 
-import redis
-from neo4j import GraphDatabase
+try:  # optional Redis dependency
+    import redis
+except Exception:  # pragma: no cover - optional dependency missing
+    redis = None  # type: ignore
+
+try:  # optional Neo4j dependency
+    from neo4j import GraphDatabase
+except Exception:  # pragma: no cover - optional dependency missing
+    GraphDatabase = None  # type: ignore
 
 from datacreek.storage import S3Storage
-from datacreek.utils.config import get_neo4j_config, get_redis_config, load_config_with_overrides
+from datacreek.utils.config import (
+    get_neo4j_config,
+    get_redis_config,
+    load_config_with_overrides,
+)
 
 try:  # optional dependency
     from redisgraph import Graph as RedisGraph
@@ -19,8 +30,11 @@ except Exception:  # pragma: no cover - optional
 
 
 @lru_cache()
-def get_redis_client(config_path: str | None = None) -> redis.Redis:
+def get_redis_client(config_path: str | None = None):
     """Return a Redis client configured via config file or environment."""
+
+    if redis is None:
+        return None
     cfg = get_redis_config(load_config_with_overrides(config_path))
     host = os.getenv("REDIS_HOST", cfg.get("host"))
     port = int(os.getenv("REDIS_PORT", cfg.get("port", 6379)))
@@ -30,6 +44,9 @@ def get_redis_client(config_path: str | None = None) -> redis.Redis:
 @lru_cache()
 def get_neo4j_driver(config_path: str | None = None):
     """Return a Neo4j driver configured via config file or environment."""
+    if GraphDatabase is None:
+        return None
+
     cfg = get_neo4j_config(load_config_with_overrides(config_path))
     uri = os.getenv("NEO4J_URI", cfg.get("uri"))
     user = os.getenv("NEO4J_USER", cfg.get("user"))

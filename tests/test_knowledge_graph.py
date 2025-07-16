@@ -1320,6 +1320,8 @@ class _DummySession:
             ]
         if "hypergraph.linkprediction" in query:
             return []
+        if "CREATE INDEX haa_pair" in query:
+            return []
         if "RETURN count(r) AS c" in query:
 
             class _Rec(dict):
@@ -1370,6 +1372,7 @@ def test_gds_quality_check_method():
     assert isinstance(res["weak_links"], list)
     assert isinstance(res["triangles_removed"], int)
     assert any("SUGGESTED_HYPER_AA" in q for q in driver.session_obj.queries)
+    assert any("CREATE INDEX haa_pair" in q for q in driver.session_obj.queries)
 
 
 def test_quality_check_method():

@@ -26,8 +26,15 @@ from typing import (
     Tuple,
 )
 
-import networkx as nx
-import numpy as np
+try:  # optional networkx dependency
+    import networkx as nx
+except Exception:  # pragma: no cover - optional dependency missing
+    nx = None  # type: ignore
+
+try:  # optional numpy dependency
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency missing
+    np = None  # type: ignore
 
 from ..analysis.monitoring import update_metric
 from ..utils import push_metrics
@@ -35,9 +42,22 @@ from ..utils import push_metrics
 if TYPE_CHECKING:
     from .ingest import IngestOptions
 
-import redis
-from neo4j import Driver
+try:  # optional Redis dependency
+    import redis
+except Exception:  # pragma: no cover - optional dependency missing
 
+    class _RedisStub:
+        Redis = object
+
+    redis = _RedisStub()  # type: ignore
+
+try:  # optional Neo4j dependency
+    from neo4j import Driver
+except Exception:  # pragma: no cover - optional dependency missing
+    Driver = object  # type: ignore
+
+# Base directory for cached artifacts
+CACHE_ROOT = os.environ.get("DATACREEK_CACHE", "./cache")
 from datacreek.utils.config import load_config
 
 from ..backends import get_redis_graph
@@ -1731,7 +1751,7 @@ class DatasetBuilder:
         n2v_attr: str = "embedding",
         gw_attr: str = "graphwave_embedding",
         write_property: str = "acca_embedding",
-        path: str = "cache/cca.pkl",
+        path: str = os.path.join(CACHE_ROOT, "cca.pkl"),
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_aligned_cca_embeddings`."""
 

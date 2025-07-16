@@ -75,6 +75,42 @@ except Exception:  # pragma: no cover - optional
 _evict_thread: threading.Thread | None = None
 _evict_stop = threading.Event()
 
+# Adaptive TTL parameters for Redis L1 cache
+_redis_hits = 0
+_redis_misses = 0
+_redis_ttl = 3600
+_last_ttl_eval = time.time()
+
+
+def _adjust_ttl(client: Optional["redis.Redis"]) -> None:
+    """Adjust Redis TTL based on hit ratio every 5 minutes."""
+
+    global _redis_hits, _redis_misses, _redis_ttl, _last_ttl_eval
+    now = time.time()
+    if now - _last_ttl_eval < 300:
+        return
+    total = _redis_hits + _redis_misses
+    ratio = _redis_hits / total if total else 0.0
+    try:
+        from .monitoring import redis_hit_ratio as _hit_gauge
+
+        if _hit_gauge is not None:
+            _hit_gauge.set(ratio)
+    except Exception:  # pragma: no cover - optional metrics
+        pass
+    if client is not None:
+        try:
+            client.config_set("maxmemory-policy", "allkeys-lru")
+        except Exception:
+            pass
+    if ratio < 0.2:
+        _redis_ttl = max(60, int(_redis_ttl * 0.5))
+    elif ratio > 0.8:
+        _redis_ttl = min(int(_redis_ttl * 1.2), 7200)
+    _redis_hits = 0
+    _redis_misses = 0
+    _last_ttl_eval = now
+
 
 def _cache_put(
     key: str,
@@ -84,7 +120,7 @@ def _cache_put(
     redis_client: Optional["redis.Redis"] = None,
     lmdb_path: str = "lmdb/hot_graph.mdb",
     ssd_dir: str = "nerve_cache",
-    ttl: int = 3600,
+    ttl: int | None = None,
 ) -> None:
     """Store ``nerve`` and ``cover`` in hierarchical caches.
 
@@ -98,6 +134,7 @@ def _cache_put(
         Time-to-live in seconds for the Redis entry. Defaults to one hour.
     """
     data = pickle.dumps((nx.node_link_data(nerve), [list(c) for c in cover]))
+    ttl_val = int(ttl if ttl is not None else _redis_ttl)
     if redis_client is None and redis is not None:  # pragma: no cover - fallback
         try:
             redis_client = redis.Redis()
@@ -105,7 +142,7 @@ def _cache_put(
             redis_client = None
     if redis_client is not None:
         try:
-            redis_client.setex(key, int(ttl), data)
+            redis_client.setex(key, ttl_val, data)
         except Exception:  # pragma: no cover - network errors
             pass
     if lmdb is not None:
@@ -118,6 +155,11 @@ def _cache_put(
             ttl_h = int(cache_cfg.get("l2_ttl_hours", 24))
             start_l2_eviction_thread(lmdb_path)
             env = lmdb.open(lmdb_path, map_size=limit_mb << 20)
+            env.set_mapsize(limit_mb * 1024**2)
+            stat = env.stat()
+            info = env.info()
+            if (stat["psize"] * info["map_size"]) / (1 << 20) > limit_mb:
+                _l2_evict_once(env, limit_mb, ttl_h)
             with env.begin(write=True) as txn:
                 now = time.time()
                 txn.put(key.encode(), pickle.dumps((now, data)))
@@ -168,6 +210,7 @@ def _cache_get(
     ssd_dir: str = "nerve_cache",
 ) -> Optional[tuple[nx.Graph, list[set[object]]]]:
     """Retrieve cached Mapper nerve from hierarchical caches."""
+    global _redis_hits, _redis_misses
     blob = None
     if redis_client is None and redis is not None:  # pragma: no cover
         try:
@@ -179,6 +222,11 @@ def _cache_get(
             blob = redis_client.hget("nerve_hash", key)
         except Exception:
             blob = None
+    if blob is not None:
+        _redis_hits += 1
+    else:
+        _redis_misses += 1
+    _adjust_ttl(redis_client)
     if blob is None and lmdb is not None:
         try:
             from ..utils.config import load_config
@@ -247,7 +295,7 @@ def cache_mapper_nerve(
         redis_client=redis_client,
         lmdb_path=lmdb_path,
         ssd_dir=ssd_dir,
-        ttl=ttl,
+        ttl=None,
     )
     return nerve, cover
 
@@ -294,7 +342,12 @@ def _evict_worker(path: str, limit_mb: int, ttl_h: int, interval: float) -> None
     while not _evict_stop.wait(interval):
         try:
             env = lmdb.open(path, map_size=limit_mb << 20)
-            _l2_evict_once(env, limit_mb, ttl_h)
+            env.set_mapsize(limit_mb * 1024**2)
+            stat = env.stat()
+            info = env.info()
+            size_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+            if size_mb > limit_mb:
+                _l2_evict_once(env, limit_mb, ttl_h)
             env.close()
         except Exception:  # pragma: no cover - disk errors
             pass

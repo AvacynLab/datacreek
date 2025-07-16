@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
 
 import numpy as np
 from sklearn.cross_decomposition import CCA
+
+# Base directory for cached artifacts
+CACHE_ROOT = os.environ.get("DATACREEK_CACHE", "./cache")
 
 
 def product_embedding(
@@ -121,7 +125,7 @@ def cca_align(
     gw: Dict[object, Iterable[float]],
     *,
     n_components: int = 32,
-    path: str = "cache/cca.pkl",
+    path: str = os.path.join(CACHE_ROOT, "cca.pkl"),
 ) -> Dict[object, np.ndarray]:
     """Return latent vectors and persist CCA weights for inference.
 
@@ -130,7 +134,6 @@ def cca_align(
     """
 
     latent, cca = aligned_cca(n2v, gw, n_components=n_components)
-    import os
     import pickle
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -142,7 +145,9 @@ def cca_align(
     return latent
 
 
-def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
+def load_cca(
+    path: str = os.path.join(CACHE_ROOT, "cca.pkl")
+) -> tuple[np.ndarray, np.ndarray]:
     """Return CCA weights ``(Wn2v, Wgw)`` previously persisted by :func:`cca_align`.
 
     Parameters
@@ -161,7 +166,6 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
         If ``path`` does not exist.
     """
 
-    import os
     import pickle
 
     import numpy as np

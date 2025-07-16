@@ -1,11 +1,14 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 from datacreek.core.scripts import build_dataset
 from datacreek.utils.config import load_config
 
 
+@pytest.mark.e2e
 def test_pipeline_end_to_end(monkeypatch, tmp_path):
     metrics = {}
 

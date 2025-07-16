@@ -848,7 +848,28 @@ def __getattr__(name: str):
 import logging
 import os
 
-from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watcher
+try:  # optional dependencies for GraphRNN
+    from .analysis.fractal import ensure_graphrnn_checkpoint
+except Exception:  # pragma: no cover - optional dependency missing
 
-# Start config watcher when the package is imported
-_start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", "configs/default.yaml"))
+    def ensure_graphrnn_checkpoint(*_args, **_kwargs):
+        return None
+
+
+try:
+    from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watcher
+except Exception:  # pragma: no cover - optional dependency missing
+
+    def _start_cleanup_watcher(*_args, **_kwargs) -> None:
+        return None
+
+
+from .utils.config import ORIGINAL_CONFIG_PATH
+
+# Start config watcher when the package is imported. Use an absolute default
+# path so imports succeed even when the working directory differs.
+_start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", ORIGINAL_CONFIG_PATH))
+try:
+    ensure_graphrnn_checkpoint()
+except Exception:  # pragma: no cover - optional dependency missing
+    pass

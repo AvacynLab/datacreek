@@ -275,6 +275,13 @@ def autotune_step(
             state.likelihood.noise += 1e-3
         restart_gp = True
         state.stagnation = 0
+        try:
+            from .monitoring import gp_jitter_restarts_total as _gp_ctr
+
+            if _gp_ctr is not None:
+                _gp_ctr.inc()
+        except Exception:
+            pass
 
     # stochastic KW gradients for tau and eps
     grad_tau = kw_gradient(

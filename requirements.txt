@@ -37,3 +37,5 @@ jsonschema>=4.0.0
 watchdog>=3.0.0
 geomloss>=0.2.6
 torch==2.7.1
+boto3>=1.34.0
+httpx>=0.26.0
