@@ -3692,7 +3692,7 @@ class DatasetBuilder:
         self.graph.graph["tpl_w1"] = float(res["distance_after"])
         update_metric("tpl_w1", float(res["distance_after"]))
         try:
-            from datacreek.analysis.monitoring import tpl_w1 as _tpl_w1_gauge
+            from datacreek.analysis.monitoring import tpl_w1_g as _tpl_w1_gauge
 
             if _tpl_w1_gauge is not None:
                 _tpl_w1_gauge.set(float(res["distance_after"]))

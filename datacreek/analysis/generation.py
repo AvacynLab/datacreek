@@ -335,7 +335,7 @@ def sheaf_score(b: Iterable[float], Delta) -> float:
     resid = b_vec - Delta @ x
     score = 1.0 / (1.0 + np.linalg.norm(resid))
     try:
-        from .monitoring import sheaf_score as _sheaf_score_gauge
+        from .monitoring import sheaf_score_g as _sheaf_score_gauge
 
         if _sheaf_score_gauge is not None:
             _sheaf_score_gauge.set(float(score))

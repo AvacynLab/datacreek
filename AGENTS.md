@@ -222,12 +222,6 @@ autotune_cost_g = Gauge('autotune_cost', 'Current J(theta)')
 - [x] Documentation rollback FractalNet
 
 ## History
-- Added RNG seeding, ANN latency histogram, compression note.
-- Implemented CCA caching, Hyper-AA cleanup counter and metrics.
-- Installed dependencies to run tests and executed full suite successfully.
-- Verified implementation and executed targeted tests successfully.
-- Added explicit PRUNE_REVERTED log in compression module.
-- Improved pruner tests to assert PRUNE_REVERTED messages; executed targeted multiview tests.
-- Retested full suite but dependencies missing; network blocked installation.
-
-- Installed required libs and passed ANN, pruner and multiview tests again.
+- Reset tasks list and cleared previous progress.
+- Renamed monitoring gauges with `_g` suffix and updated imports.
+- Installed missing dependencies and ran tests successfully.
