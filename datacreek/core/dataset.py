@@ -26,8 +26,15 @@ from typing import (
     Tuple,
 )
 
-import networkx as nx
-import numpy as np
+try:  # optional networkx dependency
+    import networkx as nx
+except Exception:  # pragma: no cover - optional dependency missing
+    nx = None  # type: ignore
+
+try:  # optional numpy dependency
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency missing
+    np = None  # type: ignore
 
 from ..analysis.monitoring import update_metric
 from ..utils import push_metrics
