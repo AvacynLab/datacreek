@@ -968,8 +968,13 @@ records.
    `coverage_stats()` can report how much of the graph has been explored.
    Supplying an `encrypt_key` masks PII in the exported records. User
    feedback is stored via `record_feedback()` for continuous improvements.
+
 9. **LLM service connectors** – `LLMService` centralizes OpenAI/vLLM access and
    provides synchronous and asynchronous batch completions.
+
+## Compression
+
+*Si la perplexité après pruning dépasse 1 % de la référence, le pruner restaure automatiquement le checkpoint précédent.*
 
 ## License
 

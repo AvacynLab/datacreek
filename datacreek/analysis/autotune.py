@@ -263,7 +263,7 @@ def autotune_step(
     state.prev_costs.append(J)
     update_metric("autotune_cost", float(J))
     try:
-        from .monitoring import autotune_cost as _autotune_gauge
+        from .monitoring import autotune_cost_g as _autotune_gauge
 
         if _autotune_gauge is not None:
             _autotune_gauge.set(float(J))

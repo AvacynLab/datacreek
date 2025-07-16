@@ -19,20 +19,20 @@ except Exception:  # pragma: no cover - optional
     start_http_server = None
 
 if Gauge is not None:
-    tpl_w1 = Gauge("tpl_w1", "Wasserstein-1 TPL")
-    sheaf_score = Gauge("sheaf_score", "Sheaf consistency score")
+    tpl_w1_g = Gauge("tpl_w1", "Wasserstein-1 TPL")
+    sheaf_score_g = Gauge("sheaf_score", "Sheaf consistency score")
     gw_entropy = Gauge("gw_entropy", "GraphWave entropy")
-    autotune_cost = Gauge("autotune_cost", "Current J(theta)")
+    autotune_cost_g = Gauge("autotune_cost", "Current J(theta)")
     bias_wasserstein_last = Gauge(
         "bias_wasserstein_last", "Latest Wasserstein distance used"
     )
     haa_edges_total = Counter("haa_edges_total", "Hyper-AA edges written")
-    j_cost = autotune_cost
+    j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
-    tpl_w1 = None
-    sheaf_score = None
+    tpl_w1_g = None
+    sheaf_score_g = None
     gw_entropy = None
-    autotune_cost = None
+    autotune_cost_g = None
     bias_wasserstein_last = None
     haa_edges_total = None
     j_cost = None
@@ -41,11 +41,11 @@ else:  # pragma: no cover - optional dependency missing
 _METRICS = {
     "sigma_db": None,
     "recall10": None,
-    "sheaf_score": sheaf_score,
+    "sheaf_score": sheaf_score_g,
     "gw_entropy": gw_entropy,
-    "tpl_w1": tpl_w1,
+    "tpl_w1": tpl_w1_g,
     "j_cost": j_cost,
-    "autotune_cost": autotune_cost,
+    "autotune_cost": autotune_cost_g,
     "bias_wasserstein_last": bias_wasserstein_last,
     "haa_edges_total": haa_edges_total,
     # ingestion statistics

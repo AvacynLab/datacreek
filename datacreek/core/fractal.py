@@ -55,6 +55,7 @@ def bootstrap_db(
 
     cfg = load_config()
     seed = int(cfg.get("fractal", {}).get("bootstrap_seed", 0))
+    random.seed(seed)
     np.random.seed(seed)
     graph.set_property("fractal_seed", seed, driver=driver, dataset=dataset)
 

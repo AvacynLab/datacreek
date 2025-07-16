@@ -30,6 +30,7 @@ def test_fractalnet_pruner_simple(caplog):
     assert ok
     assert perp <= eval_fn(pruner.model) + 1e-9
     assert any("was_reverted=False" in r.message for r in caplog.records)
+    assert any("PRUNE_REVERTED=false" in r.message for r in caplog.records)
 
 
 def test_fractalnet_pruner_rollback(tmp_path, caplog):
@@ -45,3 +46,4 @@ def test_fractalnet_pruner_rollback(tmp_path, caplog):
     # model should have been restored to original weights
     assert np.allclose(pruner.model.w, np.array([0.05, 0.001]))
     assert any("was_reverted=True" in r.message for r in caplog.records)
+    assert any("PRUNE_REVERTED=true" in r.message for r in caplog.records)

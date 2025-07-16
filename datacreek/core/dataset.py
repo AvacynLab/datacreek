@@ -1731,6 +1731,7 @@ class DatasetBuilder:
         n2v_attr: str = "embedding",
         gw_attr: str = "graphwave_embedding",
         write_property: str = "acca_embedding",
+        path: str = "cache/cca.pkl",
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_aligned_cca_embeddings`."""
 
@@ -1739,6 +1740,7 @@ class DatasetBuilder:
             n2v_attr=n2v_attr,
             gw_attr=gw_attr,
             write_property=write_property,
+            path=path,
         )
         self._record_event(
             "compute_aligned_cca_embeddings",
@@ -3690,7 +3692,7 @@ class DatasetBuilder:
         self.graph.graph["tpl_w1"] = float(res["distance_after"])
         update_metric("tpl_w1", float(res["distance_after"]))
         try:
-            from datacreek.analysis.monitoring import tpl_w1 as _tpl_w1_gauge
+            from datacreek.analysis.monitoring import tpl_w1_g as _tpl_w1_gauge
 
             if _tpl_w1_gauge is not None:
                 _tpl_w1_gauge.set(float(res["distance_after"]))
