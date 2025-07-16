@@ -856,7 +856,14 @@ except Exception:  # pragma: no cover - optional dependency missing
         return None
 
 
-from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watcher
+try:
+    from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watcher
+except Exception:  # pragma: no cover - optional dependency missing
+
+    def _start_cleanup_watcher(*_args, **_kwargs) -> None:
+        return None
+
+
 from .utils.config import ORIGINAL_CONFIG_PATH
 
 # Start config watcher when the package is imported. Use an absolute default
