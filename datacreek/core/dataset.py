@@ -35,8 +35,19 @@ from ..utils import push_metrics
 if TYPE_CHECKING:
     from .ingest import IngestOptions
 
-import redis
-from neo4j import Driver
+try:  # optional Redis dependency
+    import redis
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class _RedisStub:
+        Redis = object
+
+    redis = _RedisStub()  # type: ignore
+
+try:  # optional Neo4j dependency
+    from neo4j import Driver
+except Exception:  # pragma: no cover - optional dependency missing
+    Driver = object  # type: ignore
 
 # Base directory for cached artifacts
 CACHE_ROOT = os.environ.get("DATACREEK_CACHE", "./cache")
