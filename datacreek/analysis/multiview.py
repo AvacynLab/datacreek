@@ -8,11 +8,10 @@ can run without heavy dependencies.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Dict, Iterable, Tuple
-
-import hashlib
 
 import numpy as np
 from sklearn.cross_decomposition import CCA

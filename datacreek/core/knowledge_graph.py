@@ -2722,9 +2722,12 @@ class KnowledgeGraph:
     ) -> None:
         """Compute A-CCA latent vectors between Node2Vec and GraphWave."""
 
-        from ..analysis import aligned_cca as _acca, load_cca, cca_align
-        import numpy as np
         import os
+
+        import numpy as np
+
+        from ..analysis import aligned_cca as _acca
+        from ..analysis import cca_align, load_cca
 
         n2v = {
             n: data[n2v_attr]

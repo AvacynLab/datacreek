@@ -215,8 +215,12 @@ def test_compute_aligned_cca_embeddings_cache(monkeypatch, tmp_path):
     ds.add_entity("e1", "E")
     ds.add_entity("e2", "E")
     for node in ["e1", "e2"]:
-        ds.graph.graph.nodes[node]["embedding"] = [1.0, 0.0] if node == "e1" else [0.0, 1.0]
-        ds.graph.graph.nodes[node]["graphwave_embedding"] = [1.0, 0.0] if node == "e1" else [0.0, 1.0]
+        ds.graph.graph.nodes[node]["embedding"] = (
+            [1.0, 0.0] if node == "e1" else [0.0, 1.0]
+        )
+        ds.graph.graph.nodes[node]["graphwave_embedding"] = (
+            [1.0, 0.0] if node == "e1" else [0.0, 1.0]
+        )
     path = tmp_path / "cca.pkl"
     ds.compute_aligned_cca_embeddings(n_components=1, path=str(path))
     assert path.exists()
