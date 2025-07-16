@@ -356,7 +356,16 @@ def bias_wasserstein(loc_hist, glob_hist, logits):
     glob_t = torch.as_tensor(glob_hist, dtype=torch.float32)
     W = float(loss(loc_t, glob_t))
     beta = float(np.exp(-W))
-    scaled = np.array(logits, dtype=float, copy=True) * beta
+    scaled = np.array(logits, dtype=float, copy=True)
+    if W > 0.1:
+        scaled *= beta
+    try:
+        from .monitoring import bias_wasserstein_last as _bw_gauge
+
+        if _bw_gauge is not None:
+            _bw_gauge.set(W)
+    except Exception:  # pragma: no cover - optional metrics
+        pass
     return scaled, W
 
 
@@ -385,8 +394,9 @@ def apply_logit_bias(payload, loc_hist, glob_hist):
 
     scaled_logits, W = bias_wasserstein(loc_hist, glob_hist, payload["logits"])
     payload["logits"] = np.asarray(scaled_logits, dtype=float).tolist()
+    beta = float(np.exp(-W)) if W > 0.1 else 1.0
     logging.getLogger(__name__).info(
-        "Bias factor β=%.3f applied; W=%.4f", float(np.exp(-W)), float(W)
+        "Bias factor β=%.3f applied; W=%.4f", beta, float(W)
     )
     return W
 

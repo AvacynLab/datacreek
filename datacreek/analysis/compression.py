@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import pickle
 from pathlib import Path
 
@@ -180,15 +181,21 @@ class FractalNetPruner:
                 pass
         perplexity = self._perplexity(eval_fn)
 
-        # Rollback if perplexity worsened by more than 1% and persist otherwise
-        if perplexity > 1.01 * baseline:
+        ratio = float(perplexity) / float(baseline) if baseline else float("inf")
+        was_reverted = False
+        if ratio > 1.01:
             restored = restore_checkpoint("fractal.bak")
             if restored is not None:
                 self.model = restored
-            accepted = False
+            was_reverted = True
         else:
             save_checkpoint("pruned.ok", self.model)
-            accepted = True
 
         delta = 0.0 if baseline == 0 else abs(perplexity - baseline) / baseline
-        return accepted and delta <= 0.01, perplexity
+        logging.getLogger(__name__).info(
+            "prune_ratio=%.4f ppl_delta=%.4f was_reverted=%s",
+            ratio,
+            delta,
+            was_reverted,
+        )
+        return not was_reverted and delta <= 0.01, perplexity

@@ -56,6 +56,8 @@ def inverse_mapper(nerve: nx.Graph, cover: Iterable[Set[object]]) -> nx.Graph:
 
 
 import pickle
+import threading
+import time
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -68,6 +70,10 @@ try:
     import lmdb  # type: ignore
 except Exception:  # pragma: no cover - optional
     lmdb = None  # type: ignore
+
+
+_evict_thread: threading.Thread | None = None
+_evict_stop = threading.Event()
 
 
 def _cache_put(
@@ -107,35 +113,42 @@ def _cache_put(
             from ..utils.config import load_config
 
             cfg = load_config()
-            limit_mb = int(cfg.get("cache", {}).get("l2_max_mb", 256))
+            cache_cfg = cfg.get("cache", {})
+            limit_mb = int(cache_cfg.get("l2_max_size_mb", 256))
+            ttl_h = int(cache_cfg.get("l2_ttl_hours", 24))
+            start_l2_eviction_thread(lmdb_path)
             env = lmdb.open(lmdb_path, map_size=limit_mb << 20)
             with env.begin(write=True) as txn:
-                txn.put(key.encode(), data)
+                now = time.time()
+                txn.put(key.encode(), pickle.dumps((now, data)))
                 stat = env.stat()
                 info = env.info()
                 current_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
-                if current_mb > limit_mb:
-                    cur = txn.cursor()
-                    n_deleted = 0
-                    prev_mb = current_mb
-                    if cur.first():
-                        while current_mb > limit_mb:
+                cur = txn.cursor()
+                n_deleted = 0
+                prev_mb = current_mb
+                if cur.first():
+                    while True:
+                        raw = cur.value()
+                        ts, _ = pickle.loads(raw)
+                        age_h = (now - ts) / 3600
+                        if age_h > ttl_h or current_mb > limit_mb:
                             cur.delete()
                             n_deleted += 1
-                            if not cur.next():
-                                break
-                            stat = env.stat()
-                            info = env.info()
-                            current_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+                        if not cur.next():
+                            break
+                        stat = env.stat()
+                        info = env.info()
+                        current_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
                     env.sync()
-                    logging.getLogger(__name__).info(
-                        "[L2-EVICT] %d keys purged (%.1f MB→%.1f MB)",
-                        n_deleted,
-                        prev_mb,
-                        current_mb,
-                    )
-                else:
-                    env.sync()
+                    if n_deleted:
+                        logging.getLogger(__name__).info(
+                            "[L2-EVICT] %d keys purged (%.1f MB→%.1f MB)",
+                            n_deleted,
+                            prev_mb,
+                            current_mb,
+                        )
+                env.sync()
             env.close()
         except Exception:  # pragma: no cover - disk errors
             pass
@@ -168,10 +181,18 @@ def _cache_get(
             blob = None
     if blob is None and lmdb is not None:
         try:
+            from ..utils.config import load_config
+
+            cfg = load_config()
+            ttl_h = int(cfg.get("cache", {}).get("l2_ttl_hours", 24))
             env = lmdb.open(lmdb_path, readonly=True, lock=False)
             with env.begin() as txn:
                 blob = txn.get(key.encode())
             env.close()
+            if blob is not None:
+                ts, blob = pickle.loads(blob)
+                if (time.time() - ts) / 3600 > ttl_h:
+                    blob = None
         except Exception:
             blob = None
     if blob is None:
@@ -229,3 +250,86 @@ def cache_mapper_nerve(
         ttl=ttl,
     )
     return nerve, cover
+
+
+def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
+    """Purge expired or oversized LMDB entries from ``env``."""
+
+    now = time.time()
+    with env.begin(write=True) as txn:
+        stat = env.stat()
+        info = env.info()
+        size_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+        cur = txn.cursor()
+        n_deleted = 0
+        prev_mb = size_mb
+        if cur.first():
+            while True:
+                raw = cur.value()
+                ts, _ = pickle.loads(raw)
+                age_h = (now - ts) / 3600
+                if age_h > ttl_h or size_mb > limit_mb:
+                    cur.delete()
+                    n_deleted += 1
+                if not cur.next():
+                    break
+                stat = env.stat()
+                info = env.info()
+                size_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+        if n_deleted:
+            logging.getLogger(__name__).info(
+                "[L2-EVICT] %d keys purged (%.1f MB→%.1f MB)",
+                n_deleted,
+                prev_mb,
+                size_mb,
+            )
+        env.sync()
+
+
+def _evict_worker(path: str, limit_mb: int, ttl_h: int, interval: float) -> None:
+    """Background worker periodically evicting LMDB entries."""
+
+    if lmdb is None:
+        return
+    while not _evict_stop.wait(interval):
+        try:
+            env = lmdb.open(path, map_size=limit_mb << 20)
+            _l2_evict_once(env, limit_mb, ttl_h)
+            env.close()
+        except Exception:  # pragma: no cover - disk errors
+            pass
+
+
+def start_l2_eviction_thread(
+    lmdb_path: str = "lmdb/hot_graph.mdb", *, interval: float = 3600.0
+) -> None:
+    """Start daemon thread cleaning LMDB cache according to TTL."""
+
+    global _evict_thread
+    if _evict_thread is not None:
+        return
+    from ..utils.config import load_config
+
+    cfg = load_config()
+    cache_cfg = cfg.get("cache", {})
+    limit_mb = int(cache_cfg.get("l2_max_size_mb", 2048))
+    ttl_h = int(cache_cfg.get("l2_ttl_hours", 24))
+    _evict_stop.clear()
+    t = threading.Thread(
+        target=_evict_worker,
+        args=(lmdb_path, limit_mb, ttl_h, interval),
+        daemon=True,
+    )
+    t.start()
+    _evict_thread = t
+
+
+def stop_l2_eviction_thread() -> None:
+    """Stop the LMDB eviction worker if running."""
+
+    global _evict_thread
+    if _evict_thread is None:
+        return
+    _evict_stop.set()
+    _evict_thread.join(timeout=0.5)
+    _evict_thread = None

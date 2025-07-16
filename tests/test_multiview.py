@@ -180,6 +180,18 @@ def test_load_cca_roundtrip(tmp_path):
     W1, W2 = load_cca(str(path))
     assert W1.shape[0] == 2
     assert W2.shape[0] == 2
+    assert not W1.flags.writeable
+    assert not W2.flags.writeable
+
+
+def test_load_cca_logs_sha(tmp_path, caplog):
+    n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    gw = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    path = tmp_path / "cca.pkl"
+    cca_align(n2v, gw, n_components=1, path=str(path))
+    caplog.set_level("INFO")
+    load_cca(str(path))
+    assert any("cca_sha=" in r.message for r in caplog.records)
 
 
 def test_load_cca_missing(tmp_path):

@@ -8,6 +8,7 @@ can run without heavy dependencies.
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, Iterable, Tuple
 
 import numpy as np
@@ -156,6 +157,7 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
         If ``path`` does not exist.
     """
 
+    import hashlib
     import os
     import pickle
 
@@ -164,8 +166,15 @@ def load_cca(path: str = "cache/cca.pkl") -> tuple[np.ndarray, np.ndarray]:
     if not os.path.exists(path):
         raise FileNotFoundError(f"CCA weights not found at {path}")
     with open(path, "rb") as f:
-        data = pickle.load(f)
-    return np.asarray(data["Wn2v"]), np.asarray(data["Wgw"])
+        blob = f.read()
+    h = hashlib.sha256(blob).hexdigest()
+    data = pickle.loads(blob)
+    W1 = np.asarray(data["Wn2v"])
+    W2 = np.asarray(data["Wgw"])
+    W1.setflags(write=False)
+    W2.setflags(write=False)
+    logging.getLogger(__name__).info("cca_sha=%s", h)
+    return W1, W2
 
 
 def hybrid_score(
