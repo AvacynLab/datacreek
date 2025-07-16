@@ -225,6 +225,3 @@ autotune_cost_g = Gauge('autotune_cost', 'Current J(theta)')
 - Reset tasks list and cleared previous progress.
 - Renamed monitoring gauges with `_g` suffix and updated imports.
 - Installed missing dependencies and ran tests successfully.
-
-- Installed dependencies for test execution and verified index, pruner and multiview tests pass.
-- Installed system and pip dependencies (numpy, sklearn, redis, neo4j, faiss-cpu, gudhi) to run tests; all targeted tests pass using Python 3.12.
