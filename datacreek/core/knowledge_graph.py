@@ -17,6 +17,15 @@ import requests
 from dateutil import parser
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from contextlib import nullcontext
+
+try:
+    from ..analysis.index import ann_latency
+except Exception:  # pragma: no cover - optional metric
+    ann_latency = None
+
+# Base directory for cached artifacts
+CACHE_ROOT = os.environ.get("DATACREEK_CACHE", "./cache")
 
 from ..utils.config import load_config
 
@@ -2155,7 +2164,9 @@ class KnowledgeGraph:
         xq = np.asarray([vector], dtype=np.float32)
         faiss.normalize_L2(xq)
         start = time.monotonic()
-        _, idx = self.faiss_index.search(xq, k)
+        ctx = ann_latency.time() if ann_latency is not None else nullcontext()
+        with ctx:
+            _, idx = self.faiss_index.search(xq, k)
         latency = time.monotonic() - start
 
         if (
@@ -2718,7 +2729,7 @@ class KnowledgeGraph:
         n2v_attr: str = "embedding",
         gw_attr: str = "graphwave_embedding",
         write_property: str = "acca_embedding",
-        path: str = "cache/cca.pkl",
+        path: str = os.path.join(CACHE_ROOT, "cca.pkl"),
     ) -> None:
         """Compute A-CCA latent vectors between Node2Vec and GraphWave."""
 
@@ -5240,6 +5251,11 @@ class KnowledgeGraph:
                 " writeProperty:'score', topK:$topk, relationshipProjection:$relProj})",
                 topk=lp_topk,
                 relProj=rel_proj,
+            )
+            session.run(
+                "CREATE INDEX haa_pair IF NOT EXISTS "
+                "FOR ()-[r:SUGGESTED_HYPER_AA]-() "
+                "ON (r.startNodeId, r.endNodeId)"
             )
             session.run(
                 "CREATE INDEX haa_score_index IF NOT EXISTS FOR ()-[r:SUGGESTED_HYPER_AA]-() ON (r.score)"

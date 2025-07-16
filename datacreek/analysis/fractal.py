@@ -1,6 +1,9 @@
 import logging
 import math
+import os
+import hashlib
 import random
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 try:  # optional dependency
@@ -26,6 +29,57 @@ except Exception:  # pragma: no cover - optional dependency missing
     from numpy.linalg import eigh  # type: ignore
 
     csgraph = None  # type: ignore
+
+
+def ensure_graphrnn_checkpoint(cfg: Mapping[str, Any] | None = None,
+                               cache_dir: str | os.PathLike | None = None) -> Path | None:
+    """Download GraphRNN checkpoint from S3 if configured.
+
+    Parameters
+    ----------
+    cfg:
+        Configuration mapping. ``load_config()`` is used when ``None``.
+    cache_dir:
+        Directory in which to save the checkpoint. Defaults to
+        ``DATACREEK_CACHE``.
+
+    Returns
+    -------
+    Path | None
+        Local path to the checkpoint or ``None`` on failure.
+    """
+
+    from ..utils.config import load_config
+
+    cfg = load_config() if cfg is None else cfg
+    tpl_cfg = cfg.get("tpl", {})
+    bucket = tpl_cfg.get("rnn_ckpt_bucket")
+    key = tpl_cfg.get("rnn_ckpt_key")
+    sha = tpl_cfg.get("rnn_ckpt_sha")
+    if not bucket or not key or not sha:
+        return None
+
+    path = Path(cache_dir or os.getenv("DATACREEK_CACHE", "./cache"))
+    path.mkdir(parents=True, exist_ok=True)
+    local = path / Path(key).name
+    if local.exists():
+        with open(local, "rb") as fh:
+            if hashlib.sha256(fh.read()).hexdigest() == sha:
+                return local
+
+    try:
+        import boto3
+
+        s3 = boto3.client("s3")
+        s3.download_file(bucket, key, str(local), ExtraArgs={"ChecksumMode": "ENABLED"})
+    except Exception:  # pragma: no cover - network or dependency issues
+        return None
+
+    with open(local, "rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest()
+    if digest != sha:
+        raise RuntimeError("graphrnn checkpoint sha mismatch")
+    return local
 
 
 def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
@@ -74,6 +128,44 @@ def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:
         z = L.dot(q)
         q = z / (np.linalg.norm(z) + 1e-12)
     return float(q.dot(L.dot(q)))
+
+
+def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:
+    """Return largest eigenvalue via Lanczos with ``k`` iterations.
+
+    Parameters
+    ----------
+    L:
+        Symmetric matrix representing the operator.
+    k:
+        Number of Lanczos iterations.
+
+    Notes
+    -----
+    Orthogonalization is performed at each step. The Rayleigh quotient of
+    the final vector approximates the spectral radius.
+    """
+
+    import numpy as np
+
+    n = L.shape[0]
+    q = np.random.randn(n)
+    q /= np.linalg.norm(q)
+    basis = [q]
+    for _ in range(k):
+        z = L.dot(q)
+        for b in basis:
+            z -= b.dot(z) * b
+        nrm = np.linalg.norm(z)
+        if nrm == 0:
+            break
+        q = z / nrm
+        basis.append(q)
+    v = basis[-1]
+    denom = v.dot(v)
+    if denom == 0:
+        return 0.0
+    return float(v.dot(L.dot(v)) / denom)
 
 
 def box_cover(graph: nx.Graph, radius: int) -> List[set[int]]:
@@ -324,13 +416,29 @@ def chebyshev_heat_kernel(L: np.ndarray, t: float, m: int = 7) -> np.ndarray:
     import scipy.sparse as sp
     from scipy.special import iv
 
+    from datacreek.utils.config import load_config
+
+    cfg = load_config()
+    eig_maxit = int(cfg.get("spectral", {}).get("eig_maxit", 2000))
+
     try:  # pragma: no cover - prefer sparse eigs when available
-        from scipy.sparse.linalg import eigsh
+        from scipy.sparse.linalg import eigsh, ArpackNoConvergence
 
         if L.shape[0] > 2_000_000:
             lmax = lanczos_lmax(L, iters=5)
         else:
-            lmax = float(eigsh(L, k=1, which="LM", return_eigenvectors=False)[0])
+            lmax = float(
+                eigsh(
+                    L,
+                    k=1,
+                    which="LM",
+                    tol=1e-3,
+                    maxiter=eig_maxit,
+                    return_eigenvectors=False,
+                )[0]
+            )
+    except ArpackNoConvergence:
+        lmax = lanczos_top_eigenvalue(L, k=5)
     except Exception:  # fallback to dense eig
         lmax = float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
 

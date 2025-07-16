@@ -976,6 +976,13 @@ records.
 
 *Si la perplexité après pruning dépasse 1 % de la référence, le pruner restaure automatiquement le checkpoint précédent.*
 
+### Rollback policy
+
+| Scenario | Action |
+| -------- | ------ |
+| FractalNet pruning ratio > 1.01 | Restore previous checkpoint and increment `prune_reverts_total` |
+| DP budget exceeded | Abort operation and log `DP_ROLLBACK=true` |
+
 ## License
 
 Read more about the [License](./LICENSE)

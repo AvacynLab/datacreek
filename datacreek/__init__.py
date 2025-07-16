@@ -849,6 +849,8 @@ import logging
 import os
 
 from .core.knowledge_graph import start_cleanup_watcher as _start_cleanup_watcher
+from .analysis.fractal import ensure_graphrnn_checkpoint
 
 # Start config watcher when the package is imported
 _start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", "configs/default.yaml"))
+ensure_graphrnn_checkpoint()

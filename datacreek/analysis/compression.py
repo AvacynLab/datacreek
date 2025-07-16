@@ -6,6 +6,8 @@ import logging
 import pickle
 from pathlib import Path
 
+from .monitoring import prune_reverts_total
+
 try:
     import numpy as np
 except Exception:  # pragma: no cover - optional dependency
@@ -188,6 +190,11 @@ class FractalNetPruner:
             if restored is not None:
                 self.model = restored
             was_reverted = True
+            if prune_reverts_total is not None:
+                try:
+                    prune_reverts_total.inc()
+                except Exception:  # pragma: no cover
+                    pass
         else:
             save_checkpoint("pruned.ok", self.model)
 

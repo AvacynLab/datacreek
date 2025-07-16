@@ -12,6 +12,7 @@ except Exception:  # pragma: no cover - optional dependency
     np = None  # type: ignore
     faiss = None  # type: ignore
 
+from contextlib import nullcontext
 from .monitoring import update_metric
 
 try:  # optional Prometheus metrics
@@ -21,7 +22,7 @@ try:  # optional Prometheus metrics
     ann_latency = Histogram(
         "ann_latency_seconds",
         "Latency of ANN queries",
-        buckets=(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2),
+        buckets=(0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10),
     )
 except Exception:  # pragma: no cover - optional
     recall_gauge = None  # type: ignore
@@ -44,26 +45,20 @@ def search_with_fallback(
         index = faiss.IndexFlatIP(xb.shape[1])
         index.add(xb)
     start = time.monotonic()
-    _, idx = index.search(xq, k)
+    ctx = ann_latency.time() if ann_latency is not None else nullcontext()
+    with ctx:
+        _, idx = index.search(xq, k)
     latency = time.monotonic() - start
-    if ann_latency is not None:
-        try:
-            ann_latency.observe(latency)
-        except Exception:  # pragma: no cover - metrics optional
-            pass
     if latency > latency_threshold and not isinstance(index, faiss.IndexHNSWFlat):
         hnsw = faiss.IndexHNSWFlat(xb.shape[1], 32)
         hnsw.hnsw.efSearch = 200
         hnsw.add(xb)
         index = hnsw
         start = time.monotonic()
-        _, idx = index.search(xq, k)
+        ctx = ann_latency.time() if ann_latency is not None else nullcontext()
+        with ctx:
+            _, idx = index.search(xq, k)
         latency = time.monotonic() - start
-        if ann_latency is not None:
-            try:
-                ann_latency.observe(latency)
-            except Exception:  # pragma: no cover - metrics optional
-                pass
     return idx[0], latency, index
 
 

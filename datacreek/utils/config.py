@@ -8,6 +8,9 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
+import threading
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 import yaml
 
@@ -292,3 +295,70 @@ def get_neo4j_config(config: Dict[str, Any]) -> Dict[str, Any]:
         "neo4j",
         {"uri": "bolt://localhost:7687", "user": "neo4j", "password": "neo4j"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Global configuration with hot-reload support
+# ---------------------------------------------------------------------------
+
+_config_data: Dict[str, Any] = load_config()
+_config_lock = threading.RLock()
+_config_observer: Observer | None = None
+
+
+class Config:
+    """Thread-safe access to the live configuration."""
+
+    @classmethod
+    def get(cls) -> Dict[str, Any]:
+        """Return a copy of the current configuration."""
+
+        with _config_lock:
+            return dict(_config_data)
+
+    @classmethod
+    def reload(cls) -> None:
+        """Reload YAML configuration into memory."""
+
+        global _config_data
+        with _config_lock:
+            _config_data = load_config()
+
+
+class _ConfigHandler(FileSystemEventHandler):
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path).resolve()
+
+    def on_modified(self, event) -> None:  # type: ignore[override]
+        if Path(event.src_path).resolve() == self.path:
+            try:
+                Config.reload()
+            except Exception:
+                logger.exception("config reload failed")
+
+
+def start_config_watcher(cfg_path: str | os.PathLike | None = None) -> None:
+    """Start watchdog observer reloading the global configuration."""
+
+    global _config_observer
+    if _config_observer is not None:
+        return
+
+    path = Path(cfg_path or os.getenv(CONFIG_PATH_ENV, DEFAULT_CONFIG_PATH))
+    handler = _ConfigHandler(path)
+    observer = Observer()
+    observer.schedule(handler, str(path.parent), recursive=False)
+    observer.daemon = True
+    observer.start()
+    _config_observer = observer
+
+
+def stop_config_watcher() -> None:
+    """Stop the configuration watcher if running."""
+
+    global _config_observer
+    if _config_observer is None:
+        return
+    _config_observer.stop()
+    _config_observer.join(timeout=0.5)
+    _config_observer = None

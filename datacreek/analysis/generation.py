@@ -355,10 +355,9 @@ def bias_wasserstein(loc_hist, glob_hist, logits):
     loc_t = torch.as_tensor(loc_hist, dtype=torch.float32)
     glob_t = torch.as_tensor(glob_hist, dtype=torch.float32)
     W = float(loss(loc_t, glob_t))
-    beta = float(np.exp(-W))
+    W = min(W, 0.5)
     scaled = np.array(logits, dtype=float, copy=True)
-    if W > 0.1:
-        scaled *= beta
+    scaled *= math.exp(-W)
     try:
         from .monitoring import bias_wasserstein_last as _bw_gauge
 

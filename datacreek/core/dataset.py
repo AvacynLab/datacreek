@@ -38,6 +38,8 @@ if TYPE_CHECKING:
 import redis
 from neo4j import Driver
 
+# Base directory for cached artifacts
+CACHE_ROOT = os.environ.get("DATACREEK_CACHE", "./cache")
 from datacreek.utils.config import load_config
 
 from ..backends import get_redis_graph
@@ -1731,7 +1733,7 @@ class DatasetBuilder:
         n2v_attr: str = "embedding",
         gw_attr: str = "graphwave_embedding",
         write_property: str = "acca_embedding",
-        path: str = "cache/cca.pkl",
+        path: str = os.path.join(CACHE_ROOT, "cca.pkl"),
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_aligned_cca_embeddings`."""
 

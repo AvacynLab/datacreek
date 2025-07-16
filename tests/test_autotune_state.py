@@ -75,3 +75,34 @@ def test_update_theta_sets_gauge(monkeypatch):
     update_theta(state, metrics)
     assert called["v"] == 0.5
     assert state.tau == 3
+
+
+def test_jitter_restart_counter(monkeypatch):
+    state = AutoTuneState()
+    state.stagnation = 4
+    state.prev_costs = [0.0]
+
+    g = nx.Graph()
+    g.add_edge("a", "b")
+    emb = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
+    labels = {"a": 0, "b": 1}
+
+    import datacreek.analysis.autotune as auto
+
+    monkeypatch.setattr(auto, "structural_entropy", lambda *a, **k: 0.0)
+    monkeypatch.setattr(auto, "fractal_level_coverage", lambda *a, **k: 0.0)
+    monkeypatch.setattr(auto, "bottleneck_distance", lambda *a, **k: 0.0)
+    monkeypatch.setattr(auto, "graph_information_bottleneck", lambda *a, **k: 0.0)
+    monkeypatch.setattr(auto, "mdl_description_length", lambda *a, **k: 0.0)
+    monkeypatch.setattr(auto, "hybrid_score", lambda *a, **k: 0.0)
+
+    called = {"n": 0}
+    monkeypatch.setattr(
+        auto.monitoring,
+        "gp_jitter_restarts_total",
+        type("C", (), {"inc": lambda self: called.__setitem__("n", called["n"] + 1)})(),
+    )
+
+    res = autotune_step(g, emb, labels, [g], state)
+    assert res["restart_gp"]
+    assert called["n"] == 1

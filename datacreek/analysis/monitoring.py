@@ -27,6 +27,13 @@ if Gauge is not None:
         "bias_wasserstein_last", "Latest Wasserstein distance used"
     )
     haa_edges_total = Counter("haa_edges_total", "Hyper-AA edges written")
+    gp_jitter_restarts_total = Counter(
+        "gp_jitter_restarts_total", "SVGP restarts due to jitter"
+    )
+    prune_reverts_total = Counter(
+        "prune_reverts_total", "FractalNet pruning rollbacks"
+    )
+    redis_hit_ratio = Gauge("redis_hit_ratio", "Redis L1 hit ratio")
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
     tpl_w1_g = None
@@ -35,6 +42,9 @@ else:  # pragma: no cover - optional dependency missing
     autotune_cost_g = None
     bias_wasserstein_last = None
     haa_edges_total = None
+    gp_jitter_restarts_total = None  # type: ignore
+    prune_reverts_total = None  # type: ignore
+    redis_hit_ratio = None  # type: ignore
     j_cost = None
 
 
@@ -48,6 +58,9 @@ _METRICS = {
     "autotune_cost": autotune_cost_g,
     "bias_wasserstein_last": bias_wasserstein_last,
     "haa_edges_total": haa_edges_total,
+    "gp_jitter_restarts_total": gp_jitter_restarts_total,
+    "prune_reverts_total": prune_reverts_total,
+    "redis_hit_ratio": redis_hit_ratio,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

@@ -45,6 +45,14 @@ jobs:
 
   pipeline-e2e:
     runs-on: ubuntu-latest
+    services:
+      neo4j:
+        image: neo4j:5
+        env:
+          NEO4J_AUTH: neo4j/neo4j
+        ports:
+          - 7474:7474
+          - 7687:7687
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,7 +61,7 @@ jobs:
       - run: >-
           pip install -r requirements.txt fakeredis requests python-dateutil
           pydantic==2.4.0 rich scikit-learn watchdog PyYAML pytest geomloss
-      - run: PYTHONPATH=. pytest tests/test_pipeline_e2e.py -q
+      - run: PYTHONPATH=. pytest -m "e2e" -q
   docker-build:
     runs-on: ubuntu-latest
     permissions:
