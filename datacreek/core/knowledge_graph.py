@@ -1651,18 +1651,23 @@ class KnowledgeGraph:
             n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"
         ]
         texts = [self.graph.nodes[e].get("text", "") for e in entities]
-        langs = []
+        cfg = load_config()
+        min_conf = float(cfg.get("language", {}).get("min_confidence", 0.7))
+        langs: List[str] = []
+        probs: List[float] = []
         for eid, txt in zip(entities, texts):
             lang = self.graph.nodes[eid].get("lang")
-            if not lang:
-                try:
-                    from ..utils.text import detect_language
+            try:
+                from ..utils.text import detect_language
 
-                    lang = detect_language(txt)
-                except Exception:  # pragma: no cover - optional
-                    lang = "und"
+                detected, prob = detect_language(txt, return_prob=True)
+            except Exception:  # pragma: no cover - optional
+                detected, prob = "und", 0.0
+            if not lang:
+                lang = detected
                 self.graph.nodes[eid]["lang"] = lang
             langs.append(lang)
+            probs.append(float(prob))
         if len(entities) < 2:
             return 0
 
@@ -1707,12 +1712,23 @@ class KnowledgeGraph:
                 )
                 t1 = re.sub(r"\W+", "", texts[i]).lower()
                 t2 = re.sub(r"\W+", "", texts[j]).lower()
-                if langs[i] == langs[j] and (
-                    sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1
-                ):
+                allowed = False
+                if langs[i] == langs[j]:
+                    allowed = True
+                elif probs[i] >= min_conf and probs[j] >= min_conf:
+                    allowed = True
+                if allowed and (sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1):
                     self._merge_entity_nodes(eid1, entities[j])
                     used.add(j)
                     merged += 1
+                elif langs[i] != langs[j]:
+                    try:
+                        from ..analysis.monitoring import lang_mismatch_total as _ctr
+
+                        if _ctr is not None:
+                            _ctr.inc()
+                    except Exception:
+                        pass
         if merged:
             self.index = EmbeddingIndex(use_hnsw=self.use_hnsw)
             for n, d in self.graph.nodes(data=True):
@@ -2160,17 +2176,40 @@ class KnowledgeGraph:
 
         xb = np.vstack(vectors)
         faiss.normalize_L2(xb)
+        d = xb.shape[1]
         if method == "hnsw":
-            index = faiss.IndexHNSWFlat(xb.shape[1], 32)
+            index = faiss.IndexHNSWFlat(d, 32)
             index.hnsw.efSearch = 200
+            index.add(xb)
+        elif method == "faiss_gpu_ivfpq":
+            quantizer = faiss.IndexFlatIP(d)
+            cpu_index = faiss.IndexIVFPQ(quantizer, d, 4096, 16, 8)
+            cpu_index.train(xb)
+            cpu_index.add(xb)
+            cpu_index.nprobe = 32
+            try:
+                if faiss.get_num_gpus() > 0:
+                    res = faiss.StandardGpuResources()
+                    index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
+                else:
+                    index = cpu_index
+            except Exception:
+                index = cpu_index
         else:
-            index = faiss.IndexFlatIP(xb.shape[1])
-        index.add(xb)
+            index = faiss.IndexFlatIP(d)
+            index.add(xb)
 
         self.faiss_index = index
         self.faiss_ids = ids
         self.faiss_index_type = method
         self.faiss_node_attr = node_attr
+        try:
+            from ..analysis.monitoring import ann_backend
+
+            if ann_backend is not None:
+                ann_backend.labels(method).set(1)
+        except Exception:
+            pass
 
     def search_faiss(
         self,
@@ -4903,6 +4942,26 @@ class KnowledgeGraph:
                 continue
             matches.append(node)
         return matches
+
+    def haa_link_score(self, driver: "Driver", a_id: str, b_id: str) -> float | None:
+        """Return Hyper-Adamic–Adar score between two nodes from Neo4j.
+
+        The Cypher query uses a composite index on ``(startNodeId, endNodeId)``
+        for relationship ``SUGGESTED_HYPER_AA``. The index is only effective if
+        start and end internal IDs are materialised first, hence the
+        ``WITH id(a) AS id1, id(b) AS id2`` clause.
+        """
+
+        query = (
+            "PROFILE MATCH (a {id:$u}) MATCH (b {id:$v}) "
+            "WITH id(a) AS id1, id(b) AS id2 "
+            "MATCH ()-[r:SUGGESTED_HYPER_AA]-() "
+            "WHERE r.startNodeId = id1 AND r.endNodeId = id2 "
+            "RETURN r.score AS score"
+        )
+        with driver.session() as session:
+            rec = session.run(query, u=a_id, v=b_id).single()
+            return float(rec["score"]) if rec else None
 
     def fact_confidence(
         self, subject: str, predicate: str, object: str, *, max_hops: int = 3

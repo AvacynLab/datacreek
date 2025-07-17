@@ -7,7 +7,8 @@
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional
+from queue import Queue
+from typing import Any, Dict, List, Optional, Tuple
 
 try:  # optional dependency
     import fasttext
@@ -15,6 +16,7 @@ except Exception:  # pragma: no cover - optional dependency missing
     fasttext = None  # type: ignore
 
 _FT_MODEL = None
+_FASTTEXT_POOL: Queue | None = None
 
 try:  # optional dependency
     from pint import UnitRegistry as _UnitRegistry
@@ -156,20 +158,50 @@ def clean_text(text: str) -> str:
     return normalize_units(cleaned)
 
 
-def detect_language(text: str, model_path: str | None = None) -> str:
-    """Return ISO-639 code of ``text`` using fastText if available."""
+def _get_ft_model(path: str) -> "fasttext.FastText":  # type: ignore[name-defined]
+    """Return a fastText model instance from the global pool."""
+
+    global _FT_MODEL, _FASTTEXT_POOL
+    if _FASTTEXT_POOL is None:
+        n = max(1, (os.cpu_count() or 1))
+        q: Queue = Queue(maxsize=n)
+        for _ in range(n):
+            if _FT_MODEL is None:
+                _FT_MODEL = fasttext.load_model(path)
+            q.put(_FT_MODEL)
+        _FASTTEXT_POOL = q
+    model = _FASTTEXT_POOL.get()
+    return model
+
+
+def _release_ft_model(model: "fasttext.FastText") -> None:  # type: ignore[name-defined]
+    """Return ``model`` to the global pool."""
+
+    assert _FASTTEXT_POOL is not None
+    _FASTTEXT_POOL.put(model)
+
+
+def detect_language(
+    text: str, model_path: str | None = None, *, return_prob: bool = False
+) -> str | Tuple[str, float]:
+    """Return ISO-639 code of ``text`` and optional probability."""
 
     if fasttext is None:
-        return "und"
+        return ("und", 0.0) if return_prob else "und"
 
-    global _FT_MODEL
-    if _FT_MODEL is None:
-        path = model_path or os.getenv("FASTTEXT_MODEL", "lid.176.bin")
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"fastText model not found: {path}")
-        _FT_MODEL = fasttext.load_model(path)
+    path = model_path or os.getenv("FASTTEXT_MODEL", "lid.176.bin")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"fastText model not found: {path}")
 
-    labels, _ = _FT_MODEL.predict(text.replace("\n", " "))
+    model = _get_ft_model(path)
+    try:
+        labels, probs = model.predict(text.replace("\n", " "))
+    finally:
+        _release_ft_model(model)
+
     if not labels:
-        return "und"
-    return labels[0].replace("__label__", "")
+        return ("und", 0.0) if return_prob else "und"
+
+    lang = labels[0].replace("__label__", "")
+    prob = float(probs[0]) if probs else 0.0
+    return (lang, prob) if return_prob else lang

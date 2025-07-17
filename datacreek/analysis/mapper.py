@@ -88,22 +88,25 @@ _evict_stop = threading.Event()
 _redis_hits = 0
 _redis_misses = 0
 _last_ttl_eval = time.time()
+_hit_ema = 0.0
+_ALPHA = 0.3
 
 
 def _adjust_ttl(client: Optional["redis.Redis"], key: str | None = None) -> None:
     """Adjust Redis TTL based on hit ratio and CPU load every 5 minutes."""
 
-    global _redis_hits, _redis_misses, _redis_ttl, _last_ttl_eval
+    global _redis_hits, _redis_misses, _redis_ttl, _last_ttl_eval, _hit_ema
     now = time.time()
     if now - _last_ttl_eval < 300:
         return
     total = _redis_hits + _redis_misses
     ratio = _redis_hits / max(1, total)
+    _hit_ema = _ALPHA * ratio + (1 - _ALPHA) * _hit_ema
     try:
         from .monitoring import redis_hit_ratio as _hit_gauge
 
         if _hit_gauge is not None:
-            _hit_gauge.set(ratio)
+            _hit_gauge.set(_hit_ema)
     except Exception:  # pragma: no cover - optional metrics
         pass
     if client is not None:
@@ -111,9 +114,10 @@ def _adjust_ttl(client: Optional["redis.Redis"], key: str | None = None) -> None
             client.config_set("maxmemory-policy", "allkeys-lru")
         except Exception:
             pass
-    if ratio < 0.2:
+    prev_ttl = _redis_ttl
+    if _hit_ema < 0.2:
         _redis_ttl = max(int(_redis_ttl * 0.5), _ttl_min)
-    elif ratio > 0.8:
+    elif _hit_ema > 0.8:
         _redis_ttl = min(int(_redis_ttl * 1.2), _ttl_max)
     try:
         load = os.getloadavg()[0] / max(1, os.cpu_count() or 1)
@@ -121,6 +125,8 @@ def _adjust_ttl(client: Optional["redis.Redis"], key: str | None = None) -> None
             _redis_ttl = max(int(_redis_ttl * 1.5), _ttl_max)
     except Exception:
         pass
+    if _redis_ttl != prev_ttl:
+        logging.getLogger(__name__).debug("L1 TTL updated to %d", _redis_ttl)
     if key and client is not None:
         try:
             client.expire(key, _redis_ttl)
@@ -178,7 +184,14 @@ def _cache_put(
             env.set_mapsize(limit_mb * 1024**2)
             stat = env.stat()
             info = env.info()
-            if (stat["psize"] * info["map_size"]) / (1 << 20) > limit_mb:
+            size_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+            if size_mb > 0.9 * limit_mb:
+                logging.getLogger(__name__).warning(
+                    "LMDB soft-quota reached %.1f MB", size_mb
+                )
+                env.close()
+                return
+            if size_mb > limit_mb:
                 _l2_evict_once(env, limit_mb, ttl_h)
             with env.begin(write=True) as txn:
                 now = time.time()
@@ -343,8 +356,12 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
                 ts, _ = pickle.loads(raw)
                 age_h = (now - ts) / 3600
                 if age_h > ttl_h or size_mb > limit_mb:
+                    key_bytes = cur.key()
                     cur.delete()
                     n_deleted += 1
+                    logging.getLogger(__name__).debug(
+                        "LMDB-EVICT %s", key_bytes.decode(errors="ignore")
+                    )
                     try:
                         from ..analysis.monitoring import redis_evictions_l2_total
 

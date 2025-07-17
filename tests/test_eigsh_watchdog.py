@@ -20,14 +20,24 @@ def test_eigsh_lmax_watchdog_timeout(monkeypatch):
     )
 
     called = {"n": 0}
+    gauge = {"v": 0.0}
 
-    class Dummy:
+    class DummyCounter:
         def inc(self):
             called["n"] += 1
 
+    class DummyGauge:
+        def set(self, value):
+            gauge["v"] = value
+
     monkeypatch.setattr(
         "datacreek.analysis.monitoring.eigsh_timeouts_total",
-        Dummy(),
+        DummyCounter(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "datacreek.analysis.monitoring.eigsh_last_duration",
+        DummyGauge(),
         raising=False,
     )
 
@@ -35,3 +45,4 @@ def test_eigsh_lmax_watchdog_timeout(monkeypatch):
     val = fractal.eigsh_lmax_watchdog(L, maxiter=5, timeout=0.01)
     assert val == pytest.approx(3.0, abs=1e-2)
     assert called["n"] == 1
+    assert gauge["v"] >= 0.01

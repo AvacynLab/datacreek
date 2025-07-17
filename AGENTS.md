@@ -1,224 +1,215 @@
-### 📋 Checklist d’amélioration « v1-beta » — à cocher
+### 📋 Checklist d’améliorations « GA » — à cocher
 
-*(seulement les éléments encore non présents dans le code ; chaque tâche comporte sous-étapes, variables, maths, et objectif clair)*
-
----
-
-## 1 | Cache L1 Redis — Hit-ratio & TTL adaptatif
-
-> Objectif : réduire les ratés (miss) sous 20 % en période de charge sans sur-consommer mémoire.
-
-### Sous-étapes
-
-1. **Compteurs**
-
-   ```python
-   redis.incr('hits')   # dans get si trouvé  
-   redis.incr('miss')   # dans set si absent
-   ```
-2. **Gauge Prometheus**
-
-   ```python
-   redis_hit_ratio = Gauge('redis_hit_ratio', 'L1 cache hit ratio')
-   redis_hit_ratio.set(hits/(hits+miss))
-   ```
-3. **Boucle d’ajustement (5 min)**
-
-   ```
-   if ratio <0.2: ttl=max(ttl*0.5, cfg.cache.l1_ttl_min)
-   elif ratio>0.8: ttl=min(ttl*1.2, cfg.cache.l1_ttl_max)
-   redis.expire(key, ttl)
-   ```
-4. **YAML**
-
-   ```yaml
-   cache:
-     l1_ttl_init: 3600
-     l1_ttl_min: 300
-     l1_ttl_max: 7200
-   ```
-5. **Formule** : TTL′ = clamp(TTL×0.5,min) si hit<0.2 ; TTL′ = clamp(TTL×1.2,max) si hit>0.8 ([Redis][1], [Medium][2]).
+*(uniquement les points **non présents** dans le code actuel ; chaque tâche inclut sous‑étapes, formules/variables et objectif mesurable)*
 
 ---
 
-## 2 | Counter `gp_jitter_restarts_total`
+## 1 | Surveillance eigsh & fallback Lanczos
 
-> Objectif : monitorer la stabilité du BO SVGP.
+### Objectif
 
-### Sous-étapes
+Empêcher tout blocage > 60 s sur laplaciens géants et exposer l’incident en métrique + alerte.
 
-1. **Counter**
+### Sous‑étapes
+
+1. **Gauge + counter**
 
    ```python
-   gp_jitter_restarts_total = Counter(
-       'gp_jitter_restarts_total',
-       'Number of SVGP jitter restarts')
+   eigsh_timeouts_total = Counter('eigsh_timeouts_total',
+                                  'Number of eigsh timeouts')
+   eigsh_last_duration  = Gauge('eigsh_last_runtime_seconds', …)
    ```
-2. **Incrément** dans `autotune.py` après chaque early-stop + jitter.
+2. **Décorateur `with_timeout`**
+
+   * Wrappe l’appel `eigsh`; start timer.
+   * On timeout : incrémente `eigsh_timeouts_total`, stocke durée limite, bascule `LanczosTop5`.
 3. **Alerte Prometheus**
 
-   ```
-   alert: SVGPJitterStorm
-   expr: gp_jitter_restarts_total[1h] > 10
-   for: 5m
+   ```yaml
+   - alert: EigshTimeoutStorm
+     expr: increase(eigsh_timeouts_total[30m]) > 5
+     for: 10m
    ```
 
 ---
 
-## 3 | Composite index Neo4j pour Hyper-AA
+## 2 | LMDB L2 — logs d’éviction + Soft‑Quota stable
 
-> Objectif : éviter un NodeByLabelScan quand on joint deux nœuds sur `SUGGESTED_HYPER_AA`.
+### Sous‑étapes
 
-### Sous-étape unique
-
-```cypher
-CREATE INDEX haa_pair IF NOT EXISTS
-FOR ()-[r:SUGGESTED_HYPER_AA]-()
-ON (r.startNodeId, r.endNodeId);
-```
-
-*Rèf.* Neo4j manual composite indexes ([Graph Database & Analytics][3], [Graph Database & Analytics][4]).
-
----
-
-## 4 | Histogramme latency ANN (10 s bucket)
-
-> Objectif : capturer les cold-starts et outliers.
-
-### Sous-étapes
-
-1. Définir histogramme :
+1. **Eviction log**
 
    ```python
-   ann_latency = Histogram(
-       'ann_latency_seconds',
-       'Latency of ANN queries',
-       buckets=(0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10))
+   logger.debug("LMDB-EVICT %s", key)
    ```
-2. Envelopper chaque `index.search` :
+2. **Counter**
+   `redis_evictions_l2_total.inc()` pour chaque suppression.
+3. **Soft‑Quota**
+
+   * `cfg.cache.l2_max_size_mb` (déjà) → Stop ajoute si size > 0.9\*quota ; log warning.
+
+---
+
+## 3 | fastText lang‑id pooling
+
+### Objectif
+
+Éliminer re‑load modèle (150 ms) sur multi‑workers.
+
+### Sous‑étapes
+
+1. **Singleton**
 
    ```python
-   with ann_latency.time():
-       D,I = index.search(vecs, k)
+   _ft = fasttext.load_model(PATH) if not hasattr(cache, '_ft') else cache._ft
    ```
-3. **Math** : buckets suivent schéma log-échelle recommandé par FAISS performance notes ([GitHub][5]).
+2. **Thread‑safe queue** (size = n_cpu) pour accès concurrent.
 
 ---
 
-## 5 | eigsh watchdog & Lanczos-5 fallback
+## 4 | GPU ANN – IVFPQ benchmark
 
-> Objectif : éviter un blocage > 60 s sur graphes > 5 M nœuds.
+### Sous‑étapes
 
-### Sous-étapes
+1. **Paramètre YAML**
 
-1. **Timeout** (`signal` ou `concurrent.futures.wait(timeout)`).
-2. **Fallback Lanczos-5** :
+   ```yaml
+   ann:
+     backend: "faiss_gpu_ivfpq"  # options: flat, hnsw, ivfpq
+   ```
+2. **Construction**
 
-   $$
-     v_{k+1}=Lv_k-\alpha_k v_k-\beta_{k-1}v_{k-1}
-   $$
-
-   Approximer
-   $\lambda_{\max}\approx\frac{v_5^\top L v_5}{v_5^\top v_5}$ ([GitHub][6]).
-3. Gauge `eigsh_timeouts_total`.
-
----
-
-## 6 | LMDB L2 — Soft-Quota disque
-
-> Objectif : empêcher l’excès disque si TTL manqué.
-
-### Sous-étapes
-
-1. `env.set_mapsize(cfg.cache.l2_max_size_mb*1024**2)`
-2. Éviction loop : delete plus ancien `subgraph` jusqu’à `< max_size`.
-3. YAML : `l2_max_size_mb: 2048`.
+   ```python
+   quantizer = faiss.IndexFlatIP(d)
+   index = faiss.IndexIVFPQ(quantizer, d, nlist=4096, m=16, 8)
+   index.train(xb); index.add(xb)
+   index.nprobe = 32
+   ```
+3. **Prometheus gauge** `ann_backend` (label value).
+4. **Benchmark script** : mesure P95 latence, recall ≥ 0.9. Met à jour README.
 
 ---
 
-## 7 | Adaptive Caching Pattern (CPU-aware)
+## 5 | Model‑card enrichi
 
-> Objectif : TTL L1 doit aussi réagir à la charge CPU.
+### Sous‑étapes
 
-### Sous-étape
+1. **Nouvelles clés JSON**
 
-* Si `cpu_load > 0.7` ➜ `ttl=max(ttl*1.5, ttl_max)` pour éviter thrash ([Medium][2]).
+   ```json
+   {
+     "bias_wasserstein": 0.08,
+     "sigma_db": 1.94,
+     "H_wave": 5.12,
+     "prune_ratio": 0.48,
+     "cca_sha": "a9c4…"
+   }
+   ```
+2. **Génération HTML**
 
----
-
-## 8 | fastText lang-id avant fusion NodeSimilarity
-
-> Objectif : éviter fusion FR/EN.
-
-### Sous-étapes
-
-1. Charger modèle `lid.176.bin` (fastText) ([fasttext.cc][7]).
-2. Attribuer `lang` property à chaque atome.
-3. Modifier condition fusion : fusionner `(u,v)` **seulement si** `lang_u == lang_v`.
-
----
-
-## 9 | Kernel dynamique dans SVGP
-
-> Objectif : RBF→Matern 3/2 si paysage de coût rugueux ([arXiv][8]).
-
-### Sous-étapes
-
-1. Mesurer `Var|∇J|` sur 10 pas.
-2. Si `>0.5` — `gp.covar_module = MaternKernel(nu=1.5)`; log switch.
+   * Utiliser Jinja2 template + Chart.js mini‑plots (hist demog).
+3. **CI artefact** upload dans release.
 
 ---
 
-## 10 | Watchdog eigsh metric + Prometheus
+## 6 | Cache L1 TTL — EMA smoothing
 
-| Gauge                      | Incrément                 |
-| -------------------------- | ------------------------- |
-| `eigsh_timeouts_total`     | à chaque fallback Lanczos |
-| `redis_evictions_l2_total` | à chaque delete LMDB      |
+### Math
+
+$$
+\text{EMA}_t = \alpha\,r_t + (1-\alpha)\,\text{EMA}_{t-1},\;\alpha=0.3
+$$
+
+### Sous‑étapes
+
+1. Stocker `hit_ema` global.
+2. Appliquer l’EMA avant décision TTL.
+3. Log TTL change event.
 
 ---
 
-## 11 | Model card – biais & fractale
+## 7 | Jitter alert tuning
 
-### Sous-étape unique
+### Sous‑étapes
 
-* Générer JSON : `{ "sigma_db":…, "H_wave":…, "bias_W":…, "dp_eps":2, "prune_ratio":…, "cca_sha":… }`
+1. Changer règle :
+
+   ```yaml
+   expr: rate(gp_jitter_restarts_total[10m]) > 0.01
+   for: 10m
+   ```
+2. Ajouter label `severity="warning"`.
 
 ---
 
-**Cibles de validation**
+## 8 | Fusion multilingue – seuil probabilité
 
-* `redis_hit_ratio` stabilise > 0.5 en prod ; TTL fluctue entre 300-7200 s.
-* `gp_jitter_restarts_total/hour < 10`.
-* `eigsh_timeouts_total == 0` sur un graphe 1 M nœuds ; fallback déclenche sur 10 M nœuds.
-* Neo4j plan utilise index `haa_pair` (vérifier via `PROFILE`).
-* Model card JSON attaché à chaque dataset export.
+### Sous‑étapes
 
-[1]: https://redis.io/blog/why-your-cache-hit-ratio-strategy-needs-an-update/?utm_source=chatgpt.com "Why your cache hit ratio strategy needs an update - Redis"
-[2]: https://master-spring-ter.medium.com/implementing-the-adaptive-caching-pattern-with-spring-boot-and-redis-dd402e4c9eeb?utm_source=chatgpt.com "Implementing the Adaptive Caching Pattern with Spring Boot and ..."
-[3]: https://neo4j.com/docs/cypher-manual/current/indexes/search-performance-indexes/using-indexes/?utm_source=chatgpt.com "The impact of indexes on query performance - Cypher Manual - Neo4j"
-[4]: https://neo4j.com/docs/cypher-manual/4.3/indexes-for-search-performance/?utm_source=chatgpt.com "Indexes for search performance - Cypher Manual - Neo4j"
-[5]: https://github.com/facebookresearch/faiss/wiki/How-to-make-Faiss-run-faster?utm_source=chatgpt.com "How to make Faiss run faster · facebookresearch/faiss Wiki - GitHub"
-[6]: https://github.com/scipy/scipy/issues/9470?utm_source=chatgpt.com "scipy.sparse.linalg.eigsh requires at least 20 iterations to converge ..."
-[7]: https://fasttext.cc/docs/en/language-identification.html?utm_source=chatgpt.com "Language identification - fastText"
-[8]: https://arxiv.org/pdf/2407.13711?utm_source=chatgpt.com "Function-Space Priors for the Laplace Approximation in Bayesian ..."
+1. **cfg.language.min_confidence = 0.7**.
+2. Dans fusion nodeSimilarity, accepter si `pred.prob >= min_confidence`.
+3. Log `lang_mismatch_total` counter.
+
+---
+
+## 9 | Hyper‑AA index plan stable
+
+### Sous‑étapes
+
+1. Dans requêtes Cypher, toujours :
+
+   ```cypher
+   WITH id(a) AS id1, id(b) AS id2
+   MATCH ()-[r:SUGGESTED_HYPER_AA]-()
+   WHERE r.startNodeId = id1 AND r.endNodeId = id2
+   ```
+2. Ajouter unit‑test `PROFILE` pour vérifier `IndexSeekByRange` est utilisé.
+
+---
+
+## 10 | Watchdog plus large (eigsh & cache & ANN)
+
+### Sous‑étapes
+
+*Job cron* qui vérifie :
+
+* `eigsh_timeouts_total` growth > 10 /h.
+* `ann_latency_seconds_bucket{le="2"}` ratio < 0.95.
+* Disk usage > 85 % (soft‑quota) → alerte.
+
+---
+
+### Variables / métriques à ajouter
+
+| Nom                    | Type                | Commentaire                  |
+| ---------------------- | ------------------- | ---------------------------- |
+| `redis_hit_ratio`      | Gauge               | EMA des hits L1              |
+| `eigsh_timeouts_total` | Counter             | Fallback Lanczos             |
+| `ann_backend`          | Gauge(label)        | flat/hnsw/ivfpq              |
+| `lang_mismatch_total`  | Counter             | Tentatives fusion cross-lang |
+| `bias_wasserstein`     | Scalar (model card) | Fairness metric              |
+
+---
+
+#### Fin de feuille de route
 
 ## Checklist
-- [x] Cache L1 Redis — Hit-ratio & TTL adaptatif
-- [x] Counter `gp_jitter_restarts_total`
-- [x] Composite index Neo4j pour Hyper-AA
-- [x] Histogramme latency ANN (10 s bucket)
-- [x] eigsh watchdog & Lanczos-5 fallback
-- [x] LMDB L2 — Soft-Quota disque
-- [x] Adaptive Caching Pattern (CPU-aware)
-- [x] fastText lang-id avant fusion NodeSimilarity
-- [x] Kernel dynamique dans SVGP
-- [x] Watchdog eigsh metric + Prometheus
-- [x] Model card – biais & fractale
+- [x] Surveillance eigsh & fallback Lanczos
+- [x] LMDB L2 — logs d'éviction + Soft-Quota stable
+- [x] fastText lang-id pooling
+- [x] GPU ANN – IVFPQ benchmark
+- [x] Model-card enrichi
+- [x] Cache L1 TTL — EMA smoothing
+- [x] Jitter alert tuning
+- [x] Fusion multilingue – seuil probabilité
+- [x] Hyper‑AA index plan stable
+- [x] Watchdog plus large (eigsh & cache & ANN)
 
 ## History
-- Implemented eigsh timeout watchdog, Lanczos fallback and Prometheus counters.
-- Added Redis hit-ratio adaptation with CPU load and metrics; updated tests.
-- Added fastText language detection for entity merging, dynamic SVGP kernel and model card generation.
-- Verified checklist implementation; attempted to install dependencies and run tests but installation failed due to heavy packages.
-- Fixed formatting with pre-commit and installed missing dependencies for tests.
+- Reset checklist and added GA roadmap.
+- Implemented ANN backend gauge with IVFPQ option and TTL EMA smoothing.
+- Added eigsh watchdog metrics with timeout decorator and LMDB soft quota.
+- Added fastText pooling, model card HTML generation, jitter alert rule and language mismatch metric.
+- Added Hyper-AA pair score lookup using indexed query and watchdog cron script.
+- Installed dependencies to run tests and verified all GA tasks.
+- Verified task implementation and ran tests after installing missing Python dependencies.

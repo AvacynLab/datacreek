@@ -4,7 +4,7 @@ import math
 import os
 import random
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 try:  # optional dependency
     import gudhi as gd
@@ -13,9 +13,59 @@ except Exception:  # pragma: no cover - optional dependency missing
     gd = None  # type: ignore
     gr = None  # type: ignore
 import concurrent.futures
+import time
 
 import networkx as nx
 import numpy as np
+
+
+def with_timeout(
+    timeout: float,
+    *,
+    counter: Optional[Any] = None,
+    duration_gauge: Optional[Any] = None,
+    fallback: Optional[Callable[..., float]] = None,
+) -> Callable[[Callable[..., float]], Callable[..., float]]:
+    """Return a decorator executing ``func`` with ``timeout`` seconds.
+
+    On timeout, ``counter`` is incremented and ``fallback`` is executed.
+    The execution duration is stored in ``duration_gauge`` when provided.
+    """
+
+    def decorator(func: Callable[..., float]) -> Callable[..., float]:
+        def wrapper(*args, **kwargs) -> float:
+            start = time.monotonic()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(func, *args, **kwargs)
+                try:
+                    result = future.result(timeout=timeout)
+                    duration = time.monotonic() - start
+                    if duration_gauge is not None:
+                        try:
+                            duration_gauge.set(duration)
+                        except Exception:
+                            pass
+                    return float(result)
+                except concurrent.futures.TimeoutError:
+                    future.cancel()
+                    if counter is not None:
+                        try:
+                            counter.inc()
+                        except Exception:
+                            pass
+                    if duration_gauge is not None:
+                        try:
+                            duration_gauge.set(timeout)
+                        except Exception:
+                            pass
+                    if fallback is not None:
+                        return float(fallback(*args, **kwargs))
+                    raise
+
+        return wrapper
+
+    return decorator
+
 
 try:  # optional
     from neo4j import Driver
@@ -178,7 +228,7 @@ def eigsh_lmax_watchdog(L: np.ndarray, maxiter: int, timeout: float = 60.0) -> f
     import scipy.sparse as sp
     from scipy.sparse.linalg import ArpackNoConvergence, eigsh
 
-    from .monitoring import eigsh_timeouts_total
+    from .monitoring import eigsh_last_duration, eigsh_timeouts_total
 
     def _run() -> float:
         return float(
@@ -192,21 +242,25 @@ def eigsh_lmax_watchdog(L: np.ndarray, maxiter: int, timeout: float = 60.0) -> f
             )[0]
         )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_run)
-        try:
-            return future.result(timeout=timeout)
-        except (concurrent.futures.TimeoutError, ArpackNoConvergence):
-            future.cancel()
-            if eigsh_timeouts_total is not None:
-                try:
-                    eigsh_timeouts_total.inc()
-                except Exception:
-                    pass
+    wrapped = with_timeout(
+        timeout,
+        counter=eigsh_timeouts_total,
+        duration_gauge=eigsh_last_duration,
+        fallback=lambda *_a, **_k: lanczos_top_eigenvalue(L, k=5),
+    )(_run)
+
+    try:
+        return wrapped()
+    except ArpackNoConvergence:
+        if eigsh_timeouts_total is not None:
             try:
-                return lanczos_top_eigenvalue(L, k=5)
+                eigsh_timeouts_total.inc()
             except Exception:
-                return float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
+                pass
+        try:
+            return lanczos_top_eigenvalue(L, k=5)
+        except Exception:
+            return float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
 
 
 def box_cover(graph: nx.Graph, radius: int) -> List[set[int]]:

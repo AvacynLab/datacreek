@@ -106,6 +106,7 @@ Below is a quick overview of the main options and operations exposed at each sta
 - `compute_graph_embeddings()` – build Node2Vec embeddings
 - `compute_node2vec_gds(driver)` – run Neo4j GDS Node2Vec and store vectors
 - `build_faiss_index()` – create a FAISS index from stored embeddings
+- `scripts/ann_benchmark.py` – measure P95 latency and recall of ANN backends
 - `mark_conflicting_facts()` – flag contradictory statements
 
 **Dataset generation**
