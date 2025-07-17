@@ -90,9 +90,7 @@ _redis_misses = 0
 _last_ttl_eval = time.time()
 
 
-def _adjust_ttl(
-    client: Optional["redis.Redis"], key: str | None = None
-) -> None:
+def _adjust_ttl(client: Optional["redis.Redis"], key: str | None = None) -> None:
     """Adjust Redis TTL based on hit ratio and CPU load every 5 minutes."""
 
     global _redis_hits, _redis_misses, _redis_ttl, _last_ttl_eval

@@ -217,8 +217,8 @@ ON (r.startNodeId, r.endNodeId);
 - [x] Model card – biais & fractale
 
 ## History
-- Reset tasks and imported new v1-beta checklist.
 - Implemented eigsh timeout watchdog, Lanczos fallback and Prometheus counters.
 - Added Redis hit-ratio adaptation with CPU load and metrics; updated tests.
 - Added fastText language detection for entity merging, dynamic SVGP kernel and model card generation.
 - Verified checklist implementation; attempted to install dependencies and run tests but installation failed due to heavy packages.
+- Fixed formatting with pre-commit and installed missing dependencies for tests.

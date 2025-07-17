@@ -1707,9 +1707,8 @@ class KnowledgeGraph:
                 )
                 t1 = re.sub(r"\W+", "", texts[i]).lower()
                 t2 = re.sub(r"\W+", "", texts[j]).lower()
-                if (
-                    langs[i] == langs[j]
-                    and (sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1)
+                if langs[i] == langs[j] and (
+                    sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1
                 ):
                     self._merge_entity_nodes(eid1, entities[j])
                     used.add(j)

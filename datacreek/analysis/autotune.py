@@ -373,16 +373,14 @@ def svgp_ei_propose(
     expected improvement over the best observed score is returned.
     """
 
+    import logging
     from math import inf
 
     from scipy.stats import norm
-    import logging
     from sklearn.gaussian_process import GaussianProcessRegressor
-    from sklearn.gaussian_process.kernels import (
-        RBF,
-        Matern,
-        ConstantKernel as C,
-    )
+    from sklearn.gaussian_process.kernels import RBF
+    from sklearn.gaussian_process.kernels import ConstantKernel as C
+    from sklearn.gaussian_process.kernels import Matern
 
     X = np.asarray(list(params), dtype=float)
     y = np.asarray(list(scores), dtype=float)

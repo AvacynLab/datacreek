@@ -12,9 +12,10 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - optional dependency missing
     gd = None  # type: ignore
     gr = None  # type: ignore
+import concurrent.futures
+
 import networkx as nx
 import numpy as np
-import concurrent.futures
 
 try:  # optional
     from neo4j import Driver
@@ -170,14 +171,13 @@ def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:
     return float(v.dot(L.dot(v)) / denom)
 
 
-def eigsh_lmax_watchdog(
-    L: np.ndarray, maxiter: int, timeout: float = 60.0
-) -> float:
+def eigsh_lmax_watchdog(L: np.ndarray, maxiter: int, timeout: float = 60.0) -> float:
     """Return ``eigsh`` largest eigenvalue with timeout and fallback."""
 
     import numpy.linalg as nla
     import scipy.sparse as sp
     from scipy.sparse.linalg import ArpackNoConvergence, eigsh
+
     from .monitoring import eigsh_timeouts_total
 
     def _run() -> float:
@@ -206,9 +206,7 @@ def eigsh_lmax_watchdog(
             try:
                 return lanczos_top_eigenvalue(L, k=5)
             except Exception:
-                return float(
-                    nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max()
-                )
+                return float(nla.eigvalsh(L.toarray() if sp.issparse(L) else L).max())
 
 
 def box_cover(graph: nx.Graph, radius: int) -> List[set[int]]:
