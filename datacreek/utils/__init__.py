@@ -28,6 +28,7 @@ from .llm_processing import (
 )
 from .metrics import push_metrics
 from .progress import create_progress, progress_context
+from .cache import cache_l1
 from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
 from .toolformer import execute_tool_calls, insert_tool_calls
@@ -87,4 +88,5 @@ __all__ = [
     "encrypt_pii_fields",
     "decrypt_pii_fields",
     "push_metrics",
+    "cache_l1",
 ]

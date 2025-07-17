@@ -43,6 +43,9 @@ fractal:
   bootstrap_seed: 42
 
 cache:
+  l1_ttl_init: 3600
+  l1_ttl_min: 300
+  l1_ttl_max: 7200
   l2_max_size_mb: 2048
   l2_ttl_hours: 24
 
