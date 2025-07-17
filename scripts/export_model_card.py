@@ -10,6 +10,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path[0] = str(ROOT)
 import os
+
 os.environ.setdefault("DATACREEK_REQUIRE_PERSISTENCE", "0")
 
 import argparse

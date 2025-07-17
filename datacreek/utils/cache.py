@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import time
 from functools import wraps
 from threading import Thread
 from typing import Callable, Optional
-
-import time
 
 try:  # optional dependency
     import redis  # type: ignore

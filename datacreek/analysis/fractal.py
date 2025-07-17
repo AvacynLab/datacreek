@@ -230,8 +230,9 @@ def eigsh_safe(L: np.ndarray) -> float:
     used instead.
     """
 
-    from datacreek.utils.config import load_config
     from scipy.sparse.linalg import eigsh
+
+    from datacreek.utils.config import load_config
 
     from .monitoring import eigsh_last_duration, eigsh_timeouts_total
 

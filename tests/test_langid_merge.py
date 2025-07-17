@@ -13,6 +13,7 @@ def test_langid_prevents_cross_language_merge(monkeypatch):
         "datacreek.utils.retrieval.EmbeddingIndex.transform",
         lambda self, t: np.zeros((len(t), 1)),
     )
+
     def detect(text, **k):
         if "Hello" in text:
             return ("en", 0.99) if k.get("return_prob") else "en"

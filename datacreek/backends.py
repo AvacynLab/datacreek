@@ -4,8 +4,8 @@ try:  # optional dependency
     import boto3
 except Exception:  # pragma: no cover - handled gracefully for tests
     boto3 = None
-from functools import lru_cache
 import os
+from functools import lru_cache
 from pathlib import Path
 
 try:  # optional Redis dependency
