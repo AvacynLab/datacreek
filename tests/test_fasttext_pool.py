@@ -1,4 +1,14 @@
-import datacreek.utils.text as text
+import importlib.util
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[1]
+
+spec = importlib.util.spec_from_file_location(
+    "datacreek.utils.text", root / "datacreek" / "utils" / "text.py"
+)
+text = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(text)
 
 
 def test_fasttext_pool_single_load(monkeypatch):
@@ -14,10 +24,9 @@ def test_fasttext_pool_single_load(monkeypatch):
             return DummyModel()
 
     monkeypatch.setattr(text, "fasttext", DummyFastText())
-    monkeypatch.setattr(text.os, "cpu_count", lambda: 1)
     monkeypatch.setattr(text.os.path, "exists", lambda p: True)
-    text._FASTTEXT_POOL = None
-    text._FT_MODEL = None
+    if hasattr(text.get_fasttext, "_model"):
+        delattr(text.get_fasttext, "_model")
 
     lang1, p1 = text.detect_language("hello", model_path="lid.bin", return_prob=True)
     lang2, p2 = text.detect_language("world", model_path="lid.bin", return_prob=True)

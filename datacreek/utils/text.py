@@ -15,6 +15,7 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - optional dependency missing
     fasttext = None  # type: ignore
 
+FASTTEXT_BIN = os.getenv("FASTTEXT_MODEL", "lid.176.bin")
 _FT_MODEL = None
 _FASTTEXT_POOL: Queue | None = None
 
@@ -181,6 +182,15 @@ def _release_ft_model(model: "fasttext.FastText") -> None:  # type: ignore[name-
     _FASTTEXT_POOL.put(model)
 
 
+def get_fasttext() -> "fasttext.FastText":  # type: ignore[name-defined]
+    """Return a singleton fastText model for language detection."""
+    if fasttext is None:  # pragma: no cover - optional dependency
+        raise RuntimeError("fasttext is not installed")
+    if not hasattr(get_fasttext, "_model"):
+        get_fasttext._model = fasttext.load_model(FASTTEXT_BIN)
+    return get_fasttext._model
+
+
 def detect_language(
     text: str, model_path: str | None = None, *, return_prob: bool = False
 ) -> str | Tuple[str, float]:
@@ -193,11 +203,8 @@ def detect_language(
     if not os.path.exists(path):
         raise FileNotFoundError(f"fastText model not found: {path}")
 
-    model = _get_ft_model(path)
-    try:
-        labels, probs = model.predict(text.replace("\n", " "))
-    finally:
-        _release_ft_model(model)
+    model = get_fasttext()
+    labels, probs = model.predict(text.replace("\n", " "))
 
     if not labels:
         return ("und", 0.0) if return_prob else "und"

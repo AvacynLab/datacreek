@@ -347,6 +347,7 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
         stat = env.stat()
         info = env.info()
         size_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
+        soft = info["map_size"] > limit_mb * 1024**2 * 0.9
         cur = txn.cursor()
         n_deleted = 0
         prev_mb = size_mb
@@ -359,9 +360,10 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
                     key_bytes = cur.key()
                     cur.delete()
                     n_deleted += 1
-                    logging.getLogger(__name__).debug(
-                        "LMDB-EVICT %s", key_bytes.decode(errors="ignore")
-                    )
+                    if soft:
+                        logging.getLogger(__name__).debug(
+                            "LMDB-EVICT %s", key_bytes.decode(errors="ignore")
+                        )
                     try:
                         from ..analysis.monitoring import redis_evictions_l2_total
 

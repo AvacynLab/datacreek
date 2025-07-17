@@ -1712,11 +1712,11 @@ class KnowledgeGraph:
                 )
                 t1 = re.sub(r"\W+", "", texts[i]).lower()
                 t2 = re.sub(r"\W+", "", texts[j]).lower()
-                allowed = False
-                if langs[i] == langs[j]:
-                    allowed = True
-                elif probs[i] >= min_conf and probs[j] >= min_conf:
-                    allowed = True
+                allowed = (
+                    langs[i] == langs[j]
+                    and probs[i] >= min_conf
+                    and probs[j] >= min_conf
+                )
                 if allowed and (sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1):
                     self._merge_entity_nodes(eid1, entities[j])
                     used.add(j)
@@ -2207,7 +2207,12 @@ class KnowledgeGraph:
             from ..analysis.monitoring import ann_backend
 
             if ann_backend is not None:
-                ann_backend.labels(method).set(1)
+                if method == "faiss_gpu_ivfpq":
+                    ann_backend.set(3)
+                elif method == "hnsw":
+                    ann_backend.set(2)
+                else:
+                    ann_backend.set(1)
         except Exception:
             pass
 
