@@ -4,7 +4,9 @@ try:  # optional dependency
     import boto3
 except Exception:  # pragma: no cover - handled gracefully for tests
     boto3 = None
+import os
 from functools import lru_cache
+from pathlib import Path
 
 try:  # optional Redis dependency
     import redis
@@ -56,6 +58,8 @@ def get_neo4j_driver(config_path: str | None = None):
     driver = GraphDatabase.driver(uri, auth=(user, password))
     if os.getenv("NEO4J_INIT_INDEXES", "1") != "0":
         ensure_neo4j_indexes(driver)
+    if cfg.get("run_migrations"):
+        run_cypher_file(driver, "2025-07-haa_index.cypher")
     return driver
 
 
@@ -85,6 +89,22 @@ def ensure_neo4j_indexes(driver) -> None:
             except Exception:
                 # index creation is best-effort
                 continue
+
+
+def run_cypher_file(driver, filename: str) -> None:
+    """Execute Cypher statements from ``filename`` if it exists."""
+
+    path = Path(__file__).resolve().parent.parent / "migrations" / filename
+    if not path.exists():
+        return
+    with open(path) as fh, driver.session() as session:
+        for stmt in fh.read().split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                try:
+                    session.run(stmt)
+                except Exception:
+                    continue
 
 
 @lru_cache()

@@ -43,7 +43,6 @@ if Gauge is not None:
     ann_backend = Gauge(
         "ann_backend",
         "Approximate NN backend in use",
-        labelnames=("backend",),
     )
     redis_evictions_l2_total = Gauge(
         "redis_evictions_l2_total",

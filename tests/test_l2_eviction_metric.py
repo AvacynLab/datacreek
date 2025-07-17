@@ -26,3 +26,13 @@ def test_l2_eviction_metric(tmp_path, monkeypatch):
     mapper._l2_evict_once(env, limit_mb=1, ttl_h=24)
     assert called["n"] >= 1
     env.close()
+
+
+def test_l2_eviction_debug_log(tmp_path, caplog):
+    env = lmdb.open(str(tmp_path / "db"), map_size=1 << 20)
+    with env.begin(write=True) as txn:
+        txn.put(b"k0", pickle.dumps((time.time() - 3600 * 25, b"d")))
+    caplog.set_level("DEBUG")
+    mapper._l2_evict_once(env, limit_mb=1, ttl_h=24)
+    assert any("LMDB-EVICT" in r.message for r in caplog.records)
+    env.close()

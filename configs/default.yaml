@@ -22,6 +22,7 @@ sheaf:
   lam_thresh: 1e-3 # eigenvalue threshold
 spectral:
   eig_maxit: 2000
+  eig_timeout: 60
 embeddings:
   node2vec:
     p: 1.0
@@ -50,7 +51,7 @@ cache:
   l2_ttl_hours: 24
 
 ann:
-  backend: "flat"  # options: flat|hnsw|faiss_gpu_ivfpq
+  backend: faiss_gpu_ivfpq
 
 language:
   min_confidence: 0.7
@@ -60,3 +61,5 @@ compression:
 
 monitor:
   port: 8000       # Prometheus metrics port
+neo4j:
+  run_migrations: true

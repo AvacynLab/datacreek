@@ -4,7 +4,7 @@ groups:
       - alert: EigshTimeoutStorm
         expr: increase(eigsh_timeouts_total[30m]) > 5
         for: 10m
-      - alert: GPJitterRateHigh
+      - alert: SVGPJitterStorm
         expr: rate(gp_jitter_restarts_total[10m]) > 0.01
         for: 10m
         labels:

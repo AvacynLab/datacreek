@@ -221,6 +221,45 @@ def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:
     return float(v.dot(L.dot(v)) / denom)
 
 
+def eigsh_safe(L: np.ndarray) -> float:
+    """Return the dominant eigenvalue with a watchdog timeout.
+
+    The timeout duration is configurable via ``spectral.eig_timeout``. When the
+    underlying ``eigsh`` call exceeds this limit, the
+    ``eigsh_timeouts_total`` counter is incremented and a Lanczos fallback is
+    used instead.
+    """
+
+    from scipy.sparse.linalg import eigsh
+
+    from datacreek.utils.config import load_config
+
+    from .monitoring import eigsh_last_duration, eigsh_timeouts_total
+
+    cfg = load_config()
+    timeout_s = float(cfg.get("spectral", {}).get("eig_timeout", 60))
+
+    def _run() -> float:
+        return float(
+            eigsh(
+                L,
+                k=1,
+                which="LM",
+                tol=1e-3,
+                return_eigenvectors=False,
+            )[0]
+        )
+
+    wrapped = with_timeout(
+        timeout_s,
+        counter=eigsh_timeouts_total,
+        duration_gauge=eigsh_last_duration,
+        fallback=lambda *_a, **_k: lanczos_top_eigenvalue(L, k=5),
+    )(_run)
+
+    return wrapped()
+
+
 def eigsh_lmax_watchdog(L: np.ndarray, maxiter: int, timeout: float = 60.0) -> float:
     """Return ``eigsh`` largest eigenvalue with timeout and fallback."""
 
