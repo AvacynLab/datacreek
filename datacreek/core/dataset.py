@@ -355,13 +355,48 @@ class DatasetBuilder:
         card = {
             "sigma_db": float(meta.get("fractal_sigma", 0.0)),
             "H_wave": float(meta.get("gw_entropy", 0.0)),
-            "bias_W": float(meta.get("bias_W", 0.0)),
+            "bias_wasserstein": float(meta.get("bias_W", 0.0)),
             "dp_eps": float(dp_eps),
             "prune_ratio": float(prune_ratio),
             "cca_sha": cca_sha,
         }
         self._record_event("model_card", "Model card generated", **card)
         return card
+
+    @staticmethod
+    def model_card_html(card: Dict[str, float]) -> str:
+        """Return HTML representation using Jinja2 and Chart.js."""
+
+        try:
+            from jinja2 import Template
+        except Exception:  # pragma: no cover - optional dependency
+            return json.dumps(card, indent=2)
+
+        tmpl = Template(
+            """
+            <html>
+            <head>
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            </head>
+            <body>
+            <h1>Model Card</h1>
+            <ul>
+            {% for k, v in card.items() %}
+              <li>{{ k }}: {{ v }}</li>
+            {% endfor %}
+            </ul>
+            <canvas id="bias" width="200" height="100"></canvas>
+            <script>
+            new Chart(document.getElementById('bias'), {
+              type: 'bar',
+              data: {labels:['bias'], datasets:[{data:[{{ card.bias_wasserstein }}]}]}
+            });
+            </script>
+            </body>
+            </html>
+            """
+        )
+        return tmpl.render(card=card)
 
     @monitor_after()
     def add_document(
@@ -1484,6 +1519,13 @@ class DatasetBuilder:
         )
         return result
 
+    def haa_link_score(self, driver: "Driver", a_id: str, b_id: str) -> float | None:
+        """Wrapper for :meth:`KnowledgeGraph.haa_link_score`."""
+
+        result = self.graph.haa_link_score(driver, a_id, b_id)
+        self._record_event("haa_link_score", "Hyper-AA pair score fetched")
+        return result
+
     def compute_hyper_sagnn_embeddings(
         self,
         *,
@@ -1618,16 +1660,18 @@ class DatasetBuilder:
         )
 
     def build_faiss_index(
-        self, node_attr: str = "embedding", *, method: str = "flat"
+        self, node_attr: str = "embedding", *, method: str | None = None
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.build_faiss_index`."""
 
-        self.graph.build_faiss_index(node_attr=node_attr, method=method)
+        cfg = load_config()
+        method_val = method or cfg.get("ann", {}).get("backend", "flat")
+        self.graph.build_faiss_index(node_attr=node_attr, method=method_val)
         self._record_event(
             "build_faiss_index",
             "FAISS index built",
             node_attr=node_attr,
-            method=method,
+            method=method_val,
         )
 
     def search_faiss(

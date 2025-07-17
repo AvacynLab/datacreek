@@ -61,6 +61,7 @@ def test_cache_l1_ttl_adjustment(monkeypatch):
     mapper._redis_hits = 9
     mapper._redis_misses = 1
     mapper._last_ttl_eval = 0
+    mapper._hit_ema = 0.0
 
     gauge_val = {}
 
@@ -79,6 +80,7 @@ def test_cache_l1_ttl_adjustment(monkeypatch):
     mapper._redis_hits = 0
     mapper._redis_misses = 10
     mapper._last_ttl_eval = 0
+    mapper._hit_ema = 0.0
     monkeypatch.setattr(mapper.time, "time", lambda: 302)
 
     mapper._adjust_ttl(client, None)

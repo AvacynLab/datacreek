@@ -32,13 +32,26 @@ if Gauge is not None:
     )
     prune_reverts_total = Counter("prune_reverts_total", "FractalNet pruning rollbacks")
     redis_hit_ratio = Gauge("redis_hit_ratio", "Redis L1 hit ratio")
-    eigsh_timeouts_total = Gauge(
+    eigsh_timeouts_total = Counter(
         "eigsh_timeouts_total",
         "Number of eigsh timeouts triggering Lanczos fallback",
+    )
+    eigsh_last_duration = Gauge(
+        "eigsh_last_runtime_seconds",
+        "Duration of the last eigsh call in seconds",
+    )
+    ann_backend = Gauge(
+        "ann_backend",
+        "Approximate NN backend in use",
+        labelnames=("backend",),
     )
     redis_evictions_l2_total = Gauge(
         "redis_evictions_l2_total",
         "LMDB L2 evictions performed",
+    )
+    lang_mismatch_total = Counter(
+        "lang_mismatch_total",
+        "Cross-language merge attempts rejected",
     )
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
@@ -52,7 +65,10 @@ else:  # pragma: no cover - optional dependency missing
     prune_reverts_total = None  # type: ignore
     redis_hit_ratio = None  # type: ignore
     eigsh_timeouts_total = None  # type: ignore
+    eigsh_last_duration = None  # type: ignore
     redis_evictions_l2_total = None  # type: ignore
+    lang_mismatch_total = None  # type: ignore
+    ann_backend = None  # type: ignore
     j_cost = None
 
 
@@ -70,7 +86,10 @@ _METRICS = {
     "prune_reverts_total": prune_reverts_total,
     "redis_hit_ratio": redis_hit_ratio,
     "eigsh_timeouts_total": eigsh_timeouts_total,
+    "eigsh_last_duration": eigsh_last_duration,
     "redis_evictions_l2_total": redis_evictions_l2_total,
+    "ann_backend": ann_backend,
+    "lang_mismatch_total": lang_mismatch_total,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

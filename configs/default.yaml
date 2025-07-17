@@ -49,6 +49,12 @@ cache:
   l2_max_size_mb: 2048
   l2_ttl_hours: 24
 
+ann:
+  backend: "flat"  # options: flat|hnsw|faiss_gpu_ivfpq
+
+language:
+  min_confidence: 0.7
+
 compression:
   magnitude: 0.03  # pruning threshold
 
