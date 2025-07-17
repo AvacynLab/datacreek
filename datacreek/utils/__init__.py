@@ -1,5 +1,6 @@
 """Utility helpers for datacreek."""
 
+from .cache import cache_l1
 from .chunking import chunk_by_sentences, chunk_by_tokens
 from .config import (
     get_curate_config,
@@ -87,4 +88,5 @@ __all__ = [
     "encrypt_pii_fields",
     "decrypt_pii_fields",
     "push_metrics",
+    "cache_l1",
 ]

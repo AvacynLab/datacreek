@@ -71,6 +71,14 @@ try:
 except Exception:  # pragma: no cover - optional
     lmdb = None  # type: ignore
 
+from ..utils.cache import cache_l1
+from ..utils.config import load_config
+
+cfg = load_config()
+cache_cfg = cfg.get("cache", {})
+_redis_ttl = int(cache_cfg.get("l1_ttl_init", 3600))
+_ttl_min = int(cache_cfg.get("l1_ttl_min", 300))
+_ttl_max = int(cache_cfg.get("l1_ttl_max", 7200))
 
 _evict_thread: threading.Thread | None = None
 _evict_stop = threading.Event()
@@ -78,7 +86,6 @@ _evict_stop = threading.Event()
 # Adaptive TTL parameters for Redis L1 cache
 _redis_hits = 0
 _redis_misses = 0
-_redis_ttl = 3600
 _last_ttl_eval = time.time()
 
 
@@ -90,7 +97,7 @@ def _adjust_ttl(client: Optional["redis.Redis"]) -> None:
     if now - _last_ttl_eval < 300:
         return
     total = _redis_hits + _redis_misses
-    ratio = _redis_hits / total if total else 0.0
+    ratio = _redis_hits / max(1, total)
     try:
         from .monitoring import redis_hit_ratio as _hit_gauge
 
@@ -104,9 +111,9 @@ def _adjust_ttl(client: Optional["redis.Redis"]) -> None:
         except Exception:
             pass
     if ratio < 0.2:
-        _redis_ttl = max(60, int(_redis_ttl * 0.5))
+        _redis_ttl = max(int(_redis_ttl * 0.5), _ttl_min)
     elif ratio > 0.8:
-        _redis_ttl = min(int(_redis_ttl * 1.2), 7200)
+        _redis_ttl = min(int(_redis_ttl * 1.2), _ttl_max)
     _redis_hits = 0
     _redis_misses = 0
     _last_ttl_eval = now
@@ -202,6 +209,7 @@ def _cache_put(
         pass
 
 
+@cache_l1
 def _cache_get(
     key: str,
     *,
@@ -219,7 +227,7 @@ def _cache_get(
             redis_client = None
     if redis_client is not None:
         try:
-            blob = redis_client.hget("nerve_hash", key)
+            blob = redis_client.get(key)
         except Exception:
             blob = None
     if blob is not None:

@@ -71,6 +71,11 @@ def ensure_neo4j_indexes(driver) -> None:
         "CREATE INDEX fact_id IF NOT EXISTS FOR (n:Fact) ON (n.id)",
         "CREATE INDEX dataset_nodes IF NOT EXISTS FOR (n) ON (n.dataset)",
         "CREATE INDEX dataset_rels IF NOT EXISTS FOR ()-[r]-() ON (r.dataset)",
+        (
+            "CREATE INDEX haa_pair IF NOT EXISTS "
+            "FOR ()-[r:SUGGESTED_HYPER_AA]-() "
+            "ON (r.startNodeId, r.endNodeId)"
+        ),
     ]
 
     with driver.session() as session:

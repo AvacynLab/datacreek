@@ -1,0 +1,45 @@
+"""L1 cache utilities with Prometheus counters."""
+
+from __future__ import annotations
+
+from functools import wraps
+from typing import Callable, Optional
+
+try:  # optional dependency
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - optional
+    redis = None  # type: ignore
+
+from .config import load_config
+
+cfg = load_config()
+cache_cfg = cfg.get("cache", {})
+
+
+def cache_l1(func: Callable) -> Callable:
+    """Decorator recording Redis L1 hits/misses before calling ``func``."""
+
+    @wraps(func)
+    def wrapper(
+        key: str,
+        *args,
+        redis_client: Optional["redis.Redis"] = None,
+        **kwargs,
+    ):
+        client = redis_client
+        if client is None and redis is not None:
+            try:
+                client = redis.Redis()
+            except Exception:  # pragma: no cover - connection errors
+                client = None
+        hit = False
+        if client is not None:
+            try:
+                hit = bool(client.exists(key))
+                client.incr("hits" if hit else "miss")
+            except Exception:  # pragma: no cover - redis issues
+                pass
+        result = func(key, *args, redis_client=client, **kwargs)
+        return result
+
+    return wrapper
