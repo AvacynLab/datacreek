@@ -346,6 +346,23 @@ class DatasetBuilder:
             except Exception:
                 pass
 
+    def generate_model_card(
+        self, prune_ratio: float, cca_sha: str, dp_eps: int = 2
+    ) -> Dict[str, float]:
+        """Return model card metrics as a dictionary."""
+
+        meta = self.graph.graph.graph
+        card = {
+            "sigma_db": float(meta.get("fractal_sigma", 0.0)),
+            "H_wave": float(meta.get("gw_entropy", 0.0)),
+            "bias_W": float(meta.get("bias_W", 0.0)),
+            "dp_eps": float(dp_eps),
+            "prune_ratio": float(prune_ratio),
+            "cca_sha": cca_sha,
+        }
+        self._record_event("model_card", "Model card generated", **card)
+        return card
+
     @monitor_after()
     def add_document(
         self,

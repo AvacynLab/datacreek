@@ -17,7 +17,7 @@ cache_cfg = cfg.get("cache", {})
 
 
 def cache_l1(func: Callable) -> Callable:
-    """Decorator recording Redis L1 hits/misses before calling ``func``."""
+    """Decorator injecting a default Redis client if available."""
 
     @wraps(func)
     def wrapper(
@@ -32,13 +32,6 @@ def cache_l1(func: Callable) -> Callable:
                 client = redis.Redis()
             except Exception:  # pragma: no cover - connection errors
                 client = None
-        hit = False
-        if client is not None:
-            try:
-                hit = bool(client.exists(key))
-                client.incr("hits" if hit else "miss")
-            except Exception:  # pragma: no cover - redis issues
-                pass
         result = func(key, *args, redis_client=client, **kwargs)
         return result
 

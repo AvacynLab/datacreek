@@ -6,7 +6,15 @@
 # Text processing utilities
 import json
 import re
+import os
 from typing import Any, Dict, List, Optional
+
+try:  # optional dependency
+    import fasttext
+except Exception:  # pragma: no cover - optional dependency missing
+    fasttext = None  # type: ignore
+
+_FT_MODEL = None
 
 try:  # optional dependency
     from pint import UnitRegistry as _UnitRegistry
@@ -139,3 +147,22 @@ def clean_text(text: str) -> str:
         cleaned = re.sub(r"\s+", " ", text).strip()
 
     return normalize_units(cleaned)
+
+
+def detect_language(text: str, model_path: str | None = None) -> str:
+    """Return ISO-639 code of ``text`` using fastText if available."""
+
+    if fasttext is None:
+        return "und"
+
+    global _FT_MODEL
+    if _FT_MODEL is None:
+        path = model_path or os.getenv("FASTTEXT_MODEL", "lid.176.bin")
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"fastText model not found: {path}")
+        _FT_MODEL = fasttext.load_model(path)
+
+    labels, _ = _FT_MODEL.predict(text.replace("\n", " "))
+    if not labels:
+        return "und"
+    return labels[0].replace("__label__", "")

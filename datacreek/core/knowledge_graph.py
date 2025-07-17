@@ -244,7 +244,17 @@ class KnowledgeGraph:
 
         if self.graph.has_node(entity_id):
             raise ValueError(f"Entity already exists: {entity_id}")
-        self.graph.add_node(entity_id, type="entity", text=text, source=source)
+
+        try:
+            from ..utils.text import detect_language
+
+            lang = detect_language(text)
+        except Exception:  # pragma: no cover - optional dependency
+            lang = "und"
+
+        self.graph.add_node(
+            entity_id, type="entity", text=text, source=source, lang=lang
+        )
         if text:
             self.index.add(entity_id, text)
 
@@ -572,6 +582,14 @@ class KnowledgeGraph:
         sequence = len(atoms)
         if page is None:
             page = 1
+
+        if lang is None:
+            try:
+                from ..utils.text import detect_language
+
+                lang = detect_language(text)
+            except Exception:  # pragma: no cover - optional dependency
+                lang = "und"
 
         self.graph.add_node(
             atom_id,
@@ -1633,6 +1651,18 @@ class KnowledgeGraph:
             n for n, d in self.graph.nodes(data=True) if d.get("type") == "entity"
         ]
         texts = [self.graph.nodes[e].get("text", "") for e in entities]
+        langs = []
+        for eid, txt in zip(entities, texts):
+            lang = self.graph.nodes[eid].get("lang")
+            if not lang:
+                try:
+                    from ..utils.text import detect_language
+
+                    lang = detect_language(txt)
+                except Exception:  # pragma: no cover - optional
+                    lang = "und"
+                self.graph.nodes[eid]["lang"] = lang
+            langs.append(lang)
         if len(entities) < 2:
             return 0
 
@@ -1677,7 +1707,10 @@ class KnowledgeGraph:
                 )
                 t1 = re.sub(r"\W+", "", texts[i]).lower()
                 t2 = re.sub(r"\W+", "", texts[j]).lower()
-                if sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1:
+                if (
+                    langs[i] == langs[j]
+                    and (sim >= threshold or t1 == t2 or t1 in t2 or t2 in t1)
+                ):
                     self._merge_entity_nodes(eid1, entities[j])
                     used.add(j)
                     merged += 1
