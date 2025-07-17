@@ -373,12 +373,14 @@ def svgp_ei_propose(
     expected improvement over the best observed score is returned.
     """
 
+    import logging
     from math import inf
 
     from scipy.stats import norm
     from sklearn.gaussian_process import GaussianProcessRegressor
     from sklearn.gaussian_process.kernels import RBF
     from sklearn.gaussian_process.kernels import ConstantKernel as C
+    from sklearn.gaussian_process.kernels import Matern
 
     X = np.asarray(list(params), dtype=float)
     y = np.asarray(list(scores), dtype=float)
@@ -388,7 +390,19 @@ def svgp_ei_propose(
     X_sub = X[idx]
     y_sub = y[idx]
 
-    kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=1.0)
+    grads = []
+    pairs = list(zip(X_sub, y_sub))
+    for (p1, s1), (p2, s2) in zip(pairs[:-1], pairs[1:]):
+        dist = np.linalg.norm(np.asarray(p2) - np.asarray(p1))
+        if dist == 0:
+            continue
+        grads.append(abs(s2 - s1) / dist)
+    var_grad = np.var(grads[-10:]) if len(grads) >= 2 else 0.0
+    if var_grad > 0.5:
+        kernel = C(1.0, (1e-3, 1e3)) * Matern(nu=1.5)
+        logging.getLogger(__name__).info("dynamic_kernel=matern var=%.3f", var_grad)
+    else:
+        kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=1.0)
     gp = GaussianProcessRegressor(kernel=kernel, alpha=1e-6, normalize_y=True)
     gp.fit(X_sub, y_sub)
 

@@ -55,6 +55,7 @@ def inverse_mapper(nerve: nx.Graph, cover: Iterable[Set[object]]) -> nx.Graph:
     return g
 
 
+import os
 import pickle
 import threading
 import time
@@ -89,8 +90,8 @@ _redis_misses = 0
 _last_ttl_eval = time.time()
 
 
-def _adjust_ttl(client: Optional["redis.Redis"]) -> None:
-    """Adjust Redis TTL based on hit ratio every 5 minutes."""
+def _adjust_ttl(client: Optional["redis.Redis"], key: str | None = None) -> None:
+    """Adjust Redis TTL based on hit ratio and CPU load every 5 minutes."""
 
     global _redis_hits, _redis_misses, _redis_ttl, _last_ttl_eval
     now = time.time()
@@ -114,6 +115,17 @@ def _adjust_ttl(client: Optional["redis.Redis"]) -> None:
         _redis_ttl = max(int(_redis_ttl * 0.5), _ttl_min)
     elif ratio > 0.8:
         _redis_ttl = min(int(_redis_ttl * 1.2), _ttl_max)
+    try:
+        load = os.getloadavg()[0] / max(1, os.cpu_count() or 1)
+        if load > 0.7:
+            _redis_ttl = max(int(_redis_ttl * 1.5), _ttl_max)
+    except Exception:
+        pass
+    if key and client is not None:
+        try:
+            client.expire(key, _redis_ttl)
+        except Exception:
+            pass
     _redis_hits = 0
     _redis_misses = 0
     _last_ttl_eval = now
@@ -150,6 +162,7 @@ def _cache_put(
     if redis_client is not None:
         try:
             redis_client.setex(key, ttl_val, data)
+            redis_client.incr("miss")
         except Exception:  # pragma: no cover - network errors
             pass
     if lmdb is not None:
@@ -232,9 +245,14 @@ def _cache_get(
             blob = None
     if blob is not None:
         _redis_hits += 1
+        if redis_client is not None:
+            try:
+                redis_client.incr("hits")
+            except Exception:
+                pass
     else:
         _redis_misses += 1
-    _adjust_ttl(redis_client)
+    _adjust_ttl(redis_client, key)
     if blob is None and lmdb is not None:
         try:
             from ..utils.config import load_config
@@ -327,6 +345,13 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
                 if age_h > ttl_h or size_mb > limit_mb:
                     cur.delete()
                     n_deleted += 1
+                    try:
+                        from ..analysis.monitoring import redis_evictions_l2_total
+
+                        if redis_evictions_l2_total is not None:
+                            redis_evictions_l2_total.inc()
+                    except Exception:
+                        pass
                 if not cur.next():
                     break
                 stat = env.stat()

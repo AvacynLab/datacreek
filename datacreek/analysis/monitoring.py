@@ -32,6 +32,14 @@ if Gauge is not None:
     )
     prune_reverts_total = Counter("prune_reverts_total", "FractalNet pruning rollbacks")
     redis_hit_ratio = Gauge("redis_hit_ratio", "Redis L1 hit ratio")
+    eigsh_timeouts_total = Gauge(
+        "eigsh_timeouts_total",
+        "Number of eigsh timeouts triggering Lanczos fallback",
+    )
+    redis_evictions_l2_total = Gauge(
+        "redis_evictions_l2_total",
+        "LMDB L2 evictions performed",
+    )
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
     tpl_w1_g = None
@@ -43,6 +51,8 @@ else:  # pragma: no cover - optional dependency missing
     gp_jitter_restarts_total = None  # type: ignore
     prune_reverts_total = None  # type: ignore
     redis_hit_ratio = None  # type: ignore
+    eigsh_timeouts_total = None  # type: ignore
+    redis_evictions_l2_total = None  # type: ignore
     j_cost = None
 
 
@@ -59,6 +69,8 @@ _METRICS = {
     "gp_jitter_restarts_total": gp_jitter_restarts_total,
     "prune_reverts_total": prune_reverts_total,
     "redis_hit_ratio": redis_hit_ratio,
+    "eigsh_timeouts_total": eigsh_timeouts_total,
+    "redis_evictions_l2_total": redis_evictions_l2_total,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

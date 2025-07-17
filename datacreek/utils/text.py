@@ -5,8 +5,16 @@
 # the root directory of this source tree.
 # Text processing utilities
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
+
+try:  # optional dependency
+    import fasttext
+except Exception:  # pragma: no cover - optional dependency missing
+    fasttext = None  # type: ignore
+
+_FT_MODEL = None
 
 try:  # optional dependency
     from pint import UnitRegistry as _UnitRegistry
@@ -42,7 +50,9 @@ def split_into_chunks(
     if method == "sliding":
         return sliding_window_chunks(text, chunk_size, overlap)
     if method == "semantic":
-        return semantic_chunk_split(text, max_tokens=chunk_size, similarity_drop=similarity_drop)
+        return semantic_chunk_split(
+            text, max_tokens=chunk_size, similarity_drop=similarity_drop
+        )
     if method == "contextual":
         return contextual_chunk_split(text, max_tokens=chunk_size)
     if method == "summary":
@@ -102,7 +112,12 @@ def extract_json_from_text(text: str) -> Dict[str, Any]:
     text = text.strip()
 
     # Try to parse as complete JSON
-    if text.startswith("{") and text.endswith("}") or text.startswith("[") and text.endswith("]"):
+    if (
+        text.startswith("{")
+        and text.endswith("}")
+        or text.startswith("[")
+        and text.endswith("]")
+    ):
         try:
             return json.loads(text)
         except json.JSONDecodeError:
@@ -139,3 +154,22 @@ def clean_text(text: str) -> str:
         cleaned = re.sub(r"\s+", " ", text).strip()
 
     return normalize_units(cleaned)
+
+
+def detect_language(text: str, model_path: str | None = None) -> str:
+    """Return ISO-639 code of ``text`` using fastText if available."""
+
+    if fasttext is None:
+        return "und"
+
+    global _FT_MODEL
+    if _FT_MODEL is None:
+        path = model_path or os.getenv("FASTTEXT_MODEL", "lid.176.bin")
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"fastText model not found: {path}")
+        _FT_MODEL = fasttext.load_model(path)
+
+    labels, _ = _FT_MODEL.predict(text.replace("\n", " "))
+    if not labels:
+        return "und"
+    return labels[0].replace("__label__", "")
