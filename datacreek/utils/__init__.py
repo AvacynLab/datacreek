@@ -1,5 +1,6 @@
 """Utility helpers for datacreek."""
 
+from .cache import cache_l1
 from .chunking import chunk_by_sentences, chunk_by_tokens
 from .config import (
     get_curate_config,
@@ -28,7 +29,6 @@ from .llm_processing import (
 )
 from .metrics import push_metrics
 from .progress import create_progress, progress_context
-from .cache import cache_l1
 from .redis_helpers import decode_hash
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
 from .toolformer import execute_tool_calls, insert_tool_calls
