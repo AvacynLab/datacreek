@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import pathlib
+import pickle
+import time
 from typing import Sequence
 
 import numpy as np
 from skopt import Optimizer
-import time
-import pickle
-import pathlib
 
 try:
     import faiss  # type: ignore

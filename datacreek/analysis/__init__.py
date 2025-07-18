@@ -164,7 +164,8 @@ def __getattr__(name: str):
     }:
         from . import index as _idx
         from .node2vec_tuning import autotune_node2vec as _an2
-        from .nprobe_tuning import autotune_nprobe as _anp, profile_nprobe as _pn
+        from .nprobe_tuning import autotune_nprobe as _anp
+        from .nprobe_tuning import profile_nprobe as _pn
 
         return {
             "search_with_fallback": _idx.search_with_fallback,
@@ -344,12 +345,12 @@ def __getattr__(name: str):
         "explain_to_svg",
     }:
         from .chebyshev_diag import chebyshev_diag_hutchpp as _cdh
+        from .explain_viz import explain_to_svg as _ets
         from .graphwave_bandwidth import estimate_lambda_max as _el
         from .graphwave_bandwidth import update_graphwave_bandwidth as _ugb
         from .graphwave_cuda import chebyshev_heat_kernel_gpu as _gwk
         from .graphwave_cuda import graphwave_embedding_gpu as _gwe
         from .hybrid_ann import search_hnsw_pq as _hpq
-        from .explain_viz import explain_to_svg as _ets
 
         return {
             "estimate_lambda_max": _el,

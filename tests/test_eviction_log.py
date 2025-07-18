@@ -1,9 +1,9 @@
+import json
+import logging
 import pickle
 import time
 
 import lmdb
-import json
-import logging
 
 from datacreek.analysis import mapper
 from datacreek.utils.evict_log import clear_eviction_logs, evict_logs, log_eviction

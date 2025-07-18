@@ -799,10 +799,8 @@ def __getattr__(name: str):
             return _anp
         return _DB.autotune_step
     if name in {"export_embeddings_pg", "query_topk_pg"}:
-        from .plugins.pgvector_export import (
-            export_embeddings_pg as _eep,
-            query_topk_pg as _qt,
-        )
+        from .plugins.pgvector_export import export_embeddings_pg as _eep
+        from .plugins.pgvector_export import query_topk_pg as _qt
 
         return {"export_embeddings_pg": _eep, "query_topk_pg": _qt}[name]
     if name in {"propose_merge_split", "record_feedback", "fine_tune_from_feedback"}:

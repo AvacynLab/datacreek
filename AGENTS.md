@@ -400,4 +400,5 @@ Taux rejet $\approx \frac{(1-ρ)ρ^K}{1-ρ^{K+1}}$ où $ρ = λ/μ$; choisir $K$
 - [ ] 20. Bench throughput
 
 ## History
+- Fixed imports after precommit
 - Reset tasks and ran formatting hooks
