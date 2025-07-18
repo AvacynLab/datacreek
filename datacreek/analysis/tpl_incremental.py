@@ -71,7 +71,9 @@ def tpl_incremental(
             diags[node] = np.asarray(data, dtype=float)
 
     if diags:
-        global_diag = np.concatenate(list(diags.values())) if diags else np.empty((0, 2))
+        global_diag = (
+            np.concatenate(list(diags.values())) if diags else np.empty((0, 2))
+        )
         graph.graph["tpl_global"] = global_diag.tolist()
 
     return diags

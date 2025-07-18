@@ -1,7 +1,9 @@
 import json
+
 import fakeredis
 import pytest
 from werkzeug.security import generate_password_hash
+
 import datacreek.db as db
 from datacreek.core.dataset import DatasetBuilder, DatasetType
 from datacreek.server import app as app_module
@@ -54,7 +56,11 @@ def test_api_save_dataset_neo4j_circuit_open(monkeypatch):
 
     # first call fails, opening circuit
     monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: FailDriver())
-    monkeypatch.setattr(ds.graph.__class__, "to_neo4j", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")))
+    monkeypatch.setattr(
+        ds.graph.__class__,
+        "to_neo4j",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")),
+    )
     with pytest.raises(RuntimeError):
         dataset_save_neo4j_task.delay("demo").get()
     assert neo4j_breaker.current_state == "open"

@@ -4,12 +4,11 @@ from typing import Any, Literal
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Query
 from fastapi.responses import FileResponse, Response
-
-from datacreek.security.dp_middleware import DPBudgetMiddleware
 from sqlalchemy.orm import Session
 
 from datacreek.backends import get_neo4j_driver, get_redis_client
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN, DatasetBuilder
+from datacreek.security.dp_middleware import DPBudgetMiddleware
 
 try:  # optional heavy imports
     from datacreek.db import Dataset, SessionLocal, User, init_db
@@ -88,8 +87,8 @@ except Exception:  # pragma: no cover - simplify tests
     ) = dataset_generate_task = dataset_ingest_task = generate_task = ingest_task = (
         save_task
     ) = None
-from datacreek.utils import decode_hash
 from datacreek.analysis import explain_to_svg
+from datacreek.utils import decode_hash
 
 init_db()
 app = FastAPI(title="Datacreek API")
@@ -736,7 +735,9 @@ def get_dp_budget(current_user: User = Depends(get_current_user)) -> dict:
     summary="Explain node neighborhood with attention heatmap",
 )
 def explain_node_route(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     node_id: str = Path(...),
     hops: int = Query(3, ge=1, le=5),
     fmt: Literal["json", "svg", "png"] = Query("json"),

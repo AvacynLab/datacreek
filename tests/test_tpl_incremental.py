@@ -47,7 +47,9 @@ def test_tpl_incremental_global_diag():
     full = []
     for n in g.nodes():
         full.extend(g.nodes[n]["tpl_diag"])
-    assert np.allclose(np.asarray(full).reshape(-1, 2), np.asarray(g.graph["tpl_global"]))
+    assert np.allclose(
+        np.asarray(full).reshape(-1, 2), np.asarray(g.graph["tpl_global"])
+    )
 
 
 @pytest.mark.skipif(not _gudhi_available(), reason="gudhi required")

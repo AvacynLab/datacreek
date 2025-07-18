@@ -7,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from datacreek.db import SessionLocal, TenantPrivacy
+
 from .tenant_privacy import can_consume_epsilon
 
 

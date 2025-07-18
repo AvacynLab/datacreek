@@ -113,7 +113,11 @@ class TTLManager:
             return
         assert self._stop is not None
         self.run_once()  # flush last update
-        if self._event_loop is not None and self._event_loop.is_running() and self._event_loop is not asyncio.get_event_loop():
+        if (
+            self._event_loop is not None
+            and self._event_loop.is_running()
+            and self._event_loop is not asyncio.get_event_loop()
+        ):
             self._event_loop.call_soon_threadsafe(self._stop.set)
             self._event_loop.call_soon_threadsafe(self._task.cancel)
             self._event_loop.call_soon_threadsafe(self._event_loop.stop)

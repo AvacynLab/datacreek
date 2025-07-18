@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Dict, Iterable, Sequence
-
 import hashlib
 import json
-import time
 import pathlib
+import time
+from typing import Dict, Iterable, Sequence
 
 import numpy as np
 from skopt import Optimizer
@@ -13,9 +12,7 @@ from skopt import Optimizer
 from .index import recall10
 
 ARTIFACT_PATH = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "benchmarks"
-    / "node2vec_last.json"
+    pathlib.Path(__file__).resolve().parents[2] / "benchmarks" / "node2vec_last.json"
 )
 
 

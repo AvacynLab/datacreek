@@ -97,7 +97,7 @@ def chebyshev_diag_hutchpp(
         qtz = Q.T @ z
         correction = Q @ (B @ qtz)
         r = Az - correction
-        diag_res += (z[:, 0] * r[:, 0])
+        diag_res += z[:, 0] * r[:, 0]
     diag_res /= s2
 
     return diag_lr + diag_res

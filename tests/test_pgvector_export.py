@@ -1,10 +1,10 @@
-import time
-from pathlib import Path
 import importlib.abc
 import importlib.util
-import pytest
+import time
+from pathlib import Path
 
 import networkx as nx
+import pytest
 
 spec = importlib.util.spec_from_file_location(
     "datacreek.plugins.pgvector_export",
@@ -95,9 +95,9 @@ def test_query_topk_sql():
     vec = [0.1, 0.2]
     pgvector_export.query_topk_pg(conn, table="emb", vec=vec, k=3)
     assert any("SELECT node_id, space FROM emb" in sql for sql, _ in conn.cur.calls)
+
+
 @pytest.mark.faiss_gpu
-
-
 def test_recall_vs_faiss():
     faiss = pytest.importorskip("faiss")
     rng = np.random.default_rng(0)
@@ -111,5 +111,7 @@ def test_recall_vs_faiss():
         sims = xb @ q
         ids = np.argsort(sims)[::-1][:5]
         results.append(ids)
-    recall = sum(len(set(r).intersection(g)) for r, g in zip(results, gt)) / (len(xq) * 5)
+    recall = sum(len(set(r).intersection(g)) for r, g in zip(results, gt)) / (
+        len(xq) * 5
+    )
     assert recall == 1.0

@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parents[1]
 
 backend_stub = ModuleType("datacreek.backends")
 
+
 class DummySession:
     def __init__(self):
         self.queries = []
@@ -22,12 +23,14 @@ class DummySession:
     def __exit__(self, exc_type, exc, tb):
         pass
 
+
 class DummyDriver:
     def __init__(self):
         self.session_obj = DummySession()
 
     def session(self):
         return self.session_obj
+
 
 backend_stub.last_driver = DummyDriver()
 backend_stub.get_neo4j_driver = lambda: backend_stub.last_driver

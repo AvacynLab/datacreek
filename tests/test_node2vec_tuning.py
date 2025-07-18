@@ -1,7 +1,8 @@
 import json
-import networkx as nx
-import types
 import time
+import types
+
+import networkx as nx
 
 from datacreek.analysis import node2vec_tuning
 

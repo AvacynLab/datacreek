@@ -81,7 +81,10 @@ def test_queue_fill_ratio_metric(monkeypatch, reload_backpressure):
         raising=False,
     )
     import datacreek.analysis.monitoring as mon
-    monkeypatch.setitem(mon._METRICS, "ingest_queue_fill_ratio", mon.ingest_queue_fill_ratio)
+
+    monkeypatch.setitem(
+        mon._METRICS, "ingest_queue_fill_ratio", mon.ingest_queue_fill_ratio
+    )
 
     assert bp.acquire_slot()
     assert vals[-1] == pytest.approx(1.0)
@@ -94,7 +97,9 @@ def test_acquire_slot_with_backoff_spool(tmp_path, reload_backpressure):
     spool = tmp_path / "spool"
     bp.acquire_slot()
     data = {"name": "demo", "path": "x"}
-    assert not bp.acquire_slot_with_backoff(1, 0.01, spool_dir=str(spool), spool_data=data)
+    assert not bp.acquire_slot_with_backoff(
+        1, 0.01, spool_dir=str(spool), spool_data=data
+    )
     files = list(spool.iterdir())
     assert len(files) == 1
     import json

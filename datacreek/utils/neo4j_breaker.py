@@ -1,4 +1,5 @@
 import os
+
 import pybreaker
 
 __all__ = ["neo4j_breaker", "CircuitBreakerError", "reconfigure"]

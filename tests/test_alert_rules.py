@@ -1,5 +1,5 @@
-import yaml
 import pytest
+import yaml
 
 
 def test_jitter_alert_rule():

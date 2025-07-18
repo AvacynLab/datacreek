@@ -32,7 +32,7 @@ def chebyshev_heat_kernel_gpu_batch(
     reused for every ``t`` which limits the number of sparse matrix-vector
     multiplications. This is more efficient when many diffusion scales are
     evaluated.
-    
+
     Parameters
     ----------
     L:

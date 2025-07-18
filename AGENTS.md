@@ -378,26 +378,26 @@ Taux rejet $\approx \frac{(1-ρ)ρ^K}{1-ρ^{K+1}}$ où $ρ = λ/μ$; choisir $K$
 ---
 
 ## Checklist
-- [x] 1. Hutch++ diag
-- [x] 2. Poincaré recentrage
-- [x] 3. Node2Vec autotune
-- [x] 4. Whisper batch fallback
-- [x] 5. Export métrique LMDB
-- [x] 6. TTL PID config
-- [x] 7. Alert rules
-- [x] 8. HAA dedup migration
-- [x] 9. FAISS nprobe tuning
-- [x] 10. TTL Manager shutdown
-- [x] 11. Budgets DP gateway
-- [x] 12. Back-pressure ingestion
-- [x] 13. GPU GraphWave
-- [x] 14. TPL incrémental
-- [x] 15. Endpoint Explainability
-- [x] 16. Hybrid ANN
-- [x] 17. Plugin pgvector
-- [x] 18. CI multi-env
-- [x] 19. Observabilité cache
-- [x] 20. Bench throughput
+- [ ] 1. Hutch++ diag
+- [ ] 2. Poincaré recentrage
+- [ ] 3. Node2Vec autotune
+- [ ] 4. Whisper batch fallback
+- [ ] 5. Export métrique LMDB
+- [ ] 6. TTL PID config
+- [ ] 7. Alert rules
+- [ ] 8. HAA dedup migration
+- [ ] 9. FAISS nprobe tuning
+- [ ] 10. TTL Manager shutdown
+- [ ] 11. Budgets DP gateway
+- [ ] 12. Back-pressure ingestion
+- [ ] 13. GPU GraphWave
+- [ ] 14. TPL incrémental
+- [ ] 15. Endpoint Explainability
+- [ ] 16. Hybrid ANN
+- [ ] 17. Plugin pgvector
+- [ ] 18. CI multi-env
+- [ ] 19. Observabilité cache
+- [ ] 20. Bench throughput
 
 ## History
-- Implemented Prometheus metrics for LMDB eviction causes with counter and gauge, updated logging and tests.
+- Reset tasks and ran formatting hooks

@@ -102,7 +102,10 @@ def transcribe_audio_batch(
             except Exception as exc:  # pragma: no cover - runtime error
                 if device == "cuda" and "out of memory" in str(exc).lower():
                     logging.getLogger(__name__).warning("whisper OOM, fallback CPU")
-                    from datacreek.analysis.monitoring import whisper_fallback_total, update_metric
+                    from datacreek.analysis.monitoring import (
+                        update_metric,
+                        whisper_fallback_total,
+                    )
 
                     if whisper_fallback_total is not None:
                         try:
@@ -142,4 +145,3 @@ def transcribe_audio_batch(
         rate,
     )
     return transcripts
-

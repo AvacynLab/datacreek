@@ -84,8 +84,8 @@ def test_budget_rejects_excess():
 
 
 def test_budget_reset():
-    from datacreek.security.tenant_privacy import reset_all
     from datacreek.db import SessionLocal
+    from datacreek.security.tenant_privacy import reset_all
 
     with SessionLocal() as session:
         reset_all(session)
@@ -98,8 +98,8 @@ def test_budget_reset():
 def test_get_budget_endpoint():
     """Verify that the user can query their remaining budget."""
 
-    from datacreek.security.tenant_privacy import reset_all
     from datacreek.db import SessionLocal
+    from datacreek.security.tenant_privacy import reset_all
 
     with SessionLocal() as session:
         reset_all(session)

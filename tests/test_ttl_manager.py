@@ -1,12 +1,12 @@
+import asyncio
 import importlib.abc
 import importlib.util
 import sys
+import time
+import warnings
 from pathlib import Path
 from types import ModuleType
 
-import asyncio
-import time
-import warnings
 import pytest
 
 utils_pkg = ModuleType("datacreek.utils")
@@ -23,6 +23,7 @@ def _cleanup():
     loop = asyncio.new_event_loop()
     loop.run_until_complete(cache.ttl_manager.stop())
     loop.close()
+
 
 spec = importlib.util.spec_from_file_location(
     "datacreek.utils.cache",

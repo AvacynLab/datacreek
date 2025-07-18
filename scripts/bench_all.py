@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-import pathlib
-import sys
-import subprocess
 import os
+import pathlib
+import subprocess
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BENCH_DIR = pathlib.Path(os.environ.get("BENCHMARK_DIR", ROOT / "benchmarks"))
@@ -50,11 +50,23 @@ def check_regression(
     if metrics["recall"] < baseline["recall"] * (1 - threshold):
         regressions.append("recall")
     for key in ("ingest_rate", "graphwave_rate"):
-        if key in metrics and key in baseline and metrics[key] < baseline[key] * (1 - threshold):
+        if (
+            key in metrics
+            and key in baseline
+            and metrics[key] < baseline[key] * (1 - threshold)
+        ):
             regressions.append(key)
-    if "whisper_xrt" in metrics and "whisper_xrt" in baseline and metrics["whisper_xrt"] > baseline["whisper_xrt"] * (1 + threshold):
+    if (
+        "whisper_xrt" in metrics
+        and "whisper_xrt" in baseline
+        and metrics["whisper_xrt"] > baseline["whisper_xrt"] * (1 + threshold)
+    ):
         regressions.append("whisper_xrt")
-    if "pid_time" in metrics and "pid_time" in baseline and metrics["pid_time"] > baseline["pid_time"] * (1 + threshold):
+    if (
+        "pid_time" in metrics
+        and "pid_time" in baseline
+        and metrics["pid_time"] > baseline["pid_time"] * (1 + threshold)
+    ):
         regressions.append("pid_time")
     if regressions:
         reg = ", ".join(regressions)
@@ -111,6 +123,7 @@ def graphwave_rate(n: int = 256) -> float:
     if np is None:
         raise SystemExit("bench_all requires numpy")
     import networkx as nx
+
     from datacreek.analysis.fractal import graphwave_embedding_chebyshev
 
     g = nx.path_graph(n)
@@ -220,7 +233,9 @@ def main() -> None:
         args.output.write_text(result)
     if args.record:
         sha = (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).strip().decode()
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            .strip()
+            .decode()
         )
         BENCH_DIR.mkdir(exist_ok=True)
         path = BENCH_DIR / f"bench_{sha}.json"

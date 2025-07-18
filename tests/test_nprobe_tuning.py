@@ -14,8 +14,8 @@ def _build_ivfpq(xb):
     index.nprobe = 32
     return index
 
-@pytest.mark.faiss_gpu
 
+@pytest.mark.faiss_gpu
 def test_autotune_nprobe_runs():
     faiss = pytest.importorskip("faiss")
     rng = np.random.default_rng(0)
@@ -62,7 +62,9 @@ def test_profile_nprobe(tmp_path):
     xq = xb[:5] + 0.01
     index = _build_ivfpq(xb)
     out_path = tmp_path / "curve.pkl"
-    res = nprobe_tuning.profile_nprobe(index, xb, xq, k=5, nprobes=[32, 64], path=out_path)
+    res = nprobe_tuning.profile_nprobe(
+        index, xb, xq, k=5, nprobes=[32, 64], path=out_path
+    )
     assert list(res["nprobe"]) == [32, 64]
     assert len(res["latency"]) == 2
     assert out_path.exists()

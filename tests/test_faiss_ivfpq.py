@@ -4,9 +4,9 @@ faiss = pytest.importorskip("faiss")
 
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
+
+
 @pytest.mark.faiss_gpu
-
-
 def test_faiss_ivfpq_backend_metric(monkeypatch):
     kg = KnowledgeGraph()
     kg.graph.add_node("a", embedding=[1.0, 0.0])
