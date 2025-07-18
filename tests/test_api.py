@@ -128,7 +128,9 @@ def test_async_pipeline(monkeypatch, tmp_path):
     task_id = res.json()["task_id"]
     _wait_task(task_id)
 
-    res = client.post("/tasks/save", json={"ds_id": ds_id, "fmt": "jsonl"}, headers=headers)
+    res = client.post(
+        "/tasks/save", json={"ds_id": ds_id, "fmt": "jsonl"}, headers=headers
+    )
     task_id = res.json()["task_id"]
     _wait_task(task_id)
 
@@ -194,7 +196,9 @@ def test_global_event_log_route(monkeypatch):
     res = client.get("/datasets/events", headers=headers)
     assert res.status_code == 200
     data = res.json()
-    assert any(ev["dataset"] == "glob" and ev["operation"] == "add_chunk" for ev in data)
+    assert any(
+        ev["dataset"] == "glob" and ev["operation"] == "add_chunk" for ev in data
+    )
 
 
 def test_dataset_progress_route(monkeypatch):
@@ -207,7 +211,8 @@ def test_dataset_progress_route(monkeypatch):
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "dataset:demo")
     redis_client.hset(
-        "dataset:demo:progress", mapping={"status": TaskStatus.INGESTING.value, "count": "1"}
+        "dataset:demo:progress",
+        mapping={"status": TaskStatus.INGESTING.value, "count": "1"},
     )
 
     headers = {"X-API-Key": key}
@@ -229,10 +234,12 @@ def test_dataset_progress_history_route(monkeypatch):
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "dataset:demo")
     redis_client.rpush(
-        "dataset:demo:progress:history", json.dumps({"status": TaskStatus.INGESTING.value})
+        "dataset:demo:progress:history",
+        json.dumps({"status": TaskStatus.INGESTING.value}),
     )
     redis_client.rpush(
-        "dataset:demo:progress:history", json.dumps({"status": TaskStatus.COMPLETED.value})
+        "dataset:demo:progress:history",
+        json.dumps({"status": TaskStatus.COMPLETED.value}),
     )
 
     headers = {"X-API-Key": key}
@@ -253,7 +260,8 @@ def test_dataset_progress_history_unauthorized(monkeypatch):
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "dataset:demo")
     redis_client.rpush(
-        "dataset:demo:progress:history", json.dumps({"status": TaskStatus.INGESTING.value})
+        "dataset:demo:progress:history",
+        json.dumps({"status": TaskStatus.INGESTING.value}),
     )
 
     user_id, key = _create_user()
@@ -328,7 +336,9 @@ def test_dataset_progress_unauthorized(monkeypatch):
     ds.owner_id = 999
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "dataset:demo")
-    redis_client.hset("dataset:demo:progress", mapping={"status": TaskStatus.INGESTING.value})
+    redis_client.hset(
+        "dataset:demo:progress", mapping={"status": TaskStatus.INGESTING.value}
+    )
 
     user_id, key = _create_user()
     headers = {"X-API-Key": key}
@@ -345,7 +355,9 @@ def test_graph_progress_route(monkeypatch):
     ds.owner_id = user_id
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "graph:demo")
-    redis_client.hset("graph:demo:progress", mapping={"status": "saving_neo4j", "progress": "0.5"})
+    redis_client.hset(
+        "graph:demo:progress", mapping={"status": "saving_neo4j", "progress": "0.5"}
+    )
 
     headers = {"X-API-Key": key}
 
@@ -366,10 +378,12 @@ def test_graph_progress_history_route(monkeypatch):
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "graph:demo")
     redis_client.rpush(
-        "graph:demo:progress:history", json.dumps({"status": TaskStatus.SAVING_NEO4J.value})
+        "graph:demo:progress:history",
+        json.dumps({"status": TaskStatus.SAVING_NEO4J.value}),
     )
     redis_client.rpush(
-        "graph:demo:progress:history", json.dumps({"status": TaskStatus.COMPLETED.value})
+        "graph:demo:progress:history",
+        json.dumps({"status": TaskStatus.COMPLETED.value}),
     )
 
     headers = {"X-API-Key": key}
@@ -390,7 +404,8 @@ def test_graph_progress_history_unauthorized(monkeypatch):
     ds.redis_client = redis_client
     ds.to_redis(redis_client, "graph:demo")
     redis_client.rpush(
-        "graph:demo:progress:history", json.dumps({"status": TaskStatus.SAVING_NEO4J.value})
+        "graph:demo:progress:history",
+        json.dumps({"status": TaskStatus.SAVING_NEO4J.value}),
     )
 
     user_id, key = _create_user()
@@ -521,10 +536,14 @@ def test_create_dataset_route_bad_name(monkeypatch):
     user_id, key = _create_user()
     headers = {"X-API-Key": key}
 
-    res = client.post("/datasets/bad name", json={"dataset_type": "qa"}, headers=headers)
+    res = client.post(
+        "/datasets/bad name", json={"dataset_type": "qa"}, headers=headers
+    )
     assert res.status_code == 422
     long_name = "a" * 65
-    res = client.post(f"/datasets/{long_name}", json={"dataset_type": "qa"}, headers=headers)
+    res = client.post(
+        f"/datasets/{long_name}", json={"dataset_type": "qa"}, headers=headers
+    )
     assert res.status_code == 422
 
 
@@ -569,7 +588,9 @@ def test_list_user_datasets_details(monkeypatch):
     ds.stage = DatasetStage.GENERATED
     ds.to_redis(redis_client, "dataset:demo")
     redis_client.sadd(f"user:{user_id}:datasets", "demo")
-    redis_client.hset("dataset:demo:progress", mapping={"status": TaskStatus.INGESTING.value})
+    redis_client.hset(
+        "dataset:demo:progress", mapping={"status": TaskStatus.INGESTING.value}
+    )
     headers = {"X-API-Key": key}
 
     res = client.get("/users/me/datasets/details", headers=headers)
@@ -621,3 +642,47 @@ def test_delete_persisted_dataset_route_unauthorized(monkeypatch):
 
     res = client.delete("/datasets/demo", headers=headers)
     assert res.status_code == 404
+
+
+def test_explain_endpoint(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+
+    user_id, key = _create_user()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.owner_id = user_id
+    ds.redis_client = redis_client
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "a")
+    ds.add_chunk("d1", "c2", "b")
+    ds.graph.graph.add_edge("c1", "c2", relation="sim")
+    ds.graph.graph.nodes["c1"]["embedding"] = [0.0, 0.0]
+    ds.graph.graph.nodes["c2"]["embedding"] = [1.0, 0.0]
+    ds.to_redis(redis_client, "dataset:demo")
+    redis_client.sadd(f"user:{user_id}:datasets", "demo")
+    redis_client.sadd("datasets", "demo")
+
+    headers = {"X-API-Key": key}
+
+    res = client.get("/datasets/demo/explain/c1", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert "nodes" in body and "edges" in body and "attention" in body
+
+    res = client.get("/datasets/demo/explain/c1?fmt=svg", headers=headers)
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("image/svg")
+
+    import importlib.util
+
+    if importlib.util.find_spec("cairosvg"):
+        res = client.get("/datasets/demo/explain/c1?fmt=png", headers=headers)
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("image/png")
+    else:
+        res = client.get("/datasets/demo/explain/c1?fmt=png", headers=headers)
+        assert res.status_code == 501

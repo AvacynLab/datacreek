@@ -49,6 +49,11 @@ cache:
   l1_ttl_max: 7200
   l2_max_size_mb: 2048
   l2_ttl_hours: 24
+  ttl_pid:
+    target_hit_ratio: 0.8
+    Kp: 500.0
+    Ki: 0.05
+    I_max: 3600
 
 ann:
   backend: faiss_gpu_ivfpq

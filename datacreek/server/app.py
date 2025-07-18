@@ -72,6 +72,7 @@ from datacreek.tasks import (
 )
 from datacreek.utils import backpressure
 from datacreek.utils.config import get_llm_provider, load_config
+from datacreek.utils.neo4j_breaker import neo4j_breaker
 
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
 
@@ -1430,6 +1431,8 @@ def api_save_dataset_neo4j(name: str):
     """Persist the dataset graph to Neo4j asynchronously."""
     if not get_dataset(name):
         abort(404)
+    if neo4j_breaker.current_state != 0:  # 0 == CLOSED
+        abort(429)
     tid = dataset_save_neo4j_task.delay(name, current_user.id).id
     return jsonify({"task_id": tid})
 
@@ -1560,6 +1563,8 @@ def api_graph_save_neo4j(name: str):
     """Persist the graph to Neo4j asynchronously."""
     if not get_graph(name):
         abort(404)
+    if neo4j_breaker.current_state != 0:
+        abort(429)
     tid = graph_save_neo4j_task.delay(name, current_user.id).id
     return jsonify({"task_id": tid})
 

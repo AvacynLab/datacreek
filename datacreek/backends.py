@@ -60,6 +60,7 @@ def get_neo4j_driver(config_path: str | None = None):
         ensure_neo4j_indexes(driver)
     if cfg.get("run_migrations"):
         run_cypher_file(driver, "2025-07-haa_index.cypher")
+        run_cypher_file(driver, "2025-07-haa_unique_constraint.cypher")
     return driver
 
 

@@ -37,6 +37,7 @@ from datacreek.utils import backpressure
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
 from datacreek.utils.config import load_config_with_overrides
+from datacreek.utils.neo4j_breaker import CircuitBreakerError, neo4j_breaker
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -230,7 +231,12 @@ def dataset_ingest_task(
     name: DatasetName, path: str, user_id: int | None = None, **kwargs
 ) -> dict:
     """Ingest a file into a persisted dataset."""
-    if not backpressure.acquire_slot():
+    if not backpressure.acquire_slot_with_backoff(
+        int(os.getenv("INGEST_BACKOFF_RETRIES", "3")),
+        float(os.getenv("INGEST_BACKOFF_BASE", "0.05")),
+        spool_dir=os.getenv("INGEST_SPOOL_DIR"),
+        spool_data={"name": name, "path": path},
+    ):
         raise RuntimeError("ingest queue full")
     client = get_redis_client()
     driver = get_neo4j_driver()
@@ -464,7 +470,7 @@ def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
     client.hset(key, "save_neo4j_start", start_ts)
     _update_status(client, key, TaskStatus.SAVING_NEO4J, 0.0)
     try:
-        ds.save_neo4j(driver)
+        neo4j_breaker.call(ds.save_neo4j, driver)
         _update_status(client, key, TaskStatus.SAVING_NEO4J, 0.5)
         driver.close()
         ds.redis_client = client
@@ -477,6 +483,9 @@ def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
         client.hset(key, "save_neo4j_finish", ts)
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"stage": ds.stage}
+    except CircuitBreakerError as exc:
+        _record_error(client, key, exc, ds)
+        raise RuntimeError("neo4j circuit open") from exc
     except Exception as exc:
         _record_error(client, key, exc, ds)
         raise
@@ -967,7 +976,7 @@ def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
     client.hset(key, "save_neo4j_start", start_ts)
     _update_status(client, key, TaskStatus.SAVING_NEO4J, 0.0)
     try:
-        ds.save_neo4j(driver)
+        neo4j_breaker.call(ds.save_neo4j, driver)
         _update_status(client, key, TaskStatus.SAVING_NEO4J, 0.5)
         driver.close()
         ds.redis_client = client
@@ -980,6 +989,9 @@ def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
         client.hset(key, "save_neo4j_finish", ts)
         _update_status(client, key, TaskStatus.COMPLETED, 1.0)
         return {"nodes": len(ds.graph.graph)}
+    except CircuitBreakerError as exc:
+        _record_error(client, key, exc, ds)
+        raise RuntimeError("neo4j circuit open") from exc
     except Exception as exc:
         _record_error(client, key, exc, ds)
         raise

@@ -108,7 +108,8 @@ Below is a quick overview of the main options and operations exposed at each sta
 - `compute_node2vec_gds(driver)` – run Neo4j GDS Node2Vec and store vectors
 - `build_faiss_index()` – create a FAISS index from stored embeddings
 - `scripts/ann_benchmark.py` – measure P95 latency and recall of ANN backends
-- `scripts/bench_all.py` – aggregate CPU, GPU, memory usage and recall metrics, and compare against `benchmarks/baseline.json` to fail CI on >5% regression
+- `scripts/bench_all.py` – aggregate CPU, GPU, memory usage and recall metrics, and compare against `benchmarks/baseline.json` to fail CI on >5% regression. The script also records ingestion throughput, GraphWave rate, Whisper realtime factor and PID convergence time.
+- `scripts/install_faiss.sh` – helper installing `faiss-gpu` when CUDA is present or `faiss-cpu` otherwise.
 - `mark_conflicting_facts()` – flag contradictory statements
 
 **Dataset generation**
@@ -245,6 +246,23 @@ additional dependencies:
 ```bash
 pip install quantulum3 pint
 ```
+
+### CI setup
+
+Use `scripts/install_faiss.sh` to install FAISS depending on GPU availability.
+Run unit tests separately from heavier GPU benchmarks:
+
+```bash
+scripts/install_faiss.sh
+pytest -m "not faiss_gpu"        # unit tests
+pytest -m faiss_gpu --strict-markers  # optional heavy job
+```
+
+Benchmark results can be recorded with `scripts/bench_all.py --record` to
+`benchmarks/<commit>.json` and compared against the previous commit
+automatically.
+Generate a history table with `scripts/bench_all.py --trend` to create
+`benchmarks/bench_trend.md` summarizing throughput across commits.
 
 ### 1. Tool Setup
 

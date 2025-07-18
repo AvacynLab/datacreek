@@ -22,6 +22,21 @@ def test_chebyshev_heat_kernel_gpu_matches_cpu():
 
 
 @pytest.mark.skipif(spec is None, reason="cupy required")
+def test_chebyshev_heat_kernel_gpu_batch():
+    import cupy as cp
+
+    from datacreek.analysis.fractal import chebyshev_heat_kernel
+    from datacreek.analysis.graphwave_cuda import chebyshev_heat_kernel_gpu_batch
+
+    g = nx.path_graph(4)
+    L = nx.normalized_laplacian_matrix(g).tocsr()
+    cpu = [chebyshev_heat_kernel(L, t, m=3) for t in (0.25, 0.5)]
+    gpu = chebyshev_heat_kernel_gpu_batch(L, [0.25, 0.5], m=3)
+    for c, gk in zip(cpu, gpu):
+        assert np.allclose(c, gk, atol=1e-4)
+
+
+@pytest.mark.skipif(spec is None, reason="cupy required")
 def test_graphwave_runner_gpu(monkeypatch):
     from datacreek.core.knowledge_graph import KnowledgeGraph
     from datacreek.core.runners import GraphWaveRunner

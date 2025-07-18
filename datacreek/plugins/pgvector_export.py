@@ -1,8 +1,22 @@
-"""Export graph embeddings to PostgreSQL using pgvector."""
+"""Export graph embeddings to PostgreSQL using pgvector.
+
+This module exposes helpers to bulk COPY embeddings into a table and build a
+vector index for fast similarity search.  The schema follows the audit
+specification::
+
+    CREATE TABLE embedding (
+        node_id UUID,
+        space TEXT,
+        vec VECTOR(dim)
+    );
+
+``export_embeddings_pg`` inserts the embeddings using ``COPY`` for better
+performance and optionally creates an ``ivfflat`` index.
+"""
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from psycopg import Connection
 
@@ -18,11 +32,11 @@ def export_embeddings_pg(
     kg: "KnowledgeGraph",
     conn: Connection,
     *,
-    table: str = "node_embeddings",
-    n2v_attr: str = "embedding",
-    poincare_attr: str = "poincare_embedding",
+    table: str = "embedding",
+    attrs: Iterable[str] = ("embedding", "poincare_embedding"),
+    lists: int = 100,
 ) -> int:
-    """Export Node2Vec and Poincaré embeddings to PostgreSQL.
+    """Export embeddings using ``COPY`` and build an ``ivfflat`` index.
 
     Parameters
     ----------
@@ -32,10 +46,10 @@ def export_embeddings_pg(
         Open psycopg connection to the database with pgvector extension.
     table:
         Destination table, created if missing.
-    n2v_attr:
-        Node attribute containing Node2Vec embeddings.
-    poincare_attr:
-        Node attribute containing Poincaré embeddings.
+    attrs:
+        Node attributes storing different embedding spaces.
+    lists:
+        Number of lists for the ``ivfflat`` index.
 
     Returns
     -------
@@ -43,27 +57,45 @@ def export_embeddings_pg(
         Number of rows written.
     """
 
+    rows = []
+    dim = None
+    for node, data in kg.graph.nodes(data=True):
+        for space in attrs:
+            vec = data.get(space)
+            if vec is None:
+                continue
+            if dim is None:
+                dim = len(vec)
+            rows.append((str(node), space, _fmt_vector(vec)))
+
+    if not rows:
+        return 0
+
     with conn.cursor() as cur:
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
         cur.execute(
             f"CREATE TABLE IF NOT EXISTS {table} ("
-            "node TEXT PRIMARY KEY,"
-            "node2vec VECTOR,"
-            "poincare VECTOR"
+            "node_id UUID,"
+            "space TEXT,"
+            f"vec VECTOR({dim})"
             ")"
         )
-        rows = 0
-        for node, data in kg.graph.nodes(data=True):
-            n2v = _fmt_vector(data.get(n2v_attr))
-            pc = _fmt_vector(data.get(poincare_attr))
-            if n2v is None and pc is None:
-                continue
-            cur.execute(
-                f"INSERT INTO {table} (node, node2vec, poincare) VALUES (%s, %s, %s) "
-                "ON CONFLICT(node) DO UPDATE SET node2vec=EXCLUDED.node2vec, "
-                "poincare=EXCLUDED.poincare",
-                (str(node), n2v, pc),
-            )
-            rows += 1
+        with cur.copy(f"COPY {table} (node_id, space, vec) FROM STDIN") as cp:
+            for row in rows:
+                cp.write_row(row)
+        cur.execute(
+            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec) WITH (lists=%s)",
+            (lists,),
+        )
     conn.commit()
-    return rows
+    return len(rows)
+
+
+def query_topk_pg(conn: Connection, table: str, vec: Iterable[float], *, k: int = 5):
+    """Return ``k`` nearest neighbours ordered by cosine distance."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT node_id, space FROM {table} ORDER BY vec <-> %s LIMIT %s",
+            (_fmt_vector(vec), k),
+        )
+        return cur.fetchall()

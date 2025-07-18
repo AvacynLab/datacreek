@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 import pytest
 
 from datacreek.analysis.tpl_incremental import tpl_incremental
@@ -36,3 +37,37 @@ def test_tpl_incremental_wrapper(monkeypatch):
     diags = ds.tpl_incremental(radius=1)
     assert diags
     assert any(e.operation == "tpl_incremental" for e in ds.events)
+
+
+@pytest.mark.skipif(not _gudhi_available(), reason="gudhi required")
+def test_tpl_incremental_global_diag():
+    g = nx.cycle_graph(4)
+    tpl_incremental(g, radius=1)
+    assert "tpl_global" in g.graph
+    full = []
+    for n in g.nodes():
+        full.extend(g.nodes[n]["tpl_diag"])
+    assert np.allclose(
+        np.asarray(full).reshape(-1, 2), np.asarray(g.graph["tpl_global"])
+    )
+
+
+@pytest.mark.skipif(not _gudhi_available(), reason="gudhi required")
+def test_tpl_incremental_skip_unchanged(monkeypatch):
+    import datacreek.analysis.tpl_incremental as tpli
+
+    g = nx.path_graph(6)
+    calls = 0
+
+    def fake_persistence(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return np.array([[0.0, 1.0]])
+
+    monkeypatch.setattr(tpli, "_local_persistence", fake_persistence)
+    tpl_incremental(g, radius=1)
+    assert calls == g.number_of_nodes()
+    calls = 0
+    g.add_edge(0, 5)
+    tpl_incremental(g, radius=1)
+    assert 0 < calls < g.number_of_nodes()

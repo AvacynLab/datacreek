@@ -4,11 +4,14 @@ import types
 
 import pytest
 
+faiss = pytest.importorskip("faiss")
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
+@pytest.mark.faiss_gpu
 def test_faiss_adaptive_switch(monkeypatch):
     kg = KnowledgeGraph()
     kg.graph.add_node("a", embedding=[1.0, 0.0])

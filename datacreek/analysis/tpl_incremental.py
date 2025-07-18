@@ -14,9 +14,22 @@ __all__ = ["tpl_incremental"]
 
 
 def _local_hash(graph: nx.Graph, node: int, radius: int) -> int:
-    """Return hash of the ``radius``-hop neighbourhood of ``node``."""
+    """Return hash of the ``radius``-hop neighbourhood of ``node``.
+
+    The hash includes edges and a ``timestamp`` attribute when present so that
+    updates to connectivity are detected without recomputing all nodes.
+    """
+
     neigh = nx.single_source_shortest_path_length(graph, node, cutoff=radius)
-    return hash(tuple(sorted(neigh)))
+    nodes = set(neigh)
+    edges: list[tuple[int, int, float]] = []
+    for u, v, data in graph.edges(nodes, data=True):
+        if u in nodes and v in nodes:
+            a, b = sorted((u, v))
+            ts = float(data.get("timestamp", 0.0))
+            edges.append((a, b, ts))
+
+    return hash((tuple(sorted(nodes)), tuple(sorted(edges))))
 
 
 def _local_persistence(
@@ -45,6 +58,7 @@ def tpl_incremental(
     graph: nx.Graph, *, radius: int = 1, dimension: int = 1
 ) -> Dict[int, np.ndarray]:
     """Update and return local persistence diagrams for ``graph`` nodes."""
+
     diags: Dict[int, np.ndarray] = {}
     for node in graph.nodes():
         h = _local_hash(graph, node, radius)
@@ -55,4 +69,11 @@ def tpl_incremental(
         data = graph.nodes[node].get("tpl_diag")
         if data is not None:
             diags[node] = np.asarray(data, dtype=float)
+
+    if diags:
+        global_diag = (
+            np.concatenate(list(diags.values())) if diags else np.empty((0, 2))
+        )
+        graph.graph["tpl_global"] = global_diag.tolist()
+
     return diags

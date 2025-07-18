@@ -14,6 +14,7 @@ assert isinstance(spec.loader, importlib.abc.Loader)
 spec.loader.exec_module(hybrid_ann)
 
 
+@pytest.mark.faiss_gpu
 def test_search_hnsw_pq_pipeline():
     faiss = pytest.importorskip("faiss")
     rng = np.random.default_rng(0)
