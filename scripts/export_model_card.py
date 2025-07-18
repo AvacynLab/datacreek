@@ -35,6 +35,17 @@ def main() -> None:
         "prune_ratio": 0.0,
         "cca_sha": "none",
     }
+    try:
+        import subprocess
+
+        sha = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(ROOT))
+            .decode()
+            .strip()
+        )
+    except Exception:  # pragma: no cover - git missing
+        sha = "unknown"
+    card["code_commit"] = sha
     with open(args.out, "w") as fh:
         json.dump(card, fh)
     if args.html:

@@ -41,6 +41,7 @@ This toolkit simplifies the journey of:
   (`NEO4J_INIT_INDEXES=0` disables this step)
 - Datasets can be cloned to experiment with different cleaning steps
 - Optional RedisGraph integration for fast local queries
+- GraphWave embeddings can run on GPU via cuSPARSE when :mod:`cupy` is installed
 - Continuous monitoring with an `InvariantPolicy` enforces entropy and
   spectral limits at each stage
 - Configuration files are hot-reloaded by a watcher so threshold updates are
@@ -107,6 +108,7 @@ Below is a quick overview of the main options and operations exposed at each sta
 - `compute_node2vec_gds(driver)` – run Neo4j GDS Node2Vec and store vectors
 - `build_faiss_index()` – create a FAISS index from stored embeddings
 - `scripts/ann_benchmark.py` – measure P95 latency and recall of ANN backends
+- `scripts/bench_all.py` – aggregate CPU, GPU, memory usage and recall metrics, and compare against `benchmarks/baseline.json` to fail CI on >5% regression
 - `mark_conflicting_facts()` – flag contradictory statements
 
 **Dataset generation**
@@ -968,7 +970,8 @@ records.
    duplicates can be detected. Edge traversal is recorded so
    `coverage_stats()` can report how much of the graph has been explored.
    Supplying an `encrypt_key` masks PII in the exported records. User
-   feedback is stored via `record_feedback()` for continuous improvements.
+   feedback is stored via `record_feedback()` and merge/split suggestions can
+   be generated with `propose_merge_split()` for continuous improvements.
 
 9. **LLM service connectors** – `LLMService` centralizes OpenAI/vLLM access and
    provides synchronous and asynchronous batch completions.

@@ -1373,6 +1373,8 @@ def test_gds_quality_check_method():
     assert isinstance(res["triangles_removed"], int)
     assert any("SUGGESTED_HYPER_AA" in q for q in driver.session_obj.queries)
     assert any("CREATE INDEX haa_pair" in q for q in driver.session_obj.queries)
+    assert any("SET r.startNodeId" in q for q in driver.session_obj.queries)
+    assert any("FOREACH (x IN tail" in q for q in driver.session_obj.queries)
 
 
 def test_quality_check_method():
@@ -1628,3 +1630,19 @@ def test_prune_fractalnet_weights_method():
     w = [1, -2, 3, -4]
     out = kg.prune_fractalnet_weights(w, ratio=0.5)
     assert len([x for x in out if x != 0]) == 2
+
+
+def test_explain_node_method():
+    if KnowledgeGraph is None:
+        pytest.skip("deps missing")
+    kg = KnowledgeGraph()
+    kg.graph.add_node("n1", embedding=[0.0, 0.0])
+    kg.graph.add_node("n2", embedding=[1.0, 0.0])
+    kg.graph.add_edge("n1", "n2", relation="linked")
+
+    result = kg.explain_node("n1", hops=1)
+    assert "n1" in result["nodes"] and "n2" in result["nodes"]
+    assert ("n1", "n2") in result["edges"] or ("n2", "n1") in result["edges"]
+    assert any(
+        key.startswith("n1->") or key.endswith("->n1") for key in result["attention"]
+    )

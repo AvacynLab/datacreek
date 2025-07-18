@@ -48,6 +48,7 @@ __all__: list[str] = [
     "laplacian_energy",
     "lacunarity",
     "poincare_embedding",
+    "recenter_embeddings",
     "generate_graph_rnn_like",
     "spectral_density",
     "graph_fourier_transform",
@@ -91,6 +92,7 @@ __all__: list[str] = [
     "caption_image",
     "partition_files_to_atoms",
     "transcribe_audio",
+    "transcribe_audio_batch",
     "blip_caption_image",
     "parse_code_to_atoms",
     "detect_emotion",
@@ -144,6 +146,7 @@ __all__: list[str] = [
     "compression_layer",
     "topological_perception_layer",
     "tpl_correct_graph",
+    "tpl_incremental",
     "topological_signature_hash",
     "information_layer",
     "export_layer",
@@ -160,10 +163,17 @@ __all__: list[str] = [
     "AutoTuneState",
     "autotune_step",
     "kw_gradient",
+    "autotune_nprobe",
+    "export_embeddings_pg",
     "xor_encrypt",
     "xor_decrypt",
     "encrypt_pii_fields",
     "decrypt_pii_fields",
+    "set_tenant_limit",
+    "can_consume_epsilon",
+    "propose_merge_split",
+    "record_feedback",
+    "fine_tune_from_feedback",
 ]
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking only
@@ -482,10 +492,13 @@ def __getattr__(name: str):
         from .core.dataset import DatasetBuilder
 
         return DatasetBuilder.run_topological_perception_layer
-    if name == "tpl_correct_graph":
+    if name == "tpl_correct_graph" or name == "tpl_incremental":
         from .core.dataset import DatasetBuilder
 
-        return DatasetBuilder.tpl_correct_graph
+        return {
+            "tpl_correct_graph": DatasetBuilder.tpl_correct_graph,
+            "tpl_incremental": DatasetBuilder.tpl_incremental,
+        }[name]
     if name == "compression_layer":
         from .core.dataset import DatasetBuilder
 
@@ -514,6 +527,10 @@ def __getattr__(name: str):
         from .analysis.fractal import poincare_embedding as _peb
 
         return _peb
+    if name == "recenter_embeddings":
+        from .analysis.poincare_recentering import recenter_embeddings as _re
+
+        return _re
     if name == "compute_hyperbolic_hypergraph_embeddings":
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
@@ -558,6 +575,10 @@ def __getattr__(name: str):
         from .analysis.ingestion import transcribe_audio as _ta
 
         return _ta
+    if name == "transcribe_audio_batch":
+        from .utils.whisper_batch import transcribe_audio_batch as _tab
+
+        return _tab
     if name == "blip_caption_image":
         from .analysis.ingestion import blip_caption_image as _bci
 
@@ -614,10 +635,13 @@ def __getattr__(name: str):
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
         return _KG.hyperbolic_multi_curvature_reasoning
-    if name == "tpl_correct_graph":
+    if name == "tpl_correct_graph" or name == "tpl_incremental":
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
-        return _KG.tpl_correct_graph
+        return {
+            "tpl_correct_graph": _KG.tpl_correct_graph,
+            "tpl_incremental": _KG.tpl_incremental,
+        }[name]
     if name == "compute_distmult_embeddings":
         from .core.knowledge_graph import KnowledgeGraph as _KG
 
@@ -713,6 +737,7 @@ def __getattr__(name: str):
         from .analysis import multiview as _mv
         from .analysis import privacy as _p
         from .security import dp_budget as _dp
+        from .security import tenant_privacy as _tp
 
         if hasattr(_mv, name):
             return getattr(_mv, name)
@@ -722,6 +747,8 @@ def __getattr__(name: str):
             return getattr(_p, name)
         if hasattr(_flt, name):
             return getattr(_flt, name)
+        if hasattr(_tp, name):
+            return getattr(_tp, name)
         if hasattr(_dp, name):
             return getattr(_dp, name)
         if name == "rollback_gremlin_diff":
@@ -757,16 +784,35 @@ def __getattr__(name: str):
         from .analysis.information import mdl_description_length as _mdl
 
         return _mdl
-    if name in {"AutoTuneState", "autotune_step", "kw_gradient"}:
+    if name in {"AutoTuneState", "autotune_step", "kw_gradient", "autotune_nprobe"}:
         from .analysis.autotune import AutoTuneState as _AS
         from .analysis.autotune import kw_gradient as _kw
+        from .analysis.nprobe_tuning import autotune_nprobe as _anp
         from .core.dataset import DatasetBuilder as _DB
 
         if name == "AutoTuneState":
             return _AS
         if name == "kw_gradient":
             return _kw
+        if name == "autotune_nprobe":
+            return _anp
         return _DB.autotune_step
+    if name == "export_embeddings_pg":
+        from .plugins.pgvector_export import export_embeddings_pg as _eep
+
+        return _eep
+    if name in {"propose_merge_split", "record_feedback", "fine_tune_from_feedback"}:
+        from .utils.curation_agent import fine_tune_from_feedback as _ft
+        from .utils.curation_agent import propose_merge_split as _ps
+        from .utils.curation_agent import record_feedback as _rf
+
+        mapping = {
+            "propose_merge_split": _ps,
+            "record_feedback": _rf,
+            "fine_tune_from_feedback": _ft,
+        }
+
+        return mapping[name]
     if name == "prune_embeddings":
         from .core.dataset import DatasetBuilder as _DB
 

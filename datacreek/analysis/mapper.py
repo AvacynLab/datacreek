@@ -74,6 +74,7 @@ except Exception:  # pragma: no cover - optional
 
 from ..utils.cache import cache_l1
 from ..utils.config import load_config
+from ..utils.evict_log import log_eviction
 
 cfg = load_config()
 cache_cfg = cfg.get("cache", {})
@@ -360,6 +361,8 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
                     key_bytes = cur.key()
                     cur.delete()
                     n_deleted += 1
+                    cause = "ttl" if age_h > ttl_h else "quota"
+                    log_eviction(key_bytes.decode(errors="ignore"), now, cause)
                     if soft:
                         logging.getLogger(__name__).debug(
                             "LMDB-EVICT %s", key_bytes.decode(errors="ignore")
@@ -384,6 +387,16 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
                 size_mb,
             )
         env.sync()
+
+
+def delete_l2_entry(env, key: str) -> bool:
+    """Delete ``key`` from ``env`` and log a manual eviction."""
+
+    with env.begin(write=True) as txn:
+        existed = txn.delete(key.encode())
+    if existed:
+        log_eviction(key, time.time(), "manual")
+    return bool(existed)
 
 
 def _evict_worker(path: str, limit_mb: int, ttl_h: int, interval: float) -> None:

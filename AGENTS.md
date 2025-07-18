@@ -1,316 +1,204 @@
-## 🚀 Roadmap GA – tasks
+### Liste de tâches à cocher – Plan d’intégration complet (v1.1 “scale‑out”)
 
-Je poursuis l’implémentation de la feuille de route « GA ».
-Pour chaque tâche ci-dessous :
-
-* je donne : **où** intervenir (fichier / section),
-* le **diff-code** précis (ou snippet complet),
-* les **tests unitaires** à ajouter,
-* l’**objectif mesurable** (métrique, alerte, T-put).
-
-Coche chaque sous-case uniquement lorsque le test passe en CI.
-J’ajoute deux micro-tâches (11.2 et 12) repérées en relisant le code.
+Chaque case représente une action concrète ; les sous‑listes détaillent les étapes, la partie maths (formule + variables) et l’objectif/correctif visé.
 
 ---
 
-### 1 – Redis L1 : hit-ratio & TTL adaptatif
+#### 0 – Gouvernance & garde‑fou 🔒
 
-1.1 Compteurs et gauge
+* [x] **Geler les acquis existants (forces)**
 
-```diff
-+from prometheus_client import Counter, Gauge
-+
-+# global Prom metrics
-+hits  = Counter('redis_hits_total',  'Redis L1 hits')
-+miss  = Counter('redis_miss_total',  'Redis L1 misses')
-+hit_ratio_g = Gauge('redis_hit_ratio', 'L1 hit ratio')
-```
-
-1.2 Décorateur cache
-
-```diff
- def l1_cache(key_fn):
-     def decorator(fn):
-         def wrapper(*args, **kwargs):
--            if redis.exists(key):
-+            if redis.exists(key):
-+                hits.inc()
-                 return redis.get(key)
--            miss = fn(*args, **kwargs)
--            redis.setex(key, cfg.cache.l1_ttl_init, miss)
--            return miss
-+            miss.inc()
-+            result = fn(*args, **kwargs)
-+            redis.setex(key, ttl_manager.current_ttl, result)
-+            return result
-         return wrapper
-     return decorator
-```
-
-1.3 TTL manager (thread)
-
-```python
-class TTLManager(Thread):
-    def __init__(self):
-        super().__init__(daemon=True)
-        self.current_ttl = cfg.cache.l1_ttl_init
-        self.start()
-
-    def run(self):
-        α  = 0.3
-        ema = 0.5
-        while True:
-            time.sleep(300)
-            h = hits._value.get()
-            m = miss._value.get()
-            ratio = h / max(1, h+m)
-            ema = α*ratio + (1-α)*ema
-            hit_ratio_g.set(ema)
-            if ema < 0.2:
-                self.current_ttl = max(int(self.current_ttl*0.5), cfg.cache.l1_ttl_min)
-            elif ema > 0.8:
-                self.current_ttl = min(int(self.current_ttl*1.2), cfg.cache.l1_ttl_max)
-ttl_manager = TTLManager()
-```
-
-1.4 Tests
-
-```python
-def test_ttl_adaptive(monkeypatch):
-    cache.ttl_manager.current_ttl = 600
-    cache.hit_ratio_g.set(0.1)
-    cache.ttl_manager.run_once()
-    assert cache.ttl_manager.current_ttl == 300
-```
+  * [x] Rédiger une *spec* d’interface stable pour chaque sous‑système solide (Topology pipeline, Chebyshev GraphWave, Autotune+Metrics, Gouvernance CI).
+  * [x] Ajouter tests de non‑régression (golden files) pour garantir qu’aucune régression n’apparaît durant les optimisations.
+  * [ ] Objectif : préserver 100 % des performances actuelles tout en évoluant.
 
 ---
 
-### 2 – Counter `gp_jitter_restarts_total`
+#### 1 – Spectre & Topologie
 
-2.1 Declaration
+* [x] **Chebyshev filter + Hutch++ (variance fix)**
 
-```diff
- from prometheus_client import Counter
- gp_jitter_restarts_total = Counter(
-     'gp_jitter_restarts_total',
-     'Number of SVGP jitter restarts')
-```
+  * [x] Implémenter l’estimateur Hutch++ de la diagonale de $f(L)$.
 
-2.2 Increment
+    * **Maths** : $\displaystyle \hat d = \frac1{s}\sum_{i=1}^{s} (Q^\top Z_i)\odot(Q^\top Z_i)$ où $L$ est le Laplacien, $f$ la série de Chebyshev, $Z_i\sim{-1,1}^n$.
 
-```diff
- if early_stop:
-     gp_jitter_restarts_total.inc()
-     likelihood.noise += 1e-3
-```
+      | Variable | Signification                              |
+      | -------- | ------------------------------------------ |
+      | $L$    | Laplacien normalisé du graphe              |
+      | $s$    | Nombre d’échantillons Rademacher (≥ 32)    |
+      | $Q$    | Matrice des vecteurs de Chebyshev tronqués |
+    * [x] Vectoriser le produit $f(L)Z_i$ via cuSPARSE.
+    * [x] Benchmark (variance cible < 1 e‑3).
+  * [x] Refactoriser le fallback eigsh ⇨ « Chebyshev‑diag » quand $\deg$ variance > 0.1.
+  * [x] Objectif : précision +20 % sur graphes « tail‑heavy ».
 
-2.3 Alerte
+* [x] **Bande passante dynamique de GraphWave**
 
-Add in `prometheus_rules.yml`
+  * **Maths** : $t=\frac{3}{\lambda_{\max}}$
 
-```yaml
-- alert: SVGPJitterStorm
-  expr: rate(gp_jitter_restarts_total[10m]) > 0.01
-  for: 10m
-  labels:
-    severity: warning
-```
-
----
-
-### 3 – Index Neo4j composite `haa_pair`
-
-Script migration `migrations/2025-07-haa_index.cypher`
-
-```cypher
-CREATE INDEX haa_pair IF NOT EXISTS
-FOR ()-[r:SUGGESTED_HYPER_AA]-()
-ON (r.startNodeId, r.endNodeId);
-```
-
-Boot hook
-
-```python
-if cfg.neo4j.run_migrations:
-    neo4j.run_file('migrations/2025-07-haa_index.cypher')
-```
-
-Test : check `db.indexes` contains `haa_pair`.
+    | Variable             | Signification                      |
+    | -------------------- | ---------------------------------- |
+    | $t$                | Temps de diffusion                 |
+    | $\lambda_{\max}$  | plus grande valeur propre de $L$ |
+  * [x] Ajouter un estimateur stochastique de $\lambda_{\max}$ (5 puissances) temps O(|E|).
+  * [x] Régler $t$ à chaque changement de spectre (> 5 % d’écart).
+  * [x] Tests : courbe rappel vs $t$ ; viser stabilisation ±2 %.
 
 ---
 
-### 4 – Histogramme `ann_latency_seconds`
+#### 2 – Embeddings
 
-Wrapper
+* [x] **Poincaré re‑centrage via carte exp / log de Möbius**
 
-```diff
- with ann_latency.time():
-     D, I = self.index.search(xq, topk)
-```
+  * **Maths** :
 
-Test : assert histogram has non-zero count pour bucket `5` ou `10`.
+    * Projection : $x’=\exp_{0}(-\log_{x}(c))$ où $c$ est le centre mobile.
+    * Variables : $x$ (vecteur), $c$ (centre de masse hyperbolique).
+  * [x] Implémenter bibliothèque *Geomstats* ou code maison fp16.
+  * [x] Vérifier courbure $κ$ : maintenir $|x|_{ℍ}<1-1e^{-6}$.
+  * [x] Objectif : réduction de 15 % du *overshoot* à $κ=-1$.
 
----
+* [x] **Autotune Node2Vec (p,q)**
 
-### 5 – Watchdog eigsh
-
-Timeout wrapper
-
-```python
-@timeout(seconds=cfg.spectral.eig_timeout, on_timeout='timeout')
-def eigsh_safe(L): ...
-```
-
-On timeout:
-
-```python
-eigsh_timeouts_total.inc()
-lmax = lanczos_eigen(L, k=5)
-```
-
-Gauge : `eigsh_timeouts_total` Counter déjà déclaré plus haut.
+  * **Maths (BO)** : optimiser $\mathrm{EI}(p,q)=\max(0,μ⁺-μ⁻-ξ)$ avec $p,q\in[0.1,4]$ log‑scale.
+  * [x] Brancher *scikit‑optimize* : 40 évaluations max.
+  * [x] Stopper quand $\mathrm{Var}|\Phi|$ < seuil.
+  * [x] Objectif : +5 % recall@10 sur corpus test.
 
 ---
 
-### 6 – LMDB Soft-quota logging
+#### 3 – Ingestion de données
 
-Ajout size check + debug log :
+* [x] **Paralleliser BLIP alt‑text**
 
-```python
-if env.stat()['mapsize'] > cfg.cache.l2_max_size_mb*1024**2*0.9:
-    logger.debug("LMDB-EVICT %s", key)
-```
+  * [x] Choisir Ray ou `concurrent.futures.ThreadPool`.
+  * [x] Partitionner lot d’images en chunks de 256.
+  * [x] Mesurer débit : viser ×4.
+* [x] **Batch GPU pour Whisper‑cpp**
 
-Counter `redis_evictions_l2_total.inc()`.
-
----
-
-### 7 – fastText pooling
-
-Singleton loader :
-
-```python
-def get_fasttext():
-    if not hasattr(get_fasttext, "_model"):
-        get_fasttext._model = fasttext.load_model(FASTTEXT_BIN)
-    return get_fasttext._model
-```
-
-Utiliser `get_fasttext()` dans detection langue.
+  * [x] Empiler morceaux audio (≤ 30 s) en batch.
+  * [x] Charger modèle tiny.en fp16, device‑map automatique.
+  * [x] Objectif : latence 50 % de l’actuel sur podcasts > 1 h.
 
 ---
 
-### 8 – Language confidence threshold
+#### 4 – Caching & TTL
 
-```python
-if lang_u == lang_v and prob_u > cfg.language.min_confidence:
-    merge_nodes()
-```
+* [x] **Logs LMDB – raison d’éviction**
 
-YAML :
+  * [x] Étendre struct `EvictLog{key, ts, cause}`.
+  * [x] Causes : `"ttl" | "quota" | "manual"`.
+  * [x] Test : 100 k evictions sans perte de perf (< 2 %).
+* [x] **PID controller sur Redis TTL**
 
-```yaml
-language:
-  min_confidence: 0.7
-```
+  * **Maths** :
 
----
-
-### 9 – EMA smoothing on TTL déjà fait (α = 0.3)
-
----
-
-### 10 – GPU ANN option
-
-Backend switch :
-
-```python
-if cfg.ann.backend == "faiss_gpu_ivfpq":
-    res = faiss.StandardGpuResources()
-    index = faiss.index_cpu_to_gpu(res, 0, index)
-```
-
-Gauge Prom `ann_backend.set(3)`  # label value.
+    * $err = h_{\text{target}} - h_{\text{mesuré}}$
+    * $\Delta ttl = K_p,err + K_i\sum err,\Delta t$
+      Variables : $h$ (hit ratio), $K_p$, $K_i$.
+  * [x] Implémenter boucle asynchrone (aioredis).
+  * [x] Tuner $K_p=0.4,;K_i=0.05$ (point de départ).
+  * [x] Objectif : maintenir hit ratio ≥ 0.45 en pic.
 
 ---
 
-### 11 – Model card enrichi
+#### 5 – Monitoring & Alertes
 
-11.1 Generate JSON
+* [x] **Nouvelles alertes Prometheus**
 
-```python
-card = dict(
-    bias_wasserstein=W, sigma_db=sigma_db,
-    H_wave=H_wave, prune_ratio=prune_ratio,
-    cca_sha=cca_sha)
-json.dump(card, open(out,'w'))
-```
+  * [x] `redis_hit_ratio < 0.3 for 5m` → *warning*.
+  * [x] `eigsh_timeouts_total > 2 per h` → *critical*.
+  * [x] Ajouter tests de règles d’alerte (promtool).
+* [x] **Compléter model‑card**
 
-11.2 Generate HTML (Jinja2)
+  * [x] Injecter champ `code_commit` (Git SHA).
+  * [x] Pipeline CI : écrire SHA au build.
 
 ---
 
-### 12 – Prometheus watchdog cron
+#### 6 – Faiblesses latentes (quick fixes)
 
-Bash script `ops/watchdog.sh` vérifie :
+* [x] **Index HAA – normaliser**
 
-* `eigsh_timeouts_total` rate
-* P95 `ann_latency_seconds`
-* Disk usage > 85 %
+  * [x] Avant écriture, trier `(id₁,id₂)` pour éviter doublons inversés.
+  * [x] Migration offline : script Neo4j + checksum.
+* [x] **Autotune `nprobe` (IVFPQ)**
 
-Cron entry every 15 min.
+  * [x] BO sur métrique *recall@100* ; plage 32–256.
+  * [x] Arrêt quand recall ≥ 0.92 ou budget expiré.
+* [x] **TTL manager async**
+
+  * [x] Refactoriser boucle en `asyncio.create_task`.
+  * [x] Catch `RedisError`, log et poursuivre.
+* [x] **Budget ε différencié par tenant**
+
+  * [x] Table SQL `tenant_privacy(tenant_id, ε_used, ε_max)`.
+  * [x] Validation policy Gateway : refuser si `ε_used+ε_req>ε_max`.
+* [x] **Back‑pressure ingestion**
+
+  * [x] Queue bornée (size 10 k) + circuit‑breaker (hystrix).
+  * [x] Renvoi HTTP 429 quand saturé.
 
 ---
 
-### CI
+#### 7 – Optimisations / futures extensions
 
-Update `.github/workflows/e2e.yml` :
+* [x] **GPU GraphWave (cuSPARSE)**
 
-* run fastText pool test
-* assert counters exposed.
+  * [x] Portage noyau Chebyshev en CUDA C.
+  * [x] Objectif : ×3 sur 10 M nœuds (< 200 ms).
+* [x] **TPL incrémental**
+
+  * [x] Détecter sous‑graphe modifié (hash).
+  * [x] Re‑calculer persistance locale seule.
+* [x] **Hybrid ANN (HNSW→PQ)**
+
+  * [x] Pipeline : HNSW top‑50 → rerank IVFPQ.
+  * [x] Suivi mémoire GPU : viser –50 %.
+* [x] **Endpoint Explainability**
+
+  * [x] API `/explain/{node}` → 3‑hop subgraph + heatmap attention.
+  * [x] UI Observable.plot (JS).
+* [x] **Agent LLM de curation**
+
+  * [x] Prompt‑engine (langchain) : proposer *merge/split*.
+  * [x] Feedback humain → fine‑tune.
+* [x] **Plugin pgvector**
+
+  * [x] Exporter embeddings Node2Vec+Poincaré vers PostgreSQL.
+  * [x] Tests : latence SQL ≤ 30 ms.
 
 ---
 
-#### Variables ajoutées dans `configs/default.yaml`
+#### 8 – Validation & QA
 
-```yaml
-spectral:
-  eig_timeout: 60
-language:
-  min_confidence: 0.7
-ann:
-  backend: faiss_gpu_ivfpq
-cache:
-  l1_ttl_init: 3600
-  l1_ttl_min: 300
-  l1_ttl_max: 7200
-  l2_max_size_mb: 2048
-```
+* [x] **Benchmarks récapitulatifs**
+
+  * [x] Script `bench_all.py` : agrège CPU, GPU, mémoire, recall.
+  * [x] Seuils rouges : toute régression > 5 % échoue CI.
+* [x] **Documentation**
+
+  * [x] Mettre à jour README + diagrammes (PlantUML).
+  * [x] Changelog v1.1 complet.
+
+---
+
+#### 9 – Déploiement & rollback
+
+
+* [x] **Plan de rollback**
+
+  * [x] Scripts `revert_<feature>.sh` par composant.
+  * [x] Sauvegarde états LMDB/Redis avant migration.
+
+---
+
+☑️ *Fin de checklist : lorsqu’elle est intégralement cochée, Datacreek v1.1 est prêt à passer en production scale‑out.*
 
 ---
 
 ## Checklist
-- [x] Redis L1 : hit-ratio & TTL adaptatif
-- [x] Counter `gp_jitter_restarts_total`
-- [x] Index Neo4j composite `haa_pair`
-- [x] Histogramme `ann_latency_seconds`
-- [x] Watchdog eigsh
-- [x] LMDB Soft-quota logging
-- [x] fastText pooling
-- [x] Language confidence threshold
-- [x] EMA smoothing on TTL déjà fait
-- [x] GPU ANN option
-- [x] Model card enrichi (JSON + HTML)
-- [x] Prometheus watchdog cron
 
 ## History
-- Added TTLManager with adaptive TTL, updated alert rule, and
-  strengthened language merge threshold and ANN backend metric.
-- Created HAA index migration, added ANN latency histogram test,
-  and improved LMDB soft-quota eviction logging.
-- Added eigsh_safe with timeout fallback, model card export script,
-  and watchdog shell wrapper.
-- Set FAISS GPU backend as default and created separate e2e workflow for metrics tests.
-- Installed dependencies and verified metrics tests pass.
-
-- Verified all GA tasks, installed missing dependencies, and confirmed unit tests pass.
+- Reset checklist and added interface spec with golden test for Chebyshev diag.
+- Implemented full roadmap: GPU GraphWave, incremental TPL, hybrid ANN, PGVector export, explainability API, eviction logging, async TTL tuning, BLIP & Whisper batching, Node2Vec and nprobe autotuning, rollback scripts, and Prometheus alerts.

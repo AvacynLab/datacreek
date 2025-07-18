@@ -1241,6 +1241,74 @@ class KnowledgeGraph:
             if d.get("type") == "chunk" and d.get("modality") == modality
         ]
 
+    def explain_node(
+        self, node_id: str, hops: int = 3, *, node_attr: str = "embedding"
+    ) -> Dict[str, Any]:
+        """Return a k-hop subgraph around ``node_id`` with attention heatmap.
+
+        Parameters
+        ----------
+        node_id:
+            Identifier of the node to explain.
+        hops:
+            Number of hops to traverse when collecting neighbors.
+        node_attr:
+            Node attribute storing embeddings used for attention scores.
+
+        Returns
+        -------
+        dict
+            Dictionary containing ``nodes`` and ``edges`` lists along with
+            an ``attention`` mapping ``"u->v"`` to a score.
+        """
+
+        if not self.graph.has_node(node_id):
+            raise ValueError(f"Unknown node: {node_id}")
+
+        import numpy as np
+
+        nodes = {node_id}
+        frontier = {node_id}
+        for _ in range(hops):
+            nb: set[str] = set()
+            for n in frontier:
+                nb.update(self.graph.successors(n))
+                nb.update(self.graph.predecessors(n))
+            nb.difference_update(nodes)
+            nodes.update(nb)
+            frontier = nb
+
+        sub = self.graph.subgraph(nodes)
+
+        index: Dict[str, int] = {}
+        features: list[np.ndarray] = []
+        for n in sub.nodes:
+            emb = self.graph.nodes[n].get(node_attr)
+            if emb is not None:
+                index[n] = len(features)
+                features.append(np.asarray(emb, dtype=float))
+
+        edges: list[tuple[str, str]] = []
+        pairs: list[list[int]] = []
+        for u, v in sub.edges():
+            if u in index and v in index:
+                edges.append((u, v))
+                pairs.append([index[u], index[v]])
+
+        attention: Dict[str, float] = {}
+        if pairs and features:
+            from ..analysis.hypergraph import hyperedge_attention_scores as _att
+
+            scores = _att(pairs, np.stack(features))
+            for (u, v), s in zip(edges, scores):
+                attention[f"{u}->{v}"] = float(s)
+
+        return {
+            "nodes": list(sub.nodes),
+            "edges": list(sub.edges),
+            "attention": attention,
+        }
+
     def link_similar_chunks(self, k: int = 3) -> None:
         """Add ``similar_to`` edges between semantically close chunks."""
 
@@ -2103,6 +2171,7 @@ class KnowledgeGraph:
         num_points: int = 10,
         *,
         chebyshev_order: int | None = None,
+        gpu: bool = False,
     ) -> None:
         """Compute GraphWave embeddings for all nodes.
 
@@ -2114,19 +2183,29 @@ class KnowledgeGraph:
             Number of sample points for the characteristic function.
         """
 
-        if chebyshev_order is None:
-            from ..analysis.fractal import graphwave_embedding as _gw
+        if gpu:
+            from ..analysis.graphwave_cuda import graphwave_embedding_gpu as _gwg
 
-            emb = _gw(self.graph.to_undirected(), scales, num_points)
-        else:
-            from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
-
-            emb = _gwc(
+            emb = _gwg(
                 self.graph.to_undirected(),
                 scales,
                 num_points=num_points,
-                order=chebyshev_order,
+                order=chebyshev_order or 7,
             )
+        else:
+            if chebyshev_order is None:
+                from ..analysis.fractal import graphwave_embedding as _gw
+
+                emb = _gw(self.graph.to_undirected(), scales, num_points)
+            else:
+                from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
+
+                emb = _gwc(
+                    self.graph.to_undirected(),
+                    scales,
+                    num_points=num_points,
+                    order=chebyshev_order,
+                )
         for node, vec in emb.items():
             self.graph.nodes[node]["graphwave_embedding"] = vec.tolist()
 
@@ -4319,6 +4398,18 @@ class KnowledgeGraph:
             max_iter=max_iter,
         )
 
+    def tpl_incremental(
+        self,
+        *,
+        radius: int = 1,
+        dimension: int = 1,
+    ) -> Dict[int, np.ndarray]:
+        """Compute incremental TPL diagrams for nodes."""
+
+        from ..analysis.tpl_incremental import tpl_incremental as _tpl_inc
+
+        return _tpl_inc(self.graph.to_undirected(), radius=radius, dimension=dimension)
+
     # ------------------------------------------------------------------
     # Perception helpers
     # ------------------------------------------------------------------
@@ -4959,7 +5050,9 @@ class KnowledgeGraph:
 
         query = (
             "PROFILE MATCH (a {id:$u}) MATCH (b {id:$v}) "
-            "WITH id(a) AS id1, id(b) AS id2 "
+            "WITH id(a) AS ida, id(b) AS idb "
+            "WITH CASE WHEN ida <= idb THEN ida ELSE idb END AS id1, "
+            "CASE WHEN ida <= idb THEN idb ELSE ida END AS id2 "
             "MATCH ()-[r:SUGGESTED_HYPER_AA]-() "
             "WHERE r.startNodeId = id1 AND r.endNodeId = id2 "
             "RETURN r.score AS score"
@@ -5347,6 +5440,19 @@ class KnowledgeGraph:
                 " writeProperty:'score', topK:$topk, relationshipProjection:$relProj})",
                 topk=lp_topk,
                 relProj=rel_proj,
+            )
+            # Canonical pair orientation avoids duplicates from reversed order
+            session.run(
+                "MATCH (a)-[r:SUGGESTED_HYPER_AA]->(b) "
+                "WITH CASE WHEN r.startNodeId <= r.endNodeId THEN r.startNodeId ELSE r.endNodeId END AS s, "
+                "CASE WHEN r.startNodeId <= r.endNodeId THEN r.endNodeId ELSE r.startNodeId END AS t, r "
+                "SET r.startNodeId = s, r.endNodeId = t"
+            )
+            session.run(
+                "MATCH ()-[r:SUGGESTED_HYPER_AA]->() "
+                "WITH r.startNodeId AS s, r.endNodeId AS t, collect(r) AS rs "
+                "WHERE size(rs) > 1 "
+                "FOREACH (x IN tail(rs) | DELETE x)"
             )
             session.run(
                 "CREATE INDEX haa_pair IF NOT EXISTS "

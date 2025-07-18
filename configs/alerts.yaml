@@ -9,3 +9,13 @@ groups:
         for: 10m
         labels:
           severity: warning
+      - alert: RedisLowHitRatio
+        expr: redis_hit_ratio < 0.3
+        for: 5m
+        labels:
+          severity: warning
+      - alert: EigshTimeoutCritical
+        expr: increase(eigsh_timeouts_total[1h]) > 2
+        for: 1m
+        labels:
+          severity: critical

@@ -17,4 +17,5 @@ def test_export_model_card(tmp_path):
     )
     data = json.loads(json_path.read_text())
     assert "sigma_db" in data
+    assert "code_commit" in data
     assert html_path.exists()

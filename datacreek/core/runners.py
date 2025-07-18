@@ -68,22 +68,29 @@ class GraphWaveRunner:
 
     def run(
         self,
-        scales: Iterable[float],
+        scales: Iterable[float] | None = None,
         *,
         num_points: int = 10,
         order: int = 7,
+        dynamic: bool = False,
+        gpu: bool = False,
     ) -> None:
         import networkx as nx
 
         from ..analysis.fractal import graphwave_embedding_chebyshev as _gwc
+        from ..analysis.graphwave_bandwidth import update_graphwave_bandwidth
 
-        G = self.graph.graph.to_undirected()
-        comps = list(nx.connected_components(G))
+        G = self.graph.graph
+        if scales is None or dynamic:
+            t = update_graphwave_bandwidth(G)
+            scales = [t]
+        comps = list(nx.connected_components(G.to_undirected()))
         if len(comps) == 1:
             self.graph.compute_graphwave_embeddings(
                 scales=scales,
                 num_points=num_points,
                 chebyshev_order=order,
+                gpu=gpu,
             )
         else:
             for comp in comps:
@@ -97,8 +104,8 @@ class GraphWaveRunner:
         self.graph.graph.graph["gw_entropy"] = gw_entropy
         logger.info("gw_entropy=%.4f", gw_entropy)
         try:
-            from datacreek.analysis.monitoring import update_metric
             from datacreek.analysis.monitoring import gw_entropy as _gw_entropy_gauge
+            from datacreek.analysis.monitoring import update_metric
 
             update_metric("gw_entropy", gw_entropy)
             if _gw_entropy_gauge is not None:

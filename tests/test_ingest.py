@@ -84,7 +84,9 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
         m.setitem(
             sys.modules,
             "datacreek.utils.image_captioning",
-            types.SimpleNamespace(caption_image=lambda p: "cap"),
+            types.SimpleNamespace(
+                caption_images_parallel=lambda paths, **kw: ["cap" for _ in paths]
+            ),
         )
         to_kg("Hello\nWorld", ds, "doc1", elements=elements)
 

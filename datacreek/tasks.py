@@ -33,6 +33,7 @@ from datacreek.models.task_status import TaskStatus
 from datacreek.pipelines import GenerationOptionsModel
 from datacreek.schemas import DatasetName
 from datacreek.services import create_dataset, create_source
+from datacreek.utils import backpressure
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
 from datacreek.utils.config import load_config_with_overrides
@@ -229,6 +230,8 @@ def dataset_ingest_task(
     name: DatasetName, path: str, user_id: int | None = None, **kwargs
 ) -> dict:
     """Ingest a file into a persisted dataset."""
+    if not backpressure.acquire_slot():
+        raise RuntimeError("ingest queue full")
     client = get_redis_client()
     driver = get_neo4j_driver()
     storage = get_s3_storage()
@@ -291,6 +294,7 @@ def dataset_ingest_task(
         _record_error(client, key, exc, ds)
         raise
     finally:
+        backpressure.release_slot()
         if driver:
             driver.close()
 
