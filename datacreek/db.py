@@ -1,7 +1,7 @@
 import os
 
 from flask_login import UserMixin
-from sqlalchemy import Column, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 from datacreek.utils.config import load_config
@@ -62,6 +62,15 @@ class Dataset(Base):
 
     owner = relationship("User", back_populates="datasets")
     source = relationship("SourceData", back_populates="datasets")
+
+
+class TenantPrivacy(Base):
+    """Differential privacy budget per tenant."""
+
+    __tablename__ = "tenant_privacy"
+    tenant_id = Column(Integer, primary_key=True, index=True)
+    epsilon_used = Column(Float, nullable=False, default=0.0)
+    epsilon_max = Column(Float, nullable=False, default=0.0)
 
 
 def init_db() -> None:

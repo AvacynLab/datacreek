@@ -1,0 +1,10 @@
+@startuml
+!define RECTANGLE class
+actor User
+
+RECTANGLE bench_all
+User -> bench_all : run script
+bench_all -> "ann_benchmark" : measure recall
+bench_all -> "psutil" : CPU/memory
+bench_all -> "faiss" : GPU count
+@enduml

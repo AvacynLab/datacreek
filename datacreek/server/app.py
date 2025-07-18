@@ -10,11 +10,33 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, url_for
-from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from flask import (
+    Flask,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
 from flask_wtf import FlaskForm
 from werkzeug.security import check_password_hash, generate_password_hash
-from wtforms import FileField, IntegerField, PasswordField, SelectField, StringField, SubmitField
+from wtforms import (
+    FileField,
+    IntegerField,
+    PasswordField,
+    SelectField,
+    StringField,
+    SubmitField,
+)
 from wtforms.validators import DataRequired
 
 logger = logging.getLogger(__name__)
@@ -48,6 +70,7 @@ from datacreek.tasks import (
     graph_load_neo4j_task,
     graph_save_neo4j_task,
 )
+from datacreek.utils import backpressure
 from datacreek.utils.config import get_llm_provider, load_config
 
 STATIC_DIR = Path(__file__).parents[2] / "frontend" / "dist"
@@ -156,7 +179,10 @@ def get_dataset(name: str) -> DatasetBuilder | None:
             ds = DatasetBuilder.from_redis(REDIS, f"dataset:{name}", driver)
             ds.redis_client = REDIS
             ds.neo4j_driver = driver
-            if current_user.is_authenticated and ds.owner_id not in {None, current_user.id}:
+            if current_user.is_authenticated and ds.owner_id not in {
+                None,
+                current_user.id,
+            }:
                 return None
             DATASETS[name] = ds
             return ds
@@ -208,7 +234,10 @@ def get_graph(name: str) -> DatasetBuilder | None:
             ds = DatasetBuilder.from_redis(REDIS, f"graph:{name}", driver)
             ds.redis_client = REDIS
             ds.neo4j_driver = driver
-            if current_user.is_authenticated and ds.owner_id not in {None, current_user.id}:
+            if current_user.is_authenticated and ds.owner_id not in {
+                None,
+                current_user.id,
+            }:
                 return None
             GRAPHS[name] = ds
             return ds
@@ -496,6 +525,8 @@ def api_dataset_ingest(name: str):
     path = data.get("path")
     if not path:
         abort(400)
+    if not backpressure.has_capacity():
+        abort(429)
 
     tid = dataset_ingest_task.delay(
         name,
@@ -557,7 +588,9 @@ def api_deduplicate(name: str):
     """Remove duplicate chunks from the dataset."""
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "deduplicate_chunks", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "deduplicate_chunks", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -577,7 +610,9 @@ def api_normalize_dates(name: str):
     """Normalize date fields on dataset nodes."""
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "normalize_dates", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "normalize_dates", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -634,7 +669,9 @@ def api_similarity(name: str):
     if not get_dataset(name):
         abort(404)
     k = int(request.args.get("k", 3))
-    tid = dataset_operation_task.delay(name, "link_similar_chunks", {"k": k}, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_similar_chunks", {"k": k}, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -646,7 +683,9 @@ def api_section_similarity(name: str):
     if not get_dataset(name):
         abort(404)
     k = int(request.args.get("k", 3))
-    tid = dataset_operation_task.delay(name, "link_similar_sections", {"k": k}, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_similar_sections", {"k": k}, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -658,7 +697,9 @@ def api_document_similarity(name: str):
     if not get_dataset(name):
         abort(404)
     k = int(request.args.get("k", 3))
-    tid = dataset_operation_task.delay(name, "link_similar_documents", {"k": k}, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_similar_documents", {"k": k}, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -669,7 +710,9 @@ def api_co_mentions(name: str):
 
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "link_chunks_by_entity", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_chunks_by_entity", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -680,7 +723,9 @@ def api_doc_co_mentions(name: str):
 
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "link_documents_by_entity", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_documents_by_entity", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -691,7 +736,9 @@ def api_section_co_mentions(name: str):
 
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "link_sections_by_entity", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_sections_by_entity", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -701,7 +748,9 @@ def api_author_org_links(name: str):
     """Link document authors to their organizations."""
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "link_authors_organizations", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "link_authors_organizations", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1023,6 +1072,22 @@ def api_search_links(name: str):
     return jsonify(results)
 
 
+@app.get("/api/datasets/<name>/explain/<nid>")
+@login_required
+def api_explain_node(name: str, nid: str):
+    """Return a 3-hop subgraph around ``nid`` with attention heatmap."""
+
+    ds = get_dataset(name)
+    if not ds:
+        abort(404)
+    hops = int(request.args.get("hops", 3))
+    try:
+        data = ds.explain_node(nid, hops=hops)
+    except ValueError:
+        abort(404)
+    return jsonify(data)
+
+
 @app.post("/api/datasets/<name>/consolidate")
 @login_required
 def api_consolidate(name: str):
@@ -1040,7 +1105,9 @@ def api_consolidate(name: str):
 def api_communities(name: str):
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "detect_communities", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "detect_communities", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1049,7 +1116,9 @@ def api_communities(name: str):
 def api_entity_groups(name: str):
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "detect_entity_groups", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "detect_entity_groups", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1058,7 +1127,9 @@ def api_entity_groups(name: str):
 def api_summaries(name: str):
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "summarize_communities", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "summarize_communities", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1067,7 +1138,9 @@ def api_summaries(name: str):
 def api_entity_group_summaries(name: str):
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "summarize_entity_groups", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "summarize_entity_groups", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1230,7 +1303,9 @@ def api_mark_conflicts(name: str):
 
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "mark_conflicting_facts", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "mark_conflicting_facts", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1241,7 +1316,9 @@ def api_validate(name: str):
 
     if not get_dataset(name):
         abort(404)
-    tid = dataset_operation_task.delay(name, "validate_coherence", None, current_user.id).id
+    tid = dataset_operation_task.delay(
+        name, "validate_coherence", None, current_user.id
+    ).id
     return jsonify({"task_id": tid})
 
 
@@ -1702,7 +1779,9 @@ def create():
     # Get the list of available input files
     input_files: list[str] = []
 
-    return render_template("create.html", form=form, provider=provider, input_files=input_files)
+    return render_template(
+        "create.html", form=form, provider=provider, input_files=input_files
+    )
 
 
 @app.route("/curate", methods=["GET", "POST"])
@@ -1742,7 +1821,9 @@ def curate():
     # Get the list of available JSON files
     json_files: list[str] = []
 
-    return render_template("curate.html", form=form, provider=provider, json_files=json_files)
+    return render_template(
+        "curate.html", form=form, provider=provider, json_files=json_files
+    )
 
 
 @app.route("/ingest", methods=["GET", "POST"])
@@ -1766,7 +1847,9 @@ def ingest():
 
                 import tempfile
 
-                with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp:
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=file_extension
+                ) as tmp:
                     temp_file.save(tmp.name)
                     input_path = tmp.name
             else:

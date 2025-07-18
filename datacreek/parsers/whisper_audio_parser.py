@@ -9,6 +9,18 @@ class WhisperAudioParser(BaseParser):
     """Parse audio files using the Whisper model."""
 
     def parse(self, file_path: str) -> str:
+        """Return transcription of ``file_path`` using whisper.cpp when available."""
+
+        try:
+            from datacreek.utils.whisper_batch import transcribe_audio_batch
+
+            text = transcribe_audio_batch([file_path])[0]
+            if text:
+                return text
+        except Exception:
+            # Fallback to the slower Python implementation
+            pass
+
         try:
             import whisper
         except Exception as exc:  # pragma: no cover - optional dependency

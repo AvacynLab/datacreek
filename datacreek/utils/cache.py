@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import time
+import asyncio
+import logging
 from functools import wraps
 from threading import Thread
 from typing import Callable, Optional
@@ -54,20 +55,43 @@ def cache_l1(func: Callable) -> Callable:
     return wrapper
 
 
-class TTLManager(Thread):
-    """Background thread adjusting TTL from hit ratio."""
+class TTLManager:
+    """Asynchronous manager adjusting TTL from hit ratio."""
 
     def __init__(self) -> None:
-        super().__init__(daemon=True)
         self.current_ttl = int(cache_cfg.get("l1_ttl_init", 3600))
         self._alpha = 0.3
         self._ema = 0.5
+        self._task: asyncio.Task | None = None
+        self._stop: Optional[asyncio.Event] = None
         self.start()
 
-    def run(self) -> None:  # pragma: no cover - loop
-        while True:
-            time.sleep(300)
+    async def _loop(self) -> None:  # pragma: no cover - background
+        assert self._stop is not None
+        while not self._stop.is_set():
+            await asyncio.sleep(300)
             self.run_once()
+
+    def start(self) -> None:
+        """Launch the TTL adjustment loop in an asyncio task."""
+
+        if self._task is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+
+            def _runner() -> None:
+                asyncio.set_event_loop(loop)
+                self._stop = asyncio.Event()
+                self._task = loop.create_task(self._loop())
+                loop.run_forever()
+
+            Thread(target=_runner, daemon=True).start()
+        else:
+            self._stop = asyncio.Event()
+            self._task = loop.create_task(self._loop())
 
     def run_once(self) -> None:
         if hits is None or miss is None or hit_ratio_g is None:
@@ -104,16 +128,20 @@ def l1_cache(key_fn: Callable[..., str]) -> Callable[[Callable], Callable]:
                         if hits is not None:
                             hits.inc()
                         return redis.get(key)
-                except Exception:
-                    pass
+                except redis.RedisError:
+                    logging.getLogger(__name__).warning(
+                        "Redis error on get", exc_info=True
+                    )
             result = fn(*args, **kwargs)
             if redis is not None:
                 try:
                     if miss is not None:
                         miss.inc()
                     redis.setex(key, ttl_manager.current_ttl, result)
-                except Exception:
-                    pass
+                except redis.RedisError:
+                    logging.getLogger(__name__).warning(
+                        "Redis error on set", exc_info=True
+                    )
             return result
 
         return wrapper

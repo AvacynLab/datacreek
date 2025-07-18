@@ -347,9 +347,25 @@ class DatasetBuilder:
                 pass
 
     def generate_model_card(
-        self, prune_ratio: float, cca_sha: str, dp_eps: int = 2
+        self,
+        prune_ratio: float,
+        cca_sha: str,
+        dp_eps: int = 2,
+        code_commit: str | None = None,
     ) -> Dict[str, float]:
-        """Return model card metrics as a dictionary."""
+        """Return model card metrics as a dictionary.
+
+        Parameters
+        ----------
+        prune_ratio:
+            Ratio of pruned edges.
+        cca_sha:
+            Canonical commit identifier of CCA data.
+        dp_eps:
+            Differential privacy budget.
+        code_commit:
+            Git SHA of the current code revision.
+        """
 
         meta = self.graph.graph.graph
         card = {
@@ -360,6 +376,7 @@ class DatasetBuilder:
             "prune_ratio": float(prune_ratio),
             "cca_sha": cca_sha,
         }
+        card["code_commit"] = code_commit or os.getenv("GIT_SHA", "unknown")
         self._record_event("model_card", "Model card generated", **card)
         return card
 
@@ -1394,6 +1411,7 @@ class DatasetBuilder:
         num_points: int = 10,
         *,
         chebyshev_order: int | None = None,
+        gpu: bool = False,
     ) -> None:
         """Wrapper for :meth:`KnowledgeGraph.compute_graphwave_embeddings`."""
 
@@ -1401,6 +1419,7 @@ class DatasetBuilder:
             scales=scales,
             num_points=num_points,
             chebyshev_order=chebyshev_order,
+            gpu=gpu,
         )
         self._record_event(
             "compute_graphwave_embeddings",
@@ -1408,6 +1427,7 @@ class DatasetBuilder:
             scales=list(scales),
             num_points=num_points,
             chebyshev_order=chebyshev_order,
+            gpu=gpu,
         )
 
     def graphwave_entropy(self) -> float:
@@ -1597,6 +1617,20 @@ class DatasetBuilder:
         self._record_event(
             "edge_attention_scores",
             "Edge attention scores computed",
+        )
+        return result
+
+    def explain_node(
+        self, node_id: str, *, hops: int = 3, node_attr: str = "embedding"
+    ) -> Dict[str, Any]:
+        """Wrapper for :meth:`KnowledgeGraph.explain_node`."""
+
+        result = self.graph.explain_node(node_id, hops=hops, node_attr=node_attr)
+        self._record_event(
+            "explain_node",
+            f"Explained node {node_id}",
+            node=node_id,
+            hops=hops,
         )
         return result
 
@@ -3789,6 +3823,23 @@ class DatasetBuilder:
             distance_after=float(res["distance_after"]),
         )
         return res
+
+    def tpl_incremental(
+        self,
+        *,
+        radius: int = 1,
+        dimension: int = 1,
+    ) -> Dict[int, np.ndarray]:
+        """Wrapper for :meth:`KnowledgeGraph.tpl_incremental`."""
+
+        diags = self.graph.tpl_incremental(radius=radius, dimension=dimension)
+        self._record_event(
+            "tpl_incremental",
+            "Incremental persistence update",
+            radius=radius,
+            dimension=dimension,
+        )
+        return diags
 
     def run_information_layer(
         self,

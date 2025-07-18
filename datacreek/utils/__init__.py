@@ -1,5 +1,8 @@
 """Utility helpers for datacreek."""
 
+from .backpressure import acquire_slot as acquire_ingest_slot
+from .backpressure import has_capacity as ingest_has_capacity
+from .backpressure import release_slot as release_ingest_slot
 from .cache import cache_l1
 from .chunking import chunk_by_sentences, chunk_by_tokens
 from .config import (
@@ -30,6 +33,7 @@ from .llm_processing import (
 from .metrics import push_metrics
 from .progress import create_progress, progress_context
 from .redis_helpers import decode_hash
+from .redis_pid import get_current_ttl, start_pid_controller
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
 from .toolformer import execute_tool_calls, insert_tool_calls
 
@@ -44,6 +48,22 @@ def __getattr__(name: str):
         from .entity_extraction import extract_entities as func
 
         return func
+    if name in {
+        "propose_merge_split",
+        "record_feedback",
+        "fine_tune_from_feedback",
+    }:
+        from .curation_agent import fine_tune_from_feedback as _ft
+        from .curation_agent import propose_merge_split as _ps
+        from .curation_agent import record_feedback as _rf
+
+        mapping = {
+            "propose_merge_split": _ps,
+            "record_feedback": _rf,
+            "fine_tune_from_feedback": _ft,
+        }
+
+        return mapping[name]
     raise AttributeError(name)
 
 
@@ -89,4 +109,12 @@ __all__ = [
     "decrypt_pii_fields",
     "push_metrics",
     "cache_l1",
+    "start_pid_controller",
+    "get_current_ttl",
+    "acquire_ingest_slot",
+    "release_ingest_slot",
+    "ingest_has_capacity",
+    "propose_merge_split",
+    "record_feedback",
+    "fine_tune_from_feedback",
 ]

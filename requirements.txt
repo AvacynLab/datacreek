@@ -39,3 +39,8 @@ geomloss>=0.2.6
 torch==2.7.1
 boto3>=1.34.0
 httpx>=0.26.0
+scikit-optimize>=0.10.0
+psutil>=5.9.0
+psycopg[binary]>=3.1
+numpy>=1.25
+langchain>=0.1.0

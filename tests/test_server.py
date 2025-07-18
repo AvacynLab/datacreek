@@ -291,7 +291,9 @@ def test_api_search_endpoints():
 
     with app.test_client() as client:
         _login(client)
-        res = client.get("/api/datasets/demo/search_hybrid", query_string={"q": "hello", "k": 1})
+        res = client.get(
+            "/api/datasets/demo/search_hybrid", query_string={"q": "hello", "k": 1}
+        )
         assert res.status_code == 200
         assert res.get_json()[0] == "c1"
 
@@ -434,7 +436,10 @@ def test_dataset_ops_endpoints(monkeypatch):
             return FakeResponse(
                 {
                     "results": [
-                        {"id": "http://dbpedia.org/resource/Beethoven", "description": "desc"}
+                        {
+                            "id": "http://dbpedia.org/resource/Beethoven",
+                            "description": "desc",
+                        }
                     ]
                 }
             )
@@ -555,7 +560,9 @@ def test_lookup_endpoints():
 
     with app.test_client() as client:
         _login(client)
-        res = client.get("/api/datasets/demo/chunk_document", query_string={"cid": "c1"})
+        res = client.get(
+            "/api/datasets/demo/chunk_document", query_string={"cid": "c1"}
+        )
         assert res.status_code == 200
         assert res.get_json() == "doc"
 
@@ -570,11 +577,15 @@ def test_lookup_endpoints():
         assert res.status_code == 200
         assert res.get_json() == 1
 
-        res = client.get("/api/datasets/demo/section_document", query_string={"sid": "sec1"})
+        res = client.get(
+            "/api/datasets/demo/section_document", query_string={"sid": "sec1"}
+        )
         assert res.status_code == 200
         assert res.get_json() == "doc"
 
-        res = client.get("/api/datasets/demo/chunk_entities", query_string={"cid": "c1"})
+        res = client.get(
+            "/api/datasets/demo/chunk_entities", query_string={"cid": "c1"}
+        )
         assert set(res.get_json()) == {"A", "B"}
 
         res = client.get("/api/datasets/demo/chunk_facts", query_string={"cid": "c1"})
@@ -589,7 +600,9 @@ def test_lookup_endpoints():
         res = client.get("/api/datasets/demo/fact_pages", query_string={"fid": fid})
         assert res.get_json() == [1]
 
-        res = client.get("/api/datasets/demo/entity_documents", query_string={"eid": "A"})
+        res = client.get(
+            "/api/datasets/demo/entity_documents", query_string={"eid": "A"}
+        )
         assert res.get_json() == ["doc"]
 
         res = client.get("/api/datasets/demo/entity_chunks", query_string={"eid": "A"})
@@ -1024,3 +1037,23 @@ def test_multiple_graphs_per_user(monkeypatch):
         res = cl.get("/api/graphs")
         assert res.status_code == 200
         assert set(res.get_json()) == {"g1", "g2"}
+
+
+def test_api_explain_node():
+    ds = DatasetBuilder(DatasetType.QA, name="demo")
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "a")
+    ds.add_chunk("d1", "c2", "b")
+    ds.graph.graph.add_edge("c1", "c2", relation="similar_to")
+    ds.graph.graph.nodes["c1"]["embedding"] = [0.0, 0.0]
+    ds.graph.graph.nodes["c2"]["embedding"] = [1.0, 0.0]
+    DATASETS["demo"] = ds
+
+    with app.test_client() as client:
+        _login(client)
+        res = client.get("/api/datasets/demo/explain/c1")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "nodes" in data and "edges" in data and "attention" in data
+        assert "c1" in data["nodes"] and "c2" in data["nodes"]
+    DATASETS.clear()

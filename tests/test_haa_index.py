@@ -37,4 +37,4 @@ def test_haa_index_query_plan():
     assert score == 1.5
     q = drv.session_obj.queries[-1]
     assert q.startswith("PROFILE MATCH")
-    assert "WITH id(a) AS id1, id(b) AS id2" in q
+    assert "CASE WHEN ida <= idb" in q

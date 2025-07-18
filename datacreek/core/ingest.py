@@ -216,6 +216,7 @@ def to_kg(
         atoms: list[str] = []
         img_idx = 0
         current_page = 1
+        pending_imgs: list[tuple[str, str, int]] = []
         for el in elements:
             page = (
                 getattr(getattr(el, "metadata", None), "page_number", None)
@@ -237,14 +238,20 @@ def to_kg(
                     molecule_idx += 1
                     atoms = []
                 img_id = f"{doc_id}_image_{img_idx}"
-                try:
-                    from datacreek.utils.image_captioning import caption_image
-                except Exception:  # pragma: no cover - optional dep failure
-                    alt = ""
-                else:
-                    alt = caption_image(path)
-                dataset.add_image(doc_id, img_id, path, page=page, alt_text=alt)
+                pending_imgs.append((img_id, path, page))
                 img_idx += 1
+                if len(pending_imgs) >= 256:
+                    try:
+                        from datacreek.utils.image_captioning import (
+                            caption_images_parallel,
+                        )
+
+                        alts = caption_images_parallel([p[1] for p in pending_imgs])
+                    except Exception:  # pragma: no cover - optional dep failure
+                        alts = ["" for _ in pending_imgs]
+                    for (pid, ppath, ppage), alt in zip(pending_imgs, alts):
+                        dataset.add_image(doc_id, pid, ppath, page=ppage, alt_text=alt)
+                    pending_imgs = []
                 continue
             text_el = getattr(el, "text", None)
             if not text_el:
@@ -333,6 +340,15 @@ def to_kg(
                 chunk_idx += 1
                 if progress_callback:
                     progress_callback(chunk_idx)
+        if pending_imgs:
+            try:
+                from datacreek.utils.image_captioning import caption_images_parallel
+
+                alts = caption_images_parallel([p[1] for p in pending_imgs])
+            except Exception:  # pragma: no cover - optional dep failure
+                alts = ["" for _ in pending_imgs]
+            for (pid, ppath, ppage), alt in zip(pending_imgs, alts):
+                dataset.add_image(doc_id, pid, ppath, page=ppage, alt_text=alt)
         if atoms:
             mol_id = f"{doc_id}_molecule_{molecule_idx}"
             dataset.add_molecule(doc_id, mol_id, atoms)
@@ -575,7 +591,6 @@ def ingest_into_dataset(
             dataset.fractal_information_metrics([1])
         except Exception:
             logger.exception("Failed to compute fractal metrics for %s", file_path)
-    return doc_id
     return doc_id
 
 

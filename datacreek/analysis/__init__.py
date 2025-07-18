@@ -17,6 +17,7 @@ __all__ = [
     "build_fractal_hierarchy",
     "build_mdl_hierarchy",
     "poincare_embedding",
+    "recenter_embeddings",
     "spectral_dimension",
     "laplacian_spectrum",
     "spectral_entropy",
@@ -74,6 +75,7 @@ __all__ = [
     "search_with_fallback",
     "recall10",
     "tpl_correct_graph",
+    "tpl_incremental",
     "alignment_correlation",
     "average_hyperbolic_radius",
     "scale_bias_wasserstein",
@@ -82,6 +84,8 @@ __all__ = [
     "autotune_step",
     "svgp_ei_propose",
     "kw_gradient",
+    "autotune_nprobe",
+    "autotune_node2vec",
     "spectral_bound_exceeded",
     "filter_semantic_cycles",
     "entropy_triangle_threshold",
@@ -90,6 +94,12 @@ __all__ = [
     "start_metrics_server",
     "push_metrics_gateway",
     "update_metric",
+    "estimate_lambda_max",
+    "update_graphwave_bandwidth",
+    "chebyshev_diag_hutchpp",
+    "search_hnsw_pq",
+    "graphwave_embedding_gpu",
+    "chebyshev_heat_kernel_gpu",
 ]
 
 
@@ -135,14 +145,30 @@ def __getattr__(name: str):
         from . import fractal as _f
 
         return getattr(_f, name)
+    if name == "recenter_embeddings":
+        from .poincare_recentering import recenter_embeddings as _re
+
+        return _re
     if name == "FractalNetPruner":
         from .compression import FractalNetPruner as _fp
 
         return _fp
-    if name in {"search_with_fallback", "recall10"}:
+    if name in {
+        "search_with_fallback",
+        "recall10",
+        "autotune_nprobe",
+        "autotune_node2vec",
+    }:
         from . import index as _idx
+        from .node2vec_tuning import autotune_node2vec as _an2
+        from .nprobe_tuning import autotune_nprobe as _anp
 
-        return getattr(_idx, name)
+        return {
+            "search_with_fallback": _idx.search_with_fallback,
+            "recall10": _idx.recall10,
+            "autotune_nprobe": _anp,
+            "autotune_node2vec": _an2,
+        }[name]
     if name in {
         "hyper_sagnn_embeddings",
         "hyper_sagnn_head_drop_embeddings",
@@ -184,10 +210,11 @@ def __getattr__(name: str):
         from . import governance as _g
 
         return getattr(_g, name)
-    if name == "tpl_correct_graph":
+    if name == "tpl_correct_graph" or name == "tpl_incremental":
         from .tpl import tpl_correct_graph as _tcg
+        from .tpl_incremental import tpl_incremental as _tpli
 
-        return _tcg
+        return {"tpl_correct_graph": _tcg, "tpl_incremental": _tpli}[name]
     if name in {
         "automorphisms",
         "automorphism_orbits",
@@ -302,5 +329,28 @@ def __getattr__(name: str):
             "start_metrics_server": _sms,
             "push_metrics_gateway": _pg,
             "update_metric": _um,
+        }[name]
+    if name in {
+        "estimate_lambda_max",
+        "update_graphwave_bandwidth",
+        "chebyshev_diag_hutchpp",
+        "search_hnsw_pq",
+        "graphwave_embedding_gpu",
+        "chebyshev_heat_kernel_gpu",
+    }:
+        from .chebyshev_diag import chebyshev_diag_hutchpp as _cdh
+        from .graphwave_bandwidth import estimate_lambda_max as _el
+        from .graphwave_bandwidth import update_graphwave_bandwidth as _ugb
+        from .graphwave_cuda import chebyshev_heat_kernel_gpu as _gwk
+        from .graphwave_cuda import graphwave_embedding_gpu as _gwe
+        from .hybrid_ann import search_hnsw_pq as _hpq
+
+        return {
+            "estimate_lambda_max": _el,
+            "update_graphwave_bandwidth": _ugb,
+            "chebyshev_diag_hutchpp": _cdh,
+            "search_hnsw_pq": _hpq,
+            "graphwave_embedding_gpu": _gwe,
+            "chebyshev_heat_kernel_gpu": _gwk,
         }[name]
     raise AttributeError(name)
