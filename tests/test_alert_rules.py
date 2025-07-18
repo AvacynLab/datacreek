@@ -1,24 +1,65 @@
 import yaml
+import pytest
 
 
 def test_jitter_alert_rule():
     with open("configs/alerts.yaml") as fh:
         data = yaml.safe_load(fh)
-    rules = {r["alert"]: r for r in data["groups"][0]["rules"]}
+    rules = {}
+    for r in data["groups"][0]["rules"]:
+        key = r.get("alert") or r.get("record")
+        rules[key] = r
     jitter = rules.get("SVGPJitterStorm")
     assert jitter is not None
     assert jitter["expr"] == "rate(gp_jitter_restarts_total[10m]) > 0.01"
     assert jitter["for"] == "10m"
     assert jitter["labels"]["severity"] == "warning"
 
+    thresh = rules.get("redis_low_hit_ratio_threshold")
+    assert thresh is not None
+    assert thresh["expr"] == 0.3
     redis_rule = rules.get("RedisLowHitRatio")
     assert redis_rule is not None
-    assert redis_rule["expr"] == "redis_hit_ratio < 0.3"
+    assert redis_rule["expr"] == "redis_hit_ratio < redis_low_hit_ratio_threshold"
     assert redis_rule["for"] == "5m"
     assert redis_rule["labels"]["severity"] == "warning"
 
+    storm_thresh = rules.get("eigsh_timeout_storm_threshold")
+    assert storm_thresh is not None
+    assert storm_thresh["expr"] == 5
+    critical_thresh = rules.get("eigsh_timeout_critical_threshold")
+    assert critical_thresh is not None
+    assert critical_thresh["expr"] == 2
     eigsh_rule = rules.get("EigshTimeoutCritical")
     assert eigsh_rule is not None
-    assert eigsh_rule["expr"] == "increase(eigsh_timeouts_total[1h]) > 2"
+    assert (
+        eigsh_rule["expr"]
+        == "increase(eigsh_timeouts_total[1h]) > eigsh_timeout_critical_threshold"
+    )
     assert eigsh_rule["for"] == "1m"
     assert eigsh_rule["labels"]["severity"] == "critical"
+
+    cache_pressure = rules.get("CachePressure")
+    assert cache_pressure is not None
+    assert "ingest_queue_fill_ratio > 0.9" in cache_pressure["expr"]
+    assert cache_pressure["labels"]["severity"] == "critical"
+
+
+def test_promtool_check_rules():
+    import shutil
+    import subprocess
+
+    if shutil.which("promtool") is None:
+        pytest.skip("promtool not available")
+    subprocess.run(["promtool", "check", "rules", "configs/alerts.yaml"], check=True)
+
+
+def test_alertmanager_inhibition():
+    with open("configs/alertmanager.yaml") as fh:
+        cfg = yaml.safe_load(fh)
+    inhibit = cfg.get("inhibit_rules")
+    assert inhibit, "inhibit_rules missing"
+    rule = inhibit[0]
+    assert "critical" in rule["source_matchers"][0]
+    assert "warning" in rule["target_matchers"][0]
+    assert "alertname" in rule["equal"]

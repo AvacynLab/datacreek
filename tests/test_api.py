@@ -621,3 +621,48 @@ def test_delete_persisted_dataset_route_unauthorized(monkeypatch):
 
     res = client.delete("/datasets/demo", headers=headers)
     assert res.status_code == 404
+
+
+def test_explain_endpoint(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
+    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+
+    user_id, key = _create_user()
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.owner_id = user_id
+    ds.redis_client = redis_client
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "a")
+    ds.add_chunk("d1", "c2", "b")
+    ds.graph.graph.add_edge("c1", "c2", relation="sim")
+    ds.graph.graph.nodes["c1"]["embedding"] = [0.0, 0.0]
+    ds.graph.graph.nodes["c2"]["embedding"] = [1.0, 0.0]
+    ds.to_redis(redis_client, "dataset:demo")
+    redis_client.sadd(f"user:{user_id}:datasets", "demo")
+    redis_client.sadd("datasets", "demo")
+
+    headers = {"X-API-Key": key}
+
+    res = client.get("/datasets/demo/explain/c1", headers=headers)
+    assert res.status_code == 200
+    body = res.json()
+    assert "nodes" in body and "edges" in body and "attention" in body
+
+    res = client.get("/datasets/demo/explain/c1?fmt=svg", headers=headers)
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("image/svg")
+
+    import importlib.util
+
+    if importlib.util.find_spec("cairosvg"):
+        res = client.get("/datasets/demo/explain/c1?fmt=png", headers=headers)
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("image/png")
+    else:
+        res = client.get("/datasets/demo/explain/c1?fmt=png", headers=headers)
+        assert res.status_code == 501
+

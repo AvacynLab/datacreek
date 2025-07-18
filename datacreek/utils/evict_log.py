@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from typing import Deque, Literal
+import json
+import logging
 
 from .config import load_config
 
@@ -23,12 +25,26 @@ cache_cfg = cfg.get("cache", {})
 max_len = int(cache_cfg.get("l2_log_len", 100_000))
 
 evict_logs: Deque[EvictLog] = deque(maxlen=max_len)
+logger = logging.getLogger("datacreek.eviction")
 
 
 def log_eviction(key: str, ts: float, cause: Literal["ttl", "quota", "manual"]) -> None:
     """Append an eviction record to the global log."""
 
     evict_logs.append(EvictLog(key, ts, cause))
+    logger.info(json.dumps({"event": "lmdb_eviction", "key": key, "ts": ts, "cause": cause}))
+    try:
+        from ..analysis.monitoring import (
+            lmdb_evictions_total,
+            lmdb_eviction_last_ts,
+        )
+
+        if lmdb_evictions_total is not None:
+            lmdb_evictions_total.labels(cause=cause).inc()
+        if lmdb_eviction_last_ts is not None:
+            lmdb_eviction_last_ts.labels(cause=cause).set(ts)
+    except Exception:  # pragma: no cover - optional metrics
+        pass
 
 
 def clear_eviction_logs() -> None:

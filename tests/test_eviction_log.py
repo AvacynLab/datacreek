@@ -2,6 +2,8 @@ import pickle
 import time
 
 import lmdb
+import json
+import logging
 
 from datacreek.analysis import mapper
 from datacreek.utils.evict_log import clear_eviction_logs, evict_logs, log_eviction
@@ -23,3 +25,46 @@ def test_manual_eviction(tmp_path):
     mapper.delete_l2_entry(env, "k0")
     assert any(log.cause == "manual" and log.key == "k0" for log in evict_logs)
     env.close()
+
+
+def test_eviction_metrics(monkeypatch):
+    counter_calls = []
+    gauge_values = []
+
+    class DummyCounter:
+        def labels(self, *, cause):
+            def inc():
+                counter_calls.append(cause)
+
+            return type("L", (), {"inc": inc})
+
+    class DummyGauge:
+        def labels(self, *, cause):
+            def set(value):
+                gauge_values.append((cause, value))
+
+            return type("L", (), {"set": set})
+
+    monkeypatch.setattr(
+        "datacreek.analysis.monitoring.lmdb_evictions_total",
+        DummyCounter(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "datacreek.analysis.monitoring.lmdb_eviction_last_ts",
+        DummyGauge(),
+        raising=False,
+    )
+    clear_eviction_logs()
+    log_eviction("k1", 42.0, "quota")
+    assert counter_calls == ["quota"]
+    assert gauge_values == [("quota", 42.0)]
+
+
+def test_eviction_json_logging(caplog):
+    caplog.set_level(logging.INFO, logger="datacreek.eviction")
+    clear_eviction_logs()
+    log_eviction("kj", 123.0, "ttl")
+    assert any("lmdb_eviction" in r.message for r in caplog.records)
+    data = json.loads(caplog.records[0].message)
+    assert data["cause"] == "ttl"

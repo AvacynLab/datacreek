@@ -1,4 +1,9 @@
 import os
+import sys
+import types
+
+sys.modules.setdefault("transformers", types.ModuleType("transformers"))
+setattr(sys.modules["transformers"], "pipeline", lambda *a, **k: None)
 
 from datacreek.analysis.ingestion import (
     blip_caption_image,
@@ -77,6 +82,63 @@ def test_transcribe_audio_batch(monkeypatch):
     result = whisper_batch.transcribe_audio_batch(paths, batch_size=2)
     assert result == [f"txt-{p}" for p in paths]
     assert calls == paths
+
+
+def test_whisper_batch_gpu_fallback(monkeypatch):
+    paths = ["a.wav", "b.wav"]
+    calls: list[tuple[str, str]] = []
+
+    class GPUModel:
+        def transcribe(self, path: str, max_length: int = 30) -> str:
+            raise RuntimeError("CUDA out of memory")
+
+    class CPUModel:
+        def transcribe(self, path: str, max_length: int = 30) -> str:
+            calls.append(("cpu", path))
+            return f"cpu-{path}"
+
+    def fake_get(model="tiny.en", fp16=True, device=None, int8=False):
+        return GPUModel() if device == "cuda" else CPUModel()
+    fake_get.cache_clear = lambda: None
+
+    monkeypatch.setattr(whisper_batch, "_get_model", fake_get)
+    monkeypatch.setattr(
+        whisper_batch,
+        "torch",
+        type("T", (), {"cuda": type("C", (), {"is_available": staticmethod(lambda: True)})})(),
+    )
+
+    fb = {"n": 0}
+
+    class DummyCounter:
+        def inc(self):
+            fb["n"] += 1
+
+    vals = []
+
+    class DummyGauge:
+        def set(self, v: float):
+            vals.append(v)
+
+    monkeypatch.setattr(
+        "datacreek.analysis.monitoring.whisper_fallback_total",
+        DummyCounter(),
+        raising=False,
+    )
+    g = DummyGauge()
+    monkeypatch.setattr(
+        "datacreek.analysis.monitoring.whisper_xrt",
+        g,
+        raising=False,
+    )
+    import datacreek.analysis.monitoring as mon
+    monkeypatch.setitem(mon._METRICS, "whisper_xrt", g)
+
+    result = whisper_batch.transcribe_audio_batch(paths, batch_size=2)
+    assert result == ["cpu-a.wav", "cpu-b.wav"]
+    assert fb["n"] == 1
+    assert calls == [("cpu", "a.wav"), ("cpu", "b.wav")]
+    assert len(vals) == 1
 
 
 def test_whisper_parser_uses_batch(monkeypatch):

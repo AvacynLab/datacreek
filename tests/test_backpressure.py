@@ -44,6 +44,7 @@ def test_api_ingest_returns_429(tmp_path, monkeypatch, reload_backpressure):
     client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
     monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
+    monkeypatch.setattr("flask_login.login_required", lambda f: f)
     import datacreek.server.app as app_module
 
     app_module.REDIS = client
@@ -63,3 +64,51 @@ def test_api_ingest_returns_429(tmp_path, monkeypatch, reload_backpressure):
         assert res.status_code == 429
     bp.release_slot()
     app_module.DATASETS.clear()
+
+
+def test_queue_fill_ratio_metric(monkeypatch, reload_backpressure):
+    bp = reload_backpressure
+
+    vals = []
+
+    class DummyGauge:
+        def set(self, v: float):
+            vals.append(v)
+
+    monkeypatch.setattr(
+        "datacreek.analysis.monitoring.ingest_queue_fill_ratio",
+        DummyGauge(),
+        raising=False,
+    )
+    import datacreek.analysis.monitoring as mon
+    monkeypatch.setitem(mon._METRICS, "ingest_queue_fill_ratio", mon.ingest_queue_fill_ratio)
+
+    assert bp.acquire_slot()
+    assert vals[-1] == pytest.approx(1.0)
+    bp.release_slot()
+    assert vals[-1] == pytest.approx(0.0)
+
+
+def test_acquire_slot_with_backoff_spool(tmp_path, reload_backpressure):
+    bp = reload_backpressure
+    spool = tmp_path / "spool"
+    bp.acquire_slot()
+    data = {"name": "demo", "path": "x"}
+    assert not bp.acquire_slot_with_backoff(1, 0.01, spool_dir=str(spool), spool_data=data)
+    files = list(spool.iterdir())
+    assert len(files) == 1
+    import json
+
+    assert json.loads(files[0].read_text()) == data
+    bp.release_slot()
+
+
+def test_acquire_slot_with_backoff_retries(monkeypatch, reload_backpressure):
+    bp = reload_backpressure
+    bp.acquire_slot()
+    delays = []
+
+    monkeypatch.setattr("time.sleep", lambda d: delays.append(d))
+    assert not bp.acquire_slot_with_backoff(2, 0.01)
+    assert delays == [0.01, 0.02, 0.04]
+    bp.release_slot()

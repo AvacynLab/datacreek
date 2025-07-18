@@ -48,9 +48,31 @@ if Gauge is not None:
         "redis_evictions_l2_total",
         "LMDB L2 evictions performed",
     )
+    lmdb_evictions_total = Counter(
+        "lmdb_evictions_total",
+        "LMDB evictions by cause",
+        labelnames=["cause"],
+    )
+    lmdb_eviction_last_ts = Gauge(
+        "lmdb_eviction_last_ts",
+        "Timestamp of last LMDB eviction per cause",
+        labelnames=["cause"],
+    )
     lang_mismatch_total = Counter(
         "lang_mismatch_total",
         "Cross-language merge attempts rejected",
+    )
+    whisper_xrt = Gauge(
+        "whisper_xrt",
+        "Realtime factor of Whisper batch transcription",
+    )
+    whisper_fallback_total = Counter(
+        "whisper_fallback_total",
+        "Whisper GPU fallbacks to CPU",
+    )
+    ingest_queue_fill_ratio = Gauge(
+        "ingest_queue_fill_ratio",
+        "Ratio of active ingest tasks to queue size",
     )
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
@@ -66,8 +88,13 @@ else:  # pragma: no cover - optional dependency missing
     eigsh_timeouts_total = None  # type: ignore
     eigsh_last_duration = None  # type: ignore
     redis_evictions_l2_total = None  # type: ignore
+    lmdb_evictions_total = None  # type: ignore
+    lmdb_eviction_last_ts = None  # type: ignore
     lang_mismatch_total = None  # type: ignore
     ann_backend = None  # type: ignore
+    whisper_xrt = None  # type: ignore
+    whisper_fallback_total = None  # type: ignore
+    ingest_queue_fill_ratio = None  # type: ignore
     j_cost = None
 
 
@@ -89,6 +116,9 @@ _METRICS = {
     "redis_evictions_l2_total": redis_evictions_l2_total,
     "ann_backend": ann_backend,
     "lang_mismatch_total": lang_mismatch_total,
+    "whisper_xrt": whisper_xrt,
+    "whisper_fallback_total": whisper_fallback_total,
+    "ingest_queue_fill_ratio": ingest_queue_fill_ratio,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

@@ -165,6 +165,7 @@ __all__: list[str] = [
     "kw_gradient",
     "autotune_nprobe",
     "export_embeddings_pg",
+    "query_topk_pg",
     "xor_encrypt",
     "xor_decrypt",
     "encrypt_pii_fields",
@@ -797,10 +798,13 @@ def __getattr__(name: str):
         if name == "autotune_nprobe":
             return _anp
         return _DB.autotune_step
-    if name == "export_embeddings_pg":
-        from .plugins.pgvector_export import export_embeddings_pg as _eep
+    if name in {"export_embeddings_pg", "query_topk_pg"}:
+        from .plugins.pgvector_export import (
+            export_embeddings_pg as _eep,
+            query_topk_pg as _qt,
+        )
 
-        return _eep
+        return {"export_embeddings_pg": _eep, "query_topk_pg": _qt}[name]
     if name in {"propose_merge_split", "record_feedback", "fine_tune_from_feedback"}:
         from .utils.curation_agent import fine_tune_from_feedback as _ft
         from .utils.curation_agent import propose_merge_split as _ps

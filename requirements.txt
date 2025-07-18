@@ -44,3 +44,5 @@ psutil>=5.9.0
 psycopg[binary]>=3.1
 numpy>=1.25
 langchain>=0.1.0
+pybreaker>=1.4.0
+cairosvg>=2.7

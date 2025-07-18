@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Query
 from fastapi.responses import FileResponse, Response
+
+from datacreek.security.dp_middleware import DPBudgetMiddleware
 from sqlalchemy.orm import Session
 
 from datacreek.backends import get_neo4j_driver, get_redis_client
@@ -54,9 +56,11 @@ except Exception:  # pragma: no cover - simplify tests
         JSONL = "jsonl"
         PARQUET = "parquet"
 
-    CurateParams = DatasetCreate = DatasetInit = DatasetName = DatasetOut = DatasetUpdate = (
-        GenerateParams
-    ) = SaveParams = SourceCreate = SourceOut = UserCreate = UserOut = UserWithKey = Any
+    CurateParams = DatasetCreate = DatasetInit = DatasetName = DatasetOut = (
+        DatasetUpdate
+    ) = GenerateParams = SaveParams = SourceCreate = SourceOut = UserCreate = (
+        UserOut
+    ) = UserWithKey = Any
 
     def init_db():
         pass
@@ -79,13 +83,17 @@ except Exception:  # pragma: no cover - simplify tests
     def get_user_by_key(*args, **kwargs):
         return None
 
-    celery_app = curate_task = dataset_cleanup_task = dataset_delete_task = dataset_export_task = (
-        dataset_generate_task
-    ) = dataset_ingest_task = generate_task = ingest_task = save_task = None
+    celery_app = curate_task = dataset_cleanup_task = dataset_delete_task = (
+        dataset_export_task
+    ) = dataset_generate_task = dataset_ingest_task = generate_task = ingest_task = (
+        save_task
+    ) = None
 from datacreek.utils import decode_hash
+from datacreek.analysis import explain_to_svg
 
 init_db()
 app = FastAPI(title="Datacreek API")
+app.add_middleware(DPBudgetMiddleware)
 
 
 def get_db():
@@ -124,7 +132,9 @@ def list_user_datasets(current_user: User = Depends(get_current_user)) -> list[s
 
 
 @app.get("/users/me/datasets/details", summary="List user's datasets with progress")
-def list_user_datasets_details(current_user: User = Depends(get_current_user)) -> list[dict]:
+def list_user_datasets_details(
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
     """Return datasets with their stage and progress information."""
     client = get_redis_client()
     if client is None:
@@ -170,7 +180,9 @@ def _load_dataset(name: str, current_user: User) -> DatasetBuilder:
 
 @app.post("/datasets/{name}", summary="Create persisted dataset", status_code=201)
 def create_persisted_dataset(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     params: DatasetInit = Body(...),
     current_user: User = Depends(get_current_user),
 ):
@@ -185,7 +197,9 @@ def create_persisted_dataset(
         raise HTTPException(status_code=409, detail="Dataset already exists")
 
     driver = get_neo4j_driver()
-    ds = DatasetBuilder(params.dataset_type, name=name, redis_client=client, neo4j_driver=driver)
+    ds = DatasetBuilder(
+        params.dataset_type, name=name, redis_client=client, neo4j_driver=driver
+    )
     ds.owner_id = current_user.id
     ds.history.append("Dataset created")
     ds._persist()
@@ -210,7 +224,9 @@ def add_dataset(
 
 @app.delete("/datasets/{name}", summary="Delete persisted dataset", status_code=202)
 def delete_persisted_dataset(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Delete a persisted dataset from Redis and Neo4j."""
@@ -306,7 +322,9 @@ def delete_dataset_route(
 
 @app.get("/datasets/{name}/history", summary="Get dataset event history")
 def dataset_history(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return stored dataset events from Redis."""
@@ -326,7 +344,9 @@ def dataset_history(
 
 @app.get("/datasets/{name}/versions", summary="List dataset versions")
 def dataset_versions(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return generation versions stored for ``name``."""
@@ -336,7 +356,9 @@ def dataset_versions(
 
 @app.get("/datasets/{name}/versions/{index}", summary="Get dataset version")
 def dataset_version_item(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     index: int = Path(..., ge=1),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -349,7 +371,9 @@ def dataset_version_item(
 
 @app.delete("/datasets/{name}/versions/{index}", summary="Delete dataset version")
 def delete_dataset_version_item(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     index: int = Path(..., ge=1),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -363,9 +387,13 @@ def delete_dataset_version_item(
     return {"status": "deleted"}
 
 
-@app.post("/datasets/{name}/versions/{index}/restore", summary="Restore dataset version")
+@app.post(
+    "/datasets/{name}/versions/{index}/restore", summary="Restore dataset version"
+)
 def restore_dataset_version_item(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     index: int = Path(..., ge=1),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -381,7 +409,9 @@ def restore_dataset_version_item(
 
 @app.get("/datasets/{name}/progress", summary="Get dataset progress")
 def dataset_progress(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Return progress information stored in Redis."""
@@ -393,7 +423,9 @@ def dataset_progress(
 
 @app.get("/graphs/{name}/progress", summary="Get graph progress")
 def graph_progress(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Return progress information stored for a knowledge graph."""
@@ -416,7 +448,9 @@ def graph_progress(
 
 @app.get("/datasets/{name}/progress/history", summary="Get progress history")
 def dataset_progress_history(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return progress status history stored in Redis."""
@@ -437,7 +471,9 @@ def dataset_progress_history(
 
 @app.get("/graphs/{name}/progress/history", summary="Get graph progress history")
 def graph_progress_history(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return progress status history stored for a knowledge graph."""
@@ -469,7 +505,9 @@ def graph_progress_history(
 
 @app.post("/datasets/{name}/ingest", summary="Ingest file into dataset")
 def dataset_ingest_route(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     payload: SourceCreate = Body(...),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -492,7 +530,9 @@ def dataset_ingest_route(
 
 @app.post("/datasets/{name}/generate", summary="Generate dataset asynchronously")
 def dataset_generate_route(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     params: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -500,13 +540,17 @@ def dataset_generate_route(
 
     _load_dataset(name, current_user)
 
-    celery_task = dataset_generate_task.apply_async(args=[name, params or {}, current_user.id])
+    celery_task = dataset_generate_task.apply_async(
+        args=[name, params or {}, current_user.id]
+    )
     return {"task_id": celery_task.id}
 
 
 @app.post("/datasets/{name}/cleanup", summary="Cleanup dataset asynchronously")
 def dataset_cleanup_route(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     params: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -514,13 +558,17 @@ def dataset_cleanup_route(
 
     _load_dataset(name, current_user)
 
-    celery_task = dataset_cleanup_task.apply_async(args=[name, params or {}, current_user.id])
+    celery_task = dataset_cleanup_task.apply_async(
+        args=[name, params or {}, current_user.id]
+    )
     return {"task_id": celery_task.id}
 
 
 @app.post("/datasets/{name}/export", summary="Export dataset asynchronously")
 def dataset_export_task_route(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     fmt: ExportFormat = ExportFormat.JSONL,
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -534,7 +582,9 @@ def dataset_export_task_route(
 
 @app.get("/datasets/{name}/export", summary="Get exported dataset")
 def dataset_export_result(
-    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    name: DatasetName = Path(
+        ..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH
+    ),
     fmt: ExportFormat = ExportFormat.JSONL,
     current_user: User = Depends(get_current_user),
 ) -> Response:
@@ -627,7 +677,9 @@ async def curate_async(
     params: CurateParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    celery_task = curate_task.apply_async(args=[current_user.id, params.ds_id, params.threshold])
+    celery_task = curate_task.apply_async(
+        args=[current_user.id, params.ds_id, params.threshold]
+    )
     return {"task_id": celery_task.id}
 
 
@@ -636,7 +688,9 @@ async def save_async(
     params: SaveParams,
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    celery_task = save_task.apply_async(args=[current_user.id, params.ds_id, params.fmt.value])
+    celery_task = save_task.apply_async(
+        args=[current_user.id, params.ds_id, params.fmt.value]
+    )
     return {"task_id": celery_task.id}
 
 
@@ -650,3 +704,65 @@ async def get_task(task_id: str) -> dict:
     if res.state == "FAILURE":
         return {"status": "failed", "error": str(res.result)}
     return {"status": res.state.lower()}
+
+
+@app.post("/dp/sample", summary="Dummy endpoint for DP budget testing")
+def dp_sample(current_user: User = Depends(get_current_user)) -> dict:
+    """Endpoint guarded by :class:`DPBudgetMiddleware`."""
+
+    return {"ok": True}
+
+
+@app.get("/dp/budget", summary="Return remaining DP budget for the user")
+def get_dp_budget(current_user: User = Depends(get_current_user)) -> dict:
+    """Expose current user's epsilon budget information.
+
+    This endpoint allows clients to monitor how much differential privacy
+    budget remains. It leverages :func:`get_budget` from
+    ``datacreek.security.tenant_privacy``.
+    """
+
+    with SessionLocal() as db:
+        from datacreek.security.tenant_privacy import get_budget
+
+        info = get_budget(db, current_user.id)
+        if info is None:
+            return {"epsilon_max": 0.0, "epsilon_used": 0.0, "epsilon_remaining": 0.0}
+        return info
+
+
+@app.get(
+    "/datasets/{name}/explain/{node_id}",
+    summary="Explain node neighborhood with attention heatmap",
+)
+def explain_node_route(
+    name: DatasetName = Path(..., pattern=NAME_PATTERN.pattern, max_length=MAX_NAME_LENGTH),
+    node_id: str = Path(...),
+    hops: int = Query(3, ge=1, le=5),
+    fmt: Literal["json", "svg", "png"] = Query("json"),
+    current_user: User = Depends(get_current_user),
+) -> Response | dict:
+    """Return a radius-``hops`` subgraph around ``node_id``.
+
+    The JSON payload contains ``nodes`` and ``edges`` lists plus an ``attention``
+    mapping. When ``fmt`` is ``svg`` or ``png`` the graph is rendered as an
+    image and returned accordingly. PNG export requires ``cairosvg``.
+    """
+
+    ds = _load_dataset(name, current_user)
+    data = ds.explain_node(node_id, hops=hops)
+
+    if fmt == "json":
+        return data
+
+    svg = explain_to_svg(data)
+    if fmt == "svg":
+        return Response(content=svg, media_type="image/svg+xml")
+
+    try:
+        import cairosvg
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise HTTPException(status_code=501, detail="PNG export unavailable") from exc
+
+    png = cairosvg.svg2png(bytestring=svg.encode())
+    return Response(content=png, media_type="image/png")

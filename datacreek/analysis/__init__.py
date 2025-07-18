@@ -85,6 +85,7 @@ __all__ = [
     "svgp_ei_propose",
     "kw_gradient",
     "autotune_nprobe",
+    "profile_nprobe",
     "autotune_node2vec",
     "spectral_bound_exceeded",
     "filter_semantic_cycles",
@@ -100,6 +101,7 @@ __all__ = [
     "search_hnsw_pq",
     "graphwave_embedding_gpu",
     "chebyshev_heat_kernel_gpu",
+    "explain_to_svg",
 ]
 
 
@@ -157,16 +159,18 @@ def __getattr__(name: str):
         "search_with_fallback",
         "recall10",
         "autotune_nprobe",
+        "profile_nprobe",
         "autotune_node2vec",
     }:
         from . import index as _idx
         from .node2vec_tuning import autotune_node2vec as _an2
-        from .nprobe_tuning import autotune_nprobe as _anp
+        from .nprobe_tuning import autotune_nprobe as _anp, profile_nprobe as _pn
 
         return {
             "search_with_fallback": _idx.search_with_fallback,
             "recall10": _idx.recall10,
             "autotune_nprobe": _anp,
+            "profile_nprobe": _pn,
             "autotune_node2vec": _an2,
         }[name]
     if name in {
@@ -337,6 +341,7 @@ def __getattr__(name: str):
         "search_hnsw_pq",
         "graphwave_embedding_gpu",
         "chebyshev_heat_kernel_gpu",
+        "explain_to_svg",
     }:
         from .chebyshev_diag import chebyshev_diag_hutchpp as _cdh
         from .graphwave_bandwidth import estimate_lambda_max as _el
@@ -344,6 +349,7 @@ def __getattr__(name: str):
         from .graphwave_cuda import chebyshev_heat_kernel_gpu as _gwk
         from .graphwave_cuda import graphwave_embedding_gpu as _gwe
         from .hybrid_ann import search_hnsw_pq as _hpq
+        from .explain_viz import explain_to_svg as _ets
 
         return {
             "estimate_lambda_max": _el,
@@ -352,5 +358,6 @@ def __getattr__(name: str):
             "search_hnsw_pq": _hpq,
             "graphwave_embedding_gpu": _gwe,
             "chebyshev_heat_kernel_gpu": _gwk,
+            "explain_to_svg": _ets,
         }[name]
     raise AttributeError(name)

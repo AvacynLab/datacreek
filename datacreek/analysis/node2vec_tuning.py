@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from typing import Dict, Iterable, Sequence
 
+import hashlib
+import json
+import time
+import pathlib
+
 import numpy as np
 from skopt import Optimizer
 
 from .index import recall10
+
+ARTIFACT_PATH = (
+    pathlib.Path(__file__).resolve().parents[2]
+    / "benchmarks"
+    / "node2vec_last.json"
+)
 
 
 def _var_norm(graph: "KnowledgeGraph") -> float:
@@ -21,6 +32,15 @@ def _var_norm(graph: "KnowledgeGraph") -> float:
     return float(np.var(norms))
 
 
+def _dataset_hash(graph: "KnowledgeGraph") -> str:
+    """Return an MD5 hash summarizing the dataset."""
+
+    m = hashlib.md5()
+    m.update("".join(sorted(str(n) for n in graph.graph.nodes())).encode())
+    m.update("".join(sorted(f"{u}-{v}" for u, v in graph.graph.edges())).encode())
+    return m.hexdigest()
+
+
 def autotune_node2vec(
     kg: "KnowledgeGraph",
     queries: Sequence[object],
@@ -29,12 +49,15 @@ def autotune_node2vec(
     k: int = 10,
     var_threshold: float = 1e-4,
     max_evals: int = 40,
+    max_minutes: float = 30.0,
 ) -> tuple[float, float]:
     """Tune Node2Vec ``p`` and ``q`` using Bayesian optimisation."""
 
     opt = Optimizer([(0.1, 4.0), (0.1, 4.0)], base_estimator="GP", acq_func="EI")
     best_recall = -1.0
     best_pq = (1.0, 1.0)
+    since_improve = 0
+    start_t = time.monotonic()
 
     for _ in range(max_evals):
         cand = opt.ask()
@@ -46,9 +69,25 @@ def autotune_node2vec(
         if rec > best_recall:
             best_recall = rec
             best_pq = (p, q)
-        if var_n < var_threshold:
+            since_improve = 0
+        else:
+            since_improve += 1
+        if (
+            var_n < var_threshold
+            or since_improve >= 5
+            or (time.monotonic() - start_t) / 60.0 > max_minutes
+        ):
             break
 
     kg.compute_node2vec_embeddings(p=best_pq[0], q=best_pq[1])
     recall10(kg.graph, queries, ground_truth, gamma=0.5, eta=0.25)
+    try:
+        artifact = {
+            "dataset": _dataset_hash(kg),
+            "p": best_pq[0],
+            "q": best_pq[1],
+        }
+        ARTIFACT_PATH.write_text(json.dumps(artifact))
+    except Exception:  # pragma: no cover - best effort
+        pass
     return best_pq

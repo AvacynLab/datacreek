@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from functools import wraps
 from threading import Thread
@@ -60,10 +61,18 @@ class TTLManager:
 
     def __init__(self) -> None:
         self.current_ttl = int(cache_cfg.get("l1_ttl_init", 3600))
+        pid_cfg = cache_cfg.get("ttl_pid", {})
+        self._target = float(pid_cfg.get("target_hit_ratio", 0.8))
+        self._kp = float(pid_cfg.get("Kp", 500.0))
+        self._ki = float(pid_cfg.get("Ki", 0.05))
+        self._i_max = float(pid_cfg.get("I_max", 3600))
+        self._integral = 0.0
         self._alpha = 0.3
         self._ema = 0.5
         self._task: asyncio.Task | None = None
         self._stop: Optional[asyncio.Event] = None
+        self._event_loop: asyncio.AbstractEventLoop | None = None
+        self._thread: Thread | None = None
         self.start()
 
     async def _loop(self) -> None:  # pragma: no cover - background
@@ -81,35 +90,68 @@ class TTLManager:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
+            self._event_loop = loop
 
             def _runner() -> None:
                 asyncio.set_event_loop(loop)
                 self._stop = asyncio.Event()
                 self._task = loop.create_task(self._loop())
                 loop.run_forever()
+                loop.close()
 
-            Thread(target=_runner, daemon=True).start()
+            self._thread = Thread(target=_runner, daemon=True)
+            self._thread.start()
         else:
             self._stop = asyncio.Event()
+            self._event_loop = loop
             self._task = loop.create_task(self._loop())
 
+    async def stop(self) -> None:
+        """Stop the background loop and wait for completion."""
+
+        if self._task is None:
+            return
+        assert self._stop is not None
+        self.run_once()  # flush last update
+        if self._event_loop is not None and self._event_loop.is_running() and self._event_loop is not asyncio.get_event_loop():
+            self._event_loop.call_soon_threadsafe(self._stop.set)
+            self._event_loop.call_soon_threadsafe(self._task.cancel)
+            self._event_loop.call_soon_threadsafe(self._event_loop.stop)
+            if self._thread is not None:
+                self._thread.join(timeout=1)
+                self._thread = None
+        else:
+            self._stop.set()
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait_for(self._task, timeout=1)
+        self._task = None
+
     def run_once(self) -> None:
+        """Update TTL based on PID controller for hit ratio."""
+
         if hits is None or miss is None or hit_ratio_g is None:
             return
         h = hits._value.get()
         m = miss._value.get()
-        if hit_ratio_g._value.get() > 0:
-            self._ema = hit_ratio_g._value.get()
-        else:
-            ratio = h / max(1, h + m)
-            self._ema = self._alpha * ratio + (1 - self._alpha) * self._ema
+        ratio = h / max(1, h + m)
+        # exponential moving average for smoother control
+        self._ema = self._alpha * ratio + (1 - self._alpha) * self._ema
         hit_ratio_g.set(self._ema)
         ttl_min = int(cache_cfg.get("l1_ttl_min", 300))
         ttl_max = int(cache_cfg.get("l1_ttl_max", 7200))
-        if self._ema < 0.2:
-            self.current_ttl = max(int(self.current_ttl * 0.5), ttl_min)
-        elif self._ema > 0.8:
-            self.current_ttl = min(int(self.current_ttl * 1.2), ttl_max)
+        error = self._ema - self._target
+        # anti-windup clamp on integral term
+        self._integral = max(
+            -self._i_max,
+            min(self._i_max, self._integral + error * 300),
+        )
+        delta = self._kp * error + self._ki * self._integral
+        # apply bounded update
+        self.current_ttl = max(
+            ttl_min,
+            min(ttl_max, int(self.current_ttl + delta)),
+        )
 
 
 ttl_manager = TTLManager()
