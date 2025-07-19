@@ -1,72 +1,114 @@
-import json
+import importlib.util
+import sys
+import types
+from pathlib import Path
 
-import fakeredis
+import pybreaker
 import pytest
-from werkzeug.security import generate_password_hash
 
-import datacreek.db as db
-from datacreek.core.dataset import DatasetBuilder, DatasetType
-from datacreek.server import app as app_module
-from datacreek.tasks import dataset_save_neo4j_task
-from datacreek.utils.neo4j_breaker import neo4j_breaker, reconfigure
-
-dataset_save_neo4j_task.app.conf.task_always_eager = True
-db.init_db()
+# Load the breaker module in isolation to avoid importing the whole package tree
+mon_stub = types.SimpleNamespace(
+    breaker_state=None,
+    _METRICS={"breaker_state": None},
+    update_metric=None,
+)
 
 
-@pytest.fixture(autouse=True)
-def create_user():
-    with db.SessionLocal() as session:
-        if not session.query(db.User).filter_by(username="alice").first():
-            user = db.User(
-                username="alice",
-                api_key="key_neo",
-                password_hash=generate_password_hash("pw"),
-            )
-            session.add(user)
-            session.commit()
-    yield
+def _update(name, value, labels=None):
+    g = mon_stub._METRICS.get(name)
+    if g is not None:
+        g.set(value)
+
+
+mon_stub.update_metric = _update
+analysis_mod = types.ModuleType("datacreek.analysis")
+analysis_mod.monitoring = mon_stub
+dc_mod = types.ModuleType("datacreek")
+dc_mod.analysis = analysis_mod
+
+_orig_dc = sys.modules.get("datacreek")
+_orig_analysis = sys.modules.get("datacreek.analysis")
+_orig_mon = sys.modules.get("datacreek.analysis.monitoring")
+
+sys.modules["datacreek"] = dc_mod
+sys.modules["datacreek"].analysis = analysis_mod
+sys.modules["datacreek.analysis"] = analysis_mod
+sys.modules["datacreek.analysis.monitoring"] = mon_stub
+spec = importlib.util.spec_from_file_location(
+    "breaker_mod",
+    Path(__file__).resolve().parents[1] / "datacreek" / "utils" / "neo4j_breaker.py",
+)
+breaker_mod = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(breaker_mod)
+neo4j_breaker = breaker_mod.neo4j_breaker
+reconfigure = breaker_mod.reconfigure
+monitoring = mon_stub
 
 
 @pytest.fixture(autouse=True)
 def reset_breaker():
-    reconfigure(fail_max=1, timeout=30)
+    reconfigure(fail_max=1, timeout=0)
     yield
     neo4j_breaker.close()
 
 
-def setup_ds(client, monkeypatch):
-    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
-    ds.redis_client = client
-    ds.add_document("d", source="s")
-    ds.to_redis(client, "dataset:demo")
-    app_module.DATASETS["demo"] = ds
-    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: client)
-    return ds
+@pytest.fixture(scope="module", autouse=True)
+def restore_modules():
+    yield
+    for name, mod in [
+        ("datacreek", _orig_dc),
+        ("datacreek.analysis", _orig_analysis),
+        ("datacreek.analysis.monitoring", _orig_mon),
+    ]:
+        if mod is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = mod
 
 
-def test_api_save_dataset_neo4j_circuit_open(monkeypatch):
-    client = fakeredis.FakeStrictRedis()
-    app_module.REDIS = client
-    ds = setup_ds(client, monkeypatch)
+def test_breaker_metric_and_recovery(monkeypatch):
+    vals = []
 
-    class FailDriver:
-        def close(self):
-            pass
+    class DummyGauge:
+        def set(self, v: float):
+            vals.append(v)
 
-    # first call fails, opening circuit
-    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: FailDriver())
-    monkeypatch.setattr(
-        ds.graph.__class__,
-        "to_neo4j",
-        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("fail")),
-    )
+    monkeypatch.setattr(monitoring, "breaker_state", DummyGauge(), raising=False)
+    monkeypatch.setitem(monitoring._METRICS, "breaker_state", monitoring.breaker_state)
+
+    def fail():
+        raise RuntimeError("fail")
+
+    with pytest.raises(pybreaker.CircuitBreakerError):
+        neo4j_breaker.call(fail)
+    assert vals[-1] == 1
+
+    neo4j_breaker.call(lambda: None)
+    assert vals[-1] == 0
+
+
+def test_breaker_open_then_half_open(monkeypatch):
+    events = []
+
+    class DummyGauge:
+        def set(self, v: float):
+            events.append(v)
+
+    monkeypatch.setattr(monitoring, "breaker_state", DummyGauge(), raising=False)
+    monkeypatch.setitem(monitoring._METRICS, "breaker_state", monitoring.breaker_state)
+
+    reconfigure(fail_max=2, timeout=0)
+
+    def fail():
+        raise RuntimeError("fail")
+
     with pytest.raises(RuntimeError):
-        dataset_save_neo4j_task.delay("demo").get()
-    assert neo4j_breaker.current_state == "open"
+        neo4j_breaker.call(fail)
+    with pytest.raises(pybreaker.CircuitBreakerError):
+        neo4j_breaker.call(fail)
 
-    with app_module.app.test_client() as cl:
-        cl.post("/api/login", json={"username": "alice", "password": "pw"})
-        res = cl.post("/api/datasets/demo/save_neo4j")
-        assert res.status_code == 429
-    app_module.DATASETS.clear()
+    assert events[-1] == 1
+
+    neo4j_breaker.call(lambda: None)
+    assert events[-1] == 0

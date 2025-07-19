@@ -1,0 +1,13 @@
+fakeredis
+faiss-cpu
+prometheus-client
+lmdb
+networkx
+numpy
+rich
+pyyaml
+fastapi
+uvicorn
+sqlalchemy
+redis
+requests

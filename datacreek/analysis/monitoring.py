@@ -65,6 +65,7 @@ if Gauge is not None:
     whisper_xrt = Gauge(
         "whisper_xrt",
         "Realtime factor of Whisper batch transcription",
+        labelnames=["device"],
     )
     whisper_fallback_total = Counter(
         "whisper_fallback_total",
@@ -73,6 +74,14 @@ if Gauge is not None:
     ingest_queue_fill_ratio = Gauge(
         "ingest_queue_fill_ratio",
         "Ratio of active ingest tasks to queue size",
+    )
+    breaker_state = Gauge(
+        "breaker_state",
+        "State of Neo4j circuit breaker (0=CLOSED,1=OPEN)",
+    )
+    pgvector_query_ms = Gauge(
+        "pgvector_query_ms",
+        "Duration of pgvector nearest-neighbour queries in milliseconds",
     )
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
@@ -95,6 +104,8 @@ else:  # pragma: no cover - optional dependency missing
     whisper_xrt = None  # type: ignore
     whisper_fallback_total = None  # type: ignore
     ingest_queue_fill_ratio = None  # type: ignore
+    breaker_state = None  # type: ignore
+    pgvector_query_ms = None  # type: ignore
     j_cost = None
 
 
@@ -119,6 +130,8 @@ _METRICS = {
     "whisper_xrt": whisper_xrt,
     "whisper_fallback_total": whisper_fallback_total,
     "ingest_queue_fill_ratio": ingest_queue_fill_ratio,
+    "breaker_state": breaker_state,
+    "pgvector_query_ms": pgvector_query_ms,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,
@@ -153,12 +166,28 @@ def push_metrics_gateway(
         pass
 
 
-def update_metric(name: str, value: float) -> None:
-    """Update one of the default gauges."""
+def update_metric(
+    name: str, value: float, labels: dict[str, str] | None = None
+) -> None:
+    """Update one of the default gauges.
+
+    Parameters
+    ----------
+    name:
+        Name of the metric to update.
+    value:
+        Value to set.
+    labels:
+        Optional label mapping for metrics that use ``labelnames``.
+    """
+
     g = _METRICS.get(name)
     if g is not None:
         try:
-            g.set(value)
+            if labels:
+                g.labels(**labels).set(value)
+            else:
+                g.set(value)
         except Exception:  # pragma: no cover
             pass
 

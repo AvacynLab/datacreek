@@ -264,6 +264,9 @@ automatically.
 Generate a history table with `scripts/bench_all.py --trend` to create
 `benchmarks/bench_trend.md` summarizing throughput across commits.
 
+Upload the cache dashboard to Grafana using `scripts/upload_dashboard.py`.
+
+
 ### 1. Tool Setup
 
 The application persists all state in Redis and Neo4j so no local data

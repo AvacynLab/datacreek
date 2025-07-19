@@ -12,12 +12,49 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import networkx as nx
-import numpy as np
-import requests
-from dateutil import parser
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+try:  # optional dependency for graph operations
+    import networkx as nx
+except Exception:  # pragma: no cover - minimal stub when networkx missing
+    import types
+
+    class _GraphStub:
+        def __init__(self, *a, **k) -> None:
+            pass
+
+    nx = types.SimpleNamespace(DiGraph=_GraphStub, Graph=_GraphStub)  # type: ignore
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency missing
+    np = None  # type: ignore
+try:
+    import requests
+except Exception:  # pragma: no cover - optional dependency missing
+    requests = None  # type: ignore
+try:
+    from dateutil import parser
+except Exception:  # pragma: no cover - optional dependency missing
+    parser = None  # type: ignore
+
+try:  # optional dependency
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+except Exception:  # pragma: no cover - fallback when watchdog missing
+    FileSystemEventHandler = object  # type: ignore[misc]
+
+    class _DummyObserver:  # pragma: no cover - lightweight stub
+        def schedule(self, *a, **k):
+            pass
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+    Observer = _DummyObserver  # type: ignore[assignment]
 
 try:
     from ..analysis.index import ann_latency

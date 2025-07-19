@@ -117,3 +117,18 @@ def test_acquire_slot_with_backoff_retries(monkeypatch, reload_backpressure):
     assert not bp.acquire_slot_with_backoff(2, 0.01)
     assert delays == [0.01, 0.02, 0.04]
     bp.release_slot()
+
+
+def test_backpressure_burst_drop_ratio(reload_backpressure):
+    bp = reload_backpressure
+    bp.set_limit(10)
+    drops = 0
+    ok = 0
+    for _ in range(20):
+        if bp.acquire_slot():
+            ok += 1
+            bp.release_slot()
+        else:
+            drops += 1
+    total = ok + drops
+    assert drops / total < 0.01
