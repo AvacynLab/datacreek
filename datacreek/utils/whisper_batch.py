@@ -7,9 +7,12 @@ import time
 from functools import lru_cache
 from typing import Iterable, List
 
-try:  # optional
-    import torch
-except Exception:  # pragma: no cover - torch missing
+# Avoid importing torch on unsupported platforms to prevent crashes
+torch = None  # default to disabled
+try:  # optional dependency (disabled by default)
+    if False:
+        import torch  # pragma: no cover
+except Exception:  # pragma: no cover
     torch = None  # type: ignore
 
 try:  # optional heavy dependency

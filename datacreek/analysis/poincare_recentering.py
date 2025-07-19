@@ -6,9 +6,11 @@ from typing import Dict, Iterable, Mapping, Sequence
 
 import numpy as np
 
-try:  # pragma: no cover - optional dependency
-    import torch
-except Exception:  # pragma: no cover - torch optional
+torch = None  # default to disabled
+try:  # optional dependency (disabled by default)
+    if False:
+        import torch  # pragma: no cover
+except Exception:  # pragma: no cover
     torch = None  # type: ignore
 
 __all__ = [
