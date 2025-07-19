@@ -16,8 +16,27 @@ import networkx as nx
 import numpy as np
 import requests
 from dateutil import parser
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+
+try:  # optional dependency
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+except Exception:  # pragma: no cover - fallback when watchdog missing
+    FileSystemEventHandler = object  # type: ignore[misc]
+
+    class _DummyObserver:  # pragma: no cover - lightweight stub
+        def schedule(self, *a, **k):
+            pass
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+    Observer = _DummyObserver  # type: ignore[assignment]
 
 try:
     from ..analysis.index import ann_latency

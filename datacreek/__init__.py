@@ -912,12 +912,18 @@ except Exception:  # pragma: no cover - optional dependency missing
         return None
 
 
-from .utils.config import ORIGINAL_CONFIG_PATH
-
-# Start config watcher when the package is imported. Use an absolute default
-# path so imports succeed even when the working directory differs.
-_start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", ORIGINAL_CONFIG_PATH))
 try:
+    from .utils.config import ORIGINAL_CONFIG_PATH
+except Exception:  # pragma: no cover - optional dependency missing
+    ORIGINAL_CONFIG_PATH = None  # type: ignore[assignment]
+
+if ORIGINAL_CONFIG_PATH:
+    try:
+        _start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", ORIGINAL_CONFIG_PATH))
+    except Exception:
+        pass
+
+try:  # optional heavy dependency
     ensure_graphrnn_checkpoint()
 except Exception:  # pragma: no cover - optional dependency missing
     pass
