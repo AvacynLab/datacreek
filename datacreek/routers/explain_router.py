@@ -9,6 +9,7 @@ be used from demo pages.
 """
 
 import base64
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 

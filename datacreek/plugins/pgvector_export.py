@@ -94,6 +94,7 @@ def export_embeddings_pg(
 def query_topk_pg(conn: Connection, table: str, vec: Iterable[float], *, k: int = 5):
     """Return ``k`` nearest neighbours ordered by cosine distance."""
     import time
+
     from ..analysis.monitoring import update_metric
 
     t0 = time.perf_counter()

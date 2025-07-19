@@ -1,5 +1,6 @@
 import os
 import sys
+
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///test_openapi.db")

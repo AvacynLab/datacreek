@@ -1,7 +1,7 @@
+import importlib.util
 import os
 import subprocess
 from pathlib import Path
-import importlib.util
 
 
 class DummySession:
