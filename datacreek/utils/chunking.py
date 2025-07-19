@@ -32,7 +32,9 @@ def sliding_window_chunks(text: str, window_size: int, overlap: int) -> List[str
     return chunks
 
 
-def semantic_chunk_split(text: str, max_tokens: int, similarity_drop: float = 0.3) -> List[str]:
+def semantic_chunk_split(
+    text: str, max_tokens: int, similarity_drop: float = 0.3
+) -> List[str]:
     """Split text into semantically coherent chunks.
 
     This uses a naive TF‑IDF embedding of sentences and creates a new chunk
@@ -69,7 +71,9 @@ def semantic_chunk_split(text: str, max_tokens: int, similarity_drop: float = 0.
     return chunks
 
 
-def contextual_chunk_split(text: str, max_tokens: int, context_size: int = 20) -> List[str]:
+def contextual_chunk_split(
+    text: str, max_tokens: int, context_size: int = 20
+) -> List[str]:
     """Split ``text`` and prepend minimal context to each chunk."""
 
     words = text.split()
@@ -83,7 +87,9 @@ def contextual_chunk_split(text: str, max_tokens: int, context_size: int = 20) -
     return chunks
 
 
-def summarized_chunk_split(text: str, max_tokens: int, summary_len: int = 20) -> List[str]:
+def summarized_chunk_split(
+    text: str, max_tokens: int, summary_len: int = 20
+) -> List[str]:
     """Split text and prefix each chunk with a short summary of the previous one."""
 
     base_chunks = semantic_chunk_split(text, max_tokens=max_tokens)

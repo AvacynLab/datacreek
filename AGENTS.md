@@ -84,3 +84,4 @@
 - Initial backlog imported and dependencies installed for heavy tests.
 - Added fallback stub for missing pydantic to ensure heavy tests import modules.
 - Ran black formatting on pipelines and config after pre-commit failure.
+- Ran black on utils after pre-commit failures.
