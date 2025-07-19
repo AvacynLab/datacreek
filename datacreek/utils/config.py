@@ -10,7 +10,10 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
+try:
+    import yaml
+except Exception:  # pragma: no cover - optional dependency missing
+    yaml = None
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -76,7 +79,17 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     logger.info("Loading config from: %s", config_path)
     with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
+        if yaml is not None:
+            config = yaml.safe_load(f)
+        else:  # pragma: no cover - lightweight fallback
+            import json
+
+            try:
+                config = json.load(f)
+            except Exception as exc:
+                raise ImportError(
+                    "PyYAML is required to parse configuration files"
+                ) from exc
 
     # Debug: Print LLM provider if it exists
     if "llm" in config and "provider" in config["llm"]:
