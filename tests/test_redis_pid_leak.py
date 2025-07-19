@@ -8,32 +8,29 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 # Import redis_pid in isolation with a stub config
-utils_pkg = ModuleType("datacreek.utils")
-utils_pkg.__path__ = [str(Path(__file__).resolve().parents[1] / "datacreek" / "utils")]
-sys.modules["datacreek.utils"] = utils_pkg
-config_stub = ModuleType("datacreek.utils.config")
-config_stub.load_config = lambda: {"cache": {}, "pid": {}}
-sys.modules["datacreek.utils.config"] = config_stub
+ROOT = Path(__file__).resolve().parents[1]
 
-# Provide minimal stubs to avoid heavy imports during fixture setup
-core_pkg = ModuleType("datacreek.core")
-dataset_stub = ModuleType("datacreek.core.dataset")
-dataset_stub.InvariantPolicy = SimpleNamespace(loops=0)
-core_pkg.dataset = dataset_stub
-sys.modules.setdefault("datacreek.core", core_pkg)
-sys.modules.setdefault("datacreek.core.dataset", dataset_stub)
 
-spec = importlib.util.spec_from_file_location(
-    "datacreek.utils.redis_pid",
-    Path(__file__).resolve().parents[1] / "datacreek" / "utils" / "redis_pid.py",
-)
-assert isinstance(spec.loader, importlib.abc.Loader)
-redis_pid = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(redis_pid)
+def _load_module(monkeypatch):
+    utils_pkg = ModuleType("datacreek.utils")
+    utils_pkg.__path__ = [str(ROOT / "datacreek" / "utils")]
+    config_stub = ModuleType("datacreek.utils.config")
+    config_stub.load_config = lambda: {"cache": {}, "pid": {}}
+    monkeypatch.setitem(sys.modules, "datacreek.utils", utils_pkg)
+    monkeypatch.setitem(sys.modules, "datacreek.utils.config", config_stub)
+
+    spec = importlib.util.spec_from_file_location(
+        "datacreek.utils.redis_pid", ROOT / "datacreek" / "utils" / "redis_pid.py"
+    )
+    redis_pid = importlib.util.module_from_spec(spec)
+    assert isinstance(spec.loader, importlib.abc.Loader)
+    spec.loader.exec_module(redis_pid)
+    return redis_pid
 
 
 @pytest.mark.filterwarnings("error")
 def test_pid_loop_stops_clean(monkeypatch):
+    redis_pid = _load_module(monkeypatch)
     calls = 0
 
     async def fake_update(client):

@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - optional dependency missing
     class BaseModel:  # lightweight stub for missing pydantic
         pass
 
+
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import (

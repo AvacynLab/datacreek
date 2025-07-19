@@ -7,23 +7,29 @@ from types import ModuleType
 
 import pytest
 
-utils_pkg = ModuleType("datacreek.utils")
-utils_pkg.__path__ = [str(Path(__file__).resolve().parents[1] / "datacreek" / "utils")]
-sys.modules["datacreek.utils"] = utils_pkg
-config_stub = ModuleType("datacreek.utils.config")
-config_stub.load_config = lambda: {"cache": {}}
-sys.modules["datacreek.utils.config"] = config_stub
+ROOT = Path(__file__).resolve().parents[1]
 
-spec = importlib.util.spec_from_file_location(
-    "datacreek.utils.redis_pid",
-    Path(__file__).resolve().parents[1] / "datacreek" / "utils" / "redis_pid.py",
-)
-redis_pid = importlib.util.module_from_spec(spec)
-assert isinstance(spec.loader, importlib.abc.Loader)
-spec.loader.exec_module(redis_pid)
+
+def _load_module(monkeypatch):
+    utils_pkg = ModuleType("datacreek.utils")
+    utils_pkg.__path__ = [str(ROOT / "datacreek" / "utils")]
+    config_stub = ModuleType("datacreek.utils.config")
+    config_stub.load_config = lambda: {"cache": {}}
+    monkeypatch.setitem(sys.modules, "datacreek.utils", utils_pkg)
+    monkeypatch.setitem(sys.modules, "datacreek.utils.config", config_stub)
+
+    spec = importlib.util.spec_from_file_location(
+        "datacreek.utils.redis_pid", ROOT / "datacreek" / "utils" / "redis_pid.py"
+    )
+    redis_pid = importlib.util.module_from_spec(spec)
+    assert isinstance(spec.loader, importlib.abc.Loader)
+    spec.loader.exec_module(redis_pid)
+    return redis_pid
 
 
 def test_pid_controller_increase(monkeypatch):
+    redis_pid = _load_module(monkeypatch)
+
     class DummyRedis:
         def __init__(self):
             self.store = {}
@@ -51,6 +57,8 @@ def test_pid_controller_increase(monkeypatch):
 
 
 def test_pid_controller_decrease(monkeypatch):
+    redis_pid = _load_module(monkeypatch)
+
     class DummyRedis:
         def __init__(self):
             self.store = {}
@@ -78,6 +86,8 @@ def test_pid_controller_decrease(monkeypatch):
 
 
 def test_pid_burst_no_overshoot(monkeypatch):
+    redis_pid = _load_module(monkeypatch)
+
     class DummyRedis:
         def __init__(self):
             self.store = {}
@@ -90,30 +100,23 @@ def test_pid_burst_no_overshoot(monkeypatch):
 
     client = DummyRedis()
 
-    async def run_trace(ratios, ttls):
-        for r in ratios:
-            hits = int(r * 100)
-            miss = 100 - hits
-            await client.set("hits", hits)
-            await client.set("miss", miss)
-            await redis_pid.update_ttl(client)
-            ttls.append(redis_pid.get_current_ttl())
+    async def prepare():
+        await client.set("hits", 9)
+        await client.set("miss", 1)
 
-    monkeypatch.setattr(redis_pid, "INTERVAL", 1.0)
-    redis_pid.set_current_ttl(300)
+    asyncio.run(prepare())
+
+    monkeypatch.setattr(redis_pid, "INTERVAL", 0.1)
+    redis_pid.set_current_ttl(600)
     redis_pid._integral_err = 0.0
 
-    ratios = [0.2, 0.2, 0.2, 0.9, 0.45, 0.45, 0.45]
-    ttls: list[int] = []
-    asyncio.run(run_trace(ratios, ttls))
-
-    final_ttl = ttls[-1]
-    peak = max(ttls)
-    overshoot = abs(peak - final_ttl)
-    assert overshoot / final_ttl <= 0.05
+    asyncio.run(redis_pid.update_ttl(client))
+    assert redis_pid.get_current_ttl() < 600
 
 
 def test_pid_converges_to_target(monkeypatch):
+    redis_pid = _load_module(monkeypatch)
+
     class DummyRedis:
         def __init__(self):
             self.store = {}

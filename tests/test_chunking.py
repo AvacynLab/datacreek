@@ -1,48 +1,16 @@
-import importlib.util
-import sys
-import types
-from pathlib import Path
-
 import pytest
 
-datacreek_pkg = sys.modules.setdefault("datacreek", types.ModuleType("datacreek"))
-api_mod = types.ModuleType("datacreek.api")
-api_mod.get_neo4j_driver = lambda: None
-sys.modules.setdefault("datacreek.api", api_mod)
-setattr(datacreek_pkg, "api", api_mod)
-sys.modules.setdefault(
-    "datacreek.core.dataset",
-    types.SimpleNamespace(InvariantPolicy=types.SimpleNamespace(loops=0)),
+from datacreek.utils.chunking import (
+    TfidfVectorizer,
+    chunk_by_sentences,
+    chunk_by_tokens,
+    contextual_chunk_split,
+    semantic_chunk_split,
+    sliding_window_chunks,
+    summarized_chunk_split,
 )
-core_pkg = types.ModuleType("datacreek.core")
-dataset_mod = types.ModuleType("datacreek.core.dataset")
 
-
-class InvariantPolicy:
-    loops = 0
-
-
-dataset_mod.InvariantPolicy = InvariantPolicy
-core_pkg.dataset = dataset_mod
-setattr(datacreek_pkg, "core", core_pkg)
-sys.modules.setdefault("datacreek.core", core_pkg)
-sys.modules["datacreek.core.dataset"] = dataset_mod
-
-spec = importlib.util.spec_from_file_location(
-    "chunking", Path(__file__).resolve().parents[1] / "datacreek/utils/chunking.py"
-)
-chunking = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(chunking)
-
-contextual_chunk_split = chunking.contextual_chunk_split
-semantic_chunk_split = chunking.semantic_chunk_split
-sliding_window_chunks = chunking.sliding_window_chunks
-summarized_chunk_split = chunking.summarized_chunk_split
-chunk_by_tokens = chunking.chunk_by_tokens
-chunk_by_sentences = chunking.chunk_by_sentences
-
-SKIP_TFIDF = chunking.TfidfVectorizer is None
+SKIP_TFIDF = TfidfVectorizer is None
 
 
 def test_sliding_window_chunks():
@@ -67,7 +35,6 @@ def test_contextual_chunk_split():
     )
     chunks = contextual_chunk_split(text, max_tokens=6, context_size=3)
     assert len(chunks) > 1
-    # second chunk should reuse tokens from the first chunk
     assert chunks[1].startswith("capitale de l'Allemagne")
 
 

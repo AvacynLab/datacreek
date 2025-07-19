@@ -17,6 +17,7 @@ except Exception:  # pragma: no cover - optional dependency missing
     def constr(*_args, **_kwargs):  # type: ignore
         return str
 
+
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN
 
 # Dataset identifier constraints reused by API paths and tasks

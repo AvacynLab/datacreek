@@ -16,8 +16,9 @@ performance and optionally creates an ``ivfflat`` index.
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
 import sys
+from typing import Iterable, Sequence
+
 from psycopg import Connection
 
 # When loaded via :func:`importlib.util.module_from_spec` in tests, the
