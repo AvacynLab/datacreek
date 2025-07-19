@@ -21,10 +21,10 @@
    - [ ] **DoD**: fichier présent
 
 4. PID TTL Redis configuration
-   - [ ] Bloc YAML avec paramètres PID
-   - [ ] Anti-windup clamp intégral
-   - [ ] Boucle discrète TTL clamp [1s,24h]
-   - [ ] Test overshoot <5%
+   - [x] Bloc YAML avec paramètres PID
+   - [x] Anti-windup clamp intégral
+   - [x] Boucle discrète TTL clamp [1s,24h]
+   - [x] Test overshoot <5%
    - [ ] **DoD**: hit_ratio stable ±5%
 
 5. Migration HAA Flyway
@@ -34,12 +34,12 @@
    - [ ] **DoD**: rollback auto
 
 6. TTL manager fuite tâche
-   - [ ] Test redis_pid_leak.py
-   - [ ] **DoD**: pas de tâche pendante
+   - [x] Test redis_pid_leak.py
+   - [x] **DoD**: pas de tâche pendante
 
 7. Budget ε DP
-   - [ ] Simuler dépassement, attendre 403 header restant=0
-   - [ ] Log audit JSON
+   - [x] Simuler dépassement, attendre 403 header restant=0
+   - [x] Log audit JSON
    - [ ] **DoD**: log présent
 
 8. Back-pressure ingestion breaker
@@ -82,3 +82,4 @@
 
 ## History
 - Initial backlog imported and dependencies installed for heavy tests.
+- Added fallback stub for missing pydantic to ensure heavy tests import modules.
