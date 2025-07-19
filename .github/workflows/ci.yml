@@ -50,7 +50,7 @@ jobs:
         run: >-
           docker run --rm -v ${{ github.workspace }}/ops:/ops \
             --entrypoint=promtool quay.io/prometheus/prometheus:latest \
-            test rules /ops/prometheus_rules.yml
+            check rules /ops/prometheus_rules.yml
       - name: Run tests
         run: |
           scripts/run_changed_tests.sh \
@@ -84,7 +84,7 @@ jobs:
         run: >-
           docker run --rm -v ${{ github.workspace }}/ops:/ops \
             --entrypoint=promtool quay.io/prometheus/prometheus:latest \
-            test rules /ops/prometheus_rules.yml
+            check rules /ops/prometheus_rules.yml
 
   pipeline-e2e:
     runs-on: ubuntu-latest
