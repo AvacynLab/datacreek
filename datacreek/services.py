@@ -3,7 +3,17 @@ import secrets
 from hashlib import sha256
 
 from sqlalchemy.orm import Session
-from werkzeug.security import generate_password_hash
+
+try:
+    from werkzeug.security import generate_password_hash
+except Exception:  # pragma: no cover - optional dependency
+
+    def generate_password_hash(p: str) -> str:
+        """Fallback when ``werkzeug`` isn't installed."""
+        import hashlib
+
+        return hashlib.sha256(p.encode()).hexdigest()
+
 
 from datacreek.backends import get_redis_client
 from datacreek.db import Dataset, SourceData, User
@@ -122,7 +132,9 @@ def get_dataset_by_id(db: Session, ds_id: int) -> Dataset | None:
     return ds
 
 
-def create_user(db: Session, username: str, api_key: str, password: str | None = None) -> User:
+def create_user(
+    db: Session, username: str, api_key: str, password: str | None = None
+) -> User:
     user = User(
         username=username,
         api_key=hash_key(api_key),
@@ -174,7 +186,9 @@ def create_dataset(
     path: str | None = None,
     content: str | None = None,
 ) -> Dataset:
-    ds = Dataset(owner_id=owner_id, source_id=source_id, path=path or "", content=content)
+    ds = Dataset(
+        owner_id=owner_id, source_id=source_id, path=path or "", content=content
+    )
     db.add(ds)
     db.commit()
     db.refresh(ds)

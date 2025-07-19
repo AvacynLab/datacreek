@@ -1,0 +1,9 @@
+# Recording and alerting rules for Prometheus
+# Use the 'groups' root key as expected by promtool
+
+groups:
+  - name: datacreek
+    rules:
+      # Placeholder rule; update with real expression
+      - record: ingest_queue_fill_ratio
+        expr: 0

@@ -11,7 +11,62 @@ try:
 except Exception:  # pragma: no cover - faiss optional
     faiss = None  # type: ignore
 
-__all__ = ["search_hnsw_pq"]
+__all__ = ["rerank_pq", "search_hnsw_pq"]
+
+
+def rerank_pq(
+    xb: np.ndarray,
+    xq: np.ndarray,
+    *,
+    k: int = 10,
+    gpu: bool = True,
+) -> np.ndarray:
+    """Return ``k`` nearest indices using IVFPQ on CPU or GPU.
+
+    Parameters
+    ----------
+    xb:
+        Database vectors of shape ``(n, d)`` used for training and search.
+    xq:
+        Query vectors of shape ``(m, d)``.
+    k:
+        Number of neighbours to return.
+    gpu:
+        Whether to run the search on GPU when available.
+
+    Returns
+    -------
+    ``np.ndarray``
+        Indices of size ``(m, k)`` referring to ``xb``.
+    """
+    if faiss is None:
+        raise RuntimeError("faiss not installed")
+
+    d = xb.shape[1]
+    quantizer = faiss.IndexFlatIP(d)
+
+    if xb.shape[0] < 256:
+        index = faiss.IndexFlatIP(d)
+        index.add(xb)
+    else:
+        nlist = max(4, int(np.sqrt(xb.shape[0])))
+        nbits = 8 if xb.shape[0] >= 1000 else 6
+        index = faiss.IndexIVFPQ(quantizer, d, nlist, 8, int(nbits))
+
+        if (
+            gpu
+            and getattr(faiss, "StandardGpuResources", None)
+            and faiss.get_num_gpus() > 0
+        ):
+            res = faiss.StandardGpuResources()
+            index = faiss.index_cpu_to_gpu(res, 0, index)
+
+        index.train(xb)
+        index.add(xb)
+        index.nprobe = max(1, nlist // 4)
+
+    _, rerank = index.search(xq, k)
+    return rerank
 
 
 def search_hnsw_pq(
@@ -49,11 +104,5 @@ def search_hnsw_pq(
     _, idx = hnsw.search(xq, prefetch)
     candidates = idx[0]
 
-    quantizer = faiss.IndexFlatIP(d)
-    pq = faiss.IndexIVFPQ(quantizer, d, 1, 8, 8)
-    pq.train(xb[candidates])
-    pq.add(xb[candidates])
-    pq.nprobe = 1
-    _, rerank = pq.search(xq, k)
-
+    rerank = rerank_pq(xb[candidates], xq, k=k, gpu=True)
     return [int(candidates[i]) for i in rerank[0]]

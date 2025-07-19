@@ -5,10 +5,24 @@ from __future__ import annotations
 from typing import Dict, Iterable
 
 import numpy as np
-from scipy.stats import wasserstein_distance
+
+try:
+    from scipy.stats import wasserstein_distance
+except Exception:  # pragma: no cover - lightweight fallback when SciPy missing
+
+    def wasserstein_distance(u, v):
+        u = np.sort(np.asarray(u, dtype=float))
+        v = np.sort(np.asarray(v, dtype=float))
+        all_points = np.sort(np.concatenate((u, v)))
+        cdf_u = np.searchsorted(u, all_points, side="right") / u.size
+        cdf_v = np.searchsorted(v, all_points, side="right") / v.size
+        diffs = np.diff(np.concatenate(([0.0], all_points)))
+        return float(np.sum(np.abs(cdf_u - cdf_v) * diffs))
 
 
-def alignment_correlation(x: Dict[str, Iterable[float]], y: Dict[str, Iterable[float]]) -> float:
+def alignment_correlation(
+    x: Dict[str, Iterable[float]], y: Dict[str, Iterable[float]]
+) -> float:
     """Return Pearson correlation between two aligned embedding dictionaries."""
     common = [k for k in x if k in y]
     if not common:

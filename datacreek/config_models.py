@@ -1,7 +1,12 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+try:
+    from pydantic import BaseModel
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class BaseModel:  # lightweight stub for optional dependency
+        pass
 
 
 @dataclass
@@ -31,7 +36,9 @@ class GenerationSettings:
     def from_dict(cls, data: Dict[str, Any]) -> "GenerationSettings":
         """Create ``GenerationSettings`` from a raw dictionary."""
         defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__}
+        )
 
     def update(self, overrides: Dict[str, Any]) -> None:
         """Update fields from a dictionary of overrides."""
@@ -79,7 +86,9 @@ class CurateSettings:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "CurateSettings":
         defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__}
+        )
 
 
 class CurateSettingsModel(BaseModel):
@@ -103,7 +112,9 @@ class FormatSettings:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FormatSettings":
         defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__}
+        )
 
 
 class FormatSettingsModel(BaseModel):
@@ -128,7 +139,9 @@ class VLLMSettings:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "VLLMSettings":
         defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__}
+        )
 
 
 class VLLMSettingsModel(BaseModel):
@@ -155,7 +168,9 @@ class OpenAISettings:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "OpenAISettings":
         defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__}
+        )
 
 
 class OpenAISettingsModel(BaseModel):
@@ -178,7 +193,9 @@ class LLMSettings:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LLMSettings":
         defaults = cls()
-        return cls(**{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data.get(k, getattr(defaults, k)) for k in cls.__dataclass_fields__}
+        )
 
 
 class LLMSettingsModel(BaseModel):

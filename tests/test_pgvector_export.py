@@ -1,10 +1,17 @@
+import importlib
 import importlib.abc
 import importlib.util
+import os
+import sys
 import time
+import types
 from pathlib import Path
 
 import networkx as nx
+import numpy as np
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 spec = importlib.util.spec_from_file_location(
     "datacreek.plugins.pgvector_export",
@@ -97,6 +104,21 @@ def test_query_topk_sql():
     assert any("SELECT node_id, space FROM emb" in sql for sql, _ in conn.cur.calls)
 
 
+def test_pgvector_query_metric(monkeypatch):
+    conn = DummyConn()
+    recorded = {}
+
+    def fake_update(name, value, labels=None):
+        recorded[name] = value
+
+    fake_mod = types.SimpleNamespace(update_metric=fake_update)
+    monkeypatch.setitem(sys.modules, "datacreek.analysis.monitoring", fake_mod)
+    vec = [0.1, 0.2]
+    pgvector_export.query_topk_pg(conn, table="emb", vec=vec, k=2)
+    assert "pgvector_query_ms" in recorded
+    assert recorded["pgvector_query_ms"] >= 0
+
+
 @pytest.mark.faiss_gpu
 def test_recall_vs_faiss():
     faiss = pytest.importorskip("faiss")
@@ -115,3 +137,44 @@ def test_recall_vs_faiss():
         len(xq) * 5
     )
     assert recall == 1.0
+
+
+@pytest.mark.heavy
+def test_pgvector_latency_recall(tmp_path):
+    dsn = os.environ.get("PGVECTOR_URL")
+    if not dsn:
+        pytest.skip("pgvector not configured")
+    psycopg = pytest.importorskip("psycopg")
+    faiss = pytest.importorskip("faiss")
+
+    rng = np.random.default_rng(0)
+    dim = 8
+    n = 1000  # reduced size for CI; spec requires 1M
+    xb = rng.standard_normal((n, dim)).astype("float32")
+    xq = rng.standard_normal((100, dim)).astype("float32")
+
+    # baseline recall using FAISS CPU exact search
+    index = faiss.IndexFlatIP(dim)
+    index.add(xb)
+    _, gt = index.search(xq, 5)
+
+    # build graph structure to reuse export helper
+    kg = DummyKG()
+    for i, vec in enumerate(xb):
+        kg.graph.add_node(str(i), embedding=vec)
+
+    with psycopg.connect(dsn) as conn:
+        conn.execute("DROP TABLE IF EXISTS emb")
+        pgvector_export.export_embeddings_pg(kg, conn, lists=100)
+        t0 = time.perf_counter()
+        rows = [pgvector_export.query_topk_pg(conn, "emb", q, k=5) for q in xq]
+        elapsed = (time.perf_counter() - t0) / len(xq)
+
+    recall = 0
+    for r, g in zip(rows, gt):
+        ids = [int(i[0]) for i in r]
+        recall += len(set(ids).intersection(g))
+    recall /= len(xq) * 5
+
+    assert elapsed * 1000 < 30
+    assert recall >= 0.9

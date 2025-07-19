@@ -11,8 +11,9 @@ from skopt import Optimizer
 
 from .index import recall10
 
-ARTIFACT_PATH = (
-    pathlib.Path(__file__).resolve().parents[2] / "benchmarks" / "node2vec_last.json"
+# JSON artifact tracking the best Node2Vec parameters for the last run.
+BEST_PQ_PATH = (
+    pathlib.Path(__file__).resolve().parents[2] / "benchmarks" / "best_pq.json"
 )
 
 
@@ -36,6 +37,15 @@ def _dataset_hash(graph: "KnowledgeGraph") -> str:
     m.update("".join(sorted(str(n) for n in graph.graph.nodes())).encode())
     m.update("".join(sorted(f"{u}-{v}" for u, v in graph.graph.edges())).encode())
     return m.hexdigest()
+
+
+def _save_artifact(path: pathlib.Path, dataset: str, p: float, q: float) -> None:
+    """Persist best parameters to JSON ``path``."""
+
+    try:
+        path.write_text(json.dumps({"dataset": dataset, "p": p, "q": q}))
+    except Exception:  # pragma: no cover - best effort
+        pass
 
 
 def autotune_node2vec(
@@ -78,13 +88,5 @@ def autotune_node2vec(
 
     kg.compute_node2vec_embeddings(p=best_pq[0], q=best_pq[1])
     recall10(kg.graph, queries, ground_truth, gamma=0.5, eta=0.25)
-    try:
-        artifact = {
-            "dataset": _dataset_hash(kg),
-            "p": best_pq[0],
-            "q": best_pq[1],
-        }
-        ARTIFACT_PATH.write_text(json.dumps(artifact))
-    except Exception:  # pragma: no cover - best effort
-        pass
+    _save_artifact(BEST_PQ_PATH, _dataset_hash(kg), best_pq[0], best_pq[1])
     return best_pq

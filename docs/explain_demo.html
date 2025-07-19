@@ -10,7 +10,7 @@
       const dataset = params.get('dataset') || 'demo';
       const node = params.get('node');
       if (!node) return;
-      const res = await fetch(`/api/datasets/${dataset}/explain/${node}`);
+      const res = await fetch(`/api/explain/${node}?dataset=${dataset}`);
       const data = await res.json();
       const nodes = data.nodes;
       const edges = data.edges.map(([s, t]) => ({

@@ -1,5 +1,7 @@
 """Utility helpers for datacreek."""
 
+from contextlib import contextmanager
+
 from .backpressure import acquire_slot as acquire_ingest_slot
 from .backpressure import has_capacity as ingest_has_capacity
 from .backpressure import release_slot as release_ingest_slot
@@ -23,7 +25,11 @@ from .config import (
 from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
 from .gitinfo import get_commit_hash
-from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
+
+try:  # optional dependency on networkx
+    from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
+except Exception:  # pragma: no cover - lightweight fallback when networkx missing
+    graph_to_text = neighborhood_to_sentence = subgraph_to_text = None  # type: ignore[assignment]
 from .llm_processing import (
     convert_to_conversation_format,
     parse_qa_pairs,
@@ -31,7 +37,19 @@ from .llm_processing import (
     qa_pairs_to_records,
 )
 from .metrics import push_metrics
-from .progress import create_progress, progress_context
+
+try:  # optional dependency on rich
+    from .progress import create_progress, progress_context
+except Exception:  # pragma: no cover - fallback when rich is missing
+
+    def create_progress(*_a, **_k):  # type: ignore[return-type]
+        return None, 0
+
+    @contextmanager  # type: ignore[misc]
+    def progress_context(*_a, **_k):
+        yield None, 0
+
+
 from .redis_helpers import decode_hash
 from .redis_pid import get_current_ttl, start_pid_controller
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks

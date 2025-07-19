@@ -93,9 +93,17 @@ def export_embeddings_pg(
 
 def query_topk_pg(conn: Connection, table: str, vec: Iterable[float], *, k: int = 5):
     """Return ``k`` nearest neighbours ordered by cosine distance."""
+    import time
+
+    from ..analysis.monitoring import update_metric
+
+    t0 = time.perf_counter()
     with conn.cursor() as cur:
         cur.execute(
             f"SELECT node_id, space FROM {table} ORDER BY vec <-> %s LIMIT %s",
             (_fmt_vector(vec), k),
         )
-        return cur.fetchall()
+        rows = cur.fetchall()
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    update_metric("pgvector_query_ms", elapsed_ms)
+    return rows

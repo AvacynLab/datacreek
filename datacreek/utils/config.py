@@ -10,9 +10,31 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+try:
+    import yaml
+except Exception:  # pragma: no cover - optional dependency missing
+    yaml = None
+
+try:  # optional dependency for live config reloads
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+except Exception:  # pragma: no cover - fallback when watchdog is absent
+    FileSystemEventHandler = object  # type: ignore[misc]
+
+    class _DummyObserver:  # pragma: no cover - lightweight stub
+        def schedule(self, *a, **k):
+            pass
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+    Observer = _DummyObserver  # type: ignore[assignment]
 
 from datacreek.config_models import (
     CurateSettings,
@@ -76,7 +98,49 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     logger.info("Loading config from: %s", config_path)
     with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
+        if yaml is not None:
+            config = yaml.safe_load(f)
+        else:  # pragma: no cover - lightweight fallback
+            import json
+
+            try:
+                config = json.load(f)
+            except Exception:
+                # Minimal YAML parser for simple key/value pairs
+                f.seek(0)
+                config = {}
+                stack = [config]
+                indents = [0]
+                for line in f:
+                    if not line.strip() or line.lstrip().startswith("#"):
+                        continue
+                    indent = len(line) - len(line.lstrip())
+                    key, _, val = line.partition(":")
+                    key = key.strip()
+                    val = val.split("#", 1)[0].strip()
+                    while len(indents) > 1 and indent <= indents[-1]:
+                        stack.pop()
+                        indents.pop()
+                    parent = stack[-1]
+                    if val == "":
+                        node = {}
+                        parent[key] = node
+                        stack.append(node)
+                        indents.append(indent)
+                    else:
+                        if val.lower() in {"true", "false"}:
+                            parsed = val.lower() == "true"
+                        else:
+                            try:
+                                parsed = int(val)
+                            except ValueError:
+                                try:
+                                    parsed = float(val)
+                                except ValueError:
+                                    parsed = val.strip("\"'")
+                        parent[key] = parsed
+
+    # Debug: Print LLM provider if it exists
 
     # Debug: Print LLM provider if it exists
     if "llm" in config and "provider" in config["llm"]:

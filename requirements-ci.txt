@@ -1,0 +1,4 @@
+fakeredis
+faiss-cpu
+prometheus-client
+lmdb

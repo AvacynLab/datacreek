@@ -1,4 +1,5 @@
 import importlib
+import logging
 import os
 import sys
 
@@ -121,3 +122,38 @@ def test_get_budget_endpoint():
     assert data["epsilon_max"] == pytest.approx(1.0)
     assert data["epsilon_used"] == pytest.approx(0.1)
     assert data["epsilon_remaining"] == pytest.approx(0.9)
+
+
+def test_budget_exceed_logs(monkeypatch, tmp_path, caplog):
+    """Tenant over budget should emit JSON log and 403 response."""
+
+    db_path = tmp_path / "dp_exceed.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    if "datacreek.db" in sys.modules:
+        importlib.reload(sys.modules["datacreek.db"])
+    else:
+        importlib.import_module("datacreek.db")
+    import datacreek.db as db
+
+    db.init_db()
+    from datacreek.security.tenant_privacy import set_tenant_limit
+
+    with db.SessionLocal() as session:
+        set_tenant_limit(session, 7, epsilon_max=3.0)
+
+    from datacreek.security.dp_middleware import DPBudgetMiddleware
+
+    app = FastAPI()
+    app.add_middleware(DPBudgetMiddleware)
+
+    @app.post("/x")
+    def _sample():
+        return {"ok": True}
+
+    client_local = TestClient(app)
+    caplog.set_level(logging.INFO, logger="datacreek.privacy")
+
+    res = client_local.post("/x", headers={"X-Tenant": "7", "X-Epsilon": "5"})
+    assert res.status_code == 403
+    assert res.headers["X-Epsilon-Remaining"] == "0.000000"
+    assert any('"allowed": false' in r.message for r in caplog.records)
