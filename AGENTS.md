@@ -75,6 +75,7 @@
    - [x] requirements-ci.txt with fakeredis cupy-cuda12x faiss-cpu
    - [x] Matrix gpu true/false, heavy job 45min
    - [x] Promtool test rules
+   - [ ] Ensure heavy deps like FastAPI present
 
 15. Import dashboard Grafana cache/TTL
    - [x] Script upload_dashboard.py via HTTP API
@@ -88,3 +89,4 @@
 - Made heavy imports optional (requests, redis, networkx, numpy, rich) and added
   missing deps to requirements-ci.txt.
 - Installed heavy dependencies and verified heavy tests start running.
+- Added FastAPI and related packages to requirements-ci to fix heavy import errors.

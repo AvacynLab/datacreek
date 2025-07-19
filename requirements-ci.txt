@@ -6,3 +6,8 @@ networkx
 numpy
 rich
 pyyaml
+fastapi
+uvicorn
+sqlalchemy
+redis
+requests
