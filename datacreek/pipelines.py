@@ -57,12 +57,12 @@ from datacreek.models.results import (
     PrefPairResult,
     QAGenerationResult,
 )
+from datacreek.utils import create_progress
 from datacreek.utils.config import (
     get_format_settings,
     get_redis_config,
     load_config_with_overrides,
 )
-from datacreek.utils.progress import create_progress
 
 logger = logging.getLogger(__name__)
 
