@@ -3,12 +3,12 @@
 La revue précédente a révélé **15 points encore perfectibles** (sur 20) ; la liste ci-dessous détaille toutes les actions à mener pour que le code et la CI couvrent intégralement vos objectifs “v1.1-scale-out”. Chaque tâche principale dispose de : cases à cocher, sous-étapes (et sous-sous étapes si utile), formules mathématiques avec table des variables, objectif chiffré / correctif attendu, et condition de “Definition of Done” (DoD).
 
 ## 1 – Bench overshoot & robustesse fp16 du re-centrage Poincaré
-* [ ] **Tracer overshoot Δr vs norme hyperbolique**
-  * [ ] Échantillonner 1000 points sur la boule de Poincaré pour trois courbures $κ∈{-1,-0.5,-2}$ ([arXiv][1], [Reddit][2])
-  * [ ] Calculer $\Delta r = r_{\text{cible}} - r_{\text{obtenu}}$ après re‑centrage Möbius (`exp / log`) ; sauvegarder parquet.
-* [ ] **Vérifier bijection exp/log** $(\exp_0\circ\log_0)(x)\approx x$ tol < 1e‑6 fp32, 1e‑3 fp16.
-* [ ] **Clamp de sécurité** : forcer $|x|_2 < 1-10^{-6}$ après toute opération.
-* [ ] **DoD** : médiane |Δr| −15 % vs scaling naïf ; aucun NaN fp16.
+* [x] **Tracer overshoot Δr vs norme hyperbolique**
+  * [x] Échantillonner 1000 points sur la boule de Poincaré pour trois courbures $κ∈{-1,-0.5,-2}$ ([arXiv][1], [Reddit][2])
+  * [x] Calculer $\Delta r = r_{\text{cible}} - r_{\text{obtenu}}$ après re‑centrage Möbius (`exp / log`) ; sauvegarder parquet.
+* [x] **Vérifier bijection exp/log** $(\exp_0\circ\log_0)(x)\approx x$ tol < 1e‑6 fp32, 1e‑3 fp16.
+* [x] **Clamp de sécurité** : forcer $|x|_2 < 1-10^{-6}$ après toute opération.
+* [x] **DoD** : médiane |Δr| −15 % vs scaling naïf ; aucun NaN fp16.
 
 **Maths**
 $$
@@ -29,12 +29,12 @@ $$
 * [ ] **DoD** : pipeline CI passe sans GPU ; GPU ≤ 0.5 xRT, CPU ≤ 2 xRT.
 
 ## 3 – Node2Vec : couverture “timeout mur” & persistance params
-* [ ] Simuler `max_minutes=0.1` via monkeypatch timer → vérifier arrêt après 2 itérations.
-* [ ] Sauver `best_pq.json` (p,q,hash dataset) sur `Optimizer.stop` ([Let’s talk about science!][5], [DIVA Portal][6])
-* [ ] **DoD** : fichier présent, test paramétrique rouge si absent.
+* [x] Simuler `max_minutes=0.1` via monkeypatch timer → vérifier arrêt après 2 itérations.
+* [x] Sauver `best_pq.json` (p,q,hash dataset) sur `Optimizer.stop` ([Let’s talk about science!][5], [DIVA Portal][6])
+* [x] **DoD** : fichier présent, test paramétrique rouge si absent.
 
 ## 4 – PID TTL Redis : exposer config & tests convergence
-* [ ] Ajouter bloc YAML :
+* [x] Ajouter bloc YAML :
 
 ```yaml
 pid:
@@ -43,10 +43,10 @@ pid:
   Ki: 0.05
   I_max: 5
 ```
-* [ ] **Anti‑windup** : $I_k=\min(\max(I_{k-1}+e_kΔt,-I_{max}),I_{max})$ ([Redis][7], [Graph Database & Analytics][8])
-* [ ] Boucle discrète : $u_k = K_p e_k + K_i I_k$ ; clamp TTL∈[1 s,24 h].
-* [ ] Test boucle sur trace hit_ratio burst ; assert overshoot < 5 %.
-* [ ] DoD : hit_ratio stabilisé ±5 % autour cible.
+* [x] **Anti‑windup** : $I_k=\min(\max(I_{k-1}+e_kΔt,-I_{max}),I_{max})$ ([Redis][7], [Graph Database & Analytics][8])
+* [x] Boucle discrète : $u_k = K_p e_k + K_i I_k$ ; clamp TTL∈[1 s,24 h].
+* [x] Test boucle sur trace hit_ratio burst ; assert overshoot < 5 %.
+* [x] DoD : hit_ratio stabilisé ±5 % autour cible.
 
 ## 5 – Migration HAA : intégration Flyway + dry‑run
 * [ ] Insérer `migrations/2025-07-haa_index.cypher` dans Flyway config.
@@ -55,13 +55,13 @@ pid:
 * [ ] DoD : CI verte + script rollback auto.
 
 ## 6 – TTL manager : test fuite tâche & arrêt propre
-* [ ] Créer test `test_redis_pid_leak.py` : lancer boucle 2 cycles, déclencher `stop_event`, s’assurer `asyncio.all_tasks()`==0.
-* [ ] DoD : pytest sans warning “Task was destroyed but it is pending”.
+* [x] Créer test `test_redis_pid_leak.py` : lancer boucle 2 cycles, déclencher `stop_event`, s’assurer `asyncio.all_tasks()`==0.
+* [x] DoD : pytest sans warning “Task was destroyed but it is pending”.
 
 ## 7 – Budget ε DP : test dépassement & header REST
-* [ ] Simuler tenant ε_max = 3 ; requête ε_req = 5 → attendre 403 + header `X-Epsilon-Remaining: 0`.
-* [ ] Log audit JSON `{"tenant":…, "eps_req":…, "allowed":False}`.
-* [ ] DoD : test API passe ; log présent.
+* [x] Simuler tenant ε_max = 3 ; requête ε_req = 5 → attendre 403 + header `X-Epsilon-Remaining: 0`.
+* [x] Log audit JSON `{"tenant":…, "eps_req":…, "allowed":False}`.
+* [x] DoD : test API passe ; log présent.
 
 ## 8 – Back‑pressure ingestion : circuit‑breaker Neo4j
 * [ ] Intégrer `pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)` autour de `neo4j_writer.write_batch`.
@@ -140,3 +140,4 @@ pid:
 
 ## History
 - Reset backlog to new task list and added YAML fallback in config loader.
+- Implemented overshoot tracing, PID controller updates and DP audit logs with tests.
