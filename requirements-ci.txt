@@ -2,3 +2,7 @@ fakeredis
 faiss-cpu
 prometheus-client
 lmdb
+networkx
+numpy
+rich
+pyyaml

@@ -12,10 +12,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import networkx as nx
-import numpy as np
-import requests
-from dateutil import parser
+try:
+    import networkx as nx
+except Exception:  # pragma: no cover - optional dependency missing
+    nx = None  # type: ignore
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency missing
+    np = None  # type: ignore
+try:
+    import requests
+except Exception:  # pragma: no cover - optional dependency missing
+    requests = None  # type: ignore
+try:
+    from dateutil import parser
+except Exception:  # pragma: no cover - optional dependency missing
+    parser = None  # type: ignore
 
 try:  # optional dependency
     from watchdog.events import FileSystemEventHandler

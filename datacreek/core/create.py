@@ -13,7 +13,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import redis
+try:
+    import redis
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class _RedisStub:
+        Redis = object
+
+    redis = _RedisStub()  # type: ignore
 
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.content_type import ContentType
@@ -109,7 +116,9 @@ def process_file(
     def _generate_qa() -> Any:
         from datacreek.generators.qa_generator import QAGenerator
 
-        generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+        generator = QAGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
 
         nonlocal document_text
         if document_text is None:
@@ -140,7 +149,9 @@ def process_file(
         return gen_result.to_dict()
 
     def _generate_summary() -> Any:
-        generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+        generator = QAGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
 
         nonlocal document_text
         if document_text is None:
@@ -211,7 +222,9 @@ def process_file(
 
             qa_pairs = data.get("qa_pairs", [])
             if verbose:
-                logger.debug("Converting %d QA pairs to conversation format", len(qa_pairs))
+                logger.debug(
+                    "Converting %d QA pairs to conversation format", len(qa_pairs)
+                )
 
             conv_list = convert_to_conversation_format(qa_pairs)
             conversations = [{"conversations": conv} for conv in conv_list]
@@ -249,14 +262,18 @@ def process_file(
             # Process each conversation
             enhanced_conversations = []
 
-            for i, conversation in enumerate(tqdm(conversations, desc="Enhancing conversations")):
+            for i, conversation in enumerate(
+                tqdm(conversations, desc="Enhancing conversations")
+            ):
                 # Check if this item has a conversations field
                 if isinstance(conversation, dict) and "conversations" in conversation:
                     conv_messages = conversation["conversations"]
 
                     # Validate messages format
                     if not isinstance(conv_messages, list):
-                        logger.warning("conversations field is not a list in item %d, skipping", i)
+                        logger.warning(
+                            "conversations field is not a list in item %d, skipping", i
+                        )
                         enhanced_conversations.append(conversation)  # Keep original
                         continue
 
@@ -265,7 +282,11 @@ def process_file(
                         logger.debug("Conv_messages type: %s", type(conv_messages))
                         logger.debug(
                             "Conv_messages structure: %s",
-                            conv_messages[:1] if isinstance(conv_messages, list) else "Not a list",
+                            (
+                                conv_messages[:1]
+                                if isinstance(conv_messages, list)
+                                else "Not a list"
+                            ),
                         )
 
                     # Always include simple steps when enhancing QA pairs
@@ -329,7 +350,9 @@ def process_file(
         if document_text is None:
             document_text = kg.to_text()
 
-        generator = ToolCallGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+        generator = ToolCallGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
         result = generator.process_document(document_text, verbose=verbose)
         return result
 
@@ -366,7 +389,9 @@ def process_file(
         if document_text is None:
             document_text = kg.to_text()
 
-        generator = PrefPairGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+        generator = PrefPairGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
         result = generator.process_document(document_text, verbose=verbose)
         return result
 
@@ -377,7 +402,9 @@ def process_file(
         if document_text is None:
             document_text = kg.to_text()
 
-        generator = PrefListGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+        generator = PrefListGenerator(
+            client, config_path, kg=kg, config_overrides=config_overrides
+        )
         result = generator.process_document(document_text, verbose=verbose)
         return result
 
@@ -465,7 +492,9 @@ async def process_file_async(
 
     from datacreek.generators.qa_generator import QAGenerator
 
-    generator = QAGenerator(client, config_path, kg=kg, config_overrides=config_overrides)
+    generator = QAGenerator(
+        client, config_path, kg=kg, config_overrides=config_overrides
+    )
     if num_pairs is None:
         num_pairs = get_generation_config(client.config).num_pairs
 

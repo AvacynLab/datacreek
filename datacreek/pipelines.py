@@ -12,7 +12,14 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import redis
+try:
+    import redis
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class _RedisStub:
+        Redis = object
+
+    redis = _RedisStub()  # type: ignore
 
 try:
     from pydantic import BaseModel, ConfigDict, field_validator

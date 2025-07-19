@@ -12,7 +12,14 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import redis
+try:
+    import redis
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class _RedisStub:
+        Redis = object
+
+    redis = _RedisStub()  # type: ignore
 
 from datacreek.storage import StorageBackend
 
@@ -44,7 +51,10 @@ def _format_pairs(qa_pairs: List[Dict[str, str]], fmt: str) -> Any:
         return "\n".join(json.dumps(p, ensure_ascii=False) for p in qa_pairs)
     if fmt == "alpaca":
         return json.dumps(
-            [{"instruction": p["question"], "input": "", "output": p["answer"]} for p in qa_pairs],
+            [
+                {"instruction": p["question"], "input": "", "output": p["answer"]}
+                for p in qa_pairs
+            ],
             indent=2,
         )
 
@@ -104,8 +114,14 @@ def convert_format(
         conversations = data.get("conversations", [])
         qa_pairs = []
         for conv in conversations:
-            if len(conv) >= 3 and conv[1]["role"] == "user" and conv[2]["role"] == "assistant":
-                qa_pairs.append({"question": conv[1]["content"], "answer": conv[2]["content"]})
+            if (
+                len(conv) >= 3
+                and conv[1]["role"] == "user"
+                and conv[2]["role"] == "assistant"
+            ):
+                qa_pairs.append(
+                    {"question": conv[1]["content"], "answer": conv[2]["content"]}
+                )
     else:
         # If the file is just an array of objects, check if they look like QA pairs
         if isinstance(data, list):
@@ -114,12 +130,16 @@ def convert_format(
                 if isinstance(item, dict) and "question" in item and "answer" in item:
                     qa_pairs.append(item)
         else:
-            raise ValueError("Unrecognized data format - expected QA pairs or conversations")
+            raise ValueError(
+                "Unrecognized data format - expected QA pairs or conversations"
+            )
 
     # When using HF dataset storage format
     if storage_format == "hf":
         formatted_pairs = (
-            qa_pairs if format_type == "jsonl" else json.loads(_format_pairs(qa_pairs, format_type))
+            qa_pairs
+            if format_type == "jsonl"
+            else json.loads(_format_pairs(qa_pairs, format_type))
         )
         if backend is not None and redis_key is not None:
             return to_hf_dataset(formatted_pairs, redis_key)

@@ -12,7 +12,18 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-import requests
+try:
+    import requests
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class _RequestsStub:
+        class exceptions(Exception):
+            RequestException = Exception
+
+        def __getattr__(self, name: str):
+            raise ImportError("requests library is required for HTTP operations")
+
+    requests = _RequestsStub()  # type: ignore
 
 from datacreek.utils.config import (
     get_llm_provider,
