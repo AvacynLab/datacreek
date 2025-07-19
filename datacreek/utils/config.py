@@ -14,8 +14,27 @@ try:
     import yaml
 except Exception:  # pragma: no cover - optional dependency missing
     yaml = None
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+
+try:  # optional dependency for live config reloads
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import Observer
+except Exception:  # pragma: no cover - fallback when watchdog is absent
+    FileSystemEventHandler = object  # type: ignore[misc]
+
+    class _DummyObserver:  # pragma: no cover - lightweight stub
+        def schedule(self, *a, **k):
+            pass
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def join(self, timeout=None):
+            pass
+
+    Observer = _DummyObserver  # type: ignore[assignment]
 
 from datacreek.config_models import (
     CurateSettings,
