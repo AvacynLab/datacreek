@@ -68,3 +68,11 @@ monitor:
   port: 8000       # Prometheus metrics port
 neo4j:
   run_migrations: true
+
+# PID controller defaults
+pid:
+  target_hit_ratio: 0.45
+  Kp: 0.4
+  Ki: 0.05
+  I_max: 5
+

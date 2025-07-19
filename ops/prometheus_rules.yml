@@ -1,0 +1,5 @@
+---
+- name: datacreek
+  rules:
+    - record: ingest_queue_fill_ratio
+      expr: 0

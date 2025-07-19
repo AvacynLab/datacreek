@@ -11,7 +11,29 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - torch optional
     torch = None  # type: ignore
 
-__all__ = ["recenter_embeddings", "hyperbolic_radius", "measure_overshoot"]
+__all__ = [
+    "recenter_embeddings",
+    "hyperbolic_radius",
+    "measure_overshoot",
+    "trace_overshoot_parquet",
+]
+
+
+def _clamp_ball(x: np.ndarray, *, delta: float = 1e-6) -> np.ndarray:
+    """Return ``x`` rescaled to stay inside the open unit ball."""
+    n = np.linalg.norm(x)
+    if n >= 1.0 - delta:
+        x = x / n * (1.0 - delta)
+    return x
+
+
+if torch is not None:  # pragma: no cover - optional dependency
+
+    def _clamp_ball_torch(v: "torch.Tensor", delta: float = 1e-6) -> "torch.Tensor":
+        """Clamp tensor ``v`` inside the open unit ball."""
+        norm = torch.linalg.norm(v, dim=-1, keepdim=True)
+        factor = (1.0 - delta) / norm.clamp(min=1e-8)
+        return torch.where(norm >= 1.0 - delta, v * factor, v)
 
 
 # --- Möbius geometry helpers -------------------------------------------------
@@ -57,18 +79,29 @@ def _mobius_neg(x: np.ndarray) -> np.ndarray:
     return -x
 
 
-def _exp_map_zero(v: np.ndarray, *, c: float = 1.0) -> np.ndarray:
-    """Exponential map at the origin for curvature ``-c``."""
+def _exp_map_zero(v: np.ndarray, *, c: float = 1.0, delta: float = 1e-6) -> np.ndarray:
+    """Exponential map at the origin for curvature ``-c``.
+
+    Parameters
+    ----------
+    v:
+        Tangent vector at the origin.
+    c:
+        Positive curvature constant for ``kappa=-c``.
+    delta:
+        Safety margin to keep the result inside the unit ball.
+    """
     norm = np.linalg.norm(v)
     if norm < 1e-15:
         return v
     sqc = float(c) ** 0.5
-    return np.tanh(sqc * norm) * v / (sqc * norm)
+    res = np.tanh(sqc * norm) * v / (sqc * norm)
+    return _clamp_ball(res, delta=delta)
 
 
-def _log_map(x: np.ndarray, y: np.ndarray, *, c: float = 1.0) -> np.ndarray:
+def _log_map(x: np.ndarray, y: np.ndarray, *, c: float = 1.0, delta: float = 1e-6) -> np.ndarray:
     """Logarithmic map of ``y`` at ``x`` for curvature ``-c``."""
-    u = _mobius_add(_mobius_neg(x), y, c=c, clamp=False)
+    u = _clamp_ball(_mobius_add(_mobius_neg(x), y, c=c, clamp=False), delta=delta)
     norm_u = np.linalg.norm(u)
     if norm_u < 1e-15:
         return np.zeros_like(x)
@@ -78,10 +111,13 @@ def _log_map(x: np.ndarray, y: np.ndarray, *, c: float = 1.0) -> np.ndarray:
 
 if torch is not None:  # pragma: no cover - optional autodiff helpers
 
-    def _exp_map_zero_torch(v: "torch.Tensor", *, c: float = 1.0) -> "torch.Tensor":
+    def _exp_map_zero_torch(
+        v: "torch.Tensor", *, c: float = 1.0, delta: float = 1e-6
+    ) -> "torch.Tensor":
         norm = torch.linalg.norm(v, dim=-1, keepdim=True)
         sqc = float(c) ** 0.5
-        return torch.tanh(sqc * norm) * v / (sqc * norm.clamp_min(1e-8))
+        res = torch.tanh(sqc * norm) * v / (sqc * norm.clamp_min(1e-8))
+        return _clamp_ball_torch(res, delta)
 
     def _log_map_zero_torch(y: "torch.Tensor", *, c: float = 1.0) -> "torch.Tensor":
         norm = torch.linalg.norm(y, dim=-1, keepdim=True)
@@ -165,18 +201,53 @@ def recenter_embeddings(
         return {}
 
     # Compute approximate hyperbolic barycenter using Euclidean mean.
-    center = np.mean(list(vecs.values()), axis=0)
-    norm = np.linalg.norm(center)
-    if norm >= 1.0 - delta:
-        center = center / norm * (1.0 - delta)
+    center = _clamp_ball(np.mean(list(vecs.values()), axis=0), delta=delta)
 
     recentered: Dict[object, np.ndarray] = {}
     for key, x in vecs.items():
         v = -_log_map(x, center, c=curvature)
-        y = _exp_map_zero(v, c=curvature)
-        n = np.linalg.norm(y)
-        if n >= 1.0 - delta:
-            y = y / n * (1.0 - delta)
+        y = _clamp_ball(_exp_map_zero(v, c=curvature, delta=delta), delta=delta)
         recentered[key] = y.astype(np.float16)
 
     return recentered
+
+def trace_overshoot_parquet(path: str, *, num_points: int = 1000, curvatures: Sequence[float] = (-1.0, -0.5, -2.0)) -> None:
+    """Generate overshoot samples and save Parquet file.
+
+    Parameters
+    ----------
+    path:
+        Output Parquet file path.
+    num_points:
+        Number of random points per curvature.
+    curvatures:
+        Iterable of negative curvature values.
+    """
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+    except Exception as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("pyarrow required to dump parquet") from exc
+
+    rng = np.random.default_rng(0)
+    rows = []
+    for kappa in curvatures:
+        c = -float(kappa)
+        pts = rng.standard_normal((num_points, 2))
+        r = rng.random(num_points) ** 0.5
+        pts /= np.linalg.norm(pts, axis=1, keepdims=True)
+        pts *= r[:, None]
+        rec = recenter_embeddings({i: p for i, p in enumerate(pts)}, curvature=c)
+        for i, p in enumerate(pts):
+            r_t = hyperbolic_radius(p, c=c)
+            r_o = hyperbolic_radius(rec[i], c=c)
+            rows.append((kappa, r_t, r_o, r_t - r_o))
+
+    table = pa.table({
+        "kappa": [r[0] for r in rows],
+        "r_target": [r[1] for r in rows],
+        "r_obtained": [r[2] for r in rows],
+        "delta_r": [r[3] for r in rows],
+    })
+    pq.write_table(table, path)
+

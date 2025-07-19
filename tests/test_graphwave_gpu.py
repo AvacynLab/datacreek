@@ -47,3 +47,23 @@ def test_graphwave_runner_gpu(monkeypatch):
     monkeypatch.setattr(kg, "compute_graphwave_embeddings", lambda *a, **k: None)
     runner = GraphWaveRunner(kg)
     runner.run(scales=[0.5], gpu=True)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(spec is None, reason="cupy required")
+def test_graphwave_embedding_gpu_precision():
+    """GPU embeddings should match CPU implementation within 1e-5."""
+    from datacreek.analysis.fractal import graphwave_embedding_chebyshev
+    from datacreek.analysis.graphwave_cuda import graphwave_embedding_gpu
+
+    g = nx.path_graph(1000)
+    scales = [0.3]
+
+    cpu = graphwave_embedding_chebyshev(g, scales, num_points=3, order=5)
+    gpu = graphwave_embedding_gpu(g, scales, num_points=3, order=5)
+
+    arr_cpu = np.stack([cpu[n] for n in sorted(g.nodes())])
+    arr_gpu = np.stack([gpu[n] for n in sorted(g.nodes())])
+
+    rel_err = np.linalg.norm(arr_gpu - arr_cpu) / np.linalg.norm(arr_cpu)
+    assert rel_err < 1e-5

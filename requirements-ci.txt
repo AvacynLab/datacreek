@@ -1,0 +1,3 @@
+fakeredis
+cupy-cuda12x
+faiss-cpu

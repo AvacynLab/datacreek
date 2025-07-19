@@ -6,6 +6,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+import json
+import logging
+
+logger = logging.getLogger("datacreek.privacy")
+
 from datacreek.db import SessionLocal, TenantPrivacy
 
 from .tenant_privacy import can_consume_epsilon
@@ -43,6 +48,11 @@ class DPBudgetMiddleware(BaseHTTPMiddleware):
                 remaining = 0.0
                 if entry is not None:
                     remaining = entry.epsilon_max - entry.epsilon_used
+                logger.info(
+                    json.dumps(
+                        {"tenant": tid, "eps_req": amount, "allowed": False}
+                    )
+                )
                 return Response(
                     status_code=403,
                     headers={"X-Epsilon-Remaining": f"{remaining:.6f}"},
@@ -54,4 +64,7 @@ class DPBudgetMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response.headers["X-Epsilon-Remaining"] = f"{remaining:.6f}"
+        logger.info(
+            json.dumps({"tenant": tid, "eps_req": amount, "allowed": True})
+        )
         return response

@@ -3,7 +3,9 @@ import json
 from typing import Any, Literal
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+from datacreek.routers.explain_router import router as explain_router
 from sqlalchemy.orm import Session
 
 from datacreek.backends import get_neo4j_driver, get_redis_client
@@ -94,6 +96,8 @@ init_db()
 app = FastAPI(title="Datacreek API")
 app.add_middleware(DPBudgetMiddleware)
 
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.include_router(explain_router)
 
 def get_db():
     db = SessionLocal()
@@ -733,6 +737,7 @@ def get_dp_budget(current_user: User = Depends(get_current_user)) -> dict:
 @app.get(
     "/datasets/{name}/explain/{node_id}",
     summary="Explain node neighborhood with attention heatmap",
+    response_model=None,
 )
 def explain_node_route(
     name: DatasetName = Path(
@@ -742,7 +747,7 @@ def explain_node_route(
     hops: int = Query(3, ge=1, le=5),
     fmt: Literal["json", "svg", "png"] = Query("json"),
     current_user: User = Depends(get_current_user),
-) -> Response | dict:
+) -> Response:
     """Return a radius-``hops`` subgraph around ``node_id``.
 
     The JSON payload contains ``nodes`` and ``edges`` lists plus an ``attention``

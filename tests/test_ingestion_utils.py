@@ -122,6 +122,9 @@ def test_whisper_batch_gpu_fallback(monkeypatch):
     vals = []
 
     class DummyGauge:
+        def labels(self, **kwargs):
+            return self
+
         def set(self, v: float):
             vals.append(v)
 

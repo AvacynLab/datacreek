@@ -1,6 +1,29 @@
 import os
 import subprocess
 from pathlib import Path
+import importlib.util
+
+
+class DummySession:
+    def __init__(self):
+        self.queries = []
+
+    def run(self, q):
+        self.queries.append(q)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+
+class DummyDriver:
+    def __init__(self):
+        self.session_obj = DummySession()
+
+    def session(self):
+        return self.session_obj
 
 
 def test_backup_datastores(tmp_path):
@@ -31,3 +54,20 @@ def test_revert_cache(tmp_path):
 def test_revert_ingestion_contains_restart():
     data = Path("scripts/revert_ingestion.sh").read_text()
     assert "docker compose restart ingestion" in data
+
+
+def test_rollback_haa_index_executes_queries(monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        "rollback_haa", Path("scripts/rollback_haa_index.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    assert isinstance(spec.loader, importlib.abc.Loader)
+    spec.loader.exec_module(mod)
+
+    driver = DummyDriver()
+    monkeypatch.setattr(mod, "get_neo4j_driver", lambda: driver)
+    mod.main()
+    assert driver.session_obj.queries == [
+        "DROP CONSTRAINT haa_pair_unique IF EXISTS",
+        "DROP INDEX haa_pair IF EXISTS",
+    ]

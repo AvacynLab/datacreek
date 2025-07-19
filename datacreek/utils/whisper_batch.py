@@ -83,6 +83,8 @@ def transcribe_audio_batch(
         else:
             device = "cpu"
     use_fp16 = device == "cuda"
+    if device == "cpu":
+        batch_size = max(1, batch_size // 4)
     model_inst = _get_model(
         model, fp16=use_fp16, device=device, int8=quantize and device == "cpu"
     )
@@ -137,7 +139,7 @@ def transcribe_audio_batch(
         xrt = 0.0
     from datacreek.analysis.monitoring import update_metric
 
-    update_metric("whisper_xrt", float(xrt))
+    update_metric("whisper_xrt", float(xrt), {"device": device})
     logging.getLogger(__name__).debug(
         "Whisper.cpp transcribed %d files in %.2fs (%.2f audio/s)",
         len(all_paths),

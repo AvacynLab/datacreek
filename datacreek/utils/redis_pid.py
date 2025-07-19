@@ -20,10 +20,14 @@ from .config import load_config
 
 cfg = load_config()
 cache_cfg = cfg.get("cache", {})
+pid_cfg = cfg.get("pid", {})
 
-TARGET_HIT = float(cache_cfg.get("pid_target", 0.45))
-K_P = float(cache_cfg.get("pid_kp", 0.4))
-K_I = float(cache_cfg.get("pid_ki", 0.05))
+# Controller parameters (fallback to legacy cache keys)
+TARGET_HIT = float(pid_cfg.get("target_hit_ratio", cache_cfg.get("pid_target", 0.45)))
+K_P = float(pid_cfg.get("Kp", cache_cfg.get("pid_kp", 0.4)))
+K_I = float(pid_cfg.get("Ki", cache_cfg.get("pid_ki", 0.05)))
+# Maximum absolute value for the integral term (anti-windup)
+I_MAX = float(pid_cfg.get("I_max", cache_cfg.get("pid_i_max", 5)))
 INTERVAL = float(cache_cfg.get("pid_interval", 60.0))
 _TTL_MIN = int(cache_cfg.get("l1_ttl_min", 300))
 _TTL_MAX = int(cache_cfg.get("l1_ttl_max", 7200))
@@ -44,9 +48,12 @@ async def update_ttl(client: "aioredis.Redis") -> None:
     total = hits + miss
     ratio = hits / total if total else 0.0
     err = TARGET_HIT - ratio
-    _integral_err += err * INTERVAL
+    # Anti-windup on the integral term
+    _integral_err = max(-I_MAX, min(I_MAX, _integral_err + err * INTERVAL))
+    # Discrete PID control law
     delta = K_P * err + K_I * _integral_err
-    new_ttl = max(_TTL_MIN, min(_TTL_MAX, int(_current_ttl + delta)))
+    # Clamp result to a safe TTL range [1s, 24h]
+    new_ttl = max(1, min(86400, int(_current_ttl + delta)))
     if new_ttl != _current_ttl:
         logging.getLogger(__name__).debug("PID TTL updated to %d", new_ttl)
         _current_ttl = new_ttl
