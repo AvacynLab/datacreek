@@ -104,10 +104,10 @@ pid:
 - [ ] DoD : test heavy marqué ; skip si postgres absent.
 
 ## 14 – CI multi‑environnements & dépendances
-- [ ] Ajouter `requirements-ci.txt` : `fakeredis`, `cupy-cuda12x`, `faiss-cpu`.
-- [ ] Workflow `ci.yml` : matrix `{gpu:false,true}` ; job `unit` puis `heavy` (needs unit).
-- [ ] Ajouter étape `promtool test rules` ([GitHub][10])
-- [ ] Timeout heavy → 45 min.
+- [x] Ajouter `requirements-ci.txt` : `fakeredis`, `cupy-cuda12x`, `faiss-cpu`.
+- [x] Workflow `ci.yml` : matrix `{gpu:false,true}` ; job `unit` puis `heavy` (needs unit).
+- [x] Ajouter étape `promtool test rules` ([GitHub][10])
+- [x] Timeout heavy → 45 min.
 - [ ] DoD : CI verte CPU‑only et GPU runners.
 
 ## 15 – Import dashboard Grafana cache/TTL
@@ -130,3 +130,4 @@ pid:
 - Reset backlog to new task list.
 - Ran pre-commit, fixed import ordering and verified test_redis_pid_leak passes
 - Implemented Node2Vec timeout and artifact persistence, PID config with anti-windup, and DP budget exceed logging. Verified related tests.
+- Added optional fallbacks for missing Flask dependencies and adjusted CI to install cupy only on GPU runners.

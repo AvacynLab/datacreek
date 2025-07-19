@@ -1,6 +1,15 @@
 import os
 
-from flask_login import UserMixin
+try:
+    from flask_login import UserMixin
+except Exception:  # pragma: no cover - optional dependency
+
+    class UserMixin:  # type: ignore[misc]
+        """Fallback when Flask-Login isn't installed."""
+
+        pass
+
+
 from sqlalchemy import Column, Float, ForeignKey, Integer, String, Text, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 

@@ -1,5 +1,4 @@
 fakeredis
-cupy-cuda12x
 faiss-cpu
 prometheus-client
 lmdb

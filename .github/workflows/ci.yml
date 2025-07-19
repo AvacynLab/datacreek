@@ -78,6 +78,9 @@ jobs:
           python-version: '3.12'
       - run: |
           pip install -r requirements.txt -r requirements-ci.txt pytest
+      - if: matrix.gpu == true
+        run: |
+          pip install cupy-cuda12x
       - name: Run heavy tests
         run: PYTHONPATH=. pytest -m heavy -q
       - name: Prometheus rules
