@@ -2,7 +2,10 @@
 
 from typing import List
 
-import numpy as np
+try:
+    import numpy as np
+except Exception:  # pragma: no cover - optional dependency missing
+    np = None  # type: ignore
 
 try:
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -45,6 +48,9 @@ def semantic_chunk_split(text: str, max_tokens: int, similarity_drop: float = 0.
 
     vectorizer = TfidfVectorizer().fit(sentences)
     embeddings = vectorizer.transform(sentences).toarray()
+
+    if np is None:
+        raise ImportError("numpy is required for semantic_chunk_split")
 
     chunks = []
     current = sentences[0]
