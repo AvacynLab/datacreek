@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from pydantic import BaseModel
+try:  # optional dependency
+    from pydantic import BaseModel
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class BaseModel:  # lightweight stub for missing pydantic
+        pass
 
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient

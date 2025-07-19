@@ -11,3 +11,14 @@ uvicorn
 sqlalchemy
 redis
 requests
+httpx
+scikit-optimize
+boto3
+psycopg[binary]
+neo4j
+pybreaker
+flask
+flask-login
+flask-wtf
+wtforms
+celery

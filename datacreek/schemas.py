@@ -1,6 +1,21 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, StringConstraints, confloat, constr
+try:  # optional dependency
+    from pydantic import BaseModel, StringConstraints, confloat, constr
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class BaseModel:  # lightweight stub for missing pydantic
+        pass
+
+    class StringConstraints:  # type: ignore
+        def __init__(self, **_kwargs):
+            pass
+
+    def confloat(*_args, **_kwargs):  # type: ignore
+        return float
+
+    def constr(*_args, **_kwargs):  # type: ignore
+        return str
 
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN
 

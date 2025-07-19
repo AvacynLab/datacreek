@@ -1,8 +1,17 @@
 import os
-
+import sys
 import pybreaker
 
 from datacreek.analysis import monitoring
+
+# When imported in isolation, tests may register a minimal ``datacreek`` module
+# without ``__path__`` preventing further imports. Ensure the package behaves
+# like a namespace package.
+pkg = sys.modules.get("datacreek")
+if pkg is not None and not getattr(pkg, "__path__", None):
+    from pathlib import Path
+
+    pkg.__path__ = [str(Path(__file__).resolve().parents[1])]
 
 __all__ = ["neo4j_breaker", "CircuitBreakerError", "reconfigure"]
 
