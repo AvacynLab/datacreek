@@ -79,7 +79,7 @@ jobs:
       - run: |
           pip install -r requirements.txt -r requirements-ci.txt pytest
       - name: Run heavy tests
-        run: pytest -m heavy -q
+        run: PYTHONPATH=. pytest -m heavy -q
       - name: Prometheus rules
         run: >-
           docker run --rm -v ${{ github.workspace }}/ops:/ops \
