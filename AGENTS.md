@@ -29,12 +29,12 @@ $$
 - [ ] **DoD** : pipeline CI passe sans GPU ; GPU ≤ 0.5 xRT, CPU ≤ 2 xRT.
 
 ## 3 – Node2Vec : couverture “timeout mur” & persistance params
-- [ ] Simuler `max_minutes=0.1` via monkeypatch timer → vérifier arrêt après 2 itérations.
-- [ ] Sauver `best_pq.json` (p,q,hash dataset) sur `Optimizer.stop` ([Let’s talk about science!][5], [DIVA Portal][6])
-- [ ] **DoD** : fichier présent, test paramétrique rouge si absent.
+- [x] Simuler `max_minutes=0.1` via monkeypatch timer → vérifier arrêt après 2 itérations.
+- [x] Sauver `best_pq.json` (p,q,hash dataset) sur `Optimizer.stop` ([Let’s talk about science!][5], [DIVA Portal][6])
+- [x] **DoD** : fichier présent, test paramétrique rouge si absent.
 
 ## 4 – PID TTL Redis : exposer config & tests convergence
-- [ ] Ajouter bloc YAML :
+- [x] Ajouter bloc YAML :
 
 ```yaml
 pid:
@@ -43,10 +43,10 @@ pid:
   Ki: 0.05
   I_max: 5
 ```
-- [ ] **Anti‑windup** : $I_k=\min(\max(I_{k-1}+e_kΔt,-I_{max}),I_{max})$ ([Redis][7], [Graph Database & Analytics][8])
-- [ ] Boucle discrète : $u_k = K_p e_k + K_i I_k$ ; clamp TTL∈[1 s,24 h].
-- [ ] Test boucle sur trace hit_ratio burst ; assert overshoot < 5 %.
-- [ ] DoD : hit_ratio stabilisé ±5 % autour cible.
+- [x] **Anti‑windup** : $I_k=\min(\max(I_{k-1}+e_kΔt,-I_{max}),I_{max})$ ([Redis][7], [Graph Database & Analytics][8])
+- [x] Boucle discrète : $u_k = K_p e_k + K_i I_k$ ; clamp TTL∈[1 s,24 h].
+- [x] Test boucle sur trace hit_ratio burst ; assert overshoot < 5 %.
+- [x] DoD : hit_ratio stabilisé ±5 % autour cible.
 
 ## 5 – Migration HAA : intégration Flyway + dry‑run
 - [ ] Insérer `migrations/2025‑07‑haa_index.cypher` dans Flyway config.
@@ -59,9 +59,9 @@ pid:
 - [x] DoD : pytest sans warning “Task was destroyed but it is pending”.
 
 ## 7 – Budget ε DP : test dépassement & header REST
-- [ ] Simuler tenant ε_max = 3 ; requête ε_req = 5 → attendre 403 + header `X‑Epsilon-Remaining: 0`.
-- [ ] Log audit JSON `{\"tenant\":…, \"eps_req\":…, \"allowed\":False}`.
-- [ ] DoD : test API passe ; log présent.
+- [x] Simuler tenant ε_max = 3 ; requête ε_req = 5 → attendre 403 + header `X‑Epsilon-Remaining: 0`.
+- [x] Log audit JSON `{\"tenant\":…, \"eps_req\":…, \"allowed\":False}`.
+- [x] DoD : test API passe ; log présent.
 
 ## 8 – Back‑pressure ingestion : circuit‑breaker Neo4j
 - [ ] Intégrer `pybreaker.CircuitBreaker(fail_max=5, reset_timeout=30)` autour de `neo4j_writer.write_batch`.
@@ -129,3 +129,4 @@ pid:
 ## History
 - Reset backlog to new task list.
 - Ran pre-commit, fixed import ordering and verified test_redis_pid_leak passes
+- Implemented Node2Vec timeout and artifact persistence, PID config with anti-windup, and DP budget exceed logging. Verified related tests.
