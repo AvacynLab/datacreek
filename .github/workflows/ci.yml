@@ -47,7 +47,10 @@ jobs:
       - name: Build container images
         run: docker compose build
       - name: Prometheus rules
-        run: docker run --rm -v ${{ github.workspace }}/ops:/ops quay.io/prometheus/prometheus:latest promtool test rules /ops/prometheus_rules.yml
+        run: >-
+          docker run --rm -v ${{ github.workspace }}/ops:/ops \
+            --entrypoint=promtool quay.io/prometheus/prometheus:latest \
+            test rules /ops/prometheus_rules.yml
       - name: Run tests
         run: |
           scripts/run_changed_tests.sh \
@@ -78,7 +81,10 @@ jobs:
       - name: Run heavy tests
         run: pytest -m heavy -q
       - name: Prometheus rules
-        run: docker run --rm -v ${{ github.workspace }}/ops:/ops quay.io/prometheus/prometheus:latest promtool test rules /ops/prometheus_rules.yml
+        run: >-
+          docker run --rm -v ${{ github.workspace }}/ops:/ops \
+            --entrypoint=promtool quay.io/prometheus/prometheus:latest \
+            test rules /ops/prometheus_rules.yml
 
   pipeline-e2e:
     runs-on: ubuntu-latest
