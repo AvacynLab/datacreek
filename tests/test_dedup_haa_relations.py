@@ -6,8 +6,6 @@ from types import ModuleType
 
 root = Path(__file__).resolve().parents[1]
 
-backend_stub = ModuleType("datacreek.backends")
-
 
 class DummySession:
     def __init__(self):
@@ -32,19 +30,19 @@ class DummyDriver:
         return self.session_obj
 
 
-backend_stub.last_driver = DummyDriver()
-backend_stub.get_neo4j_driver = lambda: backend_stub.last_driver
-sys.modules["datacreek.backends"] = backend_stub
-
-spec = importlib.util.spec_from_file_location(
-    "dedup", root / "scripts" / "dedup_haa_relations.py"
-)
-dedup = importlib.util.module_from_spec(spec)
-assert isinstance(spec.loader, importlib.abc.Loader)
-spec.loader.exec_module(dedup)
-
-
 def test_dedup_script_calls_backup(monkeypatch):
+    backend_stub = ModuleType("datacreek.backends")
+    backend_stub.last_driver = DummyDriver()
+    backend_stub.get_neo4j_driver = lambda: backend_stub.last_driver
+    monkeypatch.setitem(sys.modules, "datacreek.backends", backend_stub)
+
+    spec = importlib.util.spec_from_file_location(
+        "dedup", root / "scripts" / "dedup_haa_relations.py"
+    )
+    dedup = importlib.util.module_from_spec(spec)
+    assert isinstance(spec.loader, importlib.abc.Loader)
+    spec.loader.exec_module(dedup)
+
     calls = []
 
     def fake_run(cmd, check):

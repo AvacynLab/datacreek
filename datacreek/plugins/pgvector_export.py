@@ -16,9 +16,24 @@ performance and optionally creates an ``ivfflat`` index.
 
 from __future__ import annotations
 
+import sys
 from typing import Iterable, Sequence
 
 from psycopg import Connection
+
+# When loaded via :func:`importlib.util.module_from_spec` in tests, the
+# parent ``datacreek`` package may not exist. Ensure it is imported so
+# that submodules can be discovered normally.
+if "datacreek" not in sys.modules:
+    import importlib.util
+    from pathlib import Path
+
+    pkg_path = Path(__file__).resolve().parents[1] / "__init__.py"
+    spec = importlib.util.spec_from_file_location("datacreek", pkg_path)
+    if spec and spec.loader:
+        module = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault("datacreek", module)
+        spec.loader.exec_module(module)
 
 
 def _fmt_vector(vec: Iterable[float] | None) -> str | None:

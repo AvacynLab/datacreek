@@ -10,7 +10,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import redis
-from celery import Celery
+
+try:  # optional dependency
+    from celery import Celery
+except Exception:  # pragma: no cover - optional dependency missing
+
+    class Celery:  # type: ignore[misc]
+        def __init__(self, *a, **k):
+            raise RuntimeError("Celery is not installed")
+
 
 from datacreek.backends import (
     get_neo4j_driver,

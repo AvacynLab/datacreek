@@ -6,8 +6,6 @@ from types import ModuleType
 
 root = Path(__file__).resolve().parents[1]
 
-backend_stub = ModuleType("datacreek.backends")
-
 
 class DummySession:
     def __init__(self):
@@ -39,19 +37,19 @@ class DummyDriver:
         return self.session_obj
 
 
-backend_stub.last_driver = DummyDriver()
-backend_stub.get_neo4j_driver = lambda: backend_stub.last_driver
-sys.modules["datacreek.backends"] = backend_stub
+def test_normalize_script(monkeypatch, capsys):
+    backend_stub = ModuleType("datacreek.backends")
+    backend_stub.last_driver = DummyDriver()
+    backend_stub.get_neo4j_driver = lambda: backend_stub.last_driver
+    monkeypatch.setitem(sys.modules, "datacreek.backends", backend_stub)
 
-spec = importlib.util.spec_from_file_location(
-    "normalize", root / "scripts" / "normalize_haa_pairs.py"
-)
-normalize = importlib.util.module_from_spec(spec)
-assert isinstance(spec.loader, importlib.abc.Loader)
-spec.loader.exec_module(normalize)
+    spec = importlib.util.spec_from_file_location(
+        "normalize", root / "scripts" / "normalize_haa_pairs.py"
+    )
+    normalize = importlib.util.module_from_spec(spec)
+    assert isinstance(spec.loader, importlib.abc.Loader)
+    spec.loader.exec_module(normalize)
 
-
-def test_normalize_script(capsys):
     normalize.main()
     out = capsys.readouterr().out.strip()
     assert out == "2-5"
