@@ -12,10 +12,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-try:
+try:  # optional dependency for graph operations
     import networkx as nx
-except Exception:  # pragma: no cover - optional dependency missing
-    nx = None  # type: ignore
+except Exception:  # pragma: no cover - minimal stub when networkx missing
+    import types
+
+    class _GraphStub:
+        def __init__(self, *a, **k) -> None:
+            pass
+
+    nx = types.SimpleNamespace(DiGraph=_GraphStub, Graph=_GraphStub)  # type: ignore
 try:
     import numpy as np
 except Exception:  # pragma: no cover - optional dependency missing
