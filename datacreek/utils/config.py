@@ -137,7 +137,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
                                 try:
                                     parsed = float(val)
                                 except ValueError:
-                                    parsed = val.strip('"\'')
+                                    parsed = val.strip("\"'")
                         parent[key] = parsed
 
     # Debug: Print LLM provider if it exists

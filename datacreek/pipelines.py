@@ -13,9 +13,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import redis
+
 try:
     from pydantic import BaseModel, ConfigDict, field_validator
 except Exception:  # pragma: no cover - optional dependency missing
+
     class BaseModel:
         pass
 
@@ -26,6 +28,7 @@ except Exception:  # pragma: no cover - optional dependency missing
             return fn
 
         return decorator
+
 
 if TYPE_CHECKING:  # pragma: no cover - for type checkers only
     from datacreek.core.dataset import DatasetBuilder
