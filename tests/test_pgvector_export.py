@@ -1,15 +1,15 @@
+import importlib
 import importlib.abc
 import importlib.util
-import importlib
-import sys
-import types
-import time
-from pathlib import Path
 import os
+import sys
+import time
+import types
+from pathlib import Path
 
 import networkx as nx
-import pytest
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -110,6 +110,7 @@ def test_pgvector_query_metric(monkeypatch):
 
     def fake_update(name, value, labels=None):
         recorded[name] = value
+
     fake_mod = types.SimpleNamespace(update_metric=fake_update)
     monkeypatch.setitem(sys.modules, "datacreek.analysis.monitoring", fake_mod)
     vec = [0.1, 0.2]

@@ -1,8 +1,8 @@
 import importlib.abc
 import importlib.util
+import json
 from pathlib import Path
 
-import json
 import numpy as np
 import pytest
 
@@ -51,7 +51,8 @@ def test_search_hnsw_pq_requires_faiss(monkeypatch):
 def test_hybrid_ann_bench(tmp_path, monkeypatch):
     """Hybrid ANN benchmark should meet recall and latency targets."""
     spec = importlib.util.spec_from_file_location(
-        "bench_hybrid_ann", Path(__file__).resolve().parents[1] / "scripts" / "bench_hybrid_ann.py"
+        "bench_hybrid_ann",
+        Path(__file__).resolve().parents[1] / "scripts" / "bench_hybrid_ann.py",
     )
     bench = importlib.util.module_from_spec(spec)
     assert isinstance(spec.loader, importlib.abc.Loader)

@@ -1,7 +1,7 @@
 import importlib
+import logging
 import os
 import sys
-import logging
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -142,6 +142,7 @@ def test_budget_exceed_logs(monkeypatch, tmp_path, caplog):
         set_tenant_limit(session, 7, epsilon_max=3.0)
 
     from datacreek.security.dp_middleware import DPBudgetMiddleware
+
     app = FastAPI()
     app.add_middleware(DPBudgetMiddleware)
 
@@ -155,4 +156,4 @@ def test_budget_exceed_logs(monkeypatch, tmp_path, caplog):
     res = client_local.post("/x", headers={"X-Tenant": "7", "X-Epsilon": "5"})
     assert res.status_code == 403
     assert res.headers["X-Epsilon-Remaining"] == "0.000000"
-    assert any("\"allowed\": false" in r.message for r in caplog.records)
+    assert any('"allowed": false' in r.message for r in caplog.records)

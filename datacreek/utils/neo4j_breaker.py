@@ -1,6 +1,7 @@
 import os
 
 import pybreaker
+
 from datacreek.analysis import monitoring
 
 __all__ = ["neo4j_breaker", "CircuitBreakerError", "reconfigure"]
@@ -21,6 +22,7 @@ class _PrometheusListener(pybreaker.CircuitBreakerListener):
             monitoring.update_metric("breaker_state", val)
         except Exception:
             pass
+
 
 neo4j_breaker = pybreaker.CircuitBreaker(
     fail_max=_fail_max,

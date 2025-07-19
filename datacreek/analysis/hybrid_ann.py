@@ -53,7 +53,11 @@ def rerank_pq(
         nbits = 8 if xb.shape[0] >= 1000 else 6
         index = faiss.IndexIVFPQ(quantizer, d, nlist, 8, int(nbits))
 
-        if gpu and getattr(faiss, "StandardGpuResources", None) and faiss.get_num_gpus() > 0:
+        if (
+            gpu
+            and getattr(faiss, "StandardGpuResources", None)
+            and faiss.get_num_gpus() > 0
+        ):
             res = faiss.StandardGpuResources()
             index = faiss.index_cpu_to_gpu(res, 0, index)
 

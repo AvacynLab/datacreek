@@ -15,6 +15,14 @@ config_stub = ModuleType("datacreek.utils.config")
 config_stub.load_config = lambda: {"cache": {}, "pid": {}}
 sys.modules["datacreek.utils.config"] = config_stub
 
+# Provide minimal stubs to avoid heavy imports during fixture setup
+core_pkg = ModuleType("datacreek.core")
+dataset_stub = ModuleType("datacreek.core.dataset")
+dataset_stub.InvariantPolicy = SimpleNamespace(loops=0)
+core_pkg.dataset = dataset_stub
+sys.modules.setdefault("datacreek.core", core_pkg)
+sys.modules.setdefault("datacreek.core.dataset", dataset_stub)
+
 spec = importlib.util.spec_from_file_location(
     "datacreek.utils.redis_pid",
     Path(__file__).resolve().parents[1] / "datacreek" / "utils" / "redis_pid.py",
@@ -43,7 +51,11 @@ def test_pid_loop_stops_clean(monkeypatch):
         event.set()
         await asyncio.wait_for(task, timeout=1)
         # ensure the background task exited and no other tasks remain
-        pending = [t for t in asyncio.all_tasks() if not t.done() and t is not asyncio.current_task()]
+        pending = [
+            t
+            for t in asyncio.all_tasks()
+            if not t.done() and t is not asyncio.current_task()
+        ]
         assert not pending
 
     asyncio.run(run())

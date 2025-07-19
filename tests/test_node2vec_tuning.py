@@ -1,10 +1,9 @@
-import json
-import time
-import types
-
 import importlib.abc
 import importlib.util
+import json
 import sys
+import time
+import types
 from pathlib import Path
 from types import ModuleType
 
@@ -136,4 +135,3 @@ def test_autotune_node2vec_artifact_hash(monkeypatch, tmp_path):
     node2vec_tuning.autotune_node2vec(kg, [0], {0: [1]}, max_evals=2, max_minutes=0.01)
     data = json.loads((tmp_path / "best.json").read_text())
     assert data["dataset"] == node2vec_tuning._dataset_hash(kg)
-

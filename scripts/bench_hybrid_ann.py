@@ -9,10 +9,7 @@ import numpy as np
 
 SPEC = importlib.util.spec_from_file_location(
     "hybrid_ann",
-    Path(__file__).resolve().parents[1]
-    / "datacreek"
-    / "analysis"
-    / "hybrid_ann.py",
+    Path(__file__).resolve().parents[1] / "datacreek" / "analysis" / "hybrid_ann.py",
 )
 MODULE = importlib.util.module_from_spec(SPEC)
 assert isinstance(SPEC.loader, importlib.abc.Loader)

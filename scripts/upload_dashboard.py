@@ -52,7 +52,9 @@ def upload(path: Path, folder_id: int = 0) -> None:
 
 
 def main() -> None:  # pragma: no cover - manual execution
-    path = Path(__file__).resolve().parents[1] / "docs" / "grafana" / "cache_overview.json"
+    path = (
+        Path(__file__).resolve().parents[1] / "docs" / "grafana" / "cache_overview.json"
+    )
     upload(path)
 
 

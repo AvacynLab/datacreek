@@ -112,12 +112,15 @@ def test_pid_burst_no_overshoot(monkeypatch):
     overshoot = abs(peak - final_ttl)
     assert overshoot / final_ttl <= 0.05
 
+
 def test_pid_converges_to_target(monkeypatch):
     class DummyRedis:
         def __init__(self):
             self.store = {}
+
         async def set(self, k, v):
             self.store[k] = str(v)
+
         async def get(self, k):
             return self.store.get(k)
 
@@ -142,4 +145,3 @@ def test_pid_converges_to_target(monkeypatch):
 
     stable = ttls[-5:]
     assert max(stable) - min(stable) <= stable[-1] * 0.05
-

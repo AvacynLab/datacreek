@@ -5,11 +5,11 @@ from typing import Any, Literal
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from datacreek.routers.explain_router import router as explain_router
 from sqlalchemy.orm import Session
 
 from datacreek.backends import get_neo4j_driver, get_redis_client
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN, DatasetBuilder
+from datacreek.routers.explain_router import router as explain_router
 from datacreek.security.dp_middleware import DPBudgetMiddleware
 
 try:  # optional heavy imports
@@ -96,8 +96,15 @@ init_db()
 app = FastAPI(title="Datacreek API")
 app.add_middleware(DPBudgetMiddleware)
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(explain_router)
+
 
 def get_db():
     db = SessionLocal()

@@ -32,8 +32,9 @@ def _apply_ops(graph: nx.Graph, ops: list[tuple[int, int, bool]]) -> None:
 
 def _bench_once(delta: float, n: int = 100, m: int = 200) -> float:
     """Return speedup ratio full / incremental for ``delta`` edge changes."""
-    from datacreek.analysis.tpl_incremental import tpl_incremental
     import datacreek.analysis.tpl_incremental as tpli
+    from datacreek.analysis.tpl_incremental import tpl_incremental
+
     base = nx.gnm_random_graph(n, m, seed=0)
     tpl_incremental(base)
     edges = list(base.edges())

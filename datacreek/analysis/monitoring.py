@@ -166,7 +166,9 @@ def push_metrics_gateway(
         pass
 
 
-def update_metric(name: str, value: float, labels: dict[str, str] | None = None) -> None:
+def update_metric(
+    name: str, value: float, labels: dict[str, str] | None = None
+) -> None:
     """Update one of the default gauges.
 
     Parameters

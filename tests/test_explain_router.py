@@ -1,5 +1,6 @@
 import os
 import sys
+
 import fakeredis
 from fastapi.testclient import TestClient
 
@@ -18,6 +19,7 @@ client = TestClient(app)
 def test_explain_router(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     import importlib
+
     exr = importlib.import_module("datacreek.routers.explain_router")
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
@@ -26,8 +28,13 @@ def test_explain_router(monkeypatch):
     monkeypatch.setattr(exr, "get_neo4j_driver", lambda: None)
 
     from datacreek.db import User
-    app.dependency_overrides[exr.get_current_user] = lambda: User(id=1, username="bob", api_key="k")
-    app.dependency_overrides[datacreek.api.get_current_user] = lambda: User(id=1, username="bob", api_key="k")
+
+    app.dependency_overrides[exr.get_current_user] = lambda: User(
+        id=1, username="bob", api_key="k"
+    )
+    app.dependency_overrides[datacreek.api.get_current_user] = lambda: User(
+        id=1, username="bob", api_key="k"
+    )
     key = "k"
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
     monkeypatch.setattr(ds, "_enforce_policy", lambda *a, **k: None)
@@ -50,4 +57,3 @@ def test_explain_router(monkeypatch):
     body = res.json()
     assert body["nodes"] and body["edges"] and body["attn"] is not None
     assert "svg" in body and body["svg"].startswith("PD94") is False
-

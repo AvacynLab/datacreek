@@ -1,8 +1,8 @@
 import importlib.util
+import json
 import os
 import sys
 import types
-import json
 from pathlib import Path
 
 import pytest
@@ -36,10 +36,13 @@ def test_bench_tpl_speedup(tmp_path):
     )
     bench = importlib.util.module_from_spec(spec2)
     spec2.loader.exec_module(bench)
+
     def stub(*a, **k):
         import time
+
         time.sleep(0.005)
         return tpli.np.array([[0.0, 1.0]])
+
     tpli._local_persistence = stub
     res = bench.run_bench([0.1])
     ratio = float(res["0.1"])

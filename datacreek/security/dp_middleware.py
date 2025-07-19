@@ -2,12 +2,12 @@ from __future__ import annotations
 
 """FastAPI middleware enforcing differential privacy budgets."""
 
+import json
+import logging
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
-import json
-import logging
 
 logger = logging.getLogger("datacreek.privacy")
 
@@ -49,9 +49,7 @@ class DPBudgetMiddleware(BaseHTTPMiddleware):
                 if entry is not None:
                     remaining = entry.epsilon_max - entry.epsilon_used
                 logger.info(
-                    json.dumps(
-                        {"tenant": tid, "eps_req": amount, "allowed": False}
-                    )
+                    json.dumps({"tenant": tid, "eps_req": amount, "allowed": False})
                 )
                 return Response(
                     status_code=403,
@@ -64,7 +62,5 @@ class DPBudgetMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response.headers["X-Epsilon-Remaining"] = f"{remaining:.6f}"
-        logger.info(
-            json.dumps({"tenant": tid, "eps_req": amount, "allowed": True})
-        )
+        logger.info(json.dumps({"tenant": tid, "eps_req": amount, "allowed": True}))
         return response

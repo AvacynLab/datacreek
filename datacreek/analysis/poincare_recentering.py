@@ -99,7 +99,9 @@ def _exp_map_zero(v: np.ndarray, *, c: float = 1.0, delta: float = 1e-6) -> np.n
     return _clamp_ball(res, delta=delta)
 
 
-def _log_map(x: np.ndarray, y: np.ndarray, *, c: float = 1.0, delta: float = 1e-6) -> np.ndarray:
+def _log_map(
+    x: np.ndarray, y: np.ndarray, *, c: float = 1.0, delta: float = 1e-6
+) -> np.ndarray:
     """Logarithmic map of ``y`` at ``x`` for curvature ``-c``."""
     u = _clamp_ball(_mobius_add(_mobius_neg(x), y, c=c, clamp=False), delta=delta)
     norm_u = np.linalg.norm(u)
@@ -211,7 +213,13 @@ def recenter_embeddings(
 
     return recentered
 
-def trace_overshoot_parquet(path: str, *, num_points: int = 1000, curvatures: Sequence[float] = (-1.0, -0.5, -2.0)) -> None:
+
+def trace_overshoot_parquet(
+    path: str,
+    *,
+    num_points: int = 1000,
+    curvatures: Sequence[float] = (-1.0, -0.5, -2.0),
+) -> None:
     """Generate overshoot samples and save Parquet file.
 
     Parameters
@@ -243,11 +251,12 @@ def trace_overshoot_parquet(path: str, *, num_points: int = 1000, curvatures: Se
             r_o = hyperbolic_radius(rec[i], c=c)
             rows.append((kappa, r_t, r_o, r_t - r_o))
 
-    table = pa.table({
-        "kappa": [r[0] for r in rows],
-        "r_target": [r[1] for r in rows],
-        "r_obtained": [r[2] for r in rows],
-        "delta_r": [r[3] for r in rows],
-    })
+    table = pa.table(
+        {
+            "kappa": [r[0] for r in rows],
+            "r_target": [r[1] for r in rows],
+            "r_obtained": [r[2] for r in rows],
+            "delta_r": [r[3] for r in rows],
+        }
+    )
     pq.write_table(table, path)
-

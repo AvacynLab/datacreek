@@ -6,6 +6,7 @@ import pytest
 # Provide stub modules to avoid heavy imports
 sys.modules.setdefault("transformers", types.ModuleType("transformers"))
 
+
 # Stub monitoring module to avoid importing the whole package
 def _update_metric(name: str, value: float, labels=None):
     g = mon_stub._METRICS.get(name)
@@ -14,6 +15,7 @@ def _update_metric(name: str, value: float, labels=None):
             g.labels(**labels).set(value)
         else:
             g.set(value)
+
 
 mon_stub = types.SimpleNamespace(
     whisper_xrt=None,
@@ -58,7 +60,11 @@ def test_cpu_route(monkeypatch):
     monkeypatch.setattr(
         whisper_batch,
         "torch",
-        type("T", (), {"cuda": type("C", (), {"is_available": staticmethod(lambda: False)})})(),
+        type(
+            "T",
+            (),
+            {"cuda": type("C", (), {"is_available": staticmethod(lambda: False)})},
+        )(),
     )
 
     vals = {}
@@ -82,11 +88,13 @@ def test_cpu_route(monkeypatch):
     assert vals.get("device") == "cpu"
     assert vals["xrt"] <= 2
 
+
 @pytest.mark.gpu
 def test_gpu_route(monkeypatch):
     class DummyModel:
         def __init__(self):
             self.calls = []
+
         def transcribe(self, path: str, max_length: int = 30) -> str:
             self.calls.append(path)
             return "ok"
@@ -95,7 +103,11 @@ def test_gpu_route(monkeypatch):
     monkeypatch.setattr(
         whisper_batch,
         "torch",
-        type("T", (), {"cuda": type("C", (), {"is_available": staticmethod(lambda: True)})})(),
+        type(
+            "T",
+            (),
+            {"cuda": type("C", (), {"is_available": staticmethod(lambda: True)})},
+        )(),
     )
 
     ticks = [0.0, 0.1]
@@ -107,6 +119,7 @@ def test_gpu_route(monkeypatch):
         def labels(self, **kwargs):
             vals.update(kwargs)
             return self
+
         def set(self, v: float):
             vals["xrt"] = v
 
