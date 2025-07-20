@@ -111,14 +111,33 @@ def export_embeddings_pg(
     return len(rows)
 
 
-def query_topk_pg(conn: Connection, table: str, vec: Iterable[float], *, k: int = 5):
-    """Return ``k`` nearest neighbours ordered by cosine distance."""
+def query_topk_pg(
+    conn: Connection, table: str, vec: Iterable[float], *, k: int = 5, probes: int = 10
+):
+    """Return ``k`` nearest neighbours ordered by cosine distance.
+
+    Parameters
+    ----------
+    conn:
+        Open connection to the PostgreSQL database.
+    table:
+        Name of the table containing embeddings.
+    vec:
+        Query vector as an iterable of floats.
+    k:
+        Number of nearest neighbours to return.
+    probes:
+        Number of inverted lists to probe. Higher values increase recall at the
+        cost of latency. ``ivfflat`` restricts the maximum to the number of
+        lists used when building the index.
+    """
     import time
 
     from ..analysis.monitoring import update_metric
 
     t0 = time.perf_counter()
     with conn.cursor() as cur:
+        cur.execute("SET LOCAL ivfflat.probes = %s", (probes,))
         # Use inner product distance operator for consistency with FAISS
         # ``IndexFlatIP`` baseline used in tests.
         cur.execute(
