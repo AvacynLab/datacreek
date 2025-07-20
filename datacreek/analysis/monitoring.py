@@ -162,15 +162,27 @@ _METRICS = {
     "n2v_var_norm": None,
 }
 
+# ``start_metrics_server`` should run only once, even if this module is
+# imported multiple times (e.g. by subprocesses or reloads).
+_SERVER_STARTED = False
+
 
 def start_metrics_server(port: int = 8000) -> None:
-    """Start an HTTP server exposing Prometheus gauges."""
+    """Start an HTTP server exposing Prometheus gauges.
+
+    This function is idempotent: subsequent calls will simply return without
+    altering the registry or spawning additional servers.
+    """
     if start_http_server is None or Gauge is None:
+        return
+    global _SERVER_STARTED
+    if _SERVER_STARTED:
         return
     for name, g in _METRICS.items():
         if g is None:
-            _METRICS[name] = Gauge(name, f"{name} metric")
+            _METRICS[name] = _metric(Gauge, name, f"{name} metric")
     start_http_server(port)
+    _SERVER_STARTED = True
 
 
 def push_metrics_gateway(

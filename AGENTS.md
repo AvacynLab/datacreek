@@ -1,13 +1,13 @@
 ----------
 Voici la **todo‑list finale à cocher** pour clore totalement la feuille de route *v1.1‑scale‑out*.
-Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaille les sous‑étapes (et sous‑sous‑étapes), la partie math (formules + variables), l’objectif chiffré et la *Definition of Done* (DoD).
+Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaille les sous‑étapes (et sous‑sous‑étapes), la partie math (formules + variables), l’objectif chifré et la *Definition of Done* (DoD).
 
 ---
 
 ## 1 – Tests « no‑CUDA » & métrique **xRT** pour Whisper.cpp
 
 * [ ] **Monkey‑patch `torch.cuda.is_available` → False** dans `tests/test_whisper_cpu.py`.
-* [ ] Forcer `batch_size_cpu = max(1, ⌊B_gpu / 4⌋)` dans `whisper_batch.py`.
+* [ ] Forcer `batch_size_cpu = max(1, ⌊gpu / 4⌋)` dans `whisper_batch.py`.
 * [ ] Exporter gauge Prometheus `whisper_xrt{device=cpu|gpu}` ;
 
   $$
@@ -25,9 +25,9 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 * [ ] Compléter `analysis/hybrid_ann.py.rerank_pq()` : utiliser `faiss.IndexIVFPQ` GPU si dispo, sinon CPU.
 * [ ] Script bench (pytest “heavy”) :
 
-  1. Index 1 M vecteurs d = 256.
+  1. Index 1 M vecteurs $d = 256$.
   2. Chercher 1 k queries.
-  3. Mesurer **P95** latence (95ᵉ centile) et `recall@100`.
+  3. Mesurer **P95** latence (95ᵉ centile) et `recall@100`.
 
      $$
      P95=\text{percentile}(t_{\text{query}},\,95)
@@ -35,7 +35,7 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 * [ ] Cibles : `recall ≥ 0.92`, `P95 < 20 ms`.
 * [ ] **DoD** : test échoue si seuils non atteints; résultats ajoutés à `benchmarks/`.
 
-*Réfs* : compléments HNSW & IVFPQ ([OpenReview][3], [unum.cloud][4]).
+*Réfs* : compléments HNSW & IVFPQ ([OpenReview][3], [unum.cloud][4]).
 
 ---
 
@@ -86,7 +86,7 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
   requests.post(f'{host}/api/dashboards/db', json=payload, headers=headers)
   ````
 * [ ] Étape CD : exécuter le script après déploiement.
-* [ ] **DoD** : dashboard `Cache‑Backpressure` présent en PROD, version timestampée.
+* [ ] **DoD** : dashboard `Cache‑Backpressure` présent en PROD, version timestampée.
 
 ---
 
@@ -95,8 +95,8 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 | Bloc        | KPI                           | Seuil                     | Source                       |
 | ----------- | ----------------------------- | ------------------------- | ---------------------------- |
 |  Whisper    | xRT_cpu ≤ 2, xRT_gpu ≤ 0.5  | Bench GPU/CPU             | turn0search8                 |
-|  Hybrid ANN | recall ≥ 0.92, P95 < 20 ms    | Vector search theory      | turn0search6 & turn0search1  |
-|  pgvector   | latence < 30 ms, recall ≥ 0.9 | Azure guide / Reddit perf | turn0search10 & turn0search2 |
+|  Hybrid ANN | recall ≥ 0.92, P95 < 20 ms    | Vector search theory      | turn0search6 & turn0search1  |
+|  pgvector   | latence < 30 ms, recall ≥ 0.9 | Azure guide / Reddit perf | turn0search10 & turn0search2 |
 |  CI deps    | cupy‑cuda12x installed        | PyPI                      | turn0search3                 |
 |  Grafana    | Dashboard POST 200 OK         | Grafana API docs          | turn0search7                 |
 
@@ -110,6 +110,4 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 [6]: https://www.reddit.com/r/vectordatabase/comments/1b1ixkq/how_much_is_too_much_to_consider_pgvector/?utm_source=chatgpt.com "How much is too much to consider pgvector : r/vectordatabase - Reddit"
 
 ## History
-- Reset backlog to new tasks as requested.
-- Fixed pgvector export to store node_id as TEXT so heavy tests work with numeric IDs.
-
+- Reset backlog as requested and fixed duplicate metric registration in `start_metrics_server`.
