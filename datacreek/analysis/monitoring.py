@@ -181,7 +181,12 @@ def start_metrics_server(port: int = 8000) -> None:
     for name, g in _METRICS.items():
         if g is None:
             _METRICS[name] = _metric(Gauge, name, f"{name} metric")
-    start_http_server(port)
+    try:
+        # attempt to bind to the configured port
+        start_http_server(port)
+    except OSError:  # pragma: no cover - port already in use
+        # fall back to an ephemeral port if the preferred one is taken
+        start_http_server(0)
     _SERVER_STARTED = True
 
 
