@@ -122,3 +122,4 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 - Updated CI PGVector service to v0.6.0 and set `PGVECTOR_URL` for heavy tests.
 - Rechecked all backlog items; reran pre-commit and unit tests after installing
   missing packages. Heavy tests skip gracefully when services unavailable.
+- Updated CI PGVector image to v0.5.1 to resolve missing Docker tag error.

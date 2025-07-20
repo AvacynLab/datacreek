@@ -66,7 +66,7 @@ jobs:
         gpu: [false, true]
     services:
       postgres:
-        image: ankane/pgvector:v0.6.0
+        image: ankane/pgvector:v0.5.1
         env:
           POSTGRES_PASSWORD: test
         ports:
