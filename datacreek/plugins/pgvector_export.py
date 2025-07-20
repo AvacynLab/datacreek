@@ -137,7 +137,8 @@ def query_topk_pg(
 
     t0 = time.perf_counter()
     with conn.cursor() as cur:
-        cur.execute("SET LOCAL ivfflat.probes = %s", (probes,))
+        # ``SET`` doesn't accept parameter placeholders so interpolate value
+        cur.execute(f"SET LOCAL ivfflat.probes = {int(probes)}")
         # Use inner product distance operator for consistency with FAISS
         # ``IndexFlatIP`` baseline used in tests.
         cur.execute(
