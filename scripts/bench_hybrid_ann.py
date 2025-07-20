@@ -17,8 +17,26 @@ SPEC.loader.exec_module(MODULE)  # type: ignore
 search_hnsw_pq = MODULE.search_hnsw_pq
 
 
-def run_bench(n: int = 5000, d: int = 32, k: int = 100, queries: int = 100) -> dict:
-    """Benchmark Hybrid ANN recall and latency."""
+def run_bench(
+    n: int = 1_000_000,
+    d: int = 256,
+    k: int = 100,
+    queries: int = 1000,
+) -> dict:
+    """Benchmark Hybrid ANN recall and latency.
+
+    Parameters
+    ----------
+    n:
+        Number of database vectors. Defaults to ``1_000_000`` as required by the
+        benchmark spec.
+    d:
+        Vector dimensionality. Defaults to ``256``.
+    k:
+        Number of neighbours queried.
+    queries:
+        Number of query vectors.
+    """
     rng = np.random.default_rng(0)
     xb = rng.standard_normal((n, d)).astype(np.float32)
     xq = xb[:queries] + 0.01
@@ -43,8 +61,12 @@ def run_bench(n: int = 5000, d: int = 32, k: int = 100, queries: int = 100) -> d
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="bench_hybrid_ann.json")
+    parser.add_argument("--n", type=int, default=1_000_000)
+    parser.add_argument("--d", type=int, default=256)
+    parser.add_argument("--queries", type=int, default=1000)
+    parser.add_argument("--k", type=int, default=100)
     args = parser.parse_args()
-    res = run_bench()
+    res = run_bench(args.n, args.d, args.k, args.queries)
     with open(args.output, "w") as fh:
         json.dump(res, fh, indent=2)
     print(json.dumps(res, indent=2))

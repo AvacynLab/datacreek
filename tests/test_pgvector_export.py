@@ -149,9 +149,14 @@ def test_pgvector_latency_recall(tmp_path):
 
     rng = np.random.default_rng(0)
     dim = 8
-    n = 1000  # reduced size for CI; spec requires 1M
+    if os.environ.get("PGVECTOR_FULL_BENCH"):
+        n = 1_000_000
+        q = 1000
+    else:
+        n = 1000
+        q = 100
     xb = rng.standard_normal((n, dim)).astype("float32")
-    xq = rng.standard_normal((100, dim)).astype("float32")
+    xq = rng.standard_normal((q, dim)).astype("float32")
 
     # baseline recall using FAISS CPU exact search
     index = faiss.IndexFlatIP(dim)

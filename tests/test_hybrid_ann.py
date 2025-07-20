@@ -1,6 +1,7 @@
 import importlib.abc
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,7 @@ def test_search_hnsw_pq_requires_faiss(monkeypatch):
         hybrid_ann.search_hnsw_pq(xb, xq)
 
 
+@pytest.mark.heavy
 def test_hybrid_ann_bench(tmp_path, monkeypatch):
     """Hybrid ANN benchmark should meet recall and latency targets."""
     spec = importlib.util.spec_from_file_location(
@@ -63,10 +65,17 @@ def test_hybrid_ann_bench(tmp_path, monkeypatch):
         return np.argsort(sims)[:k]
 
     monkeypatch.setattr(bench, "search_hnsw_pq", exact_search)
-    res = bench.run_bench(n=50, d=4, k=5, queries=5)
-    assert res["recall@5"] >= 0.92
+    if os.environ.get("HYBRID_FULL_BENCH"):
+        res = bench.run_bench()
+        recall_key = "recall@100"
+    else:
+        res = bench.run_bench(n=1000, d=32, k=5, queries=10)
+        recall_key = "recall@5"
+    assert res[recall_key] >= 0.92
     assert res["p95_ms"] < 20
-    out = tmp_path / "bench.json"
-    out.write_text(json.dumps(res))
-    loaded = json.loads(out.read_text())
+    out = Path("benchmarks")
+    out.mkdir(exist_ok=True)
+    out_file = out / "hybrid_ann.json"
+    out_file.write_text(json.dumps(res))
+    loaded = json.loads(out_file.read_text())
     assert loaded == res
