@@ -170,7 +170,8 @@ def test_pgvector_latency_recall(tmp_path):
 
     with psycopg.connect(dsn) as conn:
         conn.execute("DROP TABLE IF EXISTS emb")
-        pgvector_export.export_embeddings_pg(kg, conn, lists=100)
+        # store vectors in dedicated table for latency benchmark
+        pgvector_export.export_embeddings_pg(kg, conn, table="emb", lists=100)
         t0 = time.perf_counter()
         rows = [pgvector_export.query_topk_pg(conn, "emb", q, k=5) for q in xq]
         elapsed = (time.perf_counter() - t0) / len(xq)
