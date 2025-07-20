@@ -7,7 +7,7 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 ## 1 – Tests « no‑CUDA » & métrique **xRT** pour Whisper.cpp
 
 * [ ] **Monkey‑patch `torch.cuda.is_available` → False** dans `tests/test_whisper_cpu.py`.
-* [ ] Forcer `batch_size_cpu = max(1, ⌊gpu / 4⌋)` dans `whisper_batch.py`.
+* [ ] Forcer `batch_size_cpu = max(1, ⌊B_gpu / 4⌋)` dans `whisper_batch.py`.
 * [ ] Exporter gauge Prometheus `whisper_xrt{device=cpu|gpu}` ;
 
   $$
@@ -111,3 +111,4 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 
 ## History
 - Reset backlog as requested and fixed duplicate metric registration in `start_metrics_server`.
+- Installed requirements and verified tests pass with heavy tests skipped when services are unavailable.
