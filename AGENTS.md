@@ -112,3 +112,4 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
 ## History
 - Reset backlog as requested and fixed duplicate metric registration in `start_metrics_server`.
 - Installed requirements and verified tests pass with heavy tests skipped when services are unavailable.
+- Raised default `probes` to 20 in `query_topk_pg` to meet heavy test recall target.

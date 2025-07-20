@@ -112,7 +112,12 @@ def export_embeddings_pg(
 
 
 def query_topk_pg(
-    conn: Connection, table: str, vec: Iterable[float], *, k: int = 5, probes: int = 10
+    conn: Connection,
+    table: str,
+    vec: Iterable[float],
+    *,
+    k: int = 5,
+    probes: int = 20,
 ):
     """Return ``k`` nearest neighbours ordered by cosine distance.
 
@@ -129,7 +134,8 @@ def query_topk_pg(
     probes:
         Number of inverted lists to probe. Higher values increase recall at the
         cost of latency. ``ivfflat`` restricts the maximum to the number of
-        lists used when building the index.
+        lists used when building the index. The default of ``20`` meets the
+        latency/recall targets used by the heavy tests.
     """
     import time
 
