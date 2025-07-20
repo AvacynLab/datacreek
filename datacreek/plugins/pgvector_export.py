@@ -101,8 +101,11 @@ def export_embeddings_pg(
         # ``lists`` parameter cannot be passed as a bind variable in this DDL
         # statement, so interpolate it after sanitising. ``ivfflat`` requires a
         # positive integer number of lists.
+        # Build the IVFFlat index optimised for inner product search.  The
+        # ``lists`` value must be interpolated directly as pgvector does not
+        # allow parameter binding in this DDL statement.
         cur.execute(
-            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec) WITH (lists={int(lists)})"
+            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec vector_ip_ops) WITH (lists={int(lists)})"
         )
     conn.commit()
     return len(rows)
@@ -116,8 +119,10 @@ def query_topk_pg(conn: Connection, table: str, vec: Iterable[float], *, k: int 
 
     t0 = time.perf_counter()
     with conn.cursor() as cur:
+        # Use inner product distance operator for consistency with FAISS
+        # ``IndexFlatIP`` baseline used in tests.
         cur.execute(
-            f"SELECT node_id, space FROM {table} ORDER BY vec <-> %s LIMIT %s",
+            f"SELECT node_id, space FROM {table} ORDER BY vec <#> %s LIMIT %s",
             (_fmt_vector(vec), k),
         )
         rows = cur.fetchall()
