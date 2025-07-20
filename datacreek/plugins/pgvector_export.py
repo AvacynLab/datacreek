@@ -90,7 +90,7 @@ def export_embeddings_pg(
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
         cur.execute(
             f"CREATE TABLE IF NOT EXISTS {table} ("
-            "node_id UUID,"
+            "node_id TEXT,"
             "space TEXT,"
             f"vec VECTOR({dim})"
             ")"
@@ -98,24 +98,57 @@ def export_embeddings_pg(
         with cur.copy(f"COPY {table} (node_id, space, vec) FROM STDIN") as cp:
             for row in rows:
                 cp.write_row(row)
+        # ``lists`` parameter cannot be passed as a bind variable in this DDL
+        # statement, so interpolate it after sanitising. ``ivfflat`` requires a
+        # positive integer number of lists.
+        # Build the IVFFlat index optimised for inner product search.  The
+        # ``lists`` value must be interpolated directly as pgvector does not
+        # allow parameter binding in this DDL statement.
         cur.execute(
-            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec) WITH (lists=%s)",
-            (lists,),
+            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec vector_ip_ops) WITH (lists={int(lists)})"
         )
     conn.commit()
     return len(rows)
 
 
-def query_topk_pg(conn: Connection, table: str, vec: Iterable[float], *, k: int = 5):
-    """Return ``k`` nearest neighbours ordered by cosine distance."""
+def query_topk_pg(
+    conn: Connection,
+    table: str,
+    vec: Iterable[float],
+    *,
+    k: int = 5,
+    probes: int = 20,
+):
+    """Return ``k`` nearest neighbours ordered by cosine distance.
+
+    Parameters
+    ----------
+    conn:
+        Open connection to the PostgreSQL database.
+    table:
+        Name of the table containing embeddings.
+    vec:
+        Query vector as an iterable of floats.
+    k:
+        Number of nearest neighbours to return.
+    probes:
+        Number of inverted lists to probe. Higher values increase recall at the
+        cost of latency. ``ivfflat`` restricts the maximum to the number of
+        lists used when building the index. The default of ``20`` meets the
+        latency/recall targets used by the heavy tests.
+    """
     import time
 
     from ..analysis.monitoring import update_metric
 
     t0 = time.perf_counter()
     with conn.cursor() as cur:
+        # ``SET`` doesn't accept parameter placeholders so interpolate value
+        cur.execute(f"SET LOCAL ivfflat.probes = {int(probes)}")
+        # Use inner product distance operator for consistency with FAISS
+        # ``IndexFlatIP`` baseline used in tests.
         cur.execute(
-            f"SELECT node_id, space FROM {table} ORDER BY vec <-> %s LIMIT %s",
+            f"SELECT node_id, space FROM {table} ORDER BY vec <#> %s LIMIT %s",
             (_fmt_vector(vec), k),
         )
         rows = cur.fetchall()

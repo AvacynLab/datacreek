@@ -6,6 +6,7 @@ from typing import Dict
 
 try:
     from prometheus_client import (
+        REGISTRY,
         CollectorRegistry,
         Counter,
         Gauge,
@@ -19,67 +20,89 @@ except Exception:  # pragma: no cover - optional
     start_http_server = None
 
 if Gauge is not None:
-    tpl_w1_g = Gauge("tpl_w1", "Wasserstein-1 TPL")
-    sheaf_score_g = Gauge("sheaf_score", "Sheaf consistency score")
-    gw_entropy = Gauge("gw_entropy", "GraphWave entropy")
-    autotune_cost_g = Gauge("autotune_cost", "Current J(theta)")
-    bias_wasserstein_last = Gauge(
-        "bias_wasserstein_last", "Latest Wasserstein distance used"
+
+    def _metric(cls, name: str, desc: str, **kwargs):
+        """Return a metric, reusing existing collectors when present."""
+        existing = getattr(REGISTRY, "_names_to_collectors", {}).get(name)
+        if existing:
+            return existing
+        return cls(name, desc, **kwargs)
+
+    tpl_w1_g = _metric(Gauge, "tpl_w1", "Wasserstein-1 TPL")
+    sheaf_score_g = _metric(Gauge, "sheaf_score", "Sheaf consistency score")
+    gw_entropy = _metric(Gauge, "gw_entropy", "GraphWave entropy")
+    autotune_cost_g = _metric(Gauge, "autotune_cost", "Current J(theta)")
+    bias_wasserstein_last = _metric(
+        Gauge, "bias_wasserstein_last", "Latest Wasserstein distance used"
     )
-    haa_edges_total = Counter("haa_edges_total", "Hyper-AA edges written")
-    gp_jitter_restarts_total = Counter(
-        "gp_jitter_restarts_total", "SVGP restarts due to jitter"
+    haa_edges_total = _metric(Counter, "haa_edges_total", "Hyper-AA edges written")
+    gp_jitter_restarts_total = _metric(
+        Counter,
+        "gp_jitter_restarts_total",
+        "SVGP restarts due to jitter",
     )
-    prune_reverts_total = Counter("prune_reverts_total", "FractalNet pruning rollbacks")
-    redis_hit_ratio = Gauge("redis_hit_ratio", "Redis L1 hit ratio")
-    eigsh_timeouts_total = Counter(
+    prune_reverts_total = _metric(
+        Counter,
+        "prune_reverts_total",
+        "FractalNet pruning rollbacks",
+    )
+    redis_hit_ratio = _metric(Gauge, "redis_hit_ratio", "Redis L1 hit ratio")
+    eigsh_timeouts_total = _metric(
+        Counter,
         "eigsh_timeouts_total",
         "Number of eigsh timeouts triggering Lanczos fallback",
     )
-    eigsh_last_duration = Gauge(
+    eigsh_last_duration = _metric(
+        Gauge,
         "eigsh_last_runtime_seconds",
         "Duration of the last eigsh call in seconds",
     )
-    ann_backend = Gauge(
-        "ann_backend",
-        "Approximate NN backend in use",
-    )
-    redis_evictions_l2_total = Gauge(
+    ann_backend = _metric(Gauge, "ann_backend", "Approximate NN backend in use")
+    redis_evictions_l2_total = _metric(
+        Gauge,
         "redis_evictions_l2_total",
         "LMDB L2 evictions performed",
     )
-    lmdb_evictions_total = Counter(
+    lmdb_evictions_total = _metric(
+        Counter,
         "lmdb_evictions_total",
         "LMDB evictions by cause",
         labelnames=["cause"],
     )
-    lmdb_eviction_last_ts = Gauge(
+    lmdb_eviction_last_ts = _metric(
+        Gauge,
         "lmdb_eviction_last_ts",
         "Timestamp of last LMDB eviction per cause",
         labelnames=["cause"],
     )
-    lang_mismatch_total = Counter(
+    lang_mismatch_total = _metric(
+        Counter,
         "lang_mismatch_total",
         "Cross-language merge attempts rejected",
     )
-    whisper_xrt = Gauge(
+    whisper_xrt = _metric(
+        Gauge,
         "whisper_xrt",
         "Realtime factor of Whisper batch transcription",
         labelnames=["device"],
     )
-    whisper_fallback_total = Counter(
+    whisper_fallback_total = _metric(
+        Counter,
         "whisper_fallback_total",
         "Whisper GPU fallbacks to CPU",
     )
-    ingest_queue_fill_ratio = Gauge(
+    ingest_queue_fill_ratio = _metric(
+        Gauge,
         "ingest_queue_fill_ratio",
         "Ratio of active ingest tasks to queue size",
     )
-    breaker_state = Gauge(
+    breaker_state = _metric(
+        Gauge,
         "breaker_state",
         "State of Neo4j circuit breaker (0=CLOSED,1=OPEN)",
     )
-    pgvector_query_ms = Gauge(
+    pgvector_query_ms = _metric(
+        Gauge,
         "pgvector_query_ms",
         "Duration of pgvector nearest-neighbour queries in milliseconds",
     )
@@ -139,15 +162,32 @@ _METRICS = {
     "n2v_var_norm": None,
 }
 
+# ``start_metrics_server`` should run only once, even if this module is
+# imported multiple times (e.g. by subprocesses or reloads).
+_SERVER_STARTED = False
+
 
 def start_metrics_server(port: int = 8000) -> None:
-    """Start an HTTP server exposing Prometheus gauges."""
+    """Start an HTTP server exposing Prometheus gauges.
+
+    This function is idempotent: subsequent calls will simply return without
+    altering the registry or spawning additional servers.
+    """
     if start_http_server is None or Gauge is None:
+        return
+    global _SERVER_STARTED
+    if _SERVER_STARTED:
         return
     for name, g in _METRICS.items():
         if g is None:
-            _METRICS[name] = Gauge(name, f"{name} metric")
-    start_http_server(port)
+            _METRICS[name] = _metric(Gauge, name, f"{name} metric")
+    try:
+        # attempt to bind to the configured port
+        start_http_server(port)
+    except OSError:  # pragma: no cover - port already in use
+        # fall back to an ephemeral port if the preferred one is taken
+        start_http_server(0)
+    _SERVER_STARTED = True
 
 
 def push_metrics_gateway(

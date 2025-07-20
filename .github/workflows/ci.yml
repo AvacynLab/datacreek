@@ -68,20 +68,22 @@ jobs:
       postgres:
         image: ankane/pgvector:latest
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_PASSWORD: test
         ports:
           - 5432:5432
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.10'
       - run: |
           pip install -r requirements.txt -r requirements-ci.txt pytest
       - if: matrix.gpu == true
         run: |
-          pip install cupy-cuda12x
+          pip install cupy-cuda12x faiss-gpu
       - name: Run heavy tests
+        env:
+          PGVECTOR_URL: postgresql://postgres:test@localhost:5432/postgres
         run: PYTHONPATH=. pytest -m heavy -q
       - name: Prometheus rules
         run: >-
@@ -140,6 +142,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
       - uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -149,3 +156,8 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
             docker compose pull
             docker compose up -d
+      - name: Upload Grafana dashboard
+        run: python scripts/upload_dashboard.py
+        env:
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}

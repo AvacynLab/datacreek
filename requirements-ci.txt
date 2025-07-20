@@ -1,5 +1,6 @@
-fakeredis
-faiss-cpu
+cupy-cuda12x>=12.0.0  # GPU tests
+fakeredis>=2.20.0
+faiss-cpu>=1.8.0      # fallback heavy
 prometheus-client
 lmdb
 networkx

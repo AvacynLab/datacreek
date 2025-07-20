@@ -149,9 +149,14 @@ def test_pgvector_latency_recall(tmp_path):
 
     rng = np.random.default_rng(0)
     dim = 8
-    n = 1000  # reduced size for CI; spec requires 1M
+    if os.environ.get("PGVECTOR_FULL_BENCH"):
+        n = 1_000_000
+        q = 1000
+    else:
+        n = 1000
+        q = 100
     xb = rng.standard_normal((n, dim)).astype("float32")
-    xq = rng.standard_normal((100, dim)).astype("float32")
+    xq = rng.standard_normal((q, dim)).astype("float32")
 
     # baseline recall using FAISS CPU exact search
     index = faiss.IndexFlatIP(dim)
@@ -165,7 +170,8 @@ def test_pgvector_latency_recall(tmp_path):
 
     with psycopg.connect(dsn) as conn:
         conn.execute("DROP TABLE IF EXISTS emb")
-        pgvector_export.export_embeddings_pg(kg, conn, lists=100)
+        # store vectors in dedicated table for latency benchmark
+        pgvector_export.export_embeddings_pg(kg, conn, table="emb", lists=100)
         t0 = time.perf_counter()
         rows = [pgvector_export.query_topk_pg(conn, "emb", q, k=5) for q in xq]
         elapsed = (time.perf_counter() - t0) / len(xq)
