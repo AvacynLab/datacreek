@@ -124,3 +124,4 @@ Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaill
   missing packages. Heavy tests skip gracefully when services unavailable.
 - Updated CI PGVector image to v0.5.1 to resolve missing Docker tag error.
 - Switched CI PGVector service to use the `latest` stable tag.
+- Adjusted heavy job to use Python 3.10 so `faiss-gpu` installs correctly.
