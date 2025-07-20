@@ -98,9 +98,11 @@ def export_embeddings_pg(
         with cur.copy(f"COPY {table} (node_id, space, vec) FROM STDIN") as cp:
             for row in rows:
                 cp.write_row(row)
+        # ``lists`` parameter cannot be passed as a bind variable in this DDL
+        # statement, so interpolate it after sanitising. ``ivfflat`` requires a
+        # positive integer number of lists.
         cur.execute(
-            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec) WITH (lists=%s)",
-            (lists,),
+            f"CREATE INDEX IF NOT EXISTS {table}_ivfflat ON {table} USING ivfflat (vec) WITH (lists={int(lists)})"
         )
     conn.commit()
     return len(rows)
