@@ -90,7 +90,7 @@ def export_embeddings_pg(
         cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
         cur.execute(
             f"CREATE TABLE IF NOT EXISTS {table} ("
-            "node_id UUID,"
+            "node_id TEXT,"
             "space TEXT,"
             f"vec VECTOR({dim})"
             ")"
