@@ -36,6 +36,9 @@ except Exception:  # pragma: no cover - fallback when watchdog is absent
 
     Observer = _DummyObserver  # type: ignore[assignment]
 
+from pydantic import ValidationError
+
+from datacreek.config.schema import ConfigSchema
 from datacreek.config_models import (
     CurateSettings,
     FormatSettings,
@@ -44,8 +47,6 @@ from datacreek.config_models import (
     OpenAISettings,
     VLLMSettings,
 )
-from datacreek.config.schema import ConfigSchema
-from pydantic import ValidationError
 
 # Default config location relative to the project root
 ORIGINAL_CONFIG_PATH = os.path.abspath(

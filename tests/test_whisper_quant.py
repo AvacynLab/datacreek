@@ -42,10 +42,13 @@ def test_whisper_parser_int8(monkeypatch):
         sys.modules, "whisper", types.SimpleNamespace(load_model=fake_load_model)
     )
     import importlib
+
     import datacreek.parsers.whisper_audio_parser as wap
+
     importlib.reload(wap)
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     import datacreek.utils.whisper_batch as wb
+
     monkeypatch.setattr(wb, "transcribe_audio_batch", fake_transcribe_audio_batch)
 
     parser = WhisperAudioParser()

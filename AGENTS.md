@@ -237,3 +237,4 @@
 - Created create_issues.py to auto-generate GitHub epic and issues; added unit test.
 - Added bench_ann_cpu.py and bench_whisper_xrt.py with tests producing benchmark files.
 - Installed missing dependencies and validated coverage run locally.
+- Fixed formatting issues flagged by pre-commit and installed runtime dependencies to execute unit tests.
