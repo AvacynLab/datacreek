@@ -103,3 +103,33 @@ def test_stream_block_selection():
 
     b = choose_stream_block(10_000_000, limit_gb=5)
     assert estimate_stream_memory(10_000_000, b) <= 5 * 1024**3  # noqa: S101
+
+
+def test_stream_block_formula():
+    from datacreek.analysis.graphwave_cuda import choose_stream_block
+
+    assert choose_stream_block(10, order=64, limit_gb=10) == 32  # noqa: S101
+
+
+@pytest.mark.skipif(spec is None, reason="cupy required")
+def test_stream_performance_within_baseline():
+    """Streaming implementation should be within 10% of full version."""
+    import time
+
+    from datacreek.analysis.graphwave_cuda import (
+        chebyshev_heat_kernel_gpu,
+        chebyshev_heat_kernel_gpu_stream,
+    )
+
+    g = nx.path_graph(200)
+    L = nx.normalized_laplacian_matrix(g).tocsr()
+    start = time.perf_counter()
+    full = chebyshev_heat_kernel_gpu(L, 0.5, m=7)
+    t_full = time.perf_counter() - start
+
+    start = time.perf_counter()
+    streamed = chebyshev_heat_kernel_gpu_stream(L, 0.5, order=7, block=4)
+    t_stream = time.perf_counter() - start
+
+    assert np.allclose(full, streamed, atol=1e-4)  # noqa: S101
+    assert t_stream <= t_full * 1.1  # noqa: S101

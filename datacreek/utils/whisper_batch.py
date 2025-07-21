@@ -95,6 +95,8 @@ def transcribe_audio_batch(
         logging.getLogger(__name__).warning("whispercpp not available")
         return ["" for _ in all_paths]
 
+    from datacreek.analysis.monitoring import update_metric, whisper_fallback_total
+
     transcripts: List[str] = []
     start = time.perf_counter()
     idx = 0
@@ -107,10 +109,6 @@ def transcribe_audio_batch(
             except Exception as exc:  # pragma: no cover - runtime error
                 if device == "cuda" and "out of memory" in str(exc).lower():
                     logging.getLogger(__name__).warning("whisper OOM, fallback CPU")
-                    from datacreek.analysis.monitoring import (
-                        update_metric,
-                        whisper_fallback_total,
-                    )
 
                     if whisper_fallback_total is not None:
                         try:
@@ -140,8 +138,6 @@ def transcribe_audio_batch(
     else:  # pragma: no cover - extremely fast
         rate = float("inf")
         xrt = 0.0
-    from datacreek.analysis.monitoring import update_metric
-
     update_metric("whisper_xrt", float(xrt), {"device": device})
     logging.getLogger(__name__).debug(
         "Whisper.cpp transcribed %d files in %.2fs (%.2f audio/s)",

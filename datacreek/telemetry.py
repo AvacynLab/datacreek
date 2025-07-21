@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Optional
 
@@ -30,6 +31,22 @@ except Exception:  # pragma: no cover - optional dependency
     AioPikaInstrumentor = None
 
 
+class TraceIdFilter(logging.Filter):
+    """Inject the current OpenTelemetry trace ID into log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if trace is None:
+            record.trace_id = ""
+            return True
+        span = trace.get_current_span()
+        if span is None:
+            record.trace_id = ""
+            return True
+        ctx = span.get_span_context()
+        record.trace_id = format(ctx.trace_id, "032x") if ctx.trace_id else ""
+        return True
+
+
 def init_tracing(
     app: FastAPI,
     service_name: str = "datacreek",
@@ -51,6 +68,8 @@ def init_tracing(
     processor = BatchSpanProcessor(SpanExporter(endpoint=endpoint))
     provider.add_span_processor(processor)
     trace.set_tracer_provider(provider)
+
+    logging.getLogger().addFilter(TraceIdFilter())
 
     FastAPIInstrumentor().instrument_app(app)
     if AioPikaInstrumentor is not None:

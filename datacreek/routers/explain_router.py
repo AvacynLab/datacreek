@@ -53,7 +53,11 @@ def _load_dataset(name: str, user: User) -> DatasetBuilder:
 @router.get("/{node}", summary="Explain node neighborhood")
 def explain_node_public(
     node: str,
-    dataset: str = Query("demo", alias="dataset"),
+    dataset: str = Query(
+        "demo",
+        alias="dataset",
+        example="demo",
+    ),
     hops: int = Query(3, ge=1, le=5),
     user: User = Depends(get_current_user),
 ) -> JSONResponse:

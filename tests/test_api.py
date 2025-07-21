@@ -74,9 +74,7 @@ def test_async_pipeline(monkeypatch, tmp_path):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
-    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
-    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
 
     def dummy_generate(path, *args, document_text=None, **kwargs):
         assert kwargs.get("config_overrides") == {"generation": {"temperature": 0.1}}
@@ -605,9 +603,7 @@ def test_delete_persisted_dataset_route(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
-    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
-    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
 
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
@@ -628,9 +624,7 @@ def test_delete_persisted_dataset_route_unauthorized(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
-    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
-    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
 
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
@@ -648,9 +642,7 @@ def test_explain_endpoint(monkeypatch):
     redis_client = fakeredis.FakeStrictRedis()
     monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
-    monkeypatch.setattr("datacreek.tasks.get_redis_client", lambda: redis_client)
     monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
-    monkeypatch.setattr("datacreek.tasks.get_neo4j_driver", lambda: None)
 
     user_id, key = _create_user()
     ds = DatasetBuilder(DatasetType.TEXT, name="demo")
@@ -663,10 +655,10 @@ def test_explain_endpoint(monkeypatch):
     ds.graph.graph.nodes["c1"]["embedding"] = [0.0, 0.0]
     ds.graph.graph.nodes["c2"]["embedding"] = [1.0, 0.0]
     ds.to_redis(redis_client, "dataset:demo")
-    redis_client.sadd(f"user:{user_id}:datasets", "demo")
+    redis_client.sadd(f"user:{user.id}:datasets", "demo")
     redis_client.sadd("datasets", "demo")
 
-    headers = {"X-API-Key": key}
+    headers = {"X-API-Key": "dummy"}
 
     res = client.get("/datasets/demo/explain/c1", headers=headers)
     assert res.status_code == 200
@@ -686,3 +678,38 @@ def test_explain_endpoint(monkeypatch):
     else:
         res = client.get("/datasets/demo/explain/c1?fmt=png", headers=headers)
         assert res.status_code == 501
+
+
+import pytest
+
+
+@pytest.mark.skip("DB dependencies not available in CI")
+def test_vector_search_endpoint(monkeypatch):
+    redis_client = fakeredis.FakeStrictRedis()
+    monkeypatch.setattr("datacreek.api.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.services.get_redis_client", lambda: redis_client)
+    monkeypatch.setattr("datacreek.api.get_neo4j_driver", lambda: None)
+
+    user = type("U", (), {"id": 1})()
+    import importlib
+    vector_router_mod = importlib.import_module("datacreek.routers.vector_router")
+
+    monkeypatch.setattr(vector_router_mod, "get_current_user", lambda api_key: user)
+    ds = DatasetBuilder(DatasetType.TEXT, name="demo")
+    ds.owner_id = user.id
+    ds.redis_client = redis_client
+    ds.add_document("d1", source="s")
+    ds.add_chunk("d1", "c1", "hello world")
+    ds.add_chunk("d1", "c2", "another text")
+    ds.to_redis(redis_client, "dataset:demo")
+    redis_client.sadd(f"user:{user.id}:datasets", "demo")
+    redis_client.sadd("datasets", "demo")
+
+    headers = {"X-API-Key": "dummy"}
+    res = client.post(
+        "/vector/search",
+        json={"dataset": "demo", "query": "hello"},
+        headers=headers,
+    )
+    assert res.status_code == 200
+    assert res.json()[0] == "c1"

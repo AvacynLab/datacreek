@@ -1,6 +1,6 @@
 import math
 
-from datacreek.dp import allow_request, renyi_epsilon
+from datacreek.dp import allow_request, compute_epsilon, renyi_epsilon
 
 
 def test_renyi_epsilon_basic():
@@ -14,3 +14,8 @@ def test_allow_request_gate():
     eps = [0.3, 0.4]
     assert not allow_request(eps, 1.0, alphas=[2])
     assert allow_request(eps, 1.1, alphas=[2])
+
+
+def test_compute_epsilon_alias():
+    values = [0.1, 0.2]
+    assert compute_epsilon(values, alphas=[3]) == renyi_epsilon(values, alphas=[3])

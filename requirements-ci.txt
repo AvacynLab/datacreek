@@ -5,6 +5,7 @@ prometheus-client
 lmdb
 networkx
 numpy
+pytest-cov
 rich
 pyyaml
 fastapi
@@ -23,3 +24,8 @@ flask-login
 flask-wtf
 wtforms
 celery
+opentelemetry-instrumentation-fastapi>=0.42b0
+opentelemetry-sdk>=1.24.0
+jsonnet-binary
+mypy
+bitsandbytes>=0.42.0

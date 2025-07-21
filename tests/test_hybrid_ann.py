@@ -4,6 +4,7 @@ import importlib.abc
 import importlib.util
 import json
 import os
+import sys
 import types
 from pathlib import Path
 
@@ -144,6 +145,7 @@ def test_bench_ann_cpu_script(tmp_path, monkeypatch):
     bench = importlib.util.module_from_spec(spec)
     assert isinstance(spec.loader, importlib.abc.Loader)
     spec.loader.exec_module(bench)
+
     monkeypatch.setattr(
         bench, "run_bench", lambda: {"recall@100": 0.95, "p95_ms": 10.0}
     )
@@ -152,3 +154,32 @@ def test_bench_ann_cpu_script(tmp_path, monkeypatch):
     assert out.exists()  # noqa: S101
     data = json.loads(out.read_text())
     assert data == res == {"recall@100": 0.95, "p95_ms": 10.0}  # noqa: S101
+
+
+def test_run_bench_sets_threads(monkeypatch):
+    """``run_bench`` should configure FAISS threads."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "bench_hybrid_ann",
+        Path(__file__).resolve().parents[1] / "scripts" / "bench_hybrid_ann.py",
+    )
+    bench = importlib.util.module_from_spec(spec)
+    assert isinstance(spec.loader, importlib.abc.Loader)
+    spec.loader.exec_module(bench)
+
+    called = {}
+
+    class DummyFaiss:
+        def omp_set_num_threads(self, n):
+            called["threads"] = n
+
+    dummy = DummyFaiss()
+    monkeypatch.setitem(sys.modules, "faiss", dummy)
+    monkeypatch.setattr(bench.MODULE, "faiss", dummy, raising=False)
+    monkeypatch.setattr(bench, "faiss", dummy, raising=False)
+    monkeypatch.setattr(bench, "search_hnsw_pq", lambda *a, **k: [0])
+    monkeypatch.setattr(bench.MODULE, "search_hnsw_pq", lambda *a, **k: [0])
+
+    bench.run_bench(n=10, d=2, k=1, queries=1, threads=16)
+    assert called.get("threads") == 16  # noqa: S101

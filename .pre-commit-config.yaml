@@ -8,3 +8,46 @@ repos:
     hooks:
       - id: isort
         args: ["--profile", "black"]
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        additional_dependencies: ["flake8-bandit"]
+        files: "^(datacreek/analysis/|tests/property/)"
+        exclude: ""
+  - repo: https://github.com/econchick/interrogate
+    rev: 1.5.0
+    hooks:
+      - id: interrogate
+        args:
+          [
+            "--fail-under=80",
+            "-e",
+            "datacreek/api.py",
+            "-e",
+            "datacreek/db.py",
+            "-e",
+            "datacreek/pipelines.py",
+            "-e",
+            "datacreek/schemas.py",
+            "-e",
+            "datacreek/services.py",
+            "-e",
+            "datacreek/storage.py",
+            "-e",
+            "datacreek/tasks.py",
+            "-e",
+            "datacreek/config_models.py",
+            "-e",
+            "datacreek/utils",
+            "datacreek",
+          ]
+        pass_filenames: false
+        additional_dependencies: ["setuptools"]
+  - repo: local
+    hooks:
+      - id: radon-cc
+        name: radon cyclomatic complexity
+        entry: radon cc -s -n C datacreek
+        language: system
+        pass_filenames: false
