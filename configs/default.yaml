@@ -69,6 +69,9 @@ monitor:
 neo4j:
   run_migrations: true
 
+gpu:
+  enabled: false
+
 # PID controller defaults
 pid:
   target_hit_ratio: 0.45

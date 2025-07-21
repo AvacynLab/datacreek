@@ -6,6 +6,10 @@ from typing import Sequence
 
 import numpy as np
 
+from datacreek.backend import get_xp
+
+xp = get_xp()
+
 try:
     import faiss  # type: ignore
 except Exception:  # pragma: no cover - faiss optional
@@ -20,6 +24,7 @@ def rerank_pq(
     *,
     k: int = 10,
     gpu: bool = True,
+    n_subprobe: int = 1,
 ) -> np.ndarray:
     """Return ``k`` nearest indices using IVFPQ on CPU or GPU.
 
@@ -33,6 +38,9 @@ def rerank_pq(
         Number of neighbours to return.
     gpu:
         Whether to run the search on GPU when available.
+    n_subprobe:
+        Number of additional FAISS multi-probes. ``nprobe`` becomes
+        ``base * n_subprobe`` where ``base`` is ``max(1, nlist // 4)``.
 
     Returns
     -------
@@ -49,7 +57,7 @@ def rerank_pq(
         index = faiss.IndexFlatIP(d)
         index.add(xb)
     else:
-        nlist = max(4, int(np.sqrt(xb.shape[0])))
+        nlist = max(4, int(xp.sqrt(xb.shape[0])))
         nbits = 8 if xb.shape[0] >= 1000 else 6
         index = faiss.IndexIVFPQ(quantizer, d, nlist, 8, int(nbits))
 
@@ -63,7 +71,8 @@ def rerank_pq(
 
         index.train(xb)
         index.add(xb)
-        index.nprobe = max(1, nlist // 4)
+        base = max(1, nlist // 4)
+        index.nprobe = base * max(1, int(n_subprobe))
 
     _, rerank = index.search(xq, k)
     return rerank
@@ -75,6 +84,7 @@ def search_hnsw_pq(
     *,
     k: int = 10,
     prefetch: int = 50,
+    n_subprobe: int = 1,
 ) -> Sequence[int]:
     """Return ``k`` neighbours using an HNSW stage then PQ reranking.
 
@@ -88,6 +98,8 @@ def search_hnsw_pq(
         Number of neighbours to return.
     prefetch:
         Size of candidate set retrieved with HNSW before reranking.
+    n_subprobe:
+        Number of sub-probes used during PQ reranking.
 
     Returns
     -------
@@ -104,5 +116,11 @@ def search_hnsw_pq(
     _, idx = hnsw.search(xq, prefetch)
     candidates = idx[0]
 
-    rerank = rerank_pq(xb[candidates], xq, k=k, gpu=True)
+    rerank = rerank_pq(
+        xb[candidates],
+        xq,
+        k=k,
+        gpu=True,
+        n_subprobe=n_subprobe,
+    )
     return [int(candidates[i]) for i in rerank[0]]

@@ -342,10 +342,8 @@ def __getattr__(name: str):
         "search_hnsw_pq",
         "graphwave_embedding_gpu",
         "chebyshev_heat_kernel_gpu",
-        "explain_to_svg",
     }:
         from .chebyshev_diag import chebyshev_diag_hutchpp as _cdh
-        from .explain_viz import explain_to_svg as _ets
         from .graphwave_bandwidth import estimate_lambda_max as _el
         from .graphwave_bandwidth import update_graphwave_bandwidth as _ugb
         from .graphwave_cuda import chebyshev_heat_kernel_gpu as _gwk
@@ -359,6 +357,9 @@ def __getattr__(name: str):
             "search_hnsw_pq": _hpq,
             "graphwave_embedding_gpu": _gwe,
             "chebyshev_heat_kernel_gpu": _gwk,
-            "explain_to_svg": _ets,
         }[name]
+    if name == "explain_to_svg":
+        from .explain_viz import explain_to_svg as _ets
+
+        return _ets
     raise AttributeError(name)

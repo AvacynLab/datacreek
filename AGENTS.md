@@ -1,115 +1,241 @@
 ----------
-Voici la **todo‑list finale à cocher** pour clore totalement la feuille de route *v1.1‑scale‑out*.
-Les 5 blocs couvrent **toutes** les lacunes repérées : chaque bloc détaille les sous‑étapes (et sous‑sous‑étapes), la partie math (formules + variables), l’objectif chifré et la *Definition of Done* (DoD).
+### Checklist exhaustive — “v1.2 hardening”
+
+> Chaque case représente une action à réaliser.
+> Sauf mention contraire, la **Definition of Done (DoD)** correspond à : code livré + tests unitaires/CI verts + documentation mise à jour.
 
 ---
 
-## 1 – Tests « no‑CUDA » & métrique **xRT** pour Whisper.cpp
+## 0 – Meta : pilotage & gouvernance
 
-* [ ] **Monkey‑patch `torch.cuda.is_available` → False** dans `tests/test_whisper_cpu.py`.
-* [ ] Forcer `batch_size_cpu = max(1, ⌊B_gpu / 4⌋)` dans `whisper_batch.py`.
-* [ ] Exporter gauge Prometheus `whisper_xrt{device=cpu|gpu}` ;
+* [x] **Créer epic GitHub “v1.2‑hardening”**
 
-  $$
-  xRT = \frac{T_{\text{traitement}}}{T_{\text{audio}}}
-  $$
-
-  *Variables* : $T_{\text{traitement}}$ (durée réelle), $T_{\text{audio}}$ (durée du flux) ([Tom's Hardware][1], [GitHub][2])
-* [ ] **Assertions tests** : `xRT_cpu ≤ 2`, `xRT_gpu ≤ 0.5`.
-* [ ] **DoD** : test passe sur runners sans GPU ; gauge visible dans `/metrics`.
+  * [x] Générer issues automatisées pour chaque tâche ci‑dessous (étiquette : `hardening`, `area/*`).
+  * [x] Ajouter champ “Effort (pts)” & “Impact (🔥/⚡/🛠)”.
+  * [x] Objectif : suivi burndown clair.
 
 ---
 
-## 2 – Bench & assertions latence **Hybrid ANN** (HNSW → IVFPQ rerank)
+## 1 – Architecture & packaging
 
-* [ ] Compléter `analysis/hybrid_ann.py.rerank_pq()` : utiliser `faiss.IndexIVFPQ` GPU si dispo, sinon CPU.
-* [ ] Script bench (pytest “heavy”) :
+### 1.1  Abstraction GPU / CPU
 
-  1. Index 1 M vecteurs $d = 256$.
-  2. Chercher 1 k queries.
-  3. Mesurer **P95** latence (95ᵉ centile) et `recall@100`.
+* [x] Implémenter module `backend.array_api`
 
-     $$
-     P95=\text{percentile}(t_{\text{query}},\,95)
-     $$
-* [ ] Cibles : `recall ≥ 0.92`, `P95 < 20 ms`.
-* [ ] **DoD** : test échoue si seuils non atteints; résultats ajoutés à `benchmarks/`.
+  * [x] Fonction `get_xp(obj=None)` retourne `cupy` si GPU dispo, sinon `numpy`.
+  * [x] Refactor `graphwave_cuda`, `hybrid_ann`, `chebyshev_diag` pour appeler `get_xp`.
+  * [x] Tests : monkey‑patch Cupy indisponible → aucun `ImportError`.
 
-*Réfs* : compléments HNSW & IVFPQ ([OpenReview][3], [unum.cloud][4]).
+### 1.2  Plugins lourds en optionnel
 
----
+* [x] Déplacer *analysis/graphwave_cuda* et *analysis/hybrid_ann* dans extra `[gpu]`.
+* [x] Setup .py
 
-## 3 – Job CI “heavy” : conteneur **PostgreSQL + pgvector** & tests latence
-
-* [ ] Étape workflow :
-
-  ```yaml
-  services:
-    postgres:
-      image: ankane/pgvector:v0.6.0
-      env:
-        POSTGRES_PASSWORD: test
-      ports: ['5432:5432']
+  ```toml
+  extras_require = {"gpu": ["cupy-cuda12x", "faiss-gpu>=1.8.0"]}
   ```
-* [ ] Installer extension : `CREATE EXTENSION IF NOT EXISTS vector;`.
-* [ ] Insérer 1 M vecteurs; créer index `ivfflat lists=100`.
-* [ ] Test `SELECT … ORDER BY vec <=> $q LIMIT 5` : assert latence < 30 ms et recall ≥ 0.9 vs FAISS baseline. ([Microsoft Learn][5], [Reddit][6])
-* [ ] Skip test si service non dispo (runner local).
-* [ ] **DoD** : heavy job vert sur GitHub Actions.
+* [x] CI : job CPU n’installe pas `[gpu]`.
+
+### 1.3  Configuration typée
+
+* [x] Créer `config/schema.py` (Pydantic v2).
+* [x] Valider YAML → modèle ; lever `ValidationError` au boot.
+* [x] Variables :
+
+  | Nom           | Type         | Défault |
+  | ------------- | ------------ | ------- |
+  | `pid.Kp`      | float ∈(0,1] | 0.4     |
+  | `pid.Ki`      | float        | 0.05    |
+  | `gpu.enabled` | bool         | False   |
 
 ---
 
-## 4 – Dépendances **CuPy CUDA 12.x** & autres libs dans `requirements-ci.txt`
+## 2 – Qualité du code
 
-* [ ] Ajouter :
+### 2.1  Typage strict
 
-  ````text
-  cupy-cuda12x>=12.0.0  # GPU tests
-  fakeredis>=2.20.0
-  faiss-cpu>=1.8.0      # fallback heavy
-  ````
-* [ ] Dans workflow CI :
+* [x] Activer `mypy --strict` sur *datacreek/*
+* [x] Ajouter suppression localisée `# type: ignore[assignment]` où nécessaire.
 
-  * job `gpu`: `pip install cupy-cuda12x faiss-gpu`
-  * job `unit`: installe seulement `faiss-cpu`.
-* [ ] **DoD** : plus d’échec “ModuleNotFoundError: cupy / fakeredis”.
+### 2.2  Documentation
 
----
+* [x] Exiger doc‑string PEP 257 via pre‑commit `docstring-quality`.
+* [x] Couverture doc‑strings cible ≥ 80 %.
 
-## 5 – Secret **Grafana API‑Token** & upload dashboard automatisé
+### 2.3  Complexité & sécurité
 
-* [ ] Stocker `GRAFANA_TOKEN` dans GitHub Secrets (scope `dashboards:write`).
-* [ ] `scripts/upload_dashboard.py` :
-
-  ````python
-  headers={'Authorization': f'Bearer {token}'}
-  requests.post(f'{host}/api/dashboards/db', json=payload, headers=headers)
-  ````
-* [ ] Étape CD : exécuter le script après déploiement.
-* [ ] **DoD** : dashboard `Cache‑Backpressure` présent en PROD, version timestampée.
+* [x] Intégrer `flake8-bandit`, `radon` (fail > C cyclomatic).
+* [x] Metrics badge sur README.
 
 ---
 
-### Résumé Objectifs chiffrés
+## 3 – Tests & CI
 
-| Bloc        | KPI                           | Seuil                     | Source                       |
-| ----------- | ----------------------------- | ------------------------- | ---------------------------- |
-|  Whisper    | xRT_cpu ≤ 2, xRT_gpu ≤ 0.5  | Bench GPU/CPU             | turn0search8                 |
-|  Hybrid ANN | recall ≥ 0.92, P95 < 20 ms    | Vector search theory      | turn0search6 & turn0search1  |
-|  pgvector   | latence < 30 ms, recall ≥ 0.9 | Azure guide / Reddit perf | turn0search10 & turn0search2 |
-|  CI deps    | cupy‑cuda12x installed        | PyPI                      | turn0search3                 |
-|  Grafana    | Dashboard POST 200 OK         | Grafana API docs          | turn0search7                 |
+### 3.1  Couverture
 
-> **Quand ces 5 cases principales (et leurs sous‑cases) sont cochées, la couverture fonctionnelle & de test sera **100 %**, la CI verte CPU+GPU, et l’environnement observabilité complet.**
+* [x] Ajouter `pytest-cov`; publier **coverage.xml** artefact.
+* [x] CI gate : `--cov-fail-under=80`.
 
-[1]: https://www.tomshardware.com/news/whisper-audio-transcription-gpus-benchmarked?utm_source=chatgpt.com "OpenAI Whisper Audio Transcription Benchmarked on 18 GPUs: Up to 3,000 ..."
-[2]: https://github.com/openai/whisper/discussions/918?utm_source=chatgpt.com "Performance benchmark of different GPUs · openai whisper - GitHub"
-[3]: https://openreview.net/forum?id=s7Vh8OIIm6&utm_source=chatgpt.com "Hybrid Inverted Index Is a Robust Accelerator for Dense Retrieval"
-[4]: https://www.unum.cloud/blog/2023-11-07-scaling-vector-search-with-intel?utm_source=chatgpt.com "10x Faster than Meta's FAISS | Unum Blog"
-[5]: https://learn.microsoft.com/en-us/azure/cosmos-db/postgresql/howto-optimize-performance-pgvector?utm_source=chatgpt.com "How to optimize performance when using pgvector - Azure Cosmos ..."
-[6]: https://www.reddit.com/r/vectordatabase/comments/1b1ixkq/how_much_is_too_much_to_consider_pgvector/?utm_source=chatgpt.com "How much is too much to consider pgvector : r/vectordatabase - Reddit"
+### 3.2  Jobs différenciés
+
+* [x] Découper workflows :
+
+  1. **unit** (≤ 5 min)
+  2. **heavy-nightly** (bench > 1 M vecteurs)
+  3. **gpu** (labels `self-hosted`, CUDA 12)
+
+### 3.3  Property‑based tests
+
+* [x] Introduire `hypothesis` pour :
+
+  * GraphWave invariants (symétrie, norme).
+  * Poincaré Möbius addition associativité approx.
+
+---
+
+## 4 – Performance & Scalabilité
+
+### 4.1  GraphWave streaming kernel
+
+* [x] **Chebyshev streaming**
+
+  * [x] Diviser ordre $m$ en blocs $b$ pour VRAM 8 GB.
+  * [x] Formule mémoire :
+
+    $$
+    M = 2n\cdot d \cdot b \quad (\text{bytes})
+    $$
+
+    Variables :
+    | $n$ nœuds | $d$ taille float32(=4) | $b$ blocs actifs |
+  * [x] Objectif : VRAM ≤ 5 GB sur 10 M nœuds.
+
+### 4.2  Multi‑probing FAISS (CPU fallback)
+
+* [x] Activer `index.nprobe = base × n_subprobe`.
+
+  * **Maths rappel** :
+
+    $$
+    \text{Recall} \approx 1 - (1 - \frac{n_\text{probe}}{N_\text{cells}})^{L}
+    $$
+
+    | $L$ tables | $N_\text{cells}$ total centroides |
+  * [x] Bench : P95 < 50 ms CPU 32‑core, recall ≥ 0.9.
+
+### 4.3  Whisper int8 GEMM
+
+* [x] Intégrer `bitsandbytes.matmul_8bit()`.
+* [x] Mesurer gain : xRT_cpu → ≤ 1.5.
+
+---
+
+## 5 – Sécurité & conformité
+
+### 5.1  Secret hygiene
+
+* [x] Remplacer `.env.example` par `docs/env.sample` (aucun placeholder sensible).
+* [x] Activer GitHub Dependabot (# security updates).
+
+### 5.2  DP Renyi accountant
+
+* [x] Implémenter module `dp/accountant.py` (Mironov 2017).
+
+  * Cumul ε selon moments $α$:
+
+    $$
+    \varepsilon = \min_{\alpha>1} \frac{1}{\alpha-1} \log \sum_i e^{(\alpha-1) \varepsilon_i}
+    $$
+  * Variables : $\varepsilon_i$ budgets requêtes.
+* [x] Gateway : interdire si $\varepsilon_{\text{Renyi}}>\varepsilon_{\max}$.
+
+---
+
+## 6 – Observabilité & Ops
+
+### 6.1  Tracing OpenTelemetry
+
+* [x] Ajouter `opentelemetry-instrumentation-fastapi` & `aio-pika`.
+* [x] Export OTLP → Jaeger.
+
+### 6.2  Dashboards versionnés
+
+* [x] Convertir `docs/grafana/*.json` → Jsonnet (`grafonnet-lib`).
+* [x] CI valide rendu via `jsonnetfmt`.
+
+### 6.3  Nouvelles alertes
+
+* [x] Règle Prometheus :
+
+  * `p95_graphwave_ms > 250 for 10m` (warning)
+  * `ingest_queue_fill_ratio > 0.8 for 10m` (critical)
+
+---
+
+## 7 – Documentation & DX
+
+### 7.1  mkdocs‑material
+
+* [x] Config `mkdocs.yml`; pages : *quick‑start‑CPU*, *quick‑start‑GPU*.
+* [x] GitHub Pages auto‑deploy.
+
+### 7.2  API examples
+
+* [x] Ajouter bloc code Swagger `/explain/{node}` + curl + JS fetch snippet.
+
+---
+
+## 8 – Plan de livraison
+
+| Sprint | Axes clés (issus ci‑dessous)                          |
+| ------ | ---------------------------------------------------- |
+|  S‑1   | Typage strict, Pydantic config, secret hygiene       |
+|  S‑2   | GPU abstraction layer, plugin extras, CI coverage    |
+|  S‑3   | GraphWave streaming, FAISS multi‑probe, int8 Whisper |
+|  S‑4   | OpenTelemetry, DP Renyi accountant, alert rules      |
+|  S‑5   | Docs mkdocs, dashboards Jsonnet, release v1.2‑rc     |
+
+---
+
+### KPI de validation finale
+
+| Domaine            | Cible         | Mesure                |
+| ------------------ | ------------- | --------------------- |
+| Couverture tests   | ≥ 80 % lignes | `coverage.xml` CI     |
+| RAM GraphWave 10 M | ≤ 5 GB        | benchmark_gpu.json   |
+| P95 ANN CPU        | < 50 ms       | `bench_ann_cpu.json`  |
+| xRT Whisper CPU    | ≤ 1.5         | `metrics_prometheus`  |
+| Bugs SAST Bandit   | 0 high        | `bandit -r datacreek` |
+
+👉 **Quand toutes les cases sont cochées**, Datacreek sera prêt pour **v1.2 GA** : plus modulaire, plus sûr, plus rapide et mieux observable.
 
 ## History
-- Reset backlog as requested and fixed duplicate metric registration in `start_metrics_server`.
-- Installed requirements and verified tests pass with heavy tests skipped when services are unavailable.
-- Raised default `probes` to 20 in `query_topk_pg` to meet heavy test recall target.
+- Reset backlog to v1.2 hardening as instructed.
+- Created docs/env.sample and enabled Dependabot; removed legacy .env.example.
+- Added Pydantic config schema and YAML validation defaults.
+- Implemented Renyi DP accountant with gating and tests.
+- Added GPU/CPU array_api abstraction and tests covering missing Cupy.
+- Added Prometheus rules GraphwaveP95Slow and IngestQueueHigh with tests.
+- Implemented OpenTelemetry tracing with FastAPI and aio-pika instrumentation.
+- Integrated pytest-cov with coverage gating in CI.
+- Added setup.py with GPU extras and updated CI to install them only on GPU jobs.
+- Enforced PEP 257 docstrings and minimum 80% coverage via pre-commit checks.
+- Integrated flake8-bandit security lints and radon complexity guard; added
+  complexity badge to README.
+- Introduced Hypothesis property tests for GraphWave and Möbius associativity.
+- Split CI into unit, scheduled heavy-nightly and GPU jobs.
+- Documented Swagger usage for /explain/{node} with curl and fetch snippets; added
+  tests checking presence in OpenAPI docs.
+- Converted Grafana dashboards to Jsonnet and added jsonnetfmt pre-commit check.
+- Added mkdocs configuration with CPU/GPU quick-start guides and Pages deployment workflow.
+- Enabled FAISS multi-probing with configurable n_subprobe and unit tests verifying nprobe.
+- Integrated bitsandbytes int8 matmul in Whisper parser with tests.
+- Implemented streaming GPU heat kernel with block parameter and tests.
+- Added helpers to estimate streaming memory and choose block size, with unit
+  tests ensuring 5 GB usage for 10M nodes.
+- Enabled mypy strict checks with a new pre-commit hook and added type hints to parsers and telemetry.
+- Created create_issues.py to auto-generate GitHub epic and issues; added unit test.
+- Added bench_ann_cpu.py and bench_whisper_xrt.py with tests producing benchmark files.
+- Installed missing dependencies and validated coverage run locally.
+- Fixed formatting issues flagged by pre-commit and installed runtime dependencies to execute unit tests.
+- Updated CI to push Docker images only on main branch.

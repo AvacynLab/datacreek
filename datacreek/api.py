@@ -90,10 +90,12 @@ except Exception:  # pragma: no cover - simplify tests
         save_task
     ) = None
 from datacreek.analysis import explain_to_svg
+from datacreek.telemetry import init_tracing
 from datacreek.utils import decode_hash
 
 init_db()
 app = FastAPI(title="Datacreek API")
+init_tracing(app)
 app.add_middleware(DPBudgetMiddleware)
 
 app.add_middleware(

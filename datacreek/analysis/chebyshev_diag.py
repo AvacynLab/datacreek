@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from datacreek.backend import get_xp
+
+xp = get_xp()
+
 try:  # optional heavy deps
     import scipy.linalg as la
     import scipy.sparse as sp

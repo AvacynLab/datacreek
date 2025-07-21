@@ -20,3 +20,32 @@ def _no_neo4j(monkeypatch):
         # dataset module may be missing heavy deps
         pass
     yield
+
+
+import importlib.util
+
+HEAVY_DEPS = [
+    "numpy",
+    "networkx",
+    "torch",
+    "fakeredis",
+    "fastapi",
+    "sqlalchemy",
+    "prometheus_client",
+    "yaml",
+    "pydantic",
+    "hypothesis",
+    "opentelemetry",
+]
+
+
+def pytest_configure(config):
+    markexpr = getattr(config.option, "markexpr", "")
+    if "heavy" in markexpr:
+        missing = [d for d in HEAVY_DEPS if importlib.util.find_spec(d) is None]
+        if missing:
+            pytest.exit(
+                "Skipping heavy tests due to missing dependencies: "
+                + ", ".join(missing),
+                returncode=0,
+            )

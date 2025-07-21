@@ -62,6 +62,20 @@ def explain_node_public(
     The response contains the neighborhood ``nodes`` and ``edges`` lists,
     an ``attn`` mapping for attention scores and a base64 encoded ``svg``
     rendering of the subgraph.
+
+    Example
+    -------
+
+    ``curl``::
+
+        curl -H "X-API-Key: <token>" \
+             "http://localhost:8000/explain/foo?dataset=demo"
+
+    JavaScript ``fetch``::
+
+        fetch("/explain/foo?dataset=demo", {
+            headers: {"X-API-Key": "<token>"}
+        }).then(r => r.json());
     """
 
     ds = _load_dataset(dataset, user)
