@@ -32,3 +32,13 @@ groups:
         for: 5m
         labels:
           severity: critical
+      - alert: GraphwaveP95Slow
+        expr: p95_graphwave_ms > 250
+        for: 10m
+        labels:
+          severity: warning
+      - alert: IngestQueueHigh
+        expr: ingest_queue_fill_ratio > 0.8
+        for: 10m
+        labels:
+          severity: critical

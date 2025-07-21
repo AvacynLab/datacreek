@@ -1,5 +1,7 @@
 # Datacreek
 
+![Complexity](https://img.shields.io/badge/average%20complexity-A-brightgreen)
+
 Tool for generating high-quality synthetic datasets to fine-tune LLMs.
 
 Generate reasoning traces and QA pairs and save them to common fine-tuning formats.

@@ -44,6 +44,18 @@ def test_jitter_alert_rule():
     assert "ingest_queue_fill_ratio > 0.9" in cache_pressure["expr"]
     assert cache_pressure["labels"]["severity"] == "critical"
 
+    gw_rule = rules.get("GraphwaveP95Slow")
+    assert gw_rule is not None
+    assert gw_rule["expr"] == "p95_graphwave_ms > 250"
+    assert gw_rule["for"] == "10m"
+    assert gw_rule["labels"]["severity"] == "warning"
+
+    ingest_high = rules.get("IngestQueueHigh")
+    assert ingest_high is not None
+    assert ingest_high["expr"] == "ingest_queue_fill_ratio > 0.8"
+    assert ingest_high["for"] == "10m"
+    assert ingest_high["labels"]["severity"] == "critical"
+
 
 def test_promtool_check_rules():
     import shutil

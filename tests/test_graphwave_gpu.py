@@ -9,7 +9,6 @@ spec = importlib.util.find_spec("cupy")
 
 @pytest.mark.skipif(spec is None, reason="cupy required")
 def test_chebyshev_heat_kernel_gpu_matches_cpu():
-    import cupy as cp
 
     from datacreek.analysis.fractal import chebyshev_heat_kernel
     from datacreek.analysis.graphwave_cuda import chebyshev_heat_kernel_gpu
@@ -18,22 +17,38 @@ def test_chebyshev_heat_kernel_gpu_matches_cpu():
     L = nx.normalized_laplacian_matrix(g).tocsr()
     h_cpu = chebyshev_heat_kernel(L, 0.5, m=3)
     h_gpu = chebyshev_heat_kernel_gpu(L, 0.5, m=3)
-    assert np.allclose(h_cpu, h_gpu, atol=1e-4)
+    assert np.allclose(h_cpu, h_gpu, atol=1e-4)  # noqa: S101
 
 
 @pytest.mark.skipif(spec is None, reason="cupy required")
 def test_chebyshev_heat_kernel_gpu_batch():
-    import cupy as cp
 
     from datacreek.analysis.fractal import chebyshev_heat_kernel
-    from datacreek.analysis.graphwave_cuda import chebyshev_heat_kernel_gpu_batch
+    from datacreek.analysis.graphwave_cuda import (  # noqa: E501
+        chebyshev_heat_kernel_gpu_batch,
+    )
 
     g = nx.path_graph(4)
     L = nx.normalized_laplacian_matrix(g).tocsr()
     cpu = [chebyshev_heat_kernel(L, t, m=3) for t in (0.25, 0.5)]
     gpu = chebyshev_heat_kernel_gpu_batch(L, [0.25, 0.5], m=3)
     for c, gk in zip(cpu, gpu):
-        assert np.allclose(c, gk, atol=1e-4)
+        assert np.allclose(c, gk, atol=1e-4)  # noqa: S101
+
+
+@pytest.mark.skipif(spec is None, reason="cupy required")
+def test_chebyshev_heat_kernel_gpu_stream():
+    """Streaming kernel should match full computation."""
+    from datacreek.analysis.graphwave_cuda import (
+        chebyshev_heat_kernel_gpu,
+        chebyshev_heat_kernel_gpu_stream,
+    )
+
+    g = nx.path_graph(6)
+    L = nx.normalized_laplacian_matrix(g).tocsr()
+    ref = chebyshev_heat_kernel_gpu(L, 0.5, m=5)
+    streaming = chebyshev_heat_kernel_gpu_stream(L, 0.5, order=5, block=2)
+    assert np.allclose(ref, streaming, atol=1e-4)  # noqa: S101
 
 
 @pytest.mark.skipif(spec is None, reason="cupy required")
@@ -44,7 +59,11 @@ def test_graphwave_runner_gpu(monkeypatch):
     kg = KnowledgeGraph()
     kg.graph.add_edge("a", "b")
     monkeypatch.setattr(kg, "graphwave_entropy", lambda: 0.0)
-    monkeypatch.setattr(kg, "compute_graphwave_embeddings", lambda *a, **k: None)
+    monkeypatch.setattr(
+        kg,
+        "compute_graphwave_embeddings",
+        lambda *a, **k: None,
+    )
     runner = GraphWaveRunner(kg)
     runner.run(scales=[0.5], gpu=True)
 
@@ -66,4 +85,21 @@ def test_graphwave_embedding_gpu_precision():
     arr_gpu = np.stack([gpu[n] for n in sorted(g.nodes())])
 
     rel_err = np.linalg.norm(arr_gpu - arr_cpu) / np.linalg.norm(arr_cpu)
-    assert rel_err < 1e-5
+    assert rel_err < 1e-5  # noqa: S101
+
+
+def test_stream_memory_estimation():
+    from datacreek.analysis.graphwave_cuda import estimate_stream_memory
+
+    mem = estimate_stream_memory(10_000_000, 64)
+    assert mem < 5 * 1024**3  # noqa: S101
+
+
+def test_stream_block_selection():
+    from datacreek.analysis.graphwave_cuda import (
+        choose_stream_block,
+        estimate_stream_memory,
+    )
+
+    b = choose_stream_block(10_000_000, limit_gb=5)
+    assert estimate_stream_memory(10_000_000, b) <= 5 * 1024**3  # noqa: S101

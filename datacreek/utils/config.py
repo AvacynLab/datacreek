@@ -44,6 +44,8 @@ from datacreek.config_models import (
     OpenAISettings,
     VLLMSettings,
 )
+from datacreek.config.schema import ConfigSchema
+from pydantic import ValidationError
 
 # Default config location relative to the project root
 ORIGINAL_CONFIG_PATH = os.path.abspath(
@@ -140,7 +142,12 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
                                     parsed = val.strip("\"'")
                         parent[key] = parsed
 
-    # Debug: Print LLM provider if it exists
+    # Validate against typed schema to catch malformed values early
+    try:
+        ConfigSchema.model_validate(config)
+    except ValidationError:
+        logger.exception("configuration validation failed")
+        raise
 
     # Debug: Print LLM provider if it exists
     if "llm" in config and "provider" in config["llm"]:
