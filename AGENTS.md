@@ -238,3 +238,4 @@
 - Added bench_ann_cpu.py and bench_whisper_xrt.py with tests producing benchmark files.
 - Installed missing dependencies and validated coverage run locally.
 - Fixed formatting issues flagged by pre-commit and installed runtime dependencies to execute unit tests.
+- Updated CI to push Docker images only on main branch.
