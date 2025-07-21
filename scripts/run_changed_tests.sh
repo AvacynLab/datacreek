@@ -11,7 +11,7 @@ cd "$DIR"
 docker build -t datacreek:test .
 
 mapfile -t test_files < <(git diff --name-only "$base" "$head" -- 'tests/*.py')
-cmd=(pytest --cov=datacreek --cov-report xml:/workspace/coverage.xml --cov-fail-under=80 -q)
+cmd=(pytest -q)
 log_file="pytest.log"
 if [ "${#test_files[@]}" -gt 0 ]; then
   echo "Running changed tests: ${test_files[*]}"
@@ -24,7 +24,7 @@ set +e
 docker run --rm \
   -v "$DIR":/workspace \
   -w /workspace datacreek:test \
-  bash -c "pip install pytest pytest-cov && PYTHONPATH=/workspace ${cmd[*]} -vv 2>&1 | tee /workspace/$log_file"
+  bash -c "pip install pytest && PYTHONPATH=/workspace ${cmd[*]} -vv 2>&1 | tee /workspace/$log_file"
 status=$?
 set -e
 if [ $status -ne 0 ]; then

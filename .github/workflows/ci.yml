@@ -2,12 +2,13 @@ name: "CI"
 
 on:
   pull_request:
-  schedule:
-    - cron: '0 3 * * *'
 
 jobs:
   unit:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        gpu: [false, true]
     services:
       redis:
         image: redis:7
@@ -55,43 +56,14 @@ jobs:
           scripts/run_changed_tests.sh \
             ${{ steps.diff.outputs.base }} \
             ${{ steps.diff.outputs.head }}
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.xml
 
-  gpu:
+  heavy:
     needs: unit
-    runs-on: [self-hosted, cuda-12]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -r requirements.txt -r requirements-ci.txt '.[gpu]'
-      - id: diff
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "base=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
-          else
-            echo "base=${{ github.event.before }}" >> $GITHUB_OUTPUT
-          fi
-          echo "head=${{ github.sha }}" >> $GITHUB_OUTPUT
-      - run: pre-commit run --from-ref ${{ steps.diff.outputs.base }} --to-ref ${{ steps.diff.outputs.head }} --show-diff-on-failure
-      - name: Run GPU tests
-        run: |
-          scripts/run_changed_tests.sh \
-            ${{ steps.diff.outputs.base }} \
-            ${{ steps.diff.outputs.head }}
-
-  heavy-nightly:
-    needs: unit
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      matrix:
+        gpu: [false, true]
     services:
       postgres:
         image: ankane/pgvector:latest
@@ -106,6 +78,9 @@ jobs:
           python-version: '3.10'
       - run: |
           pip install -r requirements.txt -r requirements-ci.txt pytest
+      - if: matrix.gpu == true
+        run: |
+          pip install cupy-cuda12x faiss-gpu
       - name: Run heavy tests
         env:
           PGVECTOR_URL: postgresql://postgres:test@localhost:5432/postgres

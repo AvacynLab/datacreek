@@ -46,9 +46,3 @@ numpy>=1.25
 langchain>=0.1.0
 pybreaker>=1.4.0
 cairosvg>=2.7
-opentelemetry-sdk>=1.35.0
-opentelemetry-exporter-otlp>=1.35.0
-opentelemetry-instrumentation-fastapi>=0.56b0
-aio-pika>=9.5.5
-pytest-cov
-bitsandbytes>=0.43.0
