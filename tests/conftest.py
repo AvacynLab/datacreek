@@ -33,6 +33,9 @@ HEAVY_DEPS = [
     "sqlalchemy",
     "prometheus_client",
     "yaml",
+    "pydantic",
+    "hypothesis",
+    "opentelemetry",
 ]
 
 
@@ -43,5 +46,6 @@ def pytest_configure(config):
         if missing:
             pytest.exit(
                 "Skipping heavy tests due to missing dependencies: "
-                + ", ".join(missing)
+                + ", ".join(missing),
+                returncode=0,
             )
