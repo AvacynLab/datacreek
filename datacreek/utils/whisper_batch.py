@@ -121,9 +121,7 @@ def transcribe_audio_batch(
                     text = model_inst.transcribe(path, max_length=max_seconds)
                 except Exception as exc:  # pragma: no cover - runtime error
                     if device == "cuda" and "out of memory" in str(exc).lower():
-                        logging.getLogger(__name__).warning(
-                            "whisper OOM, fallback CPU"
-                        )
+                        logging.getLogger(__name__).warning("whisper OOM, fallback CPU")
                         if whisper_fallback_total is not None:
                             try:
                                 whisper_fallback_total.inc()
