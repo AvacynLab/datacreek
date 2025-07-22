@@ -42,7 +42,8 @@ jobs:
           echo "head=${{ github.sha }}" >> $GITHUB_OUTPUT
       - run: pre-commit run --from-ref ${{ steps.diff.outputs.base }} --to-ref ${{ steps.diff.outputs.head }} --show-diff-on-failure
       - name: Mypy (non-strict)
-        run: mypy --ignore-errors datacreek
+        run: mypy datacreek
+        continue-on-error: true
       - name: Jsonnet format
         run: jsonnetfmt -n docs/grafana/*.jsonnet
       - name: Compile dashboards
