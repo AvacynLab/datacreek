@@ -1,7 +1,13 @@
 from contextlib import contextmanager
-from typing import Tuple
+from typing import Generator, Tuple
 
-from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
+from rich.progress import (
+    BarColumn,
+    Progress,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 
 
 def create_progress(description: str, total: int) -> Tuple[Progress, int]:
@@ -18,7 +24,9 @@ def create_progress(description: str, total: int) -> Tuple[Progress, int]:
 
 
 @contextmanager
-def progress_context(description: str, total: int):
+def progress_context(
+    description: str, total: int
+) -> Generator[Tuple[Progress, int], None, None]:
     """Yield a started progress bar and stop it afterwards."""
     progress, task_id = create_progress(description, total)
     progress.start()
