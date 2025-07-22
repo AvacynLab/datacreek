@@ -1,3 +1,5 @@
+"""Integrate a circuit breaker with Prometheus metrics."""
+
 import os
 import sys
 

@@ -1,61 +1,48 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.4.2
-    hooks:
-      - id: black
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        args: ["--profile", "black"]
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.0.0
-    hooks:
-      - id: flake8
-        additional_dependencies: ["flake8-bandit"]
-        files: "^(datacreek/analysis/|tests/property/)"
-        exclude: ""
-  - repo: https://github.com/PyCQA/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        args: ["--add-ignore=D100,D101,D102,D103,D202,D301,D412"]
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.8
-    hooks:
-      - id: bandit
-        args: ["-x", "tests", "--skip", "B101,B110,B112,B404,B603,B607"]
-  - repo: https://github.com/econchick/interrogate
-    rev: 1.5.0
-    hooks:
-      - id: interrogate
-        args:
-          [
-            "--fail-under=80",
-            "-e",
-            "datacreek/api.py",
-            "-e",
-            "datacreek/db.py",
-            "-e",
-            "datacreek/pipelines.py",
-            "-e",
-            "datacreek/schemas.py",
-            "-e",
-            "datacreek/services.py",
-            "-e",
-            "datacreek/storage.py",
-            "-e",
-            "datacreek/tasks.py",
-            "-e",
-            "datacreek/config_models.py",
-            "-e",
-            "datacreek/utils",
-            "datacreek",
-          ]
-        pass_filenames: false
-        additional_dependencies: ["setuptools"]
   - repo: local
     hooks:
+      - id: black
+        name: black
+        entry: black
+        language: python
+        additional_dependencies: ["black==24.4.2"]
+        files: "\\.py$"
+      - id: isort
+        name: isort
+        entry: isort --profile black
+        language: python
+        additional_dependencies: ["isort==5.13.2"]
+        files: "\\.py$"
+      - id: flake8
+        name: flake8
+        entry: flake8
+        language: python
+        additional_dependencies: ["flake8==7.0.0", "flake8-bandit"]
+        files: "^(datacreek/analysis/|tests/property/)"
+        exclude: ""
+      - id: pydocstyle
+        name: pydocstyle
+        entry: pydocstyle --add-ignore=D100,D101,D102,D103,D202,D301,D412
+        language: python
+        additional_dependencies: ["pydocstyle==6.3.0"]
+      - id: docstring-quality
+        name: docstring-quality
+        entry: python scripts/docstring_quality.py
+        language: python
+        additional_dependencies: ["interrogate==1.7.0"]
+        pass_filenames: false
+      - id: bandit
+        name: bandit
+        entry: bandit -x tests --skip B101,B110,B112,B404,B603,B607
+        language: python
+        additional_dependencies: ["bandit==1.7.8"]
+      - id: interrogate
+        name: interrogate
+        entry: >-
+          interrogate --fail-under=80 -e datacreek/api.py -e datacreek/db.py -e datacreek/pipelines.py -e datacreek/schemas.py -e datacreek/services.py -e datacreek/storage.py -e datacreek/tasks.py -e datacreek/config_models.py -e datacreek/utils datacreek
+        language: python
+        pass_filenames: false
+        additional_dependencies: ["interrogate==1.5.0", "setuptools"]
       - id: radon-cc
         name: radon cyclomatic complexity
         entry: radon cc -s -n C datacreek

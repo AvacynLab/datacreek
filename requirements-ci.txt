@@ -29,5 +29,7 @@ opentelemetry-sdk>=1.24.0
 jsonnet-binary
 mypy
 radon
-bitsandbytes>=0.42.0
+bitsandbytes>=0.43
 pydocstyle
+docstring-checker>=1.2
+interrogate>=1.7

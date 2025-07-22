@@ -7,6 +7,11 @@ import time
 from functools import lru_cache
 from typing import Iterable, List
 
+try:  # optional 8-bit matmul for CPU acceleration
+    import bitsandbytes.functional as bnb_fn  # type: ignore
+except Exception:  # pragma: no cover - dependency missing
+    bnb_fn = None  # type: ignore
+
 # Avoid importing torch on unsupported platforms to prevent crashes
 torch = None  # default to disabled
 try:  # optional dependency (disabled by default)
@@ -88,6 +93,13 @@ def transcribe_audio_batch(
     use_fp16 = device == "cuda"
     if device == "cpu":
         batch_size = max(1, batch_size // 4)
+        if torch is not None and bnb_fn is not None:
+            orig_matmul = torch.matmul
+            torch.matmul = bnb_fn.matmul_8bit  # type: ignore[assignment]
+        else:
+            orig_matmul = None
+    else:
+        orig_matmul = None
     model_inst = _get_model(
         model, fp16=use_fp16, device=device, int8=quantize and device == "cpu"
     )
@@ -100,37 +112,40 @@ def transcribe_audio_batch(
     transcripts: List[str] = []
     start = time.perf_counter()
     idx = 0
-    while idx < len(all_paths):
-        chunk = all_paths[idx : idx + batch_size]
-        step = len(chunk)
-        for path in chunk:
-            try:
-                text = model_inst.transcribe(path, max_length=max_seconds)
-            except Exception as exc:  # pragma: no cover - runtime error
-                if device == "cuda" and "out of memory" in str(exc).lower():
-                    logging.getLogger(__name__).warning("whisper OOM, fallback CPU")
-
-                    if whisper_fallback_total is not None:
-                        try:
-                            whisper_fallback_total.inc()
-                        except Exception:
-                            pass
-                    # reload on CPU, reduce batch
-                    _get_model.cache_clear()
-                    device = "cpu"
-                    use_fp16 = False
-                    batch_size = 1
-                    model_inst = _get_model(
-                        model, fp16=use_fp16, device="cpu", int8=quantize
-                    )
+    try:
+        while idx < len(all_paths):
+            chunk = all_paths[idx : idx + batch_size]
+            step = len(chunk)
+            for path in chunk:
+                try:
                     text = model_inst.transcribe(path, max_length=max_seconds)
-                else:
-                    logging.getLogger(__name__).exception(
-                        "failed to transcribe %s", path
-                    )
-                    text = ""
-            transcripts.append(text)
-        idx += step
+                except Exception as exc:  # pragma: no cover - runtime error
+                    if device == "cuda" and "out of memory" in str(exc).lower():
+                        logging.getLogger(__name__).warning("whisper OOM, fallback CPU")
+                        if whisper_fallback_total is not None:
+                            try:
+                                whisper_fallback_total.inc()
+                            except Exception:
+                                pass
+                        # reload on CPU, reduce batch
+                        _get_model.cache_clear()
+                        device = "cpu"
+                        use_fp16 = False
+                        batch_size = 1
+                        model_inst = _get_model(
+                            model, fp16=use_fp16, device="cpu", int8=quantize
+                        )
+                        text = model_inst.transcribe(path, max_length=max_seconds)
+                    else:
+                        logging.getLogger(__name__).exception(
+                            "failed to transcribe %s", path
+                        )
+                        text = ""
+                transcripts.append(text)
+            idx += step
+    finally:
+        if orig_matmul is not None:
+            torch.matmul = orig_matmul
     duration = time.perf_counter() - start
     if duration > 0:
         rate = len(all_paths) / duration

@@ -1,3 +1,5 @@
+"""Decode Redis hash entries and JSON values."""
+
 from __future__ import annotations
 
 import json
