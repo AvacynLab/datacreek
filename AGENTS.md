@@ -6,15 +6,15 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 
 ## 1. Qualité & sécurité de code
 
-* [ ] **Intégrer contrôles pré‑commit avancés**
+* [x] **Intégrer contrôles pré‑commit avancés**
 
-  * [ ] Ajouter à `.pre-commit-config.yaml` :
+  * [x] Ajouter à `.pre-commit-config.yaml` :
 
-    * `docstring-quality` (≥ 80 % fonctions documentées). ([bandit.readthedocs.io][1])
+    * `docstring-quality` (pydocstyle) (≥ 80 % fonctions documentées). ([bandit.readthedocs.io][1])
     * `flake8-bandit` (analyse CVE) ([GitHub][2])
     * `radon` (complexité cyclomatique ≤ C). ([radon.readthedocs.io][3], [PyPI][4])
-  * [ ] Corriger violations (vars non utilisées, secrets hard‑codés, CC > 10).
-  * [ ] **DoD** : `pre-commit run --all-files` sort sans erreur ; badge “radon A/B”.
+  * [x] Corriger violations (vars non utilisées, secrets hard‑codés, CC > 10).
+  * [x] **DoD** : `pre-commit run --all-files` sort sans erreur ; badge “radon A/B”.
 
 * [ ] **Activer couverture & badge**
 
@@ -188,3 +188,5 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 ## History
 - Checklist reset to v1.2-hardening tasks.
 - Ran pre-commit and property tests; installed deps. Added trufflehog ignore.
+
+- Added pydocstyle docstring-quality hook and updated requirements; all pre-commit checks pass.

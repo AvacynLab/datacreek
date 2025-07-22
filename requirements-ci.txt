@@ -30,3 +30,5 @@ jsonnet-binary
 mypy
 radon
 bitsandbytes>=0.42.0
+docstring-quality
+pydocstyle
