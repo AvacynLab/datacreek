@@ -1,3 +1,5 @@
+"""Benchmark Hybrid ANN recall and latency."""
+
 import argparse
 import importlib.abc
 import importlib.util
@@ -44,6 +46,8 @@ def run_bench(
         Number of neighbours queried.
     queries:
         Number of query vectors.
+    threads:
+        Number of CPU threads used by FAISS during search.
     """
     rng = np.random.default_rng(0)
     xb = rng.standard_normal((n, d)).astype(np.float32)

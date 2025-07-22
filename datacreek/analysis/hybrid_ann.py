@@ -47,13 +47,42 @@ def expected_recall(nprobe: int, n_cells: int, tables: int) -> float:
     return 1.0 - (1.0 - nprobe / n_cells) ** tables
 
 
-def choose_nprobe_multi(n_cells: int, tables: int, *, target: float = 0.9) -> int:
-    """Return ``nprobe_multi`` achieving at least ``target`` recall."""
+def choose_nprobe_multi(n_cells: int, tables: int) -> int:
+    """Return a heuristic ``nprobe_multi`` based on index size.
+
+    ``nprobe_multi`` is chosen as the square root of ``n_cells`` per
+    subquantizer so that ``nprobe_multi=32`` when ``n_cells=2**14`` and
+    ``tables=16`` (as in an index with 16 sub-quantizers).
+    """
 
     if n_cells <= 0 or tables <= 0:
         return 1
-    value = n_cells * (1.0 - (1.0 - target) ** (1.0 / tables))
-    return max(1, int(math.ceil(value)))
+    return max(1, int(round((n_cells / tables) ** 0.5)))
+
+
+def load_ivfpq_cpu(path: str, base_nprobe: int) -> object:
+    """Load an IVFPQ index on CPU and set ``nprobe_multi``.
+
+    Parameters
+    ----------
+    path:
+        Path to the index file created by FAISS.
+    base_nprobe:
+        Number of probes per subquantizer.
+
+    Returns
+    -------
+    object
+        Loaded FAISS index with ``nprobe_multi`` configured.
+    """
+
+    if faiss is None:
+        raise RuntimeError("faiss not installed")
+    index = faiss.read_index(path)
+    pq = getattr(index, "pq", None)
+    n_subquantizers = getattr(index, "nsq", pq.M if pq is not None else 1)
+    index.nprobe_multi = [base_nprobe] * int(n_subquantizers)
+    return index
 
 
 def rerank_pq(
@@ -112,7 +141,9 @@ def rerank_pq(
         base = max(1, nlist // 4)
         index.nprobe = base * max(1, int(n_subprobe))
         if not gpu and hasattr(index, "nprobe_multi"):
-            index.nprobe_multi = choose_nprobe_multi(nlist, index.pq.M)
+            n_subquantizers = getattr(index, "nsq", index.pq.M)
+            base_multi = choose_nprobe_multi(nlist, n_subquantizers)
+            index.nprobe_multi = [base_multi] * n_subquantizers
 
     _, rerank = index.search(xq, k)
     return rerank

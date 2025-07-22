@@ -1,3 +1,5 @@
+"""Provide helpers to retrieve Git revision information."""
+
 import subprocess
 from pathlib import Path
 

@@ -2,6 +2,8 @@
 
 ![Complexity](https://img.shields.io/badge/average%20complexity-A-brightgreen)
 [![Coverage Status](https://coveralls.io/repos/github/OWNER/REPO/badge.svg?branch=main)](https://coveralls.io/github/OWNER/REPO?branch=main)
+![nightly](https://github.com/…/actions/workflows/nightly.yml/badge.svg)
+![docstring quality](https://img.shields.io/badge/docstring--quality-0.80%2B-brightgreen)
 
 Tool for generating high-quality synthetic datasets to fine-tune LLMs.
 
@@ -1036,3 +1038,4 @@ Read more about the [License](./LICENSE)
 ## Contributing
 
 Contributions are welcome! [Read our contributing guide](./CONTRIBUTING.md)
+
