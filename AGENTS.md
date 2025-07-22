@@ -195,3 +195,4 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 - Marked property tests, CI jobs, OpenTelemetry, alerts, dashboards, FAISS multi-probing, Whisper int8, GPU memory, secret hygiene, Renyi accountant, MkDocs, Swagger, and CI integration as completed.
 - Started removing bandit/pydoc ignores; fixed property tests and partial API tests.
 - Marked bitsandbytes install, GraphWave block formula, and README snippets as done.
+- Adjusted GPU CI job to detect nvidia-smi and skip tests when unavailable.
