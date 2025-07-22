@@ -20,7 +20,8 @@ def test_graphwave_norm_invariance(n: int) -> None:
     g = nx.cycle_graph(n)
     emb = graphwave_embedding_chebyshev(g, [0.5], num_points=4, order=3)
     norms = [np.linalg.norm(v) for v in emb.values()]
-    assert np.allclose(norms, norms[0])  # noqa: S101
+    if not np.allclose(norms, norms[0]):
+        raise AssertionError
 
 
 @given(st.integers(min_value=3, max_value=6))
@@ -31,7 +32,8 @@ def test_graphwave_symmetry(n: int) -> None:
     emb = graphwave_embedding_chebyshev(g, [0.5], num_points=4, order=3)
     for i in range(n):
         j = n - 1 - i
-        assert np.allclose(emb[i], emb[j])  # noqa: S101
+        if not np.allclose(emb[i], emb[j]):
+            raise AssertionError
 
 
 vector = st.lists(st.floats(-0.4, 0.4), min_size=2, max_size=2).map(
@@ -45,4 +47,5 @@ def test_mobius_add_inverse(x: np.ndarray, y: np.ndarray) -> None:
     """(x⊕y)⊖y should recover x under Möbius operations."""
     res = _mobius_add(x, y, clamp=False)
     back = _mobius_add(res, _mobius_neg(y), clamp=False)
-    assert np.allclose(back, x, atol=3e-1)  # noqa: S101
+    if not np.allclose(back, x, atol=3e-1):
+        raise AssertionError

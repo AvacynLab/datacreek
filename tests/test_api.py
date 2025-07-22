@@ -1,3 +1,5 @@
+"""Integration tests for the public API."""
+
 import json
 import os
 import time
@@ -22,42 +24,50 @@ client = TestClient(app)
 
 
 def teardown_module(module):
+    """Remove leftover test database."""
     if os.path.exists("test.db"):
         os.remove("test.db")
 
 
 def _create_user() -> tuple[int, str]:
+    """Create a demo user and return (id, api_key)."""
     name = f"u{int(time.time()*1000)}"
     res = client.post("/users", json={"username": name})
-    assert res.status_code == 200
+    if res.status_code != 200:
+        raise AssertionError
     body = res.json()
     return body["id"], body["api_key"]
 
 
-def test_create_user():
+def test_create_user() -> None:
+    """Ensure user creation endpoint persists the user."""
     res = client.post("/users", json={"username": "alice"})
-    assert res.status_code == 200
+    if res.status_code != 200:
+        raise AssertionError
     body = res.json()
     key = body["api_key"]
     user_id = body["id"]
     with SessionLocal() as db:
         user = db.get(User, user_id)
-        assert user is not None
-        assert user.username == "alice"
-        assert user.api_key == hash_key(key)
+        if user is None or user.username != "alice" or user.api_key != hash_key(key):
+            raise AssertionError
 
 
-def test_create_user_validation():
+def test_create_user_validation() -> None:
+    """Usernames must be non-empty."""
     res = client.post("/users", json={"username": ""})
-    assert res.status_code == 422
+    if res.status_code != 422:
+        raise AssertionError
 
 
-def test_generate_params_validation():
+def test_generate_params_validation() -> None:
+    """Validate required generation parameters."""
     res = client.post(
         "/tasks/generate",
         json={"src_id": 1, "provider": ""},
     )
-    assert res.status_code == 422
+    if res.status_code != 422:
+        raise AssertionError
 
 
 def _wait_task(task_id: str) -> dict:

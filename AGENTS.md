@@ -15,6 +15,8 @@ Les références pointent vers la doc ou les discussions de référence qui guid
     * `radon` (complexité cyclomatique ≤ C). ([radon.readthedocs.io][3], [PyPI][4])
   * [x] Corriger violations (vars non utilisées, secrets hard‑codés, CC > 10).
   * [x] **DoD** : `pre-commit run --all-files` sort sans erreur ; badge “radon A/B”.
+  * [ ] Supprimer toutes les exceptions bandit/pydoc et corriger le code.
+    * Étape 1 : tests conformes sans `# noqa`.
 
 * [ ] **Activer couverture & badge**
 
@@ -191,3 +193,4 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 
 - Added pydocstyle docstring-quality hook and updated requirements; all pre-commit checks pass.
 - Marked property tests, CI jobs, OpenTelemetry, alerts, dashboards, FAISS multi-probing, Whisper int8, GPU memory, secret hygiene, Renyi accountant, MkDocs, Swagger, and CI integration as completed.
+- Started removing bandit/pydoc ignores; fixed property tests and partial API tests.
