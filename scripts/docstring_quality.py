@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
-"""Simple docstring quality checker using interrogate."""
+"""Check docstring coverage using ``interrogate``.
+
+This script replicates the ``docstring-quality`` tool which normally ships
+with the ``docstring-checker`` project.  It parses the coverage reported by
+``interrogate`` and exits with ``1`` when the measured value is below the
+configured threshold.
+"""
+import argparse
 import re
 import subprocess
 import sys
 
-TARGET = 0.80
+DEFAULT_TARGET = 0.80
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--fail-under",
+        type=float,
+        default=DEFAULT_TARGET,
+        help="fail if docstring coverage is below this fraction",
+    )
+    args = parser.parse_args()
+
     cmd = [
         "interrogate",
         "-e",
@@ -44,7 +60,7 @@ def main() -> int:
         print(proc.stderr)
         return 1
     print(f"docstring quality: {coverage:.2f}")
-    return 0 if coverage >= TARGET else 1
+    return 0 if coverage >= args.fail_under else 1
 
 
 if __name__ == "__main__":

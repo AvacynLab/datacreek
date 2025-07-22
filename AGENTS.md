@@ -122,3 +122,4 @@ Voici la feuille de route ultra-précise pour terminer le « v1.2 hardening »
 - Installed pre-commit; heavy and unit tests pass; pre-commit still requires GitHub auth
 
 - Pre-commit config now only targets Python files; unit checks pass locally.
+- Added argument parsing to docstring_quality script and updated CI workflow.

@@ -30,6 +30,7 @@ repos:
         entry: python scripts/docstring_quality.py
         language: python
         additional_dependencies: ["interrogate==1.7.0"]
+        pass_filenames: false
       - id: bandit
         name: bandit
         entry: bandit -x tests --skip B101,B110,B112,B404,B603,B607
