@@ -50,3 +50,4 @@ langchain>=0.1.0
 pybreaker>=1.4.0
 cairosvg>=2.7
 docstring-checker>=1.2
+interrogate>=1.7

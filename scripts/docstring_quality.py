@@ -25,6 +25,8 @@ def main() -> int:
     args = parser.parse_args()
 
     cmd = [
+        sys.executable,
+        "-m",
         "interrogate",
         "-e",
         "datacreek/api.py",
