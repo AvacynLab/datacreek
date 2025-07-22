@@ -91,7 +91,7 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 
 ### 4.2  Whisper int8 GEMM
 
-* [ ] Installer `bitsandbytes` : utiliser matmul 8-bit. ([Hugging Face][12], [GitHub][13])
+* [x] Installer `bitsandbytes` : utiliser matmul 8-bit. ([Hugging Face][12], [GitHub][13])
 * [x] Mesurer $\text{xRT}=\frac{T_\text{proc}}{T_\text{audio}}$ ; cible CPU ≤ 1.5.
 * [x] **DoD** : gauge `whisper_xrt{device=cpu}` ≤ 1.5.
 
@@ -109,7 +109,7 @@ Les références pointent vers la doc ou les discussions de référence qui guid
   | \$d\$ | sizeof(float32)=4 |
   | \$b\$ | blocs actifs |
 
-  * [ ] Choisir \$b = \lceil m / \lceil V /5\text{ GB}\rceil\rceil\$.
+  * [x] Choisir \$b = \lceil m / \lceil V /5\text{ GB}\rceil\rceil\$.
   * [x] **DoD** : VRAM ≤ 5 GB sur 10 M nœuds, perf ⩾ 90 % baseline.
 
 ---
@@ -146,7 +146,7 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 * [ ] **Swagger examples**
 
   * [x] Ajouter `example` section pour `/explain/{node}` et `/vector/search`.
-  * [ ] README : snippet `curl` + JS fetch.
+  * [x] README : snippet `curl` + JS fetch.
   * [x] **DoD** : examples visibles dans Swagger UI.
 
 ---
@@ -194,3 +194,4 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 - Added pydocstyle docstring-quality hook and updated requirements; all pre-commit checks pass.
 - Marked property tests, CI jobs, OpenTelemetry, alerts, dashboards, FAISS multi-probing, Whisper int8, GPU memory, secret hygiene, Renyi accountant, MkDocs, Swagger, and CI integration as completed.
 - Started removing bandit/pydoc ignores; fixed property tests and partial API tests.
+- Marked bitsandbytes install, GraphWave block formula, and README snippets as done.
