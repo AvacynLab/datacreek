@@ -1,7 +1,8 @@
 """Heavy tests for ANN CPU multi-probing."""
 
-import types
 import json
+import types
+
 import numpy as np
 import pytest
 
@@ -58,7 +59,9 @@ def test_load_ivfpq_cpu_sets_nprobe_multi(monkeypatch, tmp_path):
             self.nsq = 3
             self.nprobe_multi = None
 
-    monkeypatch.setattr(ha, "faiss", types.SimpleNamespace(read_index=lambda p: DummyIndex()))
+    monkeypatch.setattr(
+        ha, "faiss", types.SimpleNamespace(read_index=lambda p: DummyIndex())
+    )
 
     idx = ha.load_ivfpq_cpu(str(tmp_path / "x.faiss"), 7)
     assert idx.nprobe_multi == [7] * 3

@@ -2,7 +2,6 @@
 
 import json
 import re
-
 from typing import Dict, List, Optional
 
 from datacreek.models.llm_client import LLMClient

@@ -182,7 +182,12 @@ step:
 13. **Threaded monitoring** – `start_policy_monitor_thread()` runs the same
    loop in a separate thread when `auto_monitor=True`.
    ```python
-   from datacreek import DatasetBuilder, DatasetType, InvariantPolicy, start_policy_monitor_thread
+   from datacreek import (
+       DatasetBuilder,
+       DatasetType,
+       InvariantPolicy,
+       start_policy_monitor_thread,
+   )
 
    ds = DatasetBuilder(DatasetType.QA, name="demo", auto_monitor=True)
    # adjust thresholds if necessary
@@ -721,8 +726,9 @@ source.  Generation steps query this cleaned graph instead of the raw files.
 The graph exposes simple search helpers so you can explore the content:
 
 ```python
-from datacreek import DatasetBuilder, DatasetType, KnowledgeGraph
 import networkx as nx
+
+from datacreek import DatasetBuilder, DatasetType, KnowledgeGraph
 
 ds = DatasetBuilder(DatasetType.QA, name="example")
 ds.add_document("doc1", source="paper.pdf")
@@ -865,14 +871,16 @@ Depending on the training objective, different dataset types are available.
 | CPT | text |
 
 ```python
-from datacreek import get_dataset_types_for_training, TrainingGoal
+from datacreek import TrainingGoal, get_dataset_types_for_training
+
 print(get_dataset_types_for_training(TrainingGoal.DPO))
 ```
 
 You can query pipelines programmatically:
 
 ```python
-from datacreek import get_pipelines_for_training, TrainingGoal
+from datacreek import TrainingGoal, get_pipelines_for_training
+
 print(get_pipelines_for_training(TrainingGoal.SFT))
 ```
 
@@ -881,10 +889,10 @@ knowledge graph:
 
 ```python
 from datacreek import (
-    run_generation_pipeline,
-    run_generation_pipeline_async,
     DatasetType,
     KnowledgeGraph,
+    run_generation_pipeline,
+    run_generation_pipeline_async,
 )
 
 kg = KnowledgeGraph()

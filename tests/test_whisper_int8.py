@@ -62,7 +62,9 @@ def test_whisper_int8_cpu(monkeypatch):
     mon_stub = types.SimpleNamespace(
         whisper_xrt=gauge,
         _METRICS={"whisper_xrt": gauge},
-        update_metric=lambda name, val, labels=None: gauge.labels(**(labels or {})).set(val),
+        update_metric=lambda name, val, labels=None: gauge.labels(**(labels or {})).set(
+            val
+        ),
         whisper_fallback_total=None,
     )
     sys.modules["datacreek.analysis.monitoring"] = mon_stub
