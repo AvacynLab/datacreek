@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Sequence
 
 import numpy as np
@@ -16,6 +17,43 @@ except Exception:  # pragma: no cover - faiss optional
     faiss = None  # type: ignore
 
 __all__ = ["rerank_pq", "search_hnsw_pq"]
+
+
+def expected_recall(nprobe: int, n_cells: int, tables: int) -> float:
+    """Return approximate recall with multi-probing.
+
+    Parameters
+    ----------
+    nprobe:
+        Number of coarse centroids probed per table.
+    n_cells:
+        Total number of centroids in the IVF index.
+    tables:
+        Number of product quantisation tables.
+
+    Notes
+    -----
+    The estimate follows
+
+    .. math::
+
+       1 - \left(1 - \frac{n_{\text{probe}}}{N_{\text{cells}}}\right)^{L}
+
+    where ``L`` is ``tables``.
+    """
+
+    if n_cells == 0:
+        return 0.0
+    return 1.0 - (1.0 - nprobe / n_cells) ** tables
+
+
+def choose_nprobe_multi(n_cells: int, tables: int, *, target: float = 0.9) -> int:
+    """Return ``nprobe_multi`` achieving at least ``target`` recall."""
+
+    if n_cells <= 0 or tables <= 0:
+        return 1
+    value = n_cells * (1.0 - (1.0 - target) ** (1.0 / tables))
+    return max(1, int(math.ceil(value)))
 
 
 def rerank_pq(
@@ -73,6 +111,8 @@ def rerank_pq(
         index.add(xb)
         base = max(1, nlist // 4)
         index.nprobe = base * max(1, int(n_subprobe))
+        if not gpu and hasattr(index, "nprobe_multi"):
+            index.nprobe_multi = choose_nprobe_multi(nlist, index.pq.M)
 
     _, rerank = index.search(xq, k)
     return rerank

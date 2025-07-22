@@ -1,6 +1,7 @@
 # Datacreek
 
 ![Complexity](https://img.shields.io/badge/average%20complexity-A-brightgreen)
+[![Coverage Status](https://coveralls.io/repos/github/OWNER/REPO/badge.svg?branch=main)](https://coveralls.io/github/OWNER/REPO?branch=main)
 
 Tool for generating high-quality synthetic datasets to fine-tune LLMs.
 
@@ -305,6 +306,24 @@ attempt. List them via `/datasets/<name>/versions`, fetch a single run with
 `DELETE /datasets/<name>/versions/{n}`. Each version stores the parameters and
 summary information for that generation. Every request must include an
 `X-API-Key` header issued when creating a user via `/users`.
+
+To locate relevant chunks using vector similarity, issue a POST request to
+`/vector/search` with the dataset name and query string:
+
+```bash
+curl -X POST -H "X-API-Key: <token>" -H "Content-Type: application/json" \
+     -d '{"dataset":"demo","query":"graph"}' http://localhost:8000/vector/search
+```
+
+Or from the browser:
+
+```js
+fetch("/vector/search", {
+  method: "POST",
+  headers: {"X-API-Key": "<token>", "Content-Type": "application/json"},
+  body: JSON.stringify({dataset: "demo", query: "graph"})
+}).then(r => r.json())
+```
 Datasets are persisted in Redis and Neo4j only. Use `DatasetBuilder.to_redis` and `save_neo4j` for persistence.
 
 ### Architecture Overview

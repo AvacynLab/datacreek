@@ -1,0 +1,26 @@
+rule_files:
+  - prometheus_rules.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'p95_graphwave_ms'
+        values: '0 260 260 260 260 260 260 260 260 260 260 260'
+    alert_rule_test:
+      - alertname: GraphwaveP95Slow
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations: {}
+  - interval: 1m
+    input_series:
+      - series: 'ingest_queue_fill_ratio'
+        values: '0 0.9 0.9 0.9 0.9 0.9 0.9 0.9 0.9 0.9 0.9 0.9'
+    alert_rule_test:
+      - alertname: IngestQueueHigh
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations: {}

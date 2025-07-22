@@ -1,12 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-try:
-    from pydantic import BaseModel
-except Exception:  # pragma: no cover - optional dependency missing
-
-    class BaseModel:  # lightweight stub for optional dependency
-        pass
+from pydantic import BaseModel
 
 
 @dataclass

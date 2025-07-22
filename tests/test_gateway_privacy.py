@@ -80,8 +80,7 @@ def test_budget_rejects_excess():
     headers = {"X-API-Key": api_key, "X-Tenant": str(user_id), "X-Epsilon": "0.6"}
     res = client.post("/dp/sample", headers=headers)
     assert res.status_code == 403
-    remaining = float(res.headers["X-Epsilon-Remaining"])
-    assert remaining <= 0.4
+    assert res.headers["X-Epsilon-Remaining"] == "0.000000"
 
 
 def test_budget_reset():

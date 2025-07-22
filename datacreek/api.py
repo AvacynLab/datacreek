@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from datacreek.backends import get_neo4j_driver, get_redis_client
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN, DatasetBuilder
-from datacreek.routers.explain_router import router as explain_router
+from datacreek.routers import explain_router, vector_router
 from datacreek.security.dp_middleware import DPBudgetMiddleware
 
 try:  # optional heavy imports
@@ -106,6 +106,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(explain_router)
+app.include_router(vector_router)
 
 
 def get_db():

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
 import networkx as nx
@@ -37,6 +38,7 @@ def choose_stream_block(
     n: int,
     *,
     limit_gb: float = 8.0,
+    order: int | None = None,
     dtype_size: int = 4,
 ) -> int:
     """Return block size so usage fits within ``limit_gb`` VRAM.
@@ -47,9 +49,22 @@ def choose_stream_block(
         Number of nodes in the graph.
     limit_gb:
         Available memory budget in gigabytes.
+    order:
+        Total number of Chebyshev coefficients to compute. When provided,
+        ``block`` is chosen according to
+
+        .. math::
+
+           b = \left\lceil \frac{m}{\lceil V / 5\,\text{GB}\rceil} \right\rceil
+
+        where :math:`m` is ``order`` and :math:`V` is ``limit_gb``.
     dtype_size:
         Size of a single coefficient in bytes.
     """
+
+    if order is not None:
+        denom = max(1, int(math.ceil(limit_gb / 5.0)))
+        return int(max(1, math.ceil(order / denom)))
 
     bytes_limit = int(limit_gb * (1024**3))
     block = max(1, bytes_limit // (2 * n * dtype_size))

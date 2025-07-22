@@ -21,6 +21,7 @@ mon_stub = types.SimpleNamespace(
     whisper_xrt=None,
     _METRICS={"whisper_xrt": None},
     update_metric=_update_metric,
+    whisper_fallback_total=None,
 )
 # Stub datacreek package hierarchy so imports in whisper_batch resolve
 dc_stub = types.ModuleType("datacreek")
@@ -86,7 +87,7 @@ def test_cpu_route(monkeypatch):
     sys.modules.pop("datacreek.analysis.monitoring", None)
     assert result == ["ok"]
     assert vals.get("device") == "cpu"
-    assert vals["xrt"] <= 2
+    assert vals["xrt"] <= 1.5
 
 
 @pytest.mark.gpu

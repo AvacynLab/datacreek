@@ -7,6 +7,12 @@ from pathlib import Path
 
 import numpy as np
 
+try:  # optional dependency
+    import faiss
+except Exception:  # pragma: no cover - faiss may be missing on CI
+    faiss = None  # type: ignore
+
+
 SPEC = importlib.util.spec_from_file_location(
     "hybrid_ann",
     Path(__file__).resolve().parents[1] / "datacreek" / "analysis" / "hybrid_ann.py",
@@ -22,6 +28,8 @@ def run_bench(
     d: int = 256,
     k: int = 100,
     queries: int = 1000,
+    *,
+    threads: int = 32,
 ) -> dict:
     """Benchmark Hybrid ANN recall and latency.
 
@@ -39,6 +47,8 @@ def run_bench(
     """
     rng = np.random.default_rng(0)
     xb = rng.standard_normal((n, d)).astype(np.float32)
+    if faiss is not None:
+        faiss.omp_set_num_threads(threads)
     xq = xb[:queries] + 0.01
 
     gt_dist = np.linalg.norm(xb[None, :] - xq[:, None, :], axis=2)
@@ -65,8 +75,9 @@ def main() -> None:
     parser.add_argument("--d", type=int, default=256)
     parser.add_argument("--queries", type=int, default=1000)
     parser.add_argument("--k", type=int, default=100)
+    parser.add_argument("--threads", type=int, default=32)
     args = parser.parse_args()
-    res = run_bench(args.n, args.d, args.k, args.queries)
+    res = run_bench(args.n, args.d, args.k, args.queries, threads=args.threads)
     with open(args.output, "w") as fh:
         json.dump(res, fh, indent=2)
     print(json.dumps(res, indent=2))

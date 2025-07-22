@@ -37,6 +37,22 @@ def renyi_epsilon(
     return best
 
 
+def compute_epsilon(
+    epsilons: Sequence[float], *, alphas: Iterable[float] | None = None
+) -> float:
+    """Return Renyi epsilon given a sequence of privacy events.
+
+    Parameters
+    ----------
+    epsilons:
+        Sequence of per-request costs ``\varepsilon_i``.
+    alphas:
+        Candidate Renyi orders. Defaults to ``2..32``.
+    """
+
+    return renyi_epsilon(epsilons, alphas=alphas)
+
+
 def allow_request(
     epsilons: Sequence[float],
     epsilon_max: float,

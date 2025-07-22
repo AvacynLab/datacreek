@@ -66,6 +66,23 @@ def test_promtool_check_rules():
     subprocess.run(["promtool", "check", "rules", "configs/alerts.yaml"], check=True)
 
 
+def test_promtool_test_rules():
+    import shutil
+    import subprocess
+
+    if shutil.which("promtool") is None:
+        pytest.skip("promtool not available")
+    subprocess.run(
+        [
+            "promtool",
+            "test",
+            "rules",
+            "ops/prometheus_rules_test.yml",
+        ],
+        check=True,
+    )
+
+
 def test_alertmanager_inhibition():
     with open("configs/alertmanager.yaml") as fh:
         cfg = yaml.safe_load(fh)

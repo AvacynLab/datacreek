@@ -17,7 +17,7 @@ tpl:
   rnn_size: 128    # GraphRNN-Lite subgraph size
   rnn_ckpt_bucket: datacreek-models
   rnn_ckpt_key: graphrnn.pt
-  rnn_ckpt_sha: 6a5085cb9eb06cc6cfb4058a52c57d205c3bd6cc2f8b0501f2cae9d2c7bd3a47
+  rnn_ckpt_sha: sample-sha
 sheaf:
   lam_thresh: 1e-3 # eigenvalue threshold
 spectral:

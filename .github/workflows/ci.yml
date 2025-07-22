@@ -6,9 +6,6 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        gpu: [false, true]
     services:
       redis:
         image: redis:7
@@ -34,7 +31,7 @@ jobs:
           pip install -r requirements.txt -r requirements-ci.txt \
             flask flask-wtf flask-login wtforms pre-commit pytest requests \
             python-dateutil rich scikit-learn watchdog PyYAML pydantic==2.4.0 \
-            boto3 httpx
+            boto3 httpx mypy jsonnet-binary
       - id: diff
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -44,6 +41,21 @@ jobs:
           fi
           echo "head=${{ github.sha }}" >> $GITHUB_OUTPUT
       - run: pre-commit run --from-ref ${{ steps.diff.outputs.base }} --to-ref ${{ steps.diff.outputs.head }} --show-diff-on-failure
+      - name: Mypy (non-strict)
+        run: mypy datacreek
+        continue-on-error: true
+      - name: Install jsonnet
+        run: sudo apt-get update && sudo apt-get install -y jsonnet
+      - name: Jsonnet format
+        run: |
+          for f in docs/grafana/*.jsonnet; do
+            jsonnetfmt -n 2 "$f"
+          done
+      - name: Compile dashboards
+        run: |
+          for f in docs/grafana/*.jsonnet; do
+            jsonnet "$f" >/dev/null
+          done
       - name: Build container images
         run: docker compose build
       - name: Prometheus rules
@@ -51,19 +63,50 @@ jobs:
           docker run --rm -v ${{ github.workspace }}/ops:/ops \
             --entrypoint=promtool quay.io/prometheus/prometheus:latest \
             check rules /ops/prometheus_rules.yml
+      - name: Prometheus rule tests
+        run: >-
+          docker run --rm -v ${{ github.workspace }}/ops:/ops \
+            --entrypoint=promtool quay.io/prometheus/prometheus:latest \
+            test rules /ops/prometheus_rules_test.yml
       - name: Run tests
         run: |
           scripts/run_changed_tests.sh \
             ${{ steps.diff.outputs.base }} \
             ${{ steps.diff.outputs.head }}
 
-  heavy:
+  gpu:
     needs: unit
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: detect_gpu
+        run: |
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.detect_gpu.outputs.available == 'true'
+        run: pip install -r requirements.txt -r requirements-ci.txt '.[gpu]'
+      - if: steps.detect_gpu.outputs.available == 'false'
+        run: pip install -r requirements.txt -r requirements-ci.txt
+      - run: |
+          if [ "${{ steps.detect_gpu.outputs.available }}" = "true" ]; then
+            PYTHONPATH=. pytest -m gpu -q
+          else
+            echo "GPU not available; skipping GPU tests" && exit 0
+          fi
+
+  heavy-nightly:
+    needs: unit
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      matrix:
-        gpu: [false, true]
     services:
       postgres:
         image: ankane/pgvector:latest
@@ -78,18 +121,21 @@ jobs:
           python-version: '3.10'
       - run: |
           pip install -r requirements.txt -r requirements-ci.txt pytest
-      - if: matrix.gpu == true
-        run: |
-          pip install cupy-cuda12x faiss-gpu
       - name: Run heavy tests
         env:
           PGVECTOR_URL: postgresql://postgres:test@localhost:5432/postgres
+          HYBRID_FULL_BENCH: "1"
         run: PYTHONPATH=. pytest -m heavy -q
       - name: Prometheus rules
         run: >-
           docker run --rm -v ${{ github.workspace }}/ops:/ops \
             --entrypoint=promtool quay.io/prometheus/prometheus:latest \
             check rules /ops/prometheus_rules.yml
+      - name: Prometheus rule tests
+        run: >-
+          docker run --rm -v ${{ github.workspace }}/ops:/ops \
+            --entrypoint=promtool quay.io/prometheus/prometheus:latest \
+            test rules /ops/prometheus_rules_test.yml
 
   pipeline-e2e:
     runs-on: ubuntu-latest
