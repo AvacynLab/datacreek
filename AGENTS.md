@@ -120,3 +120,5 @@ Voici la feuille de route ultra-précise pour terminer le « v1.2 hardening »
 - Installed numpy and ran heavy/unit tests successfully; pre-commit still fails due to GitHub auth
 - Installed numpy and docstring checker; heavy tests pass, pre-commit fails needing GitHub credentials.
 - Installed pre-commit; heavy and unit tests pass; pre-commit still requires GitHub auth
+
+- Pre-commit config now only targets Python files; unit checks pass locally.
