@@ -692,6 +692,7 @@ def test_vector_search_endpoint(monkeypatch):
 
     user = type("U", (), {"id": 1})()
     import importlib
+
     vector_router_mod = importlib.import_module("datacreek.routers.vector_router")
 
     monkeypatch.setattr(vector_router_mod, "get_current_user", lambda api_key: user)

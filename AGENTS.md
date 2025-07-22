@@ -227,3 +227,5 @@ Les références pointent vers la doc ou les discussions de référence qui guid
 - Verified repo clean with pre-commit, property tests, and trufflehog scans.
 
 - Ran pre-commit with radon installed; property tests pass after installing missing libs; trufflehog scan clean.
+- Fixed radon hook by using a Python environment and installing radon via pre-commit;
+  added radon to CI requirements and reran hooks successfully.

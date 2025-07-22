@@ -49,5 +49,6 @@ repos:
       - id: radon-cc
         name: radon cyclomatic complexity
         entry: radon cc -s -n C datacreek
-        language: system
+        language: python
+        additional_dependencies: ["radon"]
         pass_filenames: false
