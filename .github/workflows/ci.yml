@@ -47,7 +47,10 @@ jobs:
       - name: Install jsonnet
         run: sudo apt-get update && sudo apt-get install -y jsonnet
       - name: Jsonnet format
-        run: jsonnetfmt -n 2 docs/grafana/*.jsonnet
+        run: |
+          for f in docs/grafana/*.jsonnet; do
+            jsonnetfmt -n 2 "$f"
+          done
       - name: Compile dashboards
         run: |
           for f in docs/grafana/*.jsonnet; do
