@@ -168,3 +168,5 @@ En un mot : votre pipeline ingestion → dataset est déjà performant ;
 - Verified partial test suite after installing dependencies
 - Limited pydocstyle checks to the `schemas` package and installed additional
   dependencies to run the full unit tests.
+- Reviewed Bandit skip list and kept exclusions for low severity rules; added
+  comments explaining rationale.
