@@ -166,3 +166,5 @@ En un mot : votre pipeline ingestion → dataset est déjà performant ;
 - Installed runtime dependencies for test suite and verified all tests pass.
 
 - Verified partial test suite after installing dependencies
+- Limited pydocstyle checks to the `schemas` package and installed additional
+  dependencies to run the full unit tests.

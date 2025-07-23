@@ -22,10 +22,10 @@ repos:
         exclude: ""
       - id: pydocstyle
         name: pydocstyle
-        entry: pydocstyle --add-ignore=D100,D101,D102,D103,D202,D301,D412
+        entry: pydocstyle
         language: python
         additional_dependencies: ["pydocstyle==6.3.0"]
-        files: "^$"
+        files: "^schemas/"
       - id: docstring-quality
         name: docstring-quality
         entry: python scripts/docstring_quality.py
