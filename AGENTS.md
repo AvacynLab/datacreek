@@ -173,3 +173,5 @@ En un mot : votre pipeline ingestion → dataset est déjà performant ;
 - Made configuration-dependent imports optional and added dependency skip logic
   in tests so the suite runs without external packages.
 - Formatted monitoring and utils modules with Black to satisfy pre-commit.
+
+- Re-ran pre-commit on monitoring and utils modules; tests pass.
