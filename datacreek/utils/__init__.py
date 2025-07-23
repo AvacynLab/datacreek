@@ -14,12 +14,21 @@ except Exception:  # pragma: no cover - fallback when dependencies missing
 from .chunking import chunk_by_sentences, chunk_by_tokens
 
 try:  # optional dependency on pydantic/yaml for configuration helpers
-    from .config import (get_curate_config, get_curate_settings,
-                         get_format_config, get_format_settings,
-                         get_generation_config, get_llm_settings,
-                         get_openai_config, get_openai_settings, get_prompt,
-                         get_vllm_config, get_vllm_settings, load_config,
-                         merge_configs)
+    from .config import (
+        get_curate_config,
+        get_curate_settings,
+        get_format_config,
+        get_format_settings,
+        get_generation_config,
+        get_llm_settings,
+        get_openai_config,
+        get_openai_settings,
+        get_prompt,
+        get_vllm_config,
+        get_vllm_settings,
+        load_config,
+        merge_configs,
+    )
 except Exception:  # pragma: no cover - fallback when heavy deps missing
 
     def _missing(*_a, **_k):
@@ -29,11 +38,10 @@ except Exception:  # pragma: no cover - fallback when heavy deps missing
         get_format_settings
     ) = get_generation_config = get_llm_settings = get_openai_config = (
         get_openai_settings
-    ) = get_prompt = (
-        get_vllm_config
-    ) = get_vllm_settings = load_config = merge_configs = _missing  # type: ignore
-from .crypto import (decrypt_pii_fields, encrypt_pii_fields, xor_decrypt,
-                     xor_encrypt)
+    ) = get_prompt = get_vllm_config = get_vllm_settings = load_config = (
+        merge_configs
+    ) = _missing  # type: ignore
+from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
 from .delta_export import export_delta, lakefs_commit
 from .gitinfo import get_commit_hash
@@ -41,12 +49,15 @@ from .kafka_queue import enqueue_ingest
 from .rate_limit import consume_token
 
 try:  # optional dependency on networkx
-    from .graph_text import (graph_to_text, neighborhood_to_sentence,
-                             subgraph_to_text)
+    from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
 except Exception:  # pragma: no cover - lightweight fallback when networkx missing
     graph_to_text = neighborhood_to_sentence = subgraph_to_text = None  # type: ignore[assignment]
-from .llm_processing import (convert_to_conversation_format, parse_qa_pairs,
-                             parse_ratings, qa_pairs_to_records)
+from .llm_processing import (
+    convert_to_conversation_format,
+    parse_qa_pairs,
+    parse_ratings,
+    qa_pairs_to_records,
+)
 from .metrics import push_metrics
 
 try:  # optional dependency on rich
@@ -63,8 +74,7 @@ except Exception:  # pragma: no cover - fallback when rich is missing
 
 from .redis_helpers import decode_hash
 from .redis_pid import get_current_ttl, start_pid_controller
-from .text import (clean_text, extract_json_from_text, normalize_units,
-                   split_into_chunks)
+from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
 from .toolformer import execute_tool_calls, insert_tool_calls
 
 

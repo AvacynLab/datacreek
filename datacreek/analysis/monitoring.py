@@ -5,8 +5,14 @@ from __future__ import annotations
 from typing import Dict
 
 try:
-    from prometheus_client import (REGISTRY, CollectorRegistry, Counter, Gauge,
-                                   push_to_gateway, start_http_server)
+    from prometheus_client import (
+        REGISTRY,
+        CollectorRegistry,
+        Counter,
+        Gauge,
+        push_to_gateway,
+        start_http_server,
+    )
 except Exception:  # pragma: no cover - optional
     CollectorRegistry = None
     Gauge = None

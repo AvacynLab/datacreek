@@ -172,3 +172,4 @@ En un mot : votre pipeline ingestion → dataset est déjà performant ;
   comments explaining rationale.
 - Made configuration-dependent imports optional and added dependency skip logic
   in tests so the suite runs without external packages.
+- Formatted monitoring and utils modules with Black to satisfy pre-commit.
