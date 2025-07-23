@@ -19,11 +19,18 @@ try:  # optional dependency
 except Exception:  # pragma: no cover - optional
     aioredis = None  # type: ignore
 
-from .config import load_config
+try:
+    from .config import load_config
+except Exception:  # pragma: no cover - optional dependency missing
+    load_config = None  # type: ignore
 
-cfg = load_config()
-cache_cfg = cfg.get("cache", {})
-pid_cfg = cfg.get("pid", {})
+if load_config is not None:
+    cfg = load_config()
+    cache_cfg = cfg.get("cache", {})
+    pid_cfg = cfg.get("pid", {})
+else:  # basic defaults for tests when config unavailable
+    cache_cfg = {}
+    pid_cfg = {}
 
 # Controller parameters (fallback to legacy cache keys)
 TARGET_HIT = float(pid_cfg.get("target_hit_ratio", cache_cfg.get("pid_target", 0.45)))

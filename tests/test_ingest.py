@@ -2,6 +2,8 @@ import sys
 import types
 
 import pytest
+
+pytest.importorskip("PIL")
 from PIL import Image
 
 sys.modules.setdefault("torch", types.ModuleType("torch"))

@@ -170,3 +170,5 @@ En un mot : votre pipeline ingestion → dataset est déjà performant ;
   dependencies to run the full unit tests.
 - Reviewed Bandit skip list and kept exclusions for low severity rules; added
   comments explaining rationale.
+- Made configuration-dependent imports optional and added dependency skip logic
+  in tests so the suite runs without external packages.

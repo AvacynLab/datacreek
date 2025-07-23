@@ -1,3 +1,6 @@
+import pytest
+
+pytest.importorskip("PIL")
 from PIL import Image
 
 from datacreek.utils.image_dedup import FILTER, check_duplicate

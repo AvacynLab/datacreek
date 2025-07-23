@@ -5,14 +5,8 @@ from __future__ import annotations
 from typing import Dict
 
 try:
-    from prometheus_client import (
-        REGISTRY,
-        CollectorRegistry,
-        Counter,
-        Gauge,
-        push_to_gateway,
-        start_http_server,
-    )
+    from prometheus_client import (REGISTRY, CollectorRegistry, Counter, Gauge,
+                                   push_to_gateway, start_http_server)
 except Exception:  # pragma: no cover - optional
     CollectorRegistry = None
     Gauge = None
@@ -267,7 +261,11 @@ def update_metric(
             pass
 
 
-from ..utils.config import load_config
+try:
+    from ..utils.config import load_config
+except Exception:  # pragma: no cover - optional config deps missing
+    load_config = None  # type: ignore
 
-cfg = load_config()
-start_metrics_server(int(cfg.get("monitor", {}).get("port", 8000)))
+if load_config is not None:
+    cfg = load_config()
+    start_metrics_server(int(cfg.get("monitor", {}).get("port", 8000)))

@@ -7,6 +7,10 @@ import time
 import types
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("networkx")
+pytest.importorskip("numpy")
 import networkx as nx
 import numpy as np
 import pytest
