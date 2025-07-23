@@ -3,7 +3,12 @@ import logging
 import pickle
 import time
 
+import pytest
+
+pytest.importorskip("lmdb")
 import lmdb
+
+pytest.importorskip("networkx")
 
 from datacreek.analysis import mapper
 from datacreek.utils.evict_log import clear_eviction_logs, evict_logs, log_eviction
@@ -32,9 +37,9 @@ def test_eviction_metrics(monkeypatch):
     gauge_values = []
 
     class DummyCounter:
-        def labels(self, *, cause):
+        def labels(self, *, cause, type):  # type: ignore[override]
             def inc():
-                counter_calls.append(cause)
+                counter_calls.append((cause, type))
 
             return type("L", (), {"inc": inc})
 
@@ -56,8 +61,8 @@ def test_eviction_metrics(monkeypatch):
         raising=False,
     )
     clear_eviction_logs()
-    log_eviction("k1", 42.0, "quota")
-    assert counter_calls == ["quota"]
+    log_eviction("img:k1", 42.0, "quota")
+    assert counter_calls == [("quota", "img")]
     assert gauge_values == [("quota", 42.0)]
 
 

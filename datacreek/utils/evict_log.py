@@ -28,8 +28,18 @@ evict_logs: Deque[EvictLog] = deque(maxlen=max_len)
 logger = logging.getLogger("datacreek.eviction")
 
 
+def _key_type(key: str) -> str:
+    """Return type inferred from an LMDB key."""
+
+    if ":" in key:
+        prefix = key.split(":", 1)[0]
+        if prefix in {"img", "pdf", "audio"}:
+            return prefix
+    return "raw"
+
+
 def log_eviction(key: str, ts: float, cause: Literal["ttl", "quota", "manual"]) -> None:
-    """Append an eviction record to the global log."""
+    """Append an eviction record to the global log and metrics."""
 
     evict_logs.append(EvictLog(key, ts, cause))
     logger.info(
@@ -38,8 +48,9 @@ def log_eviction(key: str, ts: float, cause: Literal["ttl", "quota", "manual"]) 
     try:
         from ..analysis.monitoring import lmdb_eviction_last_ts, lmdb_evictions_total
 
+        key_t = _key_type(key)
         if lmdb_evictions_total is not None:
-            lmdb_evictions_total.labels(cause=cause).inc()
+            lmdb_evictions_total.labels(cause=cause, type=key_t).inc()
         if lmdb_eviction_last_ts is not None:
             lmdb_eviction_last_ts.labels(cause=cause).set(ts)
     except Exception:  # pragma: no cover - optional metrics

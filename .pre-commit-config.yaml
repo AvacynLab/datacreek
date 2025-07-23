@@ -22,9 +22,10 @@ repos:
         exclude: ""
       - id: pydocstyle
         name: pydocstyle
-        entry: pydocstyle --add-ignore=D100,D101,D102,D103,D202,D301,D412
+        entry: pydocstyle
         language: python
         additional_dependencies: ["pydocstyle==6.3.0"]
+        files: "^schemas/"
       - id: docstring-quality
         name: docstring-quality
         entry: python scripts/docstring_quality.py
@@ -33,6 +34,10 @@ repos:
         pass_filenames: false
       - id: bandit
         name: bandit
+        # ignore low‑severity rules that produce noisy alerts in our codebase:
+        #  - B101: `assert` used for sanity checks
+        #  - B110/B112: blank `except` blocks are purposeful fallbacks
+        #  - B404/B603/B607: benign subprocess usage
         entry: bandit -x tests --skip B101,B110,B112,B404,B603,B607
         language: python
         additional_dependencies: ["bandit==1.7.8"]

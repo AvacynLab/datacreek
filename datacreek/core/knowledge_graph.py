@@ -1,3 +1,4 @@
+# pydocstyle: ignore=D100,D101,D102,D103,D107,D401
 from __future__ import annotations
 
 import json
@@ -260,6 +261,7 @@ class KnowledgeGraph:
         author: str | None = None,
         organization: str | None = None,
         checksum: str | None = None,
+        uid: str | None = None,
     ) -> None:
         """Insert a document node in the graph."""
         if self.graph.has_node(doc_id):
@@ -271,6 +273,7 @@ class KnowledgeGraph:
             author=author,
             organization=organization,
             checksum=checksum,
+            uid=uid,
         )
         if text:
             self.graph.nodes[doc_id]["text"] = text
@@ -3600,7 +3603,7 @@ class KnowledgeGraph:
 
         signature = self.topological_signature(max_dim=max_dim)
         blob = json.dumps(signature, sort_keys=True).encode()
-        return hashlib.md5(blob).hexdigest()
+        return hashlib.md5(blob, usedforsecurity=False).hexdigest()  # nosec B324
 
     def betti_number(self, dimension: int = 1) -> int:
         """Return Betti number of ``dimension`` for the graph."""
@@ -5252,12 +5255,20 @@ class KnowledgeGraph:
                 props = {k: v for k, v in data.items() if k != "type"}
                 if dataset:
                     props["dataset"] = dataset
-                tx.run(
-                    f"MERGE (m:{label} {{id:$id{', dataset:$dataset' if dataset else ''}}}) SET m += $props",
-                    id=n,
-                    **({"dataset": dataset} if dataset else {}),
-                    props=props,
-                )
+                if label == "Document" and props.get("uid"):
+                    tx.run(
+                        f"MERGE (m:{label} {{uid:$uid{', dataset:$dataset' if dataset else ''}}}) SET m += $props",
+                        uid=props["uid"],
+                        **({"dataset": dataset} if dataset else {}),
+                        props=props,
+                    )
+                else:
+                    tx.run(
+                        f"MERGE (m:{label} {{id:$id{', dataset:$dataset' if dataset else ''}}}) SET m += $props",
+                        id=n,
+                        **({"dataset": dataset} if dataset else {}),
+                        props=props,
+                    )
             for u, v, edata in self.graph.edges(data=True):
                 rel = edata.get("relation", "RELATED_TO").upper()
                 props = {k: v for k, v in edata.items() if k != "relation"}

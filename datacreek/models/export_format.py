@@ -8,3 +8,4 @@ class ExportFormat(str, Enum):
     ALPACA = "alpaca"
     FT = "ft"
     CHATML = "chatml"
+    DELTA = "delta"

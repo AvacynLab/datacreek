@@ -42,3 +42,12 @@ groups:
         for: 10m
         labels:
           severity: critical
+      - alert: IngestLatencyP999High
+        expr: ingest_latency_p999 > 5
+        for: 15m
+        labels:
+          severity: critical
+      - record: ingest_latency_burn_rate_1h
+        expr: avg_over_time(ingest_latency_p999[1h]) / 5
+      - record: ingest_latency_burn_rate_6h
+        expr: avg_over_time(ingest_latency_p999[6h]) / 5

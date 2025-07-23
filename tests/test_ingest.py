@@ -3,6 +3,11 @@ import types
 
 import pytest
 
+pytest.importorskip("PIL")
+from PIL import Image
+
+sys.modules.setdefault("torch", types.ModuleType("torch"))
+
 import datacreek.analysis.monitoring
 import datacreek.parsers
 from datacreek import DatasetBuilder, DatasetType, ingest_file, to_kg
@@ -105,6 +110,51 @@ def test_to_kg_with_elements(tmp_path, monkeypatch):
     )
     chunk_id = ds.get_chunks_for_document("doc1")[0]
     assert ds.graph.graph.nodes[chunk_id].get("modality") == detect_modality("Hello")
+
+
+def test_image_deduplication(monkeypatch, tmp_path):
+    class El:
+        def __init__(self, image_path=None, page_number=1):
+            self.image_path = image_path
+            self.metadata = types.SimpleNamespace(
+                page_number=page_number, image_path=image_path
+            )
+
+    img1 = tmp_path / "img1.png"
+    img2 = tmp_path / "img2.png"
+    Image.new("RGB", (8, 8), color="red").save(img1)
+    Image.new("RGB", (8, 8), color="red").save(img2)
+
+    elements = [El(image_path=str(img1)), El(image_path=str(img2))]
+
+    ds = DatasetBuilder(DatasetType.TEXT)
+    ds._enforce_policy = lambda *a, **k: None
+    called = {"n": 0}
+
+    def fake_caption(paths, **kw):
+        called["n"] += len(paths)
+        return [f"cap-{p}" for p in paths]
+
+    with monkeypatch.context() as m:
+        m.setitem(
+            sys.modules,
+            "datacreek.utils.image_captioning",
+            types.SimpleNamespace(caption_images_parallel=fake_caption),
+        )
+        from datacreek.utils import image_dedup
+
+        image_dedup.FILTER[:] = b"\x00" * len(image_dedup.FILTER)
+        to_kg("img", ds, "docx", elements=elements)
+
+    imgs = ds.get_images_for_document("docx")
+    assert len(imgs) == 2
+    for img in imgs:
+        node = ds.graph.graph.nodes[img]
+        if node["path"] == str(img1):
+            assert node.get("alt_text") == f"cap-{img1}"
+        else:
+            assert node.get("alt_text") is None
+    assert called["n"] == 1
 
 
 def test_ingest_audio(tmp_path, monkeypatch):

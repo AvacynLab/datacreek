@@ -2,29 +2,51 @@
 
 from contextlib import contextmanager
 
+from .audio_vad import split_on_silence
 from .backpressure import acquire_slot as acquire_ingest_slot
 from .backpressure import has_capacity as ingest_has_capacity
 from .backpressure import release_slot as release_ingest_slot
-from .cache import cache_l1
+
+try:  # optional dependency on redis and pydantic
+    from .cache import cache_l1
+except Exception:  # pragma: no cover - fallback when dependencies missing
+    cache_l1 = None  # type: ignore
 from .chunking import chunk_by_sentences, chunk_by_tokens
-from .config import (
-    get_curate_config,
-    get_curate_settings,
-    get_format_config,
-    get_format_settings,
-    get_generation_config,
-    get_llm_settings,
-    get_openai_config,
-    get_openai_settings,
-    get_prompt,
-    get_vllm_config,
-    get_vllm_settings,
-    load_config,
-    merge_configs,
-)
+
+try:  # optional dependency on pydantic/yaml for configuration helpers
+    from .config import (
+        get_curate_config,
+        get_curate_settings,
+        get_format_config,
+        get_format_settings,
+        get_generation_config,
+        get_llm_settings,
+        get_openai_config,
+        get_openai_settings,
+        get_prompt,
+        get_vllm_config,
+        get_vllm_settings,
+        load_config,
+        merge_configs,
+    )
+except Exception:  # pragma: no cover - fallback when heavy deps missing
+
+    def _missing(*_a, **_k):
+        raise RuntimeError("configuration utilities require pydantic and yaml")
+
+    get_curate_config = get_curate_settings = get_format_config = (
+        get_format_settings
+    ) = get_generation_config = get_llm_settings = get_openai_config = (
+        get_openai_settings
+    ) = get_prompt = get_vllm_config = get_vllm_settings = load_config = (
+        merge_configs
+    ) = _missing  # type: ignore
 from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
+from .delta_export import export_delta, lakefs_commit
 from .gitinfo import get_commit_hash
+from .kafka_queue import enqueue_ingest
+from .rate_limit import consume_token
 
 try:  # optional dependency on networkx
     from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
@@ -102,6 +124,7 @@ __all__ = [
     "split_into_chunks",
     "chunk_by_tokens",
     "chunk_by_sentences",
+    "split_on_silence",
     "extract_json_from_text",
     "clean_text",
     "normalize_units",
@@ -132,6 +155,8 @@ __all__ = [
     "acquire_ingest_slot",
     "release_ingest_slot",
     "ingest_has_capacity",
+    "consume_token",
+    "enqueue_ingest",
     "propose_merge_split",
     "record_feedback",
     "fine_tune_from_feedback",

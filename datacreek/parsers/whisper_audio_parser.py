@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
-import torch
+try:  # optional dependency used for CPU int8 inference
+    import torch
+except Exception:  # pragma: no cover - dependency missing
+    torch = None  # type: ignore[misc]
 
 from .base import BaseParser
 
@@ -13,7 +16,10 @@ try:  # optional quantised matmul
 except Exception:  # pragma: no cover - dependency missing
     _matmul = None
 
-matmul_8bit: Optional[Callable[..., torch.Tensor]] = _matmul
+if TYPE_CHECKING:  # pragma: no cover - used only for type hints
+    import torch as _torch
+
+matmul_8bit: Optional[Callable[..., "_torch.Tensor"]] = _matmul
 
 
 class WhisperAudioParser(BaseParser):  # type: ignore[misc]
@@ -40,7 +46,11 @@ class WhisperAudioParser(BaseParser):  # type: ignore[misc]
             ) from exc
 
         model = whisper.load_model("base")
-        use_int8 = matmul_8bit is not None and not torch.cuda.is_available()
+        use_int8 = (
+            matmul_8bit is not None
+            and torch is not None
+            and not torch.cuda.is_available()
+        )
         if use_int8:
             orig_matmul = torch.matmul
             torch.matmul = matmul_8bit

@@ -24,3 +24,15 @@ tests:
           - exp_labels:
               severity: critical
             exp_annotations: {}
+  - interval: 1m
+    input_series:
+      - series: 'ingest_latency_p999'
+        # start high latency at 1m so the 15m window elapses by 16m
+        values: '0 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6 6'
+    alert_rule_test:
+      - alertname: IngestLatencyP999High
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations: {}
