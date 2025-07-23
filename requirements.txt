@@ -54,3 +54,4 @@ docstring-checker>=1.2
 interrogate>=1.7
 imagehash>=4.3.0
 kafka-python>=2.0.2
+pillow>=11.0.0
