@@ -56,6 +56,20 @@ def test_jitter_alert_rule():
     assert ingest_high["for"] == "10m"
     assert ingest_high["labels"]["severity"] == "critical"
 
+    latency = rules.get("IngestLatencyP999High")
+    assert latency is not None
+    assert latency["expr"] == "ingest_latency_p999 > 5"
+    assert latency["for"] == "15m"
+    assert latency["labels"]["severity"] == "critical"
+
+    burn1 = rules.get("ingest_latency_burn_rate_1h")
+    assert burn1 is not None
+    assert burn1["expr"] == "avg_over_time(ingest_latency_p999[1h]) / 5"
+
+    burn6 = rules.get("ingest_latency_burn_rate_6h")
+    assert burn6 is not None
+    assert burn6["expr"] == "avg_over_time(ingest_latency_p999[6h]) / 5"
+
 
 def test_promtool_check_rules():
     import shutil

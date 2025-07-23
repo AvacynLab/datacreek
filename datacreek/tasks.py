@@ -15,11 +15,42 @@ try:  # optional dependency
     from celery import Celery
 except Exception:  # pragma: no cover - optional dependency missing
 
+    class _AsyncResult:
+        """Simple stand-in for :class:`celery.result.AsyncResult`."""
+
+        def __init__(self, result):
+            self._result = result
+
+        def get(self, timeout: float | None = None):
+            return self._result
+
     class Celery:  # type: ignore[misc]
+        """Very small stub of :class:`Celery` used when the dependency is missing."""
+
         def __init__(self, *a, **k):
-            raise RuntimeError("Celery is not installed")
+            """Create a minimal Celery substitute."""
+
+            from types import SimpleNamespace
+
+            self.conf = SimpleNamespace()
+
+        def task(self, fn=None, **opts):
+            def decorator(func):
+                def delay(*args, **kwargs):  # type: ignore[misc]
+                    return _AsyncResult(func(*args, **kwargs))
+
+                func.delay = delay
+                return func
+
+            return decorator(fn) if fn else decorator
 
 
+from pydantic import ValidationError
+
+from datacreek.analysis.monitoring import (
+    ingest_rate_limited_total,
+    ingest_validation_fail_total,
+)
 from datacreek.backends import (
     get_neo4j_driver,
     get_redis_client,
@@ -41,11 +72,13 @@ from datacreek.models.task_status import TaskStatus
 from datacreek.pipelines import GenerationOptionsModel
 from datacreek.schemas import DatasetName
 from datacreek.services import create_dataset, create_source
-from datacreek.utils import backpressure
+from datacreek.utils import backpressure, consume_token, export_delta
 from datacreek.utils import extract_entities as extract_entities_func
 from datacreek.utils import extract_facts as extract_facts_func
+from datacreek.utils import lakefs_commit
 from datacreek.utils.config import load_config_with_overrides
 from datacreek.utils.neo4j_breaker import CircuitBreakerError, neo4j_breaker
+from schemas import AudioIngest, BaseIngest, ImageIngest, PdfIngest
 
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_BACKEND_URL = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
@@ -247,6 +280,12 @@ def dataset_ingest_task(
     ):
         raise RuntimeError("ingest queue full")
     client = get_redis_client()
+    tenant_id = str(user_id) if user_id is not None else "public"
+    if not consume_token(tenant_id, client=client):
+        if ingest_rate_limited_total is not None:
+            ingest_rate_limited_total.inc()
+        backpressure.release_slot()
+        raise RuntimeError("rate limit exceeded")
     driver = get_neo4j_driver()
     storage = get_s3_storage()
     ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
@@ -257,6 +296,22 @@ def dataset_ingest_task(
     opt_args = {k: kwargs.pop(k) for k in list(kwargs) if k in opt_fields}
     options = IngestOptionsModel(**opt_args).to_options() if opt_args else None
     async_mode = kwargs.pop("async_mode", False)
+
+    # Validate payload according to resource type
+    ext = Path(path).suffix.lower()
+    try:
+        if ext in {".jpg", ".jpeg", ".png", ".gif"}:
+            ImageIngest(path=path, **opt_args)
+        elif ext in {".wav", ".mp3", ".flac"}:
+            AudioIngest(path=path, **opt_args)
+        elif ext == ".pdf":
+            PdfIngest(path=path, **opt_args)
+        else:
+            BaseIngest(path=path)
+    except ValidationError:
+        if ingest_validation_fail_total is not None:
+            ingest_validation_fail_total.inc()
+        raise
     key = f"dataset:{name}:progress"
     start_ts = datetime.now(timezone.utc).isoformat()
     client.hset(key, "ingest_start", start_ts)
@@ -311,6 +366,19 @@ def dataset_ingest_task(
         backpressure.release_slot()
         if driver:
             driver.close()
+
+
+def enqueue_dataset_ingest(
+    name: DatasetName, path: str, user_id: int | None = None, **kwargs
+) -> object:
+    """Enqueue ingestion in Kafka if configured, else run via Celery."""
+
+    if os.getenv("KAFKA_BOOTSTRAP_SERVERS"):
+        from datacreek.utils.kafka_queue import enqueue_ingest
+
+        return enqueue_ingest(name, path, user_id=user_id, **kwargs)
+
+    return dataset_ingest_task.apply_async(args=[name, path, user_id], kwargs=kwargs)
 
 
 @celery_app.task
@@ -437,15 +505,35 @@ def dataset_export_task(
     try:
         if ds.versions and ds.versions[-1].get("result") is not None:
             data = ds.versions[-1]["result"]
-            formatted = convert_format(data, fmt.value, {}, "json")
-            _update_status(client, progress_key, TaskStatus.EXPORTING, 0.5)
-            key = f"dataset:{name}:export:{fmt.value}"
-            payload = formatted if isinstance(formatted, str) else json.dumps(formatted)
+            if fmt is ExportFormat.DELTA:
+                root_dir = os.getenv("DELTA_EXPORT_ROOT", "delta_exports")
+                path = export_delta(
+                    data,
+                    root=root_dir,
+                    org_id=ds.owner_id or "anon",
+                    kind=ds.dataset_type.value,
+                )
+                repo = os.getenv("LAKEFS_REPO")
+                if repo:
+                    lakefs_commit(path, repo)
+                _update_status(client, progress_key, TaskStatus.EXPORTING, 0.5)
+                key = str(path)
+                payload = ""
+            else:
+                formatted = convert_format(data, fmt.value, {}, "json")
+                _update_status(client, progress_key, TaskStatus.EXPORTING, 0.5)
+                key = f"dataset:{name}:export:{fmt.value}"
+                payload = (
+                    formatted if isinstance(formatted, str) else json.dumps(formatted)
+                )
         else:
             key = f"dataset:{name}:export:json"
             payload = json.dumps(ds.to_dict())
-        client.set(key, payload)
-        s3_key = storage.save(key, payload) if storage else None
+        if payload:
+            client.set(key, payload)
+            s3_key = storage.save(key, payload) if storage else None
+        else:
+            s3_key = None
 
         ds.mark_exported()
         ts = datetime.now(timezone.utc).isoformat()

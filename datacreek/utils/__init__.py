@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 
+from .audio_vad import split_on_silence
 from .backpressure import acquire_slot as acquire_ingest_slot
 from .backpressure import has_capacity as ingest_has_capacity
 from .backpressure import release_slot as release_ingest_slot
@@ -24,7 +25,10 @@ from .config import (
 )
 from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
+from .delta_export import export_delta, lakefs_commit
 from .gitinfo import get_commit_hash
+from .kafka_queue import enqueue_ingest
+from .rate_limit import consume_token
 
 try:  # optional dependency on networkx
     from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
@@ -102,6 +106,7 @@ __all__ = [
     "split_into_chunks",
     "chunk_by_tokens",
     "chunk_by_sentences",
+    "split_on_silence",
     "extract_json_from_text",
     "clean_text",
     "normalize_units",
@@ -132,6 +137,8 @@ __all__ = [
     "acquire_ingest_slot",
     "release_ingest_slot",
     "ingest_has_capacity",
+    "consume_token",
+    "enqueue_ingest",
     "propose_merge_split",
     "record_feedback",
     "fine_tune_from_feedback",

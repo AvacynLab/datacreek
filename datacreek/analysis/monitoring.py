@@ -47,6 +47,11 @@ if Gauge is not None:
         "FractalNet pruning rollbacks",
     )
     redis_hit_ratio = _metric(Gauge, "redis_hit_ratio", "Redis L1 hit ratio")
+    redis_hit_ratio_stdev = _metric(
+        Gauge,
+        "redis_hit_ratio_stdev",
+        "Std dev of Redis hit ratio",
+    )
     eigsh_timeouts_total = _metric(
         Counter,
         "eigsh_timeouts_total",
@@ -66,8 +71,8 @@ if Gauge is not None:
     lmdb_evictions_total = _metric(
         Counter,
         "lmdb_evictions_total",
-        "LMDB evictions by cause",
-        labelnames=["cause"],
+        "LMDB evictions by cause and type",
+        labelnames=["cause", "type"],
     )
     lmdb_eviction_last_ts = _metric(
         Gauge,
@@ -90,6 +95,26 @@ if Gauge is not None:
         Counter,
         "whisper_fallback_total",
         "Whisper GPU fallbacks to CPU",
+    )
+    blip_called_total = _metric(
+        Counter,
+        "blip_called_total",
+        "Images captioned with BLIP",
+    )
+    blip_skipped_total = _metric(
+        Counter,
+        "blip_skipped_total",
+        "Images skipped due to phash deduplication",
+    )
+    ingest_validation_fail_total = _metric(
+        Counter,
+        "ingest_validation_fail_total",
+        "Invalid ingest payloads rejected",
+    )
+    ingest_rate_limited_total = _metric(
+        Counter,
+        "ingest_rate_limited_total",
+        "Ingest requests rejected due to rate limiting",
     )
     ingest_queue_fill_ratio = _metric(
         Gauge,
@@ -117,6 +142,7 @@ else:  # pragma: no cover - optional dependency missing
     gp_jitter_restarts_total = None  # type: ignore
     prune_reverts_total = None  # type: ignore
     redis_hit_ratio = None  # type: ignore
+    redis_hit_ratio_stdev = None  # type: ignore
     eigsh_timeouts_total = None  # type: ignore
     eigsh_last_duration = None  # type: ignore
     redis_evictions_l2_total = None  # type: ignore
@@ -126,6 +152,10 @@ else:  # pragma: no cover - optional dependency missing
     ann_backend = None  # type: ignore
     whisper_xrt = None  # type: ignore
     whisper_fallback_total = None  # type: ignore
+    blip_called_total = None  # type: ignore
+    blip_skipped_total = None  # type: ignore
+    ingest_validation_fail_total = None  # type: ignore
+    ingest_rate_limited_total = None  # type: ignore
     ingest_queue_fill_ratio = None  # type: ignore
     breaker_state = None  # type: ignore
     pgvector_query_ms = None  # type: ignore
@@ -145,6 +175,7 @@ _METRICS = {
     "gp_jitter_restarts_total": gp_jitter_restarts_total,
     "prune_reverts_total": prune_reverts_total,
     "redis_hit_ratio": redis_hit_ratio,
+    "redis_hit_ratio_stdev": redis_hit_ratio_stdev,
     "eigsh_timeouts_total": eigsh_timeouts_total,
     "eigsh_last_duration": eigsh_last_duration,
     "redis_evictions_l2_total": redis_evictions_l2_total,
@@ -152,6 +183,10 @@ _METRICS = {
     "lang_mismatch_total": lang_mismatch_total,
     "whisper_xrt": whisper_xrt,
     "whisper_fallback_total": whisper_fallback_total,
+    "blip_called_total": blip_called_total,
+    "blip_skipped_total": blip_skipped_total,
+    "ingest_validation_fail_total": ingest_validation_fail_total,
+    "ingest_rate_limited_total": ingest_rate_limited_total,
     "ingest_queue_fill_ratio": ingest_queue_fill_ratio,
     "breaker_state": breaker_state,
     "pgvector_query_ms": pgvector_query_ms,

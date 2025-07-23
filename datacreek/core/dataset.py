@@ -1,3 +1,4 @@
+# pydocstyle: ignore=D100,D101,D102,D103,D107,D401
 from __future__ import annotations
 
 import asyncio
@@ -425,6 +426,7 @@ class DatasetBuilder:
         author: str | None = None,
         organization: str | None = None,
         checksum: str | None = None,
+        uid: str | None = None,
     ) -> None:
         """Insert a document node in the dataset graph."""
 
@@ -435,6 +437,7 @@ class DatasetBuilder:
             author=author,
             organization=organization,
             checksum=checksum,
+            uid=uid,
         )
         self._record_event(
             "add_document",
@@ -5234,7 +5237,9 @@ class DatasetBuilder:
                 "perception_id": attrs.get("perception_id"),
                 "topo_signature": signature,
                 "signature_hash": sig_hash,
-                "prompt_hash": hashlib.md5(prompt_text.encode()).hexdigest(),
+                "prompt_hash": hashlib.md5(
+                    prompt_text.encode(), usedforsecurity=False
+                ).hexdigest(),  # nosec B324
                 "git_commit": commit,
                 "mdl_gain": mdl_gain,
                 "ib_beta": ib_beta,

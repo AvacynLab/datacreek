@@ -84,24 +84,27 @@ def test_export_embeddings_latency():
     kg = DummyKG()
     kg.graph.add_node("a", embedding=[0.1, 0.2], poincare_embedding=[0.3, 0.4])
     kg.graph.add_node("b", embedding=[0.5, 0.6], poincare_embedding=[0.7, 0.8])
+    kg.graph.graph["faiss_meta"] = {"embedding_version": "1.0"}
     conn = DummyConn()
 
     start = time.perf_counter()
-    rows = pgvector_export.export_embeddings_pg(kg, conn, table="emb", lists=10)
+    rows = pgvector_export.export_embeddings_pg(
+        kg, conn, table="emb", lists=10, embedding_version="1.0"
+    )
     duration = time.perf_counter() - start
 
     assert rows == 4
     assert conn.committed
     assert duration < 0.03
-    assert any("COPY emb" in cp.sql for cp in conn.cur.copies)
+    assert any("embedding_version" in cp.sql for cp in conn.cur.copies)
     assert any("ivfflat" in sql for sql, _ in conn.cur.calls)
 
 
 def test_query_topk_sql():
     conn = DummyConn()
     vec = [0.1, 0.2]
-    pgvector_export.query_topk_pg(conn, table="emb", vec=vec, k=3)
-    assert any("SELECT node_id, space FROM emb" in sql for sql, _ in conn.cur.calls)
+    pgvector_export.query_topk_pg(conn, table="emb", vec=vec, k=3, version="1.0")
+    assert any("embedding_version" in sql for sql, _ in conn.cur.calls)
 
 
 def test_pgvector_query_metric(monkeypatch):
@@ -114,7 +117,7 @@ def test_pgvector_query_metric(monkeypatch):
     fake_mod = types.SimpleNamespace(update_metric=fake_update)
     monkeypatch.setitem(sys.modules, "datacreek.analysis.monitoring", fake_mod)
     vec = [0.1, 0.2]
-    pgvector_export.query_topk_pg(conn, table="emb", vec=vec, k=2)
+    pgvector_export.query_topk_pg(conn, table="emb", vec=vec, k=2, version="1.0")
     assert "pgvector_query_ms" in recorded
     assert recorded["pgvector_query_ms"] >= 0
 
@@ -171,9 +174,14 @@ def test_pgvector_latency_recall(tmp_path):
     with psycopg.connect(dsn) as conn:
         conn.execute("DROP TABLE IF EXISTS emb")
         # store vectors in dedicated table for latency benchmark
-        pgvector_export.export_embeddings_pg(kg, conn, table="emb", lists=100)
+        pgvector_export.export_embeddings_pg(
+            kg, conn, table="emb", lists=100, embedding_version="1.0"
+        )
         t0 = time.perf_counter()
-        rows = [pgvector_export.query_topk_pg(conn, "emb", q, k=5) for q in xq]
+        rows = [
+            pgvector_export.query_topk_pg(conn, "emb", q, k=5, version="1.0")
+            for q in xq
+        ]
         elapsed = (time.perf_counter() - t0) / len(xq)
 
     recall = 0

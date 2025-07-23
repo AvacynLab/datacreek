@@ -50,6 +50,7 @@ def export_embeddings_pg(
     table: str = "embedding",
     attrs: Iterable[str] = ("embedding", "poincare_embedding"),
     lists: int = 100,
+    embedding_version: str | None = None,
 ) -> int:
     """Export embeddings using ``COPY`` and build an ``ivfflat`` index.
 
@@ -65,6 +66,8 @@ def export_embeddings_pg(
         Node attributes storing different embedding spaces.
     lists:
         Number of lists for the ``ivfflat`` index.
+    embedding_version:
+        Version tag stored alongside each row for reproducibility.
 
     Returns
     -------
@@ -74,6 +77,9 @@ def export_embeddings_pg(
 
     rows = []
     dim = None
+    version = embedding_version or kg.graph.graph.get("faiss_meta", {}).get(
+        "embedding_version", "1.0"
+    )
     for node, data in kg.graph.nodes(data=True):
         for space in attrs:
             vec = data.get(space)
@@ -81,7 +87,7 @@ def export_embeddings_pg(
                 continue
             if dim is None:
                 dim = len(vec)
-            rows.append((str(node), space, _fmt_vector(vec)))
+            rows.append((str(node), space, _fmt_vector(vec), version))
 
     if not rows:
         return 0
@@ -92,10 +98,13 @@ def export_embeddings_pg(
             f"CREATE TABLE IF NOT EXISTS {table} ("
             "node_id TEXT,"
             "space TEXT,"
-            f"vec VECTOR({dim})"
+            f"vec VECTOR({dim}),"
+            "embedding_version TEXT"
             ")"
         )
-        with cur.copy(f"COPY {table} (node_id, space, vec) FROM STDIN") as cp:
+        with cur.copy(
+            f"COPY {table} (node_id, space, vec, embedding_version) FROM STDIN"
+        ) as cp:
             for row in rows:
                 cp.write_row(row)
         # ``lists`` parameter cannot be passed as a bind variable in this DDL
@@ -118,7 +127,8 @@ def query_topk_pg(
     *,
     k: int = 5,
     probes: int = 20,
-):
+    version: str | None = None,
+) -> list[tuple[str, str]]:
     """Return ``k`` nearest neighbours ordered by cosine distance.
 
     Parameters
@@ -147,10 +157,16 @@ def query_topk_pg(
         cur.execute(f"SET LOCAL ivfflat.probes = {int(probes)}")
         # Use inner product distance operator for consistency with FAISS
         # ``IndexFlatIP`` baseline used in tests.
-        cur.execute(
-            f"SELECT node_id, space FROM {table} ORDER BY vec <#> %s LIMIT %s",
-            (_fmt_vector(vec), k),
-        )
+        if version is None:
+            cur.execute(
+                f"SELECT node_id, space FROM {table} ORDER BY vec <#> %s LIMIT %s",  # nosec B608
+                (_fmt_vector(vec), k),
+            )
+        else:
+            cur.execute(
+                f"SELECT node_id, space FROM {table} WHERE embedding_version = %s ORDER BY vec <#> %s LIMIT %s",  # nosec B608
+                (version, _fmt_vector(vec), k),
+            )
         rows = cur.fetchall()
     elapsed_ms = (time.perf_counter() - t0) * 1000
     update_metric("pgvector_query_ms", elapsed_ms)

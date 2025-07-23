@@ -46,6 +46,7 @@ try:  # optional heavy imports
         dataset_export_task,
         dataset_generate_task,
         dataset_ingest_task,
+        enqueue_dataset_ingest,
         generate_task,
         ingest_task,
         save_task,
@@ -56,6 +57,7 @@ except Exception:  # pragma: no cover - simplify tests
     class ExportFormat(str, enum.Enum):
         JSONL = "jsonl"
         PARQUET = "parquet"
+        DELTA = "delta"
 
     CurateParams = DatasetCreate = DatasetInit = DatasetName = DatasetOut = (
         DatasetUpdate
@@ -86,9 +88,9 @@ except Exception:  # pragma: no cover - simplify tests
 
     celery_app = curate_task = dataset_cleanup_task = dataset_delete_task = (
         dataset_export_task
-    ) = dataset_generate_task = dataset_ingest_task = generate_task = ingest_task = (
-        save_task
-    ) = None
+    ) = dataset_generate_task = dataset_ingest_task = enqueue_dataset_ingest = (
+        generate_task
+    ) = ingest_task = save_task = None
 from datacreek.analysis import explain_to_svg
 from datacreek.telemetry import init_tracing
 from datacreek.utils import decode_hash
@@ -527,18 +529,18 @@ def dataset_ingest_route(
     """Schedule ingestion of a file into a persisted dataset."""
 
     ds = _load_dataset(name, current_user)
-    celery_task = dataset_ingest_task.apply_async(
-        args=[name, payload.path, current_user.id],
-        kwargs={
-            "doc_id": payload.name,
-            "high_res": payload.high_res or False,
-            "ocr": payload.ocr or False,
-            "use_unstructured": payload.use_unstructured,
-            "extract_entities": payload.extract_entities or False,
-            "extract_facts": payload.extract_facts or False,
-        },
+    result = enqueue_dataset_ingest(
+        name,
+        payload.path,
+        current_user.id,
+        doc_id=payload.name,
+        high_res=payload.high_res or False,
+        ocr=payload.ocr or False,
+        use_unstructured=payload.use_unstructured,
+        extract_entities=payload.extract_entities or False,
+        extract_facts=payload.extract_facts or False,
     )
-    return {"task_id": celery_task.id}
+    return {"task_id": getattr(result, "id", None)}
 
 
 @app.post("/datasets/{name}/generate", summary="Generate dataset asynchronously")

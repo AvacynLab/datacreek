@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ except Exception:  # pragma: no cover - optional dependency missing
         pass
 
 
+from datacreek.analysis.monitoring import blip_called_total, blip_skipped_total
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.models.llm_client import LLMClient
 from datacreek.parsers import (
@@ -31,6 +33,7 @@ from datacreek.parsers import (
     get_parser_for_extension,
 )
 from datacreek.utils.config import get_generation_config, load_config
+from datacreek.utils.image_dedup import check_duplicate
 from datacreek.utils.modality import detect_modality
 from datacreek.utils.text import clean_text, split_into_chunks
 
@@ -211,8 +214,16 @@ def to_kg(
     cleaned_text = clean_text(text)
     cleaned_pages = [clean_text(p) for p in pages] if pages else None
 
+    uid = hashlib.sha1(
+        cleaned_text.encode("utf-8"), usedforsecurity=False
+    ).hexdigest()  # nosec B324
+
     dataset.add_document(
-        doc_id, source=source or doc_id, text=cleaned_text, checksum=checksum
+        doc_id,
+        source=source or doc_id,
+        text=cleaned_text,
+        checksum=checksum,
+        uid=uid,
     )
 
     if elements:
@@ -251,11 +262,35 @@ def to_kg(
                         from datacreek.utils.image_captioning import (
                             caption_images_parallel,
                         )
-
-                        alts = caption_images_parallel([p[1] for p in pending_imgs])
                     except Exception:  # pragma: no cover - optional dep failure
-                        alts = ["" for _ in pending_imgs]
-                    for (pid, ppath, ppage), alt in zip(pending_imgs, alts):
+                        caption_images_parallel = None
+
+                    to_caption: list[tuple[str, str, int]] = []
+                    for item in pending_imgs:
+                        pid, ppath, ppage = item
+                        skip = False
+                        try:
+                            skip = check_duplicate(ppath)
+                        except Exception:
+                            skip = False
+                        if skip:
+                            if blip_skipped_total is not None:
+                                blip_skipped_total.inc()
+                            dataset.add_image(
+                                doc_id, pid, ppath, page=ppage, alt_text=""
+                            )
+                        else:
+                            if blip_called_total is not None:
+                                blip_called_total.inc()
+                            to_caption.append(item)
+
+                    alts: list[str] = ["" for _ in to_caption]
+                    if to_caption and caption_images_parallel is not None:
+                        try:
+                            alts = caption_images_parallel([p[1] for p in to_caption])
+                        except Exception:  # pragma: no cover - optional dep failure
+                            alts = ["" for _ in to_caption]
+                    for (pid, ppath, ppage), alt in zip(to_caption, alts):
                         dataset.add_image(doc_id, pid, ppath, page=ppage, alt_text=alt)
                     pending_imgs = []
                 continue
@@ -349,11 +384,32 @@ def to_kg(
         if pending_imgs:
             try:
                 from datacreek.utils.image_captioning import caption_images_parallel
-
-                alts = caption_images_parallel([p[1] for p in pending_imgs])
             except Exception:  # pragma: no cover - optional dep failure
-                alts = ["" for _ in pending_imgs]
-            for (pid, ppath, ppage), alt in zip(pending_imgs, alts):
+                caption_images_parallel = None
+
+            to_caption: list[tuple[str, str, int]] = []
+            for pid, ppath, ppage in pending_imgs:
+                skip = False
+                try:
+                    skip = check_duplicate(ppath)
+                except Exception:
+                    skip = False
+                if skip:
+                    if blip_skipped_total is not None:
+                        blip_skipped_total.inc()
+                    dataset.add_image(doc_id, pid, ppath, page=ppage, alt_text="")
+                else:
+                    if blip_called_total is not None:
+                        blip_called_total.inc()
+                    to_caption.append((pid, ppath, ppage))
+
+            alts: list[str] = ["" for _ in to_caption]
+            if to_caption and caption_images_parallel is not None:
+                try:
+                    alts = caption_images_parallel([p[1] for p in to_caption])
+                except Exception:  # pragma: no cover - optional dep failure
+                    alts = ["" for _ in to_caption]
+            for (pid, ppath, ppage), alt in zip(to_caption, alts):
                 dataset.add_image(doc_id, pid, ppath, page=ppage, alt_text=alt)
         if atoms:
             mol_id = f"{doc_id}_molecule_{molecule_idx}"
