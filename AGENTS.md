@@ -175,3 +175,4 @@ En un mot : votre pipeline ingestion → dataset est déjà performant ;
 - Formatted monitoring and utils modules with Black to satisfy pre-commit.
 
 - Re-ran pre-commit on monitoring and utils modules; tests pass.
+- Added ``apply_async`` to Celery fallback and verified unit tests still pass.

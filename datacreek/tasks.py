@@ -40,6 +40,12 @@ except Exception:  # pragma: no cover - optional dependency missing
                     return _AsyncResult(func(*args, **kwargs))
 
                 func.delay = delay
+
+                # mimic Celery's ``apply_async`` for tests that expect it
+                def apply_async(args=None, kwargs=None, **_opts):  # type: ignore[misc]
+                    return delay(*(args or []), **(kwargs or {}))
+
+                func.apply_async = apply_async
                 return func
 
             return decorator(fn) if fn else decorator
