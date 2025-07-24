@@ -1,5 +1,5 @@
-........................................................................ [ 58%]
-...................................................                      [100%]
+........................................................................ [ 56%]
+........................................................                 [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -126,7 +126,7 @@ datacreek/utils/evict_log.py                        36     36     0%
 datacreek/utils/fact_extraction.py                  34      6    82%
 datacreek/utils/format_converter.py                 27      2    93%
 datacreek/utils/gitinfo.py                           8      0   100%
-datacreek/utils/graph_text.py                       56     49    12%
+datacreek/utils/graph_text.py                       56      1    98%
 datacreek/utils/image_captioning.py                 32     32     0%
 datacreek/utils/image_dedup.py                      30     30     0%
 datacreek/utils/kafka_queue.py                      36      4    89%
@@ -144,6 +144,6 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            13991  10926    22%
+TOTAL                                            13991  10878    22%
 Coverage XML written to file coverage.xml
-123 passed in 7.21s
+128 passed in 7.82s
