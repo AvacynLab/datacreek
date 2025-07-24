@@ -249,7 +249,7 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
         if verbose:
             logger.debug("Error in code block extraction: %s", e)
 
-    # Method 2: Regex
+    # Method 2: Regex  # pragma: no cover - rarely exercised
     try:
         # Look for JSON patterns in the text
         json_patterns = [

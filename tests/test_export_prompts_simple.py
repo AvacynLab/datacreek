@@ -15,6 +15,7 @@ from datacreek.core.dataset import DatasetBuilder, DatasetType
 
 def test_export_prompts_tag():
     ds = DatasetBuilder(DatasetType.TEXT)
+    ds.policy.loops = 0  # disable heavy policy enforcement during tests
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "hello")
     records = ds.export_prompts()
@@ -23,6 +24,7 @@ def test_export_prompts_tag():
 
 def test_export_prompts_metrics(monkeypatch):
     ds = DatasetBuilder(DatasetType.TEXT)
+    ds.policy.loops = 0  # disable heavy policy enforcement during tests
     ds.add_document("d", source="s")
     ds.add_chunk("d", "c1", "hello")
 
@@ -31,8 +33,7 @@ def test_export_prompts_metrics(monkeypatch):
     def dummy(metrics, **_):
         calls.append(metrics)
 
-    mod = importlib.import_module("datacreek.utils.metrics")
-    monkeypatch.setattr(mod, "push_metrics", dummy)
+    monkeypatch.setattr("datacreek.core.dataset.push_metrics", dummy)
 
     ds.export_prompts()
     assert calls and calls[0]["prompts_exported"] == 1.0

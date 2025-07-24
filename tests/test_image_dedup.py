@@ -1,7 +1,14 @@
+import importlib
+import sys
 import pytest
 
 pytest.importorskip("PIL")
 from PIL import Image
+
+# Ensure real scipy is available because other tests may stub it
+sys.modules.pop("scipy", None)
+sys.modules.pop("scipy.fftpack", None)
+importlib.import_module("scipy.fftpack")
 
 from datacreek.utils.image_dedup import FILTER, check_duplicate
 

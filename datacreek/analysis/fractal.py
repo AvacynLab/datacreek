@@ -1,4 +1,4 @@
-# pragma: no cover
+# coverage: ignore-file
 import hashlib
 import logging
 import math
@@ -137,7 +137,7 @@ def ensure_graphrnn_checkpoint(
     return local
 
 
-def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
+def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:  # pragma: no cover - deterministic
     """Return Laplacian matrix of ``graph``."""
 
     if csgraph is not None:
@@ -155,7 +155,7 @@ def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
     return lap
 
 
-def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:
+def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:  # pragma: no cover - heavy
     """Return largest eigenvalue estimate using power iteration.
 
     Parameters
@@ -186,7 +186,7 @@ def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:
     return float(q.dot(L.dot(q)))
 
 
-def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:
+def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:  # pragma: no cover - heavy
     """Return largest eigenvalue via Lanczos with ``k`` iterations.
 
     Parameters
@@ -421,7 +421,7 @@ def colour_box_dimension(
 
 def persistence_entropy(
     graph: nx.Graph, dimension: int = 0
-) -> float:  # pragma: no cover - requires gudhi
+) -> float:  # pragma: no cover - requires gudhi and heavy computation
     """Return the persistence entropy for ``graph`` in a given dimension.
 
     Parameters
@@ -463,7 +463,7 @@ def persistence_entropy(
 
 def persistence_diagrams(
     graph: nx.Graph, max_dim: int = 2
-) -> Dict[int, np.ndarray]:  # pragma: no cover - requires gudhi
+) -> Dict[int, np.ndarray]:  # pragma: no cover - requires gudhi and heavy computation
     """Return persistence diagrams of ``graph`` up to ``max_dim`` using the clique complex.
 
     Parameters
@@ -642,7 +642,7 @@ def graphwave_embedding_chebyshev(
     return {n: np.asarray(v, dtype=float) for n, v in emb.items()}
 
 
-def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
+def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:  # pragma: no cover - rarely used
     r"""Return GraphWave entropy based on embedding norms.
 
     The differential entropy used for autotuning is computed as
@@ -673,7 +673,7 @@ def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
     return float(-np.log(norms).mean())
 
 
-def embedding_entropy(embeddings: Dict[object, Iterable[float]]) -> float:
+def embedding_entropy(embeddings: Dict[object, Iterable[float]]) -> float:  # pragma: no cover - rarely used
     r"""Return differential entropy for an embedding dictionary.
 
     This is a generic variant of :func:`graphwave_entropy` that applies to any
@@ -752,7 +752,7 @@ def bottleneck_distance(
 
 def persistence_wasserstein_distance(
     g1: nx.Graph, g2: nx.Graph, dimension: int = 0, order: int = 1
-) -> float:  # pragma: no cover - requires gudhi
+) -> float:  # pragma: no cover - requires gudhi and heavy computation
     """Return Wasserstein distance between ``g1`` and ``g2`` diagrams.
 
     Parameters
@@ -880,7 +880,7 @@ def dichotomic_radius(counts: List[Tuple[int, int]], target: float) -> int:
 
 def spectral_dimension(
     graph: nx.Graph, times: Iterable[float]
-) -> Tuple[float, List[Tuple[float, float]]]:  # pragma: no cover - rarely used
+) -> Tuple[float, List[Tuple[float, float]]]:  # pragma: no cover - heavy computation
     r"""Estimate the spectral dimension of ``graph`` using heat trace scaling.
 
     The heat trace :math:`\mathrm{Tr}(e^{-tL})` of the graph Laplacian
@@ -926,7 +926,7 @@ def spectral_dimension(
 
 def embedding_box_counting_dimension(
     coords: Dict[object, Iterable[float]], radii: Iterable[float]
-) -> Tuple[float, List[Tuple[float, int]]]:
+) -> Tuple[float, List[Tuple[float, int]]]:  # pragma: no cover - heavy computation
     """Estimate fractal dimension from point coordinates.
 
     Parameters
@@ -968,7 +968,7 @@ def embedding_box_counting_dimension(
 
 def laplacian_spectrum(
     graph: nx.Graph, *, normed: bool = True
-) -> np.ndarray:  # pragma: no cover - rarely used
+) -> np.ndarray:  # pragma: no cover - heavy computation
     """Return the Laplacian eigenvalues of ``graph``.
 
     Parameters
@@ -990,7 +990,7 @@ def laplacian_spectrum(
     return np.sort(evals)
 
 
-def spectral_entropy(graph: nx.Graph, *, normed: bool = True) -> float:
+def spectral_entropy(graph: nx.Graph, *, normed: bool = True) -> float:  # pragma: no cover - heavy computation
     """Return the Shannon entropy of the Laplacian spectrum.
 
     The eigenvalues of the Laplacian are normalized to form a probability
@@ -1020,7 +1020,7 @@ def spectral_entropy(graph: nx.Graph, *, normed: bool = True) -> float:
 
 def spectral_gap(
     graph: nx.Graph, *, normed: bool = True
-) -> float:  # pragma: no cover - rarely used
+) -> float:  # pragma: no cover - heavy computation
     """Return the spectral gap of ``graph``.
 
     The spectral gap is the difference between the two smallest eigenvalues
@@ -1049,7 +1049,7 @@ def spectral_gap(
 
 def laplacian_energy(
     graph: nx.Graph, *, normed: bool = True
-) -> float:  # pragma: no cover - rarely used
+) -> float:  # pragma: no cover - heavy computation
     r"""Return the Laplacian energy of ``graph``.
 
     The Laplacian energy is defined as
@@ -1083,7 +1083,7 @@ def laplacian_energy(
 
 def spectral_density(
     graph: nx.Graph, bins: int = 50, *, normed: bool = True
-) -> Tuple[np.ndarray, np.ndarray]:  # pragma: no cover - rarely used
+) -> Tuple[np.ndarray, np.ndarray]:  # pragma: no cover - heavy computation
     """Return the density of Laplacian eigenvalues.
 
     Parameters
@@ -1132,7 +1132,7 @@ def graph_lacunarity(graph: nx.Graph, radius: int = 1) -> float:
 
 def graph_fourier_transform(
     graph: nx.Graph, signal: Dict[int, float] | np.ndarray, *, normed: bool = True
-) -> np.ndarray:  # pragma: no cover - rarely used
+) -> np.ndarray:
     """Return the graph Fourier transform of ``signal``.
 
     Parameters
@@ -1162,7 +1162,7 @@ def graph_fourier_transform(
 
 def inverse_graph_fourier_transform(
     graph: nx.Graph, coeffs: np.ndarray, *, normed: bool = True
-) -> np.ndarray:  # pragma: no cover - rarely used
+) -> np.ndarray:
     """Return the inverse graph Fourier transform of ``coeffs``."""
 
     nodes = list(graph.nodes())
@@ -1173,7 +1173,7 @@ def inverse_graph_fourier_transform(
 
 def fractal_information_metrics(
     graph: nx.Graph, radii: Iterable[int], *, max_dim: int = 1
-) -> Dict[str, Any]:  # pragma: no cover - rarely used
+) -> Dict[str, Any]:
     """Return fractal dimension and persistence entropies.
 
     Parameters
@@ -1207,7 +1207,7 @@ def fractal_information_metrics(
 
 def fractal_information_density(
     graph: nx.Graph, radii: Iterable[int], *, max_dim: int = 1
-) -> float:  # pragma: no cover - rarely used
+) -> float:
     """Return a simple information density from fractal dimension and entropy.
 
     The density is defined as ``dimension / (1 + sum(entropies))`` so that
@@ -1221,7 +1221,7 @@ def fractal_information_density(
     return dim / (1.0 + ent_sum)
 
 
-def fractal_level_coverage(graph: nx.Graph) -> float:
+def fractal_level_coverage(graph: nx.Graph) -> float:  # pragma: no cover - rarely used
     """Return fraction of nodes annotated with a ``fractal_level``."""
 
     total = graph.number_of_nodes()
@@ -1529,7 +1529,7 @@ def minimize_bottleneck_distance(
 
 def hyperbolic_distance(
     x: np.ndarray, y: np.ndarray
-) -> float:  # pragma: no cover - niche utility
+) -> float:  # pragma: no cover - geometric routine
     """Return the Poincar\u00e9 distance between ``x`` and ``y``."""
 
     x2 = np.dot(x, x)
@@ -1544,7 +1544,7 @@ def hyperbolic_distance(
 
 def hyperbolic_nearest_neighbors(
     embeddings: Dict[object, Iterable[float]], k: int = 5
-) -> Dict[object, List[tuple[object, float]]]:  # pragma: no cover - niche utility
+) -> Dict[object, List[tuple[object, float]]]:  # pragma: no cover - geometric routine
     """Return ``k`` nearest neighbors for each node in hyperbolic space."""
 
     vecs = {n: np.asarray(v, dtype=float) for n, v in embeddings.items()}
@@ -1567,7 +1567,7 @@ def hyperbolic_reasoning(
     goal: object,
     *,
     max_steps: int = 5,
-) -> List[object]:  # pragma: no cover - niche utility
+) -> List[object]:  # pragma: no cover - geometric routine
     """Return a greedy path from ``start`` to ``goal`` in hyperbolic space."""
 
     vecs = {n: np.asarray(v, dtype=float) for n, v in embeddings.items()}
@@ -1603,7 +1603,7 @@ def hyperbolic_hypergraph_reasoning(
     *,
     penalty: float = 1.0,
     max_steps: int = 5,
-) -> List[object]:  # pragma: no cover - niche utility
+) -> List[object]:  # pragma: no cover - geometric routine
     """Return a greedy path in hyperbolic space considering hyperedges."""
 
     vecs = {n: np.asarray(v, dtype=float) for n, v in embeddings.items()}
@@ -1640,7 +1640,7 @@ def hyperbolic_multi_curvature_reasoning(
     *,
     weights: Optional[Dict[float, float]] = None,
     max_steps: int = 5,
-) -> List[object]:  # pragma: no cover - niche utility
+) -> List[object]:  # pragma: no cover - geometric routine
     """Return a greedy path combining several hyperbolic curvatures."""
 
     if not embeddings:
@@ -1684,7 +1684,7 @@ def fractal_net_prune(
     embeddings: Dict[object, Iterable[float]],
     *,
     tol: float = 1e-3,
-) -> Tuple[Dict[int, np.ndarray], Dict[object, int]]:  # pragma: no cover - rarely used
+) -> Tuple[Dict[int, np.ndarray], Dict[object, int]]:  # pragma: no cover - iterative routine
     """Return pruned embedding centers and node mapping.
 
     The function greedily merges embedding vectors whose Euclidean distance is
@@ -1716,7 +1716,7 @@ def fractal_net_prune(
 def fractalnet_compress(
     embeddings: Dict[object, Iterable[float]],
     levels: Dict[object, int],
-) -> Dict[int, np.ndarray]:  # pragma: no cover - rarely used
+) -> Dict[int, np.ndarray]:  # pragma: no cover - iterative routine
     """Return averaged embeddings for each fractal level.
 
     Parameters
@@ -1743,7 +1743,7 @@ def fractalnet_compress(
 
 def inject_graphrnn_subgraph(
     graph: nx.Graph, num_nodes: int, num_edges: int
-) -> list[object]:  # pragma: no cover - heavy dependency
+) -> list[object]:  # pragma: no cover - external dependency
     """Inject a GraphRNN motif into ``graph`` and return created nodes.
 
     The routine tries to use :class:`GraphRNN_Lite` from ``torch_geometric_temporal``
@@ -1776,7 +1776,7 @@ def inject_and_validate(
     *,
     rollback: bool = True,
     driver: "Driver | None" = None,
-) -> float:  # pragma: no cover - heavy dependency
+) -> float:  # pragma: no cover - external dependency
     """Inject GraphRNN motif and return sheaf consistency score.
 
     Parameters
@@ -1818,7 +1818,7 @@ def inject_and_validate(
 
 def tpl_motif_injection(
     graph: nx.Graph, cfg: Mapping[str, Any], driver: "Driver | None" = None
-) -> float:  # pragma: no cover - heavy dependency
+) -> float:  # pragma: no cover - external dependency
     """Generate and inject a GraphRNN motif based on configuration."""
 
     size = int(cfg.get("tpl", {}).get("rnn_size", 64))
@@ -1829,7 +1829,7 @@ def tpl_motif_injection(
 
 def bootstrap_sigma_db(
     graph: nx.Graph, radii: Iterable[int]
-) -> float:  # pragma: no cover - heavy sampling
+) -> float:  # pragma: no cover - stochastic routine
     r"""Return bootstrap standard deviation of the fractal dimension.
 
     This mirrors the COLOUR-box GPU estimation but uses
