@@ -5,6 +5,8 @@
 - [x] Improve coverage for datacreek/__init__.py
 - [ ] Continue improving coverage file by file
 - [x] Improve coverage for datacreek/analysis/autotune.py
+- [x] Improve coverage for datacreek/analysis/compression.py
+- Added basic tests for compression helpers to raise module coverage
 - [x] Improve coverage for datacreek/analysis/chebyshev_diag.py
 
 Current objective: raise coverage to 80% by adding tests or excluding heavy code.
@@ -16,9 +18,9 @@ History:
 
 Latest coverage run:
 ```
-....................................................                     [100%]
+.........................................................                [100%]
 ================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.10-final-0 _______________
+_______________ coverage: platform linux, python 3.12.3-final-0 ________________
 
 Name                                             Stmts   Miss  Cover
 --------------------------------------------------------------------
@@ -26,7 +28,7 @@ datacreek/__init__.py                               15      0   100%
 datacreek/analysis/__init__.py                       1      0   100%
 datacreek/analysis/autotune.py                      70      7    90%
 datacreek/analysis/chebyshev_diag.py                14      0   100%
-datacreek/analysis/compression.py                   94     94     0%
+datacreek/analysis/compression.py                   94     18    81%
 datacreek/analysis/explain_viz.py                   27     27     0%
 datacreek/analysis/filtering.py                     26     26     0%
 datacreek/analysis/fractal.py                      755    683    10%
@@ -161,7 +163,7 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            14682  13751     6%
+TOTAL                                            14682  13675     7%
 Coverage XML written to file coverage.xml
-52 passed in 4.44s
+57 passed in 6.29s
 ```
