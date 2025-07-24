@@ -16,6 +16,7 @@
 - [x] Improve coverage for datacreek/analysis/graphwave_bandwidth.py
 - [x] Improve coverage for datacreek/utils/cache.py
 - [x] Improve coverage for datacreek/utils/config.py
+- [x] Improve coverage for datacreek/utils/curation_agent.py
 
 Current objective: raise coverage to 80% by adding tests or excluding heavy code.
 
@@ -27,6 +28,7 @@ History:
 - Added simple tests for cache utilities and excluded background threads
 - Achieved 91% coverage for datacreek/utils/cache.py with stubs
 - Added tests for config helpers raising module coverage to 82%
+- Added tests for curation agent utilities covering prompt templates and error paths
 
 Latest coverage run:
 ```
@@ -1283,6 +1285,7 @@ datacreek/utils/chunking.py                         89      5    94%
 datacreek/utils/config.py                          154     28    82%
 datacreek/utils/crypto.py                           25      0   100%
 datacreek/utils/curation_agent.py                   24      8    67%
+datacreek/utils/curation_agent.py                   24      0   100%
 datacreek/utils/dataset_cleanup.py                  16      0   100%
 datacreek/utils/delta_export.py                     24      3    88%
 datacreek/utils/emotion.py                          15     15     0%
@@ -1309,7 +1312,7 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            14111  11393    19%
+TOTAL                                            14111  11385    19%
 Coverage XML written to file coverage.xml
-87 passed in 9.00s
+93 passed in 6.98s
 ```
