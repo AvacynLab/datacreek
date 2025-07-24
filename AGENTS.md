@@ -12,5 +12,6 @@ Latest coverage (tests/test_simple_utils.py tests/test_audio_vad.py tests/test_m
 
 ```
 TOTAL                                            15422  14765     4%
+============================== 17 passed in 1.77s ==============================
 ```
 
