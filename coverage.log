@@ -1,4 +1,4 @@
-..................................                                       [100%]
+...................................                                      [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -23,7 +23,7 @@ datacreek/analysis/information.py                   88     88     0%
 datacreek/analysis/ingestion.py                     28     28     0%
 datacreek/analysis/mapper.py                       289    289     0%
 datacreek/analysis/monitoring.py                    71     56    21%
-datacreek/analysis/multiview.py                    155    147     5%
+datacreek/analysis/multiview.py                    155    148     5%
 datacreek/analysis/node2vec_tuning.py               48     48     0%
 datacreek/analysis/nprobe_tuning.py                 61     61     0%
 datacreek/analysis/poincare_recentering.py          94     94     0%
@@ -127,14 +127,14 @@ datacreek/utils/format_converter.py                 27     27     0%
 datacreek/utils/gitinfo.py                           8      0   100%
 datacreek/utils/graph_text.py                       56     52     7%
 datacreek/utils/image_captioning.py                 33     33     0%
-datacreek/utils/image_dedup.py                      30      0   100%
+datacreek/utils/image_dedup.py                      30     30     0%
 datacreek/utils/kafka_queue.py                      36      4    89%
 datacreek/utils/llm_processing.py                  237    227     4%
 datacreek/utils/metrics.py                           9      0   100%
 datacreek/utils/modality.py                         27     27     0%
 datacreek/utils/neo4j_breaker.py                    26     26     0%
 datacreek/utils/progress.py                         14      0   100%
-datacreek/utils/rate_limit.py                       46     11    76%
+datacreek/utils/rate_limit.py                       46      3    93%
 datacreek/utils/redis_helpers.py                    15      2    87%
 datacreek/utils/redis_pid.py                        74     39    47%
 datacreek/utils/retrieval.py                       132    132     0%
@@ -143,6 +143,6 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            13992  13316     5%
+TOTAL                                            13992  13339     5%
 Coverage XML written to file coverage.xml
-34 passed in 7.55s
+35 passed, 1 skipped in 4.99s
