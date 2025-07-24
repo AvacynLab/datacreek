@@ -21,6 +21,7 @@
 - [x] Improve coverage for datacreek/utils/emotion.py
 - [x] Improve coverage for datacreek/analysis/monitoring.py
 - [x] Improve coverage for datacreek/utils/format_converter.py
+- [x] Improve coverage for datacreek/analysis/graphwave_cuda.py
 
 Current objective: raise coverage to 80% by adding tests or excluding heavy code.
 
@@ -660,4 +661,116 @@ datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
 TOTAL                                            14124  11098    21%
+Coverage XML written to file coverage.xml
+
+Latest coverage after graphwave_cuda tests:
+........................................................................ [ 62%]
+............................................                             [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.10-final-0 _______________
+
+Name                                             Stmts   Miss  Cover
+--------------------------------------------------------------------
+datacreek/__init__.py                               15      0   100%
+datacreek/analysis/__init__.py                       1      0   100%
+datacreek/analysis/autotune.py                      70      7    90%
+datacreek/analysis/chebyshev_diag.py                14      0   100%
+datacreek/analysis/compression.py                   94     18    81%
+datacreek/analysis/explain_viz.py                   27      0   100%
+datacreek/analysis/filtering.py                     26      2    92%
+datacreek/analysis/fractal.py                      256     43    83%
+datacreek/analysis/generation.py                   175     23    87%
+datacreek/analysis/governance.py                    54      2    96%
+datacreek/analysis/graphwave_bandwidth.py           35      2    94%
+datacreek/analysis/graphwave_cuda.py                17      0   100%
+datacreek/analysis/hybrid_ann.py                    60     60     0%
+datacreek/analysis/hypergraph.py                    87     87     0%
+datacreek/analysis/index.py                         72      8    89%
+datacreek/analysis/information.py                   88     76    14%
+datacreek/analysis/ingestion.py                     28     28     0%
+datacreek/analysis/mapper.py                       289    289     0%
+datacreek/analysis/monitoring.py                    71      3    96%
+datacreek/analysis/multiview.py                    155    138    11%
+datacreek/analysis/node2vec_tuning.py               48     48     0%
+datacreek/analysis/nprobe_tuning.py                 61     61     0%
+datacreek/analysis/poincare_recentering.py          94     94     0%
+datacreek/analysis/privacy.py                       14     14     0%
+datacreek/analysis/rollback.py                      24     24     0%
+datacreek/analysis/sheaf.py                        144    144     0%
+datacreek/analysis/symmetry.py                      47     47     0%
+datacreek/analysis/tpl.py                           57     57     0%
+datacreek/analysis/tpl_incremental.py               49     49     0%
+datacreek/api.py                                   363    359     1%
+datacreek/backend/__init__.py                        2      0   100%
+datacreek/backend/array_api.py                      22      9    59%
+datacreek/backends.py                               89     66    26%
+datacreek/build_dataset.py                           3      3     0%
+datacreek/cli.py                                    13     13     0%
+datacreek/config/__init__.py                         0      0   100%
+datacreek/config/schema.py                          14      0   100%
+datacreek/config_models.py                         131     13    90%
+datacreek/core/__init__.py                           6      2    67%
+datacreek/core/cleanup.py                           19     14    26%
+datacreek/core/context.py                            8      8     0%
+datacreek/core/create.py                           200    180    10%
+datacreek/core/curate.py                           158    137    13%
+datacreek/core/dataset.py                         1658   1258    24%
+datacreek/core/fractal.py                          105    105     0%
+datacreek/core/ingest.py                           385    385     0%
+datacreek/core/knowledge_graph.py                 2411   2093    13%
+datacreek/core/runners.py                           76     76     0%
+datacreek/core/save_as.py                           66     52    21%
+datacreek/db.py                                     57     57     0%
+datacreek/dp/__init__.py                             2      2     0%
+datacreek/dp/accountant.py                          21     21     0%
+datacreek/generators/__init__.py                    30     30     0%
+datacreek/generators/base.py                        18     18     0%
+datacreek/generators/conversation_generator.py      25     25     0%
+datacreek/generators/cot_generator.py               97     97     0%
+datacreek/generators/kg_generator.py                64     64     0%
+datacreek/generators/multi_tool_generator.py        30     30     0%
+datacreek/generators/pref_generator.py              59     59     0%
+datacreek/generators/qa_generator.py               218    218     0%
+datacreek/generators/tool_generator.py              30     30     0%
+datacreek/generators/vqa_generator.py              104    104     0%
+datacreek/models/__init__.py                        45     39    13%
+datacreek/templates/__init__.py                      1      1     0%
+datacreek/templates/library.py                      43     43     0%
+datacreek/utils/__init__.py                         54     11    80%
+datacreek/utils/audio_vad.py                        28      0   100%
+datacreek/utils/backpressure.py                     55      3    95%
+datacreek/utils/batch.py                            38      0   100%
+datacreek/utils/cache.py                            69      5    93%
+datacreek/utils/checksum.py                          8      0   100%
+datacreek/utils/chunking.py                         89      5    94%
+datacreek/utils/config.py                          154     28    82%
+datacreek/utils/crypto.py                           25      0   100%
+datacreek/utils/curation_agent.py                   24      0   100%
+datacreek/utils/dataset_cleanup.py                  16      0   100%
+datacreek/utils/delta_export.py                     24      3    88%
+datacreek/utils/emotion.py                          15      0   100%
+datacreek/utils/entity_extraction.py                16      2    88%
+datacreek/utils/evict_log.py                        36     36     0%
+datacreek/utils/fact_extraction.py                  34      6    82%
+datacreek/utils/format_converter.py                 27      2    93%
+datacreek/utils/gitinfo.py                           8      0   100%
+datacreek/utils/graph_text.py                       56     49    12%
+datacreek/utils/image_captioning.py                 32     32     0%
+datacreek/utils/image_dedup.py                      30     30     0%
+datacreek/utils/kafka_queue.py                      36      4    89%
+datacreek/utils/llm_processing.py                  237    227     4%
+datacreek/utils/metrics.py                           9      0   100%
+datacreek/utils/modality.py                         27     27     0%
+datacreek/utils/neo4j_breaker.py                    26     26     0%
+datacreek/utils/progress.py                         14      0   100%
+datacreek/utils/rate_limit.py                       46     11    76%
+datacreek/utils/redis_helpers.py                    15      2    87%
+datacreek/utils/redis_pid.py                        74     38    49%
+datacreek/utils/retrieval.py                       132    115    13%
+datacreek/utils/self_instruct.py                    42     42     0%
+datacreek/utils/text.py                            119     61    49%
+datacreek/utils/toolformer.py                       42     35    17%
+datacreek/utils/whisper_batch.py                    57     57     0%
+--------------------------------------------------------------------
+TOTAL                                            14034  11059    21%
 Coverage XML written to file coverage.xml
