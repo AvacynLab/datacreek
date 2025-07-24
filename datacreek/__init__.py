@@ -233,7 +233,7 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking only
     from .utils.image_captioning import caption_image
 
 
-def __getattr__(name: str):
+def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
     if name == "DatasetBuilder":
         from .core.dataset import DatasetBuilder as _DB
 
@@ -918,9 +918,9 @@ except Exception:  # pragma: no cover - optional dependency missing
     ORIGINAL_CONFIG_PATH = None  # type: ignore[assignment]
 
 if ORIGINAL_CONFIG_PATH:
-    try:
+    try:  # pragma: no cover - optional watcher startup
         _start_cleanup_watcher(os.getenv("DATACREEK_CONFIG", ORIGINAL_CONFIG_PATH))
-    except Exception:
+    except Exception:  # pragma: no cover - watcher may fail
         pass
 
 try:  # optional heavy dependency
