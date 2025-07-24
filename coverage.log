@@ -1,5 +1,5 @@
-........................................................................ [ 63%]
-.........................................                                [100%]
+........................................................................ [ 61%]
+..............................................                           [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -20,7 +20,7 @@ datacreek/analysis/graphwave_cuda.py               107    107     0%
 datacreek/analysis/hybrid_ann.py                    60     60     0%
 datacreek/analysis/hypergraph.py                    87     87     0%
 datacreek/analysis/index.py                         72      8    89%
-datacreek/analysis/information.py                   88     76    14%
+datacreek/analysis/information.py                   88      1    99%
 datacreek/analysis/ingestion.py                     28     28     0%
 datacreek/analysis/mapper.py                       289    289     0%
 datacreek/analysis/monitoring.py                    71      3    96%
@@ -89,7 +89,7 @@ datacreek/parsers/ppt_parser.py                     11     11     0%
 datacreek/parsers/txt_parser.py                      6      6     0%
 datacreek/parsers/whisper_audio_parser.py           32     32     0%
 datacreek/parsers/youtube_parser.py                 17     17     0%
-datacreek/pipelines.py                             425    249    41%
+datacreek/pipelines.py                             425    255    40%
 datacreek/plugins/__init__.py                        2      2     0%
 datacreek/plugins/pgvector_export.py                53     53     0%
 datacreek/routers/__init__.py                        2      2     0%
@@ -115,7 +115,7 @@ datacreek/utils/batch.py                            38      0   100%
 datacreek/utils/cache.py                            69      5    93%
 datacreek/utils/checksum.py                          8      0   100%
 datacreek/utils/chunking.py                         89      5    94%
-datacreek/utils/config.py                          154     28    82%
+datacreek/utils/config.py                          154     29    81%
 datacreek/utils/crypto.py                           25      0   100%
 datacreek/utils/curation_agent.py                   24      0   100%
 datacreek/utils/dataset_cleanup.py                  16      0   100%
@@ -144,5 +144,5 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            14124  11166    21%
+TOTAL                                            14124  11098    21%
 Coverage XML written to file coverage.xml
