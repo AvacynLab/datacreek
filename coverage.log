@@ -1,5 +1,5 @@
-........................................................................ [ 68%]
-.................................                                        [100%]
+........................................................................ [ 64%]
+.......................................                                  [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -117,7 +117,7 @@ datacreek/utils/checksum.py                          8      0   100%
 datacreek/utils/chunking.py                         89      5    94%
 datacreek/utils/config.py                          154     28    82%
 datacreek/utils/crypto.py                           25      0   100%
-datacreek/utils/curation_agent.py                   24      8    67%
+datacreek/utils/curation_agent.py                   24      0   100%
 datacreek/utils/dataset_cleanup.py                  16      0   100%
 datacreek/utils/delta_export.py                     24      3    88%
 datacreek/utils/emotion.py                          15      0   100%
@@ -144,5 +144,6 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            14124  11228    21%
-105 passed in 6.80s
+TOTAL                                            14124  11220    21%
+Coverage XML written to file coverage.xml
+111 passed in 6.54s
