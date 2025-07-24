@@ -1,4 +1,9 @@
+import sys
+from pathlib import Path
+
 import networkx as nx
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from datacreek import AutoTuneState
 from datacreek.analysis.autotune import autotune_step, recall_at_k
