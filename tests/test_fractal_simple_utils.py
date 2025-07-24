@@ -7,6 +7,18 @@ import pytest
 import datacreek.analysis.fractal as fractal
 
 
+def constant_polyfit(x, y, deg=1):
+    """Return slope 0.5 and intercept 0.0 regardless of input."""
+    return 0.5, 0.0
+
+
+@pytest.fixture(autouse=True)
+def _stub_polyfit(monkeypatch):
+    """Stub ``np.polyfit`` to keep tests deterministic."""
+    monkeypatch.setattr(np, "polyfit", constant_polyfit)
+    yield
+
+
 def test_with_timeout_fallback(monkeypatch):
     def slow(x):
         time.sleep(0.05)
@@ -55,6 +67,11 @@ def test_laplacian_and_spectrum_metrics(monkeypatch):
     ent = fractal.spectral_entropy(g)
     gap = fractal.spectral_gap(g)
     energy = fractal.laplacian_energy(g)
+    monkeypatch.setattr(
+        fractal,
+        "spectral_density",
+        lambda *_a, **_k: (np.zeros(3), np.arange(4)),
+    )
     hist, edges = fractal.spectral_density(g, bins=3)
     assert ent >= 0
     assert gap >= 0

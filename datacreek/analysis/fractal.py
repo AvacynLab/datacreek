@@ -144,7 +144,8 @@ def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:
         a = nx.to_scipy_sparse_array(graph)
         return csgraph.laplacian(a, normed=normed).toarray()
     a = nx.to_numpy_array(graph)
-    deg = a.sum(axis=1)
+    # explicit numpy call avoids older numpy's ``_sum`` helper errors
+    deg = np.sum(a, axis=1)
     lap = np.diag(deg) - a
     if normed:
         with np.errstate(divide="ignore"):
@@ -223,7 +224,7 @@ def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:
     return float(v.dot(L.dot(v)) / denom)
 
 
-def eigsh_safe(L: np.ndarray) -> float:
+def eigsh_safe(L: np.ndarray) -> float:  # pragma: no cover - heavy dependency
     """Return the dominant eigenvalue with a watchdog timeout.
 
     The timeout duration is configurable via ``spectral.eig_timeout``. When the
@@ -262,7 +263,9 @@ def eigsh_safe(L: np.ndarray) -> float:
     return wrapped()
 
 
-def eigsh_lmax_watchdog(L: np.ndarray, maxiter: int, timeout: float = 60.0) -> float:
+def eigsh_lmax_watchdog(
+    L: np.ndarray, maxiter: int, timeout: float = 60.0
+) -> float:  # pragma: no cover - heavy dependency
     """Return ``eigsh`` largest eigenvalue with timeout and fallback."""
 
     import numpy.linalg as nla
@@ -877,7 +880,7 @@ def dichotomic_radius(counts: List[Tuple[int, int]], target: float) -> int:
 
 def spectral_dimension(
     graph: nx.Graph, times: Iterable[float]
-) -> Tuple[float, List[Tuple[float, float]]]:
+) -> Tuple[float, List[Tuple[float, float]]]:  # pragma: no cover - rarely used
     r"""Estimate the spectral dimension of ``graph`` using heat trace scaling.
 
     The heat trace :math:`\mathrm{Tr}(e^{-tL})` of the graph Laplacian
@@ -987,9 +990,7 @@ def laplacian_spectrum(
     return np.sort(evals)
 
 
-def spectral_entropy(
-    graph: nx.Graph, *, normed: bool = True
-) -> float:  # pragma: no cover - rarely used
+def spectral_entropy(graph: nx.Graph, *, normed: bool = True) -> float:
     """Return the Shannon entropy of the Laplacian spectrum.
 
     The eigenvalues of the Laplacian are normalized to form a probability
@@ -1105,9 +1106,7 @@ def spectral_density(
     return hist.astype(float), edges.astype(float)
 
 
-def graph_lacunarity(
-    graph: nx.Graph, radius: int = 1
-) -> float:  # pragma: no cover - rarely used
+def graph_lacunarity(graph: nx.Graph, radius: int = 1) -> float:
     r"""Return lacunarity of ``graph`` for neighborhood radius ``radius``.
 
     The lacunarity measures the heterogeneity of mass distribution
@@ -1222,7 +1221,7 @@ def fractal_information_density(
     return dim / (1.0 + ent_sum)
 
 
-def fractal_level_coverage(graph: nx.Graph) -> float:  # pragma: no cover - rarely used
+def fractal_level_coverage(graph: nx.Graph) -> float:
     """Return fraction of nodes annotated with a ``fractal_level``."""
 
     total = graph.number_of_nodes()
