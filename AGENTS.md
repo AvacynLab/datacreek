@@ -10,6 +10,7 @@
 - [x] Improve coverage for datacreek/analysis/chebyshev_diag.py
 - [x] Improve coverage for datacreek/analysis/explain_viz.py
 - [x] Improve coverage for datacreek/analysis/filtering.py
+- [x] Improve coverage for datacreek/analysis/generation.py
 
 Current objective: raise coverage to 80% by adding tests or excluding heavy code.
 
@@ -322,3 +323,74 @@ TOTAL                                            14682  13624     7%
 Coverage XML written to file coverage.xml
 62 passed in 4.99s
 ```
+\nLatest coverage run:
+....................................................................     [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.10-final-0 _______________
+
+Name                                             Stmts   Miss  Cover
+--------------------------------------------------------------------
+datacreek/__init__.py                               15      0   100%
+datacreek/analysis/__init__.py                       1      0   100%
+datacreek/analysis/autotune.py                      70      7    90%
+datacreek/analysis/chebyshev_diag.py                14      0   100%
+datacreek/analysis/compression.py                   94     18    81%
+datacreek/analysis/explain_viz.py                   27     27     0%
+datacreek/analysis/filtering.py                     26     26     0%
+datacreek/analysis/generation.py                   175     23    87%
+datacreek/analysis/governance.py                    54     54     0%
+datacreek/analysis/graphwave_bandwidth.py           35     35     0%
+datacreek/analysis/graphwave_cuda.py               107    107     0%
+datacreek/analysis/hybrid_ann.py                    60     60     0%
+datacreek/analysis/hypergraph.py                    87     87     0%
+datacreek/analysis/index.py                         72     62    14%
+datacreek/analysis/information.py                   88     76    14%
+datacreek/analysis/ingestion.py                     28     28     0%
+datacreek/analysis/mapper.py                       289    289     0%
+datacreek/analysis/monitoring.py                    71     56    21%
+datacreek/analysis/multiview.py                    155    138    11%
+datacreek/analysis/node2vec_tuning.py               48     48     0%
+datacreek/analysis/nprobe_tuning.py                 61     61     0%
+datacreek/analysis/poincare_recentering.py          94     94     0%
+datacreek/analysis/privacy.py                       14     14     0%
+datacreek/analysis/rollback.py                      24     24     0%
+datacreek/analysis/sheaf.py                        144    144     0%
+datacreek/analysis/symmetry.py                      47     47     0%
+datacreek/analysis/tpl.py                           57     57     0%
+datacreek/analysis/tpl_incremental.py               49     49     0%
+datacreek/api.py                                   363    359     1%
+datacreek/backend/__init__.py                        2      0   100%
+datacreek/backend/array_api.py                      22      9    59%
+datacreek/backends.py                               89     89     0%
+datacreek/build_dataset.py                           3      3     0%
+datacreek/cli.py                                    13     13     0%
+datacreek/config/__init__.py                         0      0   100%
+datacreek/config/schema.py                          14     14     0%
+datacreek/config_models.py                         131    131     0%
+datacreek/core/__init__.py                           6      2    67%
+datacreek/core/cleanup.py                           19     19     0%
+datacreek/core/context.py                            8      8     0%
+datacreek/core/create.py                           200    200     0%
+datacreek/core/curate.py                           158    158     0%
+datacreek/core/dataset.py                         1658   1630     2%
+datacreek/core/fractal.py                          105    105     0%
+datacreek/core/ingest.py                           385    385     0%
+datacreek/core/knowledge_graph.py                 2411   2385     1%
+datacreek/core/runners.py                           76     76     0%
+datacreek/core/save_as.py                           66     66     0%
+datacreek/db.py                                     57     57     0%
+datacreek/dp/__init__.py                             2      2     0%
+datacreek/dp/accountant.py                          21     21     0%
+datacreek/generators/__init__.py                    30     30     0%
+datacreek/generators/base.py                        18     18     0%
+datacreek/generators/conversation_generator.py      25     25     0%
+datacreek/generators/cot_generator.py               97     97     0%
+datacreek/generators/kg_generator.py                64     64     0%
+datacreek/generators/multi_tool_generator.py        30     30     0%
+datacreek/generators/pref_generator.py              59     59     0%
+datacreek/generators/qa_generator.py               218    218     0%
+datacreek/generators/tool_generator.py              30     30     0%
+datacreek/generators/vqa_generator.py              104    104     0%
+datacreek/models/__init__.py                        45     43     4%
+datacreek/models/content_type.py                    13     13     0%
+datacreek/models/cot.py                              9      9     0%
