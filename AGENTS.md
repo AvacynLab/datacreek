@@ -18,6 +18,7 @@
 - [x] Improve coverage for datacreek/utils/config.py
 - [x] Improve coverage for datacreek/utils/curation_agent.py
 - [x] Improve coverage for datacreek/utils/emotion.py
+- [x] Improve coverage for datacreek/analysis/monitoring.py
 - [x] Improve coverage for datacreek/utils/format_converter.py
 
 Current objective: raise coverage to 80% by adding tests or excluding heavy code.
@@ -173,3 +174,37 @@ datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
 TOTAL                                            14124  13412     5%
 41 passed in 3.64s
+
+Latest coverage run:
+datacreek/utils/chunking.py                         89      5    94%
+datacreek/utils/config.py                          154     28    82%
+datacreek/utils/crypto.py                           25      0   100%
+datacreek/utils/curation_agent.py                   24      8    67%
+datacreek/utils/dataset_cleanup.py                  16      0   100%
+datacreek/utils/delta_export.py                     24      3    88%
+datacreek/utils/emotion.py                          15      0   100%
+datacreek/utils/entity_extraction.py                16      2    88%
+datacreek/utils/evict_log.py                        36     36     0%
+datacreek/utils/fact_extraction.py                  34      6    82%
+datacreek/utils/format_converter.py                 27      2    93%
+datacreek/utils/gitinfo.py                           8      0   100%
+datacreek/utils/graph_text.py                       56     49    12%
+datacreek/utils/image_captioning.py                 32     32     0%
+datacreek/utils/image_dedup.py                      30     30     0%
+datacreek/utils/kafka_queue.py                      36      4    89%
+datacreek/utils/llm_processing.py                  237    227     4%
+datacreek/utils/metrics.py                           9      0   100%
+datacreek/utils/modality.py                         27     27     0%
+datacreek/utils/neo4j_breaker.py                    26     26     0%
+datacreek/utils/progress.py                         14      0   100%
+datacreek/utils/rate_limit.py                       46     11    76%
+datacreek/utils/redis_helpers.py                    15      2    87%
+datacreek/utils/redis_pid.py                        74     38    49%
+datacreek/utils/retrieval.py                       132    115    13%
+datacreek/utils/self_instruct.py                    42     42     0%
+datacreek/utils/text.py                            119     61    49%
+datacreek/utils/toolformer.py                       42     35    17%
+datacreek/utils/whisper_batch.py                    57     57     0%
+--------------------------------------------------------------------
+TOTAL                                            14124  11228    21%
+105 passed in 6.80s

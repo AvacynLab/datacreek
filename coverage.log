@@ -1,4 +1,5 @@
-.......................................................................................
+........................................................................ [ 68%]
+.................................                                        [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -9,8 +10,8 @@ datacreek/analysis/__init__.py                       1      0   100%
 datacreek/analysis/autotune.py                      70      7    90%
 datacreek/analysis/chebyshev_diag.py                14      0   100%
 datacreek/analysis/compression.py                   94     18    81%
-datacreek/analysis/explain_viz.py                   27     27     0%
-datacreek/analysis/filtering.py                     26     26     0%
+datacreek/analysis/explain_viz.py                   27      0   100%
+datacreek/analysis/filtering.py                     26      2    92%
 datacreek/analysis/fractal.py                      256     43    83%
 datacreek/analysis/generation.py                   175     23    87%
 datacreek/analysis/governance.py                    54      2    96%
@@ -22,7 +23,7 @@ datacreek/analysis/index.py                         72     62    14%
 datacreek/analysis/information.py                   88     76    14%
 datacreek/analysis/ingestion.py                     28     28     0%
 datacreek/analysis/mapper.py                       289    289     0%
-datacreek/analysis/monitoring.py                    71     52    27%
+datacreek/analysis/monitoring.py                    71      3    96%
 datacreek/analysis/multiview.py                    155    138    11%
 datacreek/analysis/node2vec_tuning.py               48     48     0%
 datacreek/analysis/nprobe_tuning.py                 61     61     0%
@@ -107,11 +108,11 @@ datacreek/tasks.py                                 763    763     0%
 datacreek/telemetry.py                              39     39     0%
 datacreek/templates/__init__.py                      1      1     0%
 datacreek/templates/library.py                      43     43     0%
-datacreek/utils/__init__.py                         41      0   100%
+datacreek/utils/__init__.py                         54     11    80%
 datacreek/utils/audio_vad.py                        28      0   100%
 datacreek/utils/backpressure.py                     55      3    95%
 datacreek/utils/batch.py                            38      0   100%
-datacreek/utils/cache.py                            69     49    29%
+datacreek/utils/cache.py                            69      5    93%
 datacreek/utils/checksum.py                          8      0   100%
 datacreek/utils/chunking.py                         89      5    94%
 datacreek/utils/config.py                          154     28    82%
@@ -119,11 +120,11 @@ datacreek/utils/crypto.py                           25      0   100%
 datacreek/utils/curation_agent.py                   24      8    67%
 datacreek/utils/dataset_cleanup.py                  16      0   100%
 datacreek/utils/delta_export.py                     24      3    88%
-datacreek/utils/emotion.py                          15     15     0%
+datacreek/utils/emotion.py                          15      0   100%
 datacreek/utils/entity_extraction.py                16      2    88%
 datacreek/utils/evict_log.py                        36     36     0%
 datacreek/utils/fact_extraction.py                  34      6    82%
-datacreek/utils/format_converter.py                 27     19    30%
+datacreek/utils/format_converter.py                 27      2    93%
 datacreek/utils/gitinfo.py                           8      0   100%
 datacreek/utils/graph_text.py                       56     49    12%
 datacreek/utils/image_captioning.py                 32     32     0%
@@ -143,6 +144,5 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            14111  11393    19%
-Coverage XML written to file coverage.xml
-87 passed in 9.00s
+TOTAL                                            14124  11228    21%
+105 passed in 6.80s
