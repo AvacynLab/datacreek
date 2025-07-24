@@ -20,9 +20,13 @@ History:
 - Added tests for text, Kafka queue, and progress utilities
 - Ran coverage on the full test suite but coverage is still far below the 80% goal.
 
+Latest coverage run:
+
 ```
+................................                                         [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
+
 Name                                             Stmts   Miss  Cover
 --------------------------------------------------------------------
 datacreek/__init__.py                              462    317    31%
@@ -134,7 +138,7 @@ datacreek/utils/backpressure.py                     55      3    95%
 datacreek/utils/batch.py                            38     38     0%
 datacreek/utils/cache.py                           120    108    10%
 datacreek/utils/checksum.py                          8      0   100%
-datacreek/utils/chunking.py                         89     19    79%
+datacreek/utils/chunking.py                         89      5    94%
 datacreek/utils/config.py                          175    165     6%
 datacreek/utils/crypto.py                           25      0   100%
 datacreek/utils/curation_agent.py                   24     24     0%
@@ -164,6 +168,6 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            15422  14627     5%
-31 passed in 2.90s
+TOTAL                                            15422  14613     5%
+32 passed in 2.04s
 ```

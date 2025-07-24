@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+import datacreek.utils.chunking as chunking
 from datacreek.utils.chunking import (
     chunk_by_sentences,
     chunk_by_tokens,
@@ -67,6 +68,30 @@ def test_chunk_by_sentences_error():
 def test_semantic_chunk_split_requires_deps():
     with pytest.raises(ImportError):
         semantic_chunk_split("a. b.", max_tokens=10)
+
+
+def test_semantic_chunk_split(monkeypatch):
+    """Cover semantic_chunk_split with stubbed dependencies."""
+
+    class FakeVectorizer:
+        def fit(self, sentences):
+            return self
+
+        def transform(self, sentences):
+            class Arr:
+                def toarray(self) -> list[list[float]]:
+                    return [[1.0] for _ in sentences]
+
+            return Arr()
+
+    monkeypatch.setattr(chunking, "TfidfVectorizer", FakeVectorizer)
+
+    import types
+
+    monkeypatch.setattr(chunking, "np", types.SimpleNamespace(dot=lambda a, b: 1.0))
+
+    result = semantic_chunk_split("A. B. C.", max_tokens=50)
+    assert result == ["A. B. C"]
 
 
 def test_contextual_chunk_split():
