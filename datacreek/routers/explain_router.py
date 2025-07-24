@@ -56,7 +56,7 @@ def explain_node_public(
     dataset: str = Query(
         "demo",
         alias="dataset",
-        example="demo",
+        examples={"default": {"summary": "Demo dataset", "value": "demo"}},
     ),
     hops: int = Query(3, ge=1, le=5),
     user: User = Depends(get_current_user),

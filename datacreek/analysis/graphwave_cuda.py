@@ -41,7 +41,7 @@ def choose_stream_block(
     order: int | None = None,
     dtype_size: int = 4,
 ) -> int:
-    """Return block size so usage fits within ``limit_gb`` VRAM.
+    r"""Return block size so usage fits within ``limit_gb`` VRAM.
 
     Parameters
     ----------

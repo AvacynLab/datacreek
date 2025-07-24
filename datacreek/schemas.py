@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 
 try:  # optional dependency
-    from pydantic import BaseModel, StringConstraints, confloat, constr
+    from pydantic import BaseModel, ConfigDict, StringConstraints, confloat, constr
 except Exception:  # pragma: no cover - optional dependency missing
 
     class BaseModel:  # lightweight stub for missing pydantic
@@ -16,6 +16,9 @@ except Exception:  # pragma: no cover - optional dependency missing
 
     def constr(*_args, **_kwargs):  # type: ignore
         return str
+
+    class ConfigDict(dict):  # type: ignore
+        pass
 
 
 from datacreek.core.dataset import MAX_NAME_LENGTH, NAME_PATTERN
@@ -39,8 +42,7 @@ class UserOut(BaseModel):
     id: int
     username: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SourceCreate(BaseModel):
@@ -56,8 +58,7 @@ class SourceCreate(BaseModel):
 class SourceOut(BaseModel):
     id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 from datacreek.models.content_type import ContentType
@@ -79,8 +80,7 @@ class DatasetOut(BaseModel):
     id: int
     path: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CurateParams(BaseModel):

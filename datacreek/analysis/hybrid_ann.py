@@ -20,7 +20,7 @@ __all__ = ["rerank_pq", "search_hnsw_pq"]
 
 
 def expected_recall(nprobe: int, n_cells: int, tables: int) -> float:
-    """Return approximate recall with multi-probing.
+    r"""Return approximate recall with multi-probing.
 
     Parameters
     ----------
