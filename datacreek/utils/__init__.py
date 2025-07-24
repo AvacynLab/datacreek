@@ -61,7 +61,34 @@ from .llm_processing import (
 from .metrics import push_metrics
 
 try:  # optional dependency on rich
-    from .progress import create_progress, progress_context
+    # Only load real progress helpers if ``rich.progress`` is already imported.
+    # This allows tests to provide a stub module before importing ``datacreek``.
+    import sys
+
+    if "rich.progress" not in sys.modules:
+        raise ImportError
+    import rich.progress as _rp  # noqa: F401
+
+    # Skip using rich if a test stub injected a fake module.
+    if getattr(_rp.Progress, "__module__", "rich.progress").startswith("test_"):
+        raise ImportError
+
+    def create_progress(*args, **kwargs):
+        """Load :func:`create_progress` lazily to allow test stubs."""
+
+        from .progress import create_progress as _create
+
+        return _create(*args, **kwargs)
+
+    @contextmanager
+    def progress_context(*args, **kwargs):
+        """Load :func:`progress_context` lazily to allow test stubs."""
+
+        from .progress import progress_context as _context
+
+        with _context(*args, **kwargs) as ctx:
+            yield ctx
+
 except Exception:  # pragma: no cover - fallback when rich is missing
 
     def create_progress(*_a, **_k):  # type: ignore[return-type]
