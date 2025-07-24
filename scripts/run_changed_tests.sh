@@ -11,7 +11,20 @@ cd "$DIR"
 docker build -t datacreek:test .
 
 mapfile -t test_files < <(git diff --name-only "$base" "$head" -- 'tests/*.py')
-cmd=(pytest --cov=datacreek --cov-report=xml --cov-fail-under=80 -q)
+mapfile -t src_files < <(git diff --name-only "$base" "$head" -- 'datacreek/**/*.py')
+
+cov_args=()
+for f in "${src_files[@]}"; do
+  mod=${f%.py}
+  mod=${mod//\//.}
+  cov_args+=("--cov=$mod")
+done
+
+if [ "${#cov_args[@]}" -eq 0 ]; then
+  cov_args=(--cov=datacreek)
+fi
+
+cmd=(pytest -q "${cov_args[@]}" --cov-report=xml --cov-fail-under=80)
 log_file="pytest.log"
 if [ "${#test_files[@]}" -gt 0 ]; then
   echo "Running changed tests: ${test_files[*]}"
