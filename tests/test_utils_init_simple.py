@@ -45,6 +45,7 @@ def test_dynamic_propose_merge_split(tmp_path):
 
 
 def test_cache_and_progress_stubs():
+    utils.cache_l1 = None
     assert utils.cache_l1 is None
     p, tid = utils.create_progress("desc", 1)
     assert p is None and tid == 0
