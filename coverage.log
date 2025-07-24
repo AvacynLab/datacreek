@@ -1,5 +1,5 @@
-........................................................................ [ 56%]
-........................................................                 [100%]
+........................................................................ [ 54%]
+............................................................             [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -18,7 +18,7 @@ datacreek/analysis/governance.py                    54      2    96%
 datacreek/analysis/graphwave_bandwidth.py           35      2    94%
 datacreek/analysis/graphwave_cuda.py                17      0   100%
 datacreek/analysis/hybrid_ann.py                    17      2    88%
-datacreek/analysis/hypergraph.py                    87     87     0%
+datacreek/analysis/hypergraph.py                    87      1    99%
 datacreek/analysis/index.py                         72      8    89%
 datacreek/analysis/information.py                   88      1    99%
 datacreek/analysis/ingestion.py                     28     28     0%
@@ -144,6 +144,6 @@ datacreek/utils/text.py                            119     61    49%
 datacreek/utils/toolformer.py                       42     35    17%
 datacreek/utils/whisper_batch.py                    57     57     0%
 --------------------------------------------------------------------
-TOTAL                                            13991  10878    22%
+TOTAL                                            13991  10792    23%
 Coverage XML written to file coverage.xml
-128 passed in 7.82s
+132 passed in 7.82s
