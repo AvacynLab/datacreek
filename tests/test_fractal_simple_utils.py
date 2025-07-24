@@ -1,4 +1,5 @@
 import time
+import concurrent.futures
 
 import networkx as nx
 import numpy as np
@@ -42,6 +43,26 @@ def test_with_timeout_fallback(monkeypatch):
 
     c = Counter()
     g = Gauge()
+
+    class DummyFuture:
+        def result(self, timeout=None):
+            raise concurrent.futures.TimeoutError
+
+        def cancel(self):
+            pass
+
+    class DummyExecutor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, *args, **kwargs):
+            return DummyFuture()
+
+    monkeypatch.setattr(fractal.concurrent.futures, "ThreadPoolExecutor", DummyExecutor)
+
     wrapped = fractal.with_timeout(
         0.01, counter=c, duration_gauge=g, fallback=fallback
     )(slow)

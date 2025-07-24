@@ -5,6 +5,9 @@ from types import ModuleType
 import networkx as nx
 import numpy as np
 import pytest
+sys.modules.pop("sklearn", None)
+sys.modules.pop("sklearn.linear_model", None)
+pytest.importorskip("sklearn")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from datacreek.analysis import information as info
