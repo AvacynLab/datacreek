@@ -1,4 +1,5 @@
 import json
+import subprocess
 
 from datacreek.utils.dataset_cleanup import deduplicate_pairs
 from datacreek.utils.delta_export import export_delta
@@ -30,3 +31,13 @@ def test_export_delta_string(tmp_path):
 def test_get_commit_hash():
     h = get_commit_hash()
     assert len(h) == 40
+
+
+def test_get_commit_hash_fallback(monkeypatch):
+    """Return 'unknown' when git command fails."""
+
+    def fail(*_a, **_k):
+        raise subprocess.CalledProcessError(1, ["git", "rev-parse", "HEAD"])
+
+    monkeypatch.setattr(subprocess, "check_output", fail)
+    assert get_commit_hash() == "unknown"
