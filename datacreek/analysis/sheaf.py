@@ -26,7 +26,7 @@ def sheaf_laplacian(graph: nx.Graph, *, edge_attr: str = "sheaf_sign") -> np.nda
 def sheaf_incidence_matrix(
     graph: nx.Graph, *, edge_attr: str = "sheaf_sign"
 ) -> np.ndarray:
-    """Return incidence matrix ``\delta`` for ``graph``.
+    r"""Return incidence matrix ``\delta`` for ``graph``.
 
     Parameters
     ----------
@@ -263,7 +263,7 @@ def sheaf_consistency_score_batched(
 def spectral_bound_exceeded(
     graph: nx.Graph, k: int, tau: float, *, edge_attr: str = "sheaf_sign"
 ) -> bool:
-    """Return True if the k-th sheaf Laplacian eigenvalue exceeds ``tau``.
+    r"""Return True if the k-th sheaf Laplacian eigenvalue exceeds ``tau``.
 
     Parameters
     ----------
@@ -348,7 +348,7 @@ def block_smith_invariants(delta: np.ndarray, block_size: int = 40000) -> list[i
 def block_smith(
     delta: np.ndarray, block_size: int = 40000, lam_thresh: float | None = None
 ) -> int:
-    """Return the :math:`H^1` rank from a block-Smith reduction on ``delta``.
+    r"""Return the :math:`H^1` rank from a block-Smith reduction on ``delta``.
 
     Parameters
     ----------

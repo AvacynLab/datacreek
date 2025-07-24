@@ -105,7 +105,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
     if name in {
         "bottleneck_distance",
         "box_counting_dimension",

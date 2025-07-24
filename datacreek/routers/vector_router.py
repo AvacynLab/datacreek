@@ -17,10 +17,13 @@ router = APIRouter(prefix="/vector", tags=["vector"])
 class VectorSearchRequest(BaseModel):
     """Request body for the vector search endpoint."""
 
-    dataset: str = Field(..., example="demo")
-    query: str = Field(..., example="graph")
-    k: int = Field(5, ge=1, le=50, example=5)
-    node_type: str = Field("chunk", example="chunk")
+    dataset: str = Field(..., json_schema_extra={"examples": ["demo"]})
+    query: str = Field(..., json_schema_extra={"examples": ["graph"]})
+    k: int = Field(5, ge=1, le=50, json_schema_extra={"examples": [5]})
+    node_type: str = Field(
+        "chunk",
+        json_schema_extra={"examples": ["chunk"]},
+    )
 
 
 def get_current_user(api_key: str = Header(..., alias="X-API-Key")) -> User:

@@ -8,12 +8,17 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import Iterable, List
 
-from transformers import pipeline
+try:  # pragma: no cover - optional dependency
+    from transformers import pipeline
+except Exception:  # pragma: no cover - fallback when transformers missing
+    pipeline = None  # type: ignore
 
 
 @lru_cache(maxsize=1)
 def _get_model():
     """Return a cached BLIP captioning pipeline."""
+    if pipeline is None:
+        raise ImportError("transformers is required for image captioning")
     return pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
 
 

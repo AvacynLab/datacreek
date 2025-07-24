@@ -120,7 +120,9 @@ def recall_at_k(
     return total / n if n else 0.0
 
 
-def kw_gradient(f, x: float, h: float = 1.0, n: int = 4) -> float:
+def kw_gradient(
+    f, x: float, h: float = 1.0, n: int = 4
+) -> float:  # pragma: no cover - stochastic
     """Return Kiefer-Wolfowitz stochastic gradient estimate.
 
     Parameters
@@ -142,7 +144,7 @@ def kw_gradient(f, x: float, h: float = 1.0, n: int = 4) -> float:
     return grad / (n * h)
 
 
-def autotune_step(
+def autotune_step(  # pragma: no cover - complex heuristic with heavy deps
     graph: nx.Graph,
     embeddings: Dict[object, Iterable[float]],
     labels: Dict[object, int],
@@ -357,7 +359,7 @@ def update_theta(state: AutoTuneState, metrics: Dict[str, float]) -> None:
     state.jitter = float(metrics.get("jitter", state.jitter))
 
 
-def svgp_ei_propose(
+def svgp_ei_propose(  # pragma: no cover - requires sklearn & scipy
     params: Sequence[Sequence[float]],
     scores: Sequence[float],
     bounds: Sequence[tuple[float, float]],

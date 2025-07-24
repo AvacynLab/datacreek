@@ -124,7 +124,7 @@ def hyper_sagnn_head_drop_embeddings(
 def hyper_adamic_adar_scores(
     hyperedges: Iterable[Iterable[object]],
 ) -> dict[tuple[object, object], float]:
-    """Return Hyper-Adamic\N{EN DASH}Adar scores between pairs of nodes.
+    r"""Return Hyper-Adamic\N{EN DASH}Adar scores between pairs of nodes.
 
     Each hyperedge contributes :math:`1/\log(|H|-1)` to every pair of its
     incident nodes. This generalizes the classical Adamic--Adar index

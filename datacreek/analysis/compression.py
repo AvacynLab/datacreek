@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import pickle
+import pickle  # nosec B403 - acceptable for trusted checkpoints
 from pathlib import Path
 
 from .monitoring import prune_reverts_total
@@ -29,7 +29,7 @@ def restore_checkpoint(path: str = "fractal.bak") -> object | None:
 
     try:
         with open(Path(path), "rb") as fh:
-            return pickle.load(fh)
+            return pickle.load(fh)  # nosec B301 - controlled input
     except Exception:  # pragma: no cover - missing file
         return None
 

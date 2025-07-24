@@ -41,7 +41,7 @@ def choose_stream_block(
     order: int | None = None,
     dtype_size: int = 4,
 ) -> int:
-    """Return block size so usage fits within ``limit_gb`` VRAM.
+    r"""Return block size so usage fits within ``limit_gb`` VRAM.
 
     Parameters
     ----------
@@ -88,7 +88,7 @@ __all__ = [
 ]
 
 
-def chebyshev_heat_kernel_gpu_batch(
+def chebyshev_heat_kernel_gpu_batch(  # pragma: no cover - requires GPU
     L: np.ndarray | "csp.spmatrix", ts: Iterable[float], m: int = 7
 ) -> list[np.ndarray]:
     """Return GPU approximation of ``exp(-t L)`` for multiple scales.
@@ -167,7 +167,7 @@ def chebyshev_heat_kernel_gpu_batch(
     return results
 
 
-def chebyshev_heat_kernel_gpu(
+def chebyshev_heat_kernel_gpu(  # pragma: no cover - requires GPU
     L: np.ndarray | "csp.spmatrix", t: float, m: int = 7
 ) -> np.ndarray:
     """Return GPU approximation of ``exp(-t L)``.
@@ -178,7 +178,7 @@ def chebyshev_heat_kernel_gpu(
     return chebyshev_heat_kernel_gpu_batch(L, [t], m=m)[0]
 
 
-def chebyshev_heat_kernel_gpu_stream(
+def chebyshev_heat_kernel_gpu_stream(  # pragma: no cover - requires GPU
     L: np.ndarray | "csp.spmatrix",
     t: float,
     *,
@@ -252,7 +252,7 @@ def chebyshev_heat_kernel_gpu_stream(
     )
 
 
-def graphwave_embedding_gpu(
+def graphwave_embedding_gpu(  # pragma: no cover - requires GPU
     graph: nx.Graph,
     scales: Iterable[float],
     *,

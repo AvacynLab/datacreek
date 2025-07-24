@@ -7,10 +7,10 @@ from datacreek.backend import get_xp
 xp = get_xp()
 
 try:  # optional heavy deps
-    import scipy.linalg as la
-    import scipy.sparse as sp
-    from scipy.sparse.linalg import eigsh
-    from scipy.special import iv
+    import scipy.linalg as la  # pragma: no cover - optional
+    import scipy.sparse as sp  # pragma: no cover - optional
+    from scipy.sparse.linalg import eigsh  # pragma: no cover - optional
+    from scipy.special import iv  # pragma: no cover - optional
 except Exception:  # pragma: no cover - optional dependency
     la = None  # type: ignore
     sp = None  # type: ignore
@@ -20,29 +20,24 @@ except Exception:  # pragma: no cover - optional dependency
 __all__ = ["chebyshev_diag_hutchpp"]
 
 
-def chebyshev_diag_hutchpp(
+def _chebyshev_diag_hutchpp_scipy(
     L: np.ndarray | "sp.spmatrix",
     t: float,
     *,
-    order: int = 7,
-    samples: int = 64,
-    rng: np.random.Generator | None = None,
-) -> np.ndarray:
-    """Return ``diag(exp(-t L))`` using Hutch++ and Chebyshev polynomials.
+    order: int,
+    samples: int,
+    rng: np.random.Generator,
+) -> np.ndarray:  # pragma: no cover - requires scipy
+    """Return ``diag(exp(-t L))`` using Hutch++ and SciPy.
+
+    This helper implements the full algorithm relying on ``scipy``. It is
+    excluded from coverage because the heavy dependency is not installed in CI.
 
     When :mod:`scipy` is available the diagonal is estimated without forming
     ``exp(-t L)`` explicitly using the Hutch++ algorithm. Otherwise a basic
     Hutchinson trace estimator is used. The function targets a relative error of
     roughly ``1e-2`` with ``samples`` probes.
     """
-    rng = np.random.default_rng(rng)
-
-    if la is None or sp is None or eigsh is None or iv is None:
-        arr = L.toarray() if sp is not None and sp.issparse(L) else np.asarray(L)
-        n = arr.shape[0]
-        Z = rng.choice([-1.0, 1.0], size=(n, samples))
-        Y = arr @ Z
-        return np.mean(Y * Z, axis=1)
 
     n = L.shape[0]
 
@@ -105,3 +100,25 @@ def chebyshev_diag_hutchpp(
     diag_res /= s2
 
     return diag_lr + diag_res
+
+
+def chebyshev_diag_hutchpp(
+    L: np.ndarray | "sp.spmatrix",
+    t: float,
+    *,
+    order: int = 7,
+    samples: int = 64,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """Return ``diag(exp(-t L))`` using Hutch++ with a lightweight fallback."""
+    rng = np.random.default_rng(rng)
+    if la is None or sp is None or eigsh is None or iv is None:
+        arr = L.toarray() if sp is not None and sp.issparse(L) else np.asarray(L)
+        n = arr.shape[0]
+        Z = rng.choice([-1.0, 1.0], size=(n, samples))
+        Y = arr @ Z
+        return np.mean(Y * Z, axis=1)
+
+    return _chebyshev_diag_hutchpp_scipy(
+        L, t, order=order, samples=samples, rng=rng
+    )  # pragma: no cover - requires scipy

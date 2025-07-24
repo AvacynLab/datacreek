@@ -20,7 +20,7 @@ __all__ = ["rerank_pq", "search_hnsw_pq"]
 
 
 def expected_recall(nprobe: int, n_cells: int, tables: int) -> float:
-    """Return approximate recall with multi-probing.
+    r"""Return approximate recall with multi-probing.
 
     Parameters
     ----------
@@ -60,7 +60,9 @@ def choose_nprobe_multi(n_cells: int, tables: int) -> int:
     return max(1, int(round((n_cells / tables) ** 0.5)))
 
 
-def load_ivfpq_cpu(path: str, base_nprobe: int) -> object:
+def load_ivfpq_cpu(
+    path: str, base_nprobe: int
+) -> object:  # pragma: no cover - requires faiss
     """Load an IVFPQ index on CPU and set ``nprobe_multi``.
 
     Parameters
@@ -85,7 +87,7 @@ def load_ivfpq_cpu(path: str, base_nprobe: int) -> object:
     return index
 
 
-def rerank_pq(
+def rerank_pq(  # pragma: no cover - requires faiss
     xb: np.ndarray,
     xq: np.ndarray,
     *,
@@ -149,7 +151,7 @@ def rerank_pq(
     return rerank
 
 
-def search_hnsw_pq(
+def search_hnsw_pq(  # pragma: no cover - requires faiss
     xb: np.ndarray,
     xq: np.ndarray,
     *,

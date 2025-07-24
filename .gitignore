@@ -12,3 +12,4 @@ test_server.db
 coverage.xml
 .mypy_cache/
 datacreek.egg-info/
+.coverage

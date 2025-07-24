@@ -6,7 +6,16 @@ from functools import lru_cache
 from typing import Dict, Iterable
 
 DEFAULT_EMOTION_LEXICON: Dict[str, Iterable[str]] = {
-    "happy": {"happy", "joy", "joyful", "glad", "delighted", "cheerful", "good", "great"},
+    "happy": {
+        "happy",
+        "joy",
+        "joyful",
+        "glad",
+        "delighted",
+        "cheerful",
+        "good",
+        "great",
+    },
     "sad": {"sad", "unhappy", "sorrow", "depressed", "down", "gloomy"},
     "angry": {"angry", "mad", "furious", "irate"},
     "surprised": {"surprised", "astonished", "amazed"},
