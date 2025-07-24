@@ -29,6 +29,7 @@
 - [x] Improve coverage for datacreek/utils/image_dedup.py
 - [x] Improve coverage for datacreek/utils/rate_limit.py
 
+- [x] Improve coverage for datacreek/utils/evict_log.py
 Current objective: raise coverage to 80% by adding tests or excluding heavy code.
 
 History:
@@ -1270,7 +1271,8 @@ datacreek/utils/whisper_batch.py                    57     57     0%
 TOTAL                                            13992  13443     4%
 Coverage XML written to file coverage.xml
 11 passed in 5.42s
-\n
+
+
 ..................................                                       [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
@@ -1570,3 +1572,28 @@ datacreek/utils/whisper_batch.py                    57     57     0%
 TOTAL                                            13992  13339     5%
 Coverage XML written to file coverage.xml
 35 passed, 1 skipped in 4.99s
+
+- Added tests for eviction_log with metrics stubs; coverage now 100%
+
+
+Latest coverage run after evict_log tests:
+datacreek/utils/image_captioning.py                 33     33     0%
+datacreek/utils/image_dedup.py                      30     30     0%
+datacreek/utils/kafka_queue.py                      36      4    89%
+datacreek/utils/llm_processing.py                  237    227     4%
+datacreek/utils/metrics.py                           9      0   100%
+datacreek/utils/modality.py                         27     27     0%
+datacreek/utils/neo4j_breaker.py                    26     26     0%
+datacreek/utils/progress.py                         14      0   100%
+datacreek/utils/rate_limit.py                       46      3    93%
+datacreek/utils/redis_helpers.py                    15      2    87%
+datacreek/utils/redis_pid.py                        74     38    49%
+datacreek/utils/retrieval.py                       132    115    13%
+datacreek/utils/self_instruct.py                    42     42     0%
+datacreek/utils/text.py                            119     61    49%
+datacreek/utils/toolformer.py                       42     35    17%
+datacreek/utils/whisper_batch.py                    57     57     0%
+--------------------------------------------------------------------
+TOTAL                                            13992  11971    14%
+Coverage XML written to file coverage.xml
+48 passed in 7.81s
