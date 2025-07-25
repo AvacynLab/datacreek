@@ -1,9 +1,11 @@
 import importlib
+import os
 import sys
 import types
 
 import pytest
 
+os.environ["DATACREEK_LIGHT_DATASET"] = "1"
 # skip if datacreek cannot be imported due to missing deps
 try:
     import datacreek
@@ -33,7 +35,7 @@ def test_export_prompts_metrics(monkeypatch):
     def dummy(metrics, **_):
         calls.append(metrics)
 
-    monkeypatch.setattr("datacreek.core.dataset.push_metrics", dummy)
+    monkeypatch.setattr("datacreek.core.dataset_light.push_metrics", dummy)
 
     ds.export_prompts()
     assert calls and calls[0]["prompts_exported"] == 1.0
