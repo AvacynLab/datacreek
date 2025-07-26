@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
 from datacreek.models.results import ConversationResult
-from datacreek.utils import qa_pairs_to_records
+from datacreek.utils import qa_pairs_to_records, convert_to_conversation_format
 
 from .base import BaseGenerator
 

@@ -4,6 +4,7 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 # Visual Question Answering Generator
+from __future__ import annotations
 
 import json
 import logging
