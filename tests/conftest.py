@@ -1,6 +1,7 @@
 import os
 
 os.environ.setdefault("DATACREEK_REQUIRE_PERSISTENCE", "0")
+os.environ.setdefault("DATACREEK_LIGHT_DATASET", "1")
 
 
 import pytest
