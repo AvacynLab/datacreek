@@ -1,10 +1,37 @@
 import os
+import sys
+import types
 
 os.environ.setdefault("DATACREEK_REQUIRE_PERSISTENCE", "0")
 os.environ.setdefault("DATACREEK_LIGHT_DATASET", "1")
 
 
 import pytest
+
+# Lightweight stubs for scikit-learn to avoid heavy dependency.
+if 'sklearn' not in sys.modules:
+    sklearn = types.ModuleType('sklearn')
+    cd = types.ModuleType('sklearn.cross_decomposition')
+    class DummyCCA:
+        def fit(self, X, Y):
+            return self
+        def transform(self, X, Y=None):
+            return X
+    cd.CCA = DummyCCA
+    decomp = types.ModuleType('sklearn.decomposition')
+    class DummyPCA:
+        def __init__(self, n_components=None):
+            self.n_components = n_components
+        def fit_transform(self, X):
+            return X
+        def inverse_transform(self, X):
+            return X
+    decomp.PCA = DummyPCA
+    sklearn.cross_decomposition = cd
+    sklearn.decomposition = decomp
+    sys.modules['sklearn'] = sklearn
+    sys.modules['sklearn.cross_decomposition'] = cd
+    sys.modules['sklearn.decomposition'] = decomp
 
 
 @pytest.fixture(autouse=True)

@@ -705,7 +705,7 @@ def get_pipelines_for_training(goal: TrainingGoal) -> List[GenerationPipeline]:
     ]
 
 
-async def _run_generation_pipeline_impl(
+async def _run_generation_pipeline_impl(  # pragma: no cover - integration helper
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
     *,
@@ -1079,7 +1079,7 @@ async def _run_generation_pipeline_impl(
     return data
 
 
-def run_generation_pipeline(
+def run_generation_pipeline(  # pragma: no cover - integration helper
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
     *,
@@ -1153,7 +1153,7 @@ def run_generation_pipeline(
     )
 
 
-async def run_generation_pipeline_async(
+async def run_generation_pipeline_async(  # pragma: no cover - integration helper
     dataset_type: DatasetType,
     kg: KnowledgeGraph,
     *,

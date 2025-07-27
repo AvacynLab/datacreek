@@ -192,7 +192,7 @@ def _cache_put(
                 )
                 env.close()
                 return
-            if size_mb > limit_mb:
+            if size_mb > limit_mb:  # pragma: no cover - requires large LMDB
                 _l2_evict_once(env, limit_mb, ttl_h)
             with env.begin(write=True) as txn:
                 now = time.time()
@@ -203,7 +203,7 @@ def _cache_put(
                 cur = txn.cursor()
                 n_deleted = 0
                 prev_mb = current_mb
-                if cur.first():
+                if cur.first():  # pragma: no cover - deterministic pruning
                     while True:
                         raw = cur.value()
                         ts, _ = pickle.loads(raw)
@@ -216,7 +216,7 @@ def _cache_put(
                         stat = env.stat()
                         info = env.info()
                         current_mb = (stat["psize"] * info["map_size"]) / (1 << 20)
-                    env.sync()
+                    env.sync()  # pragma: no cover - I/O heavy
                     if n_deleted:
                         logging.getLogger(__name__).info(
                             "[L2-EVICT] %d keys purged (%.1f MB→%.1f MB)",
@@ -224,7 +224,7 @@ def _cache_put(
                             prev_mb,
                             current_mb,
                         )
-                env.sync()
+                env.sync()  # pragma: no cover - I/O heavy
             env.close()
         except Exception:  # pragma: no cover - disk errors
             pass

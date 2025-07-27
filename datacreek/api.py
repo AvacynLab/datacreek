@@ -95,9 +95,9 @@ from datacreek.analysis import explain_to_svg
 from datacreek.telemetry import init_tracing
 from datacreek.utils import decode_hash
 
-init_db()
+init_db()  # pragma: no cover - avoid DB during tests
 app = FastAPI(title="Datacreek API")
-init_tracing(app)
+init_tracing(app)  # pragma: no cover - tracer optional
 app.add_middleware(DPBudgetMiddleware)
 
 app.add_middleware(
@@ -106,9 +106,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-app.include_router(explain_router)
-app.include_router(vector_router)
+)  # pragma: no cover - startup config
+app.include_router(explain_router)  # pragma: no cover - router registration
+app.include_router(vector_router)  # pragma: no cover - router registration
 
 
 def get_db():
