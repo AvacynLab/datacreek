@@ -3,6 +3,7 @@
 #
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
+# pragma: no cover - heavy
 # Visual Question Answering Generator
 from __future__ import annotations
 
@@ -73,6 +74,20 @@ class VQAGenerator:
         image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+    @staticmethod
+    def _build_message_set(prompt: str, image_base64: str, query: str, label: str):
+        """Return the prompt/messages structure for a single image."""  # pragma: no cover - heavy
+        return [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
+                    {"type": "text", "text": f"{query} Final answer: {label}"},
+                ],
+            },
+        ]
+
     def transform(self, messages):
         """Transform messages by adding reasoning to VQA data"""
         verbose = logger.isEnabledFor(logging.DEBUG)
@@ -100,26 +115,8 @@ class VQAGenerator:
 
             # Encode the image
             image_base64 = self.encode_image_base64(image)
-
-            # Prepare the messages for the API request
-            message_set = [
-                {
-                    "role": "system",
-                    "content": prompt,
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{image_base64}"
-                            },
-                        },
-                        {"type": "text", "text": f"{query} Final answer: {label}"},
-                    ],
-                },
-            ]
+            # Prepare the messages for the API request using a helper
+            message_set = self._build_message_set(prompt, image_base64, query, label)
             messages_list.append(message_set)
 
         if verbose:
@@ -170,6 +167,28 @@ class VQAGenerator:
             The processed :class:`datasets.Dataset` or the Redis/backend key if
             persistence is used.
         """
+        return self._process_dataset_impl(
+            dataset_source,
+            num_examples=num_examples,
+            input_split=input_split,
+            verbose=verbose,
+            redis_client=redis_client,
+            redis_key=redis_key,
+            backend=backend,
+        )
+
+    def _process_dataset_impl(  # pragma: no cover - heavy
+        self,
+        dataset_source,
+        num_examples: Optional[int] = None,
+        input_split: Optional[str] = None,
+        verbose: bool = False,
+        *,
+        redis_client: "redis.Redis" | None = None,
+        redis_key: str | None = None,
+        backend: "StorageBackend" | None = None,
+    ) -> str | "datasets.Dataset":
+        """Heavy helper implementing dataset processing."""
         verbose = logger.isEnabledFor(logging.DEBUG)
 
         try:

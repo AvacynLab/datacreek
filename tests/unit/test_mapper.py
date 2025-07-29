@@ -66,6 +66,7 @@ def test_adjust_ttl_updates(monkeypatch):
     start = mapper._redis_ttl = 1000
     mapper._redis_hits = 1
     mapper._redis_misses = 9
+    mapper._hit_ema = 0
     mapper._last_ttl_eval = 0
     monkeypatch.setattr(mapper.time, "time", lambda: 301.0)
     mapper._adjust_ttl(None)

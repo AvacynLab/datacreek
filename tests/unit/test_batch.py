@@ -67,5 +67,36 @@ async def test_async_process_batches_success():
 @pytest.mark.asyncio
 async def test_async_process_batches_error():
     client = DummyClient(raise_error=True)
-    res = await batch.async_process_batches(client, [[{'a':1}]], batch_size=1, temperature=0.0, parse_fn=lambda x:x)
+    res = await batch.async_process_batches(client, [[{'a':1}]], batch_size=1, temperature=0.0, parse_fn=lambda x: x)
     assert res == []
+
+
+@pytest.mark.asyncio
+async def test_async_process_batches_parse_error(caplog):
+    client = DummyClient()
+    def bad_parse(_):
+        raise ValueError('bad')
+    with caplog.at_level(logging.ERROR):
+        out = await batch.async_process_batches(
+            client,
+            [[{'a': 1}]],
+            batch_size=1,
+            temperature=0.0,
+            parse_fn=bad_parse,
+        )
+    assert out == []
+    assert 'Failed to parse response' in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_async_process_batches_raise_on_error():
+    client = DummyClient(raise_error=True)
+    with pytest.raises(RuntimeError):
+        await batch.async_process_batches(
+            client,
+            [[{'a': 1}]],
+            batch_size=1,
+            temperature=0.0,
+            parse_fn=lambda x: x,
+            raise_on_error=True,
+        )

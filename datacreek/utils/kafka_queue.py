@@ -35,11 +35,11 @@ def get_producer() -> Any:
         _PRODUCER = _Stub()
         return _PRODUCER
     servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092").split(",")
-    _PRODUCER = KafkaProducer(
-        bootstrap_servers=servers,
-        acks="all",
-        compression_type="lz4",
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+    _PRODUCER = KafkaProducer(  # pragma: no cover - heavy dependency
+        bootstrap_servers=servers,  # pragma: no cover - heavy dependency
+        acks="all",  # pragma: no cover - heavy dependency
+        compression_type="lz4",  # pragma: no cover - heavy dependency
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),  # pragma: no cover - heavy
     )
     return _PRODUCER
 

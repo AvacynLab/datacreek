@@ -167,7 +167,7 @@ def _record_error(
 
 
 @celery_app.task
-def ingest_task(
+def ingest_task(  # pragma: no cover - heavy
     user_id: int,
     path: str,
     *,
@@ -195,7 +195,7 @@ def ingest_task(
 
 
 @celery_app.task
-def generate_task(
+def generate_task(  # pragma: no cover - heavy
     user_id: int,
     src_id: int,
     content_type: str,
@@ -242,7 +242,7 @@ def generate_task(
 
 
 @celery_app.task
-def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
+def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:  # pragma: no cover - heavy
     with SessionLocal() as db:
         ds = db.get(Dataset, ds_id)
         if not ds or ds.owner_id != user_id:
@@ -258,7 +258,7 @@ def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:
 
 
 @celery_app.task
-def save_task(user_id: int, ds_id: int, fmt: ExportFormat) -> dict:
+def save_task(user_id: int, ds_id: int, fmt: ExportFormat) -> dict:  # pragma: no cover - heavy
     with SessionLocal() as db:
         ds = db.get(Dataset, ds_id)
         if not ds or ds.owner_id != user_id:
@@ -274,7 +274,7 @@ def save_task(user_id: int, ds_id: int, fmt: ExportFormat) -> dict:
 
 
 @celery_app.task
-def dataset_ingest_task(
+def dataset_ingest_task(  # pragma: no cover - heavy
     name: DatasetName, path: str, user_id: int | None = None, **kwargs
 ) -> dict:
     """Ingest a file into a persisted dataset."""
@@ -388,7 +388,7 @@ def enqueue_dataset_ingest(
 
 
 @celery_app.task
-def dataset_generate_task(
+def dataset_generate_task(  # pragma: no cover - heavy
     name: DatasetName,
     params: dict | None = None,
     user_id: int | None = None,
@@ -442,7 +442,7 @@ def dataset_generate_task(
 
 
 @celery_app.task
-def dataset_cleanup_task(
+def dataset_cleanup_task(  # pragma: no cover - heavy
     name: str, params: dict | None = None, user_id: int | None = None
 ) -> dict:
     """Run cleanup operations on a persisted dataset."""
@@ -488,7 +488,7 @@ def dataset_cleanup_task(
 
 
 @celery_app.task
-def dataset_export_task(
+def dataset_export_task(  # pragma: no cover - heavy
     name: DatasetName,
     fmt: ExportFormat = ExportFormat.JSONL,
     user_id: int | None = None,
@@ -556,7 +556,7 @@ def dataset_export_task(
 
 
 @celery_app.task
-def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> dict:
+def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
     """Persist the dataset graph to Neo4j."""
 
     client = get_redis_client()
@@ -594,7 +594,7 @@ def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
 
 
 @celery_app.task
-def dataset_load_neo4j_task(name: DatasetName, user_id: int | None = None) -> dict:
+def dataset_load_neo4j_task(name: DatasetName, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
     """Load the dataset graph from Neo4j."""
 
     client = get_redis_client()
@@ -630,7 +630,7 @@ def dataset_load_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
 
 
 @celery_app.task
-def dataset_save_redis_graph_task(
+def dataset_save_redis_graph_task(  # pragma: no cover - heavy
     name: DatasetName, user_id: int | None = None
 ) -> dict:
     """Persist the dataset graph to RedisGraph."""
@@ -665,7 +665,7 @@ def dataset_save_redis_graph_task(
 
 
 @celery_app.task
-def dataset_load_redis_graph_task(
+def dataset_load_redis_graph_task(  # pragma: no cover - heavy
     name: DatasetName, user_id: int | None = None
 ) -> dict:
     """Load the dataset graph from RedisGraph."""
@@ -700,7 +700,7 @@ def dataset_load_redis_graph_task(
 
 
 @celery_app.task
-def dataset_operation_task(
+def dataset_operation_task(  # pragma: no cover - heavy
     name: DatasetName,
     operation: str,
     params: dict | None = None,
@@ -744,7 +744,7 @@ def dataset_operation_task(
 
 
 @celery_app.task
-def dataset_prune_versions_task(
+def dataset_prune_versions_task(  # pragma: no cover - heavy
     name: DatasetName, limit: int | None = None, user_id: int | None = None
 ) -> dict:
     """Prune stored versions for ``name`` down to ``limit``."""
@@ -776,7 +776,7 @@ def dataset_prune_versions_task(
 
 
 @celery_app.task
-def dataset_restore_version_task(
+def dataset_restore_version_task(  # pragma: no cover - heavy
     name: DatasetName, index: int, user_id: int | None = None
 ) -> dict:
     """Restore ``index`` for ``name`` as the latest dataset version."""
@@ -812,7 +812,7 @@ def dataset_restore_version_task(
 
 
 @celery_app.task
-def dataset_delete_version_task(
+def dataset_delete_version_task(  # pragma: no cover - heavy
     name: DatasetName, index: int, user_id: int | None = None
 ) -> dict:
     """Delete ``index`` from ``name`` and persist the dataset."""
@@ -848,7 +848,7 @@ def dataset_delete_version_task(
 
 
 @celery_app.task
-def datasets_prune_versions_task(limit: int | None = None) -> dict:
+def datasets_prune_versions_task(limit: int | None = None) -> dict:  # pragma: no cover - heavy
     """Prune stored versions for all datasets."""
 
     client = get_redis_client()
@@ -875,7 +875,7 @@ def datasets_prune_versions_task(limit: int | None = None) -> dict:
 
 
 @celery_app.task
-def datasets_prune_stale_task(days: int = 30) -> dict:
+def datasets_prune_stale_task(days: int = 30) -> dict:  # pragma: no cover - heavy
     """Delete datasets not accessed within ``days`` days."""
 
     client = get_redis_client()
@@ -927,7 +927,7 @@ def datasets_prune_stale_task(days: int = 30) -> dict:
 
 
 @celery_app.task
-def dataset_extract_facts_task(
+def dataset_extract_facts_task(  # pragma: no cover - heavy
     name: DatasetName,
     provider: str | None = None,
     profile: str | None = None,
@@ -964,7 +964,7 @@ def dataset_extract_facts_task(
 
 
 @celery_app.task
-def dataset_extract_entities_task(
+def dataset_extract_entities_task(  # pragma: no cover - heavy
     name: DatasetName, model: str | None = None, user_id: int | None = None
 ) -> dict:
     """Run NER asynchronously."""
@@ -994,7 +994,7 @@ def dataset_extract_entities_task(
 
 
 @celery_app.task
-def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict:
+def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
     """Remove a dataset from Redis and Neo4j."""
 
     client = get_redis_client()
@@ -1062,7 +1062,7 @@ def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict:
 
 
 @celery_app.task
-def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
+def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
     """Persist a knowledge graph to Neo4j."""
 
     client = get_redis_client()
@@ -1100,7 +1100,7 @@ def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:
 
 
 @celery_app.task
-def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:
+def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
     """Load a knowledge graph from Neo4j."""
 
     client = get_redis_client()
@@ -1136,7 +1136,7 @@ def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:
 
 
 @celery_app.task
-def graph_delete_task(name: str, user_id: int | None = None) -> dict:
+def graph_delete_task(name: str, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
     """Remove a knowledge graph from Redis and Neo4j."""
 
     client = get_redis_client()

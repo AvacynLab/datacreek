@@ -126,3 +126,34 @@ def test_load_config_errors(tmp_path):
     path = tmp_path / "missing.yml"
     with pytest.raises(FileNotFoundError):
         config.load_config(str(path))
+
+
+def test_manual_parse_and_prompt(monkeypatch, tmp_path):
+    """Ensure manual YAML parser works when PyYAML and json fail."""
+    cfg = tmp_path / "m.yml"
+    cfg.write_text("""\nllm:\n  provider: vllm\nflag: true\nnum: 5\n""")
+    monkeypatch.setattr(config, "yaml", None)
+    import json as json_mod
+    monkeypatch.setattr(json_mod, "load", lambda f: (_ for _ in ()).throw(ValueError()), raising=False)
+    loaded = config.load_config(str(cfg))
+    assert loaded["flag"] is True and loaded["num"] == 5
+    with pytest.raises(ValueError):
+        config.get_prompt(loaded, "missing")
+    loaded.setdefault("prompts", {"p": "hi"})
+    assert config.get_prompt(loaded, "p") == "hi"
+
+
+def test_validation_error(monkeypatch, tmp_path):
+    """Validation failures surface to the caller."""
+    cfg = tmp_path / "b.yml"
+    cfg.write_text("a: 1\n")
+    monkeypatch.setattr(config, "yaml", None)
+    class DummyError(Exception):
+        pass
+
+    monkeypatch.setattr(config, "ValidationError", DummyError)
+    monkeypatch.setattr(config.ConfigSchema, "model_validate", lambda data: (_ for _ in ()).throw(DummyError()))
+    import json as json_mod
+    monkeypatch.setattr(json_mod, "load", lambda f: {}, raising=False)
+    with pytest.raises(DummyError):
+        config.load_config(str(cfg))

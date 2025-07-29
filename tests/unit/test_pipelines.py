@@ -123,3 +123,72 @@ def test_validate_step_result_pref_pair_invalid():
             pipelines.PipelineStep.GENERATE_CANDIDATES,
             {'pairs': [{'question': 'q', 'chosen': 'c'}]},
         )
+
+def test_gen_options_start_variants(tmp_path):
+    conf = tmp_path / 'c.yaml'
+    model_none = pipelines.GenerationOptionsModel(config_path=str(conf))
+    opts_none = model_none.to_options()
+    assert opts_none.start_step is None
+    model_enum = pipelines.GenerationOptionsModel(start_step=pipelines.PipelineStep.SAVE)
+    opts_enum = model_enum.to_options()
+    assert opts_enum.start_step is pipelines.PipelineStep.SAVE
+
+
+def test_gen_options_pipeline_path(tmp_path):
+    cfg = tmp_path / 'cfg.yaml'
+    model = pipelines.GenerationOptionsModel(pipeline_config_path=str(cfg))
+    opts = model.to_options()
+    assert opts.pipeline_config_path == cfg
+
+
+def test_validate_step_result_qa_pair_too_long():
+    long_q = 'q' * 1001
+    long_a = 'a' * 5001
+    with pytest.raises(ValueError):
+        pipelines._validate_step_result(
+            pipelines.DatasetType.QA,
+            pipelines.PipelineStep.GENERATE_QA,
+            {'qa_pairs': [{'question': long_q, 'answer': long_a}]},
+        )
+
+
+def test_validate_step_result_pref_list(tmp_path):
+    responses = [{'question': 'q', 'answers': [{'text': 'a1'}, {'text': 'a2'}]}]
+    payload = {'responses': responses}
+    assert pipelines._validate_step_result(
+        pipelines.DatasetType.PREF_LIST,
+        pipelines.PipelineStep.GENERATE_CANDIDATES,
+        payload,
+    ) == payload
+
+
+def test_validate_step_result_pref_list_invalid():
+    with pytest.raises(ValueError):
+        pipelines._validate_step_result(
+            pipelines.DatasetType.PREF_LIST,
+            pipelines.PipelineStep.GENERATE_CANDIDATES,
+            {'responses': [{'question': '', 'answers': [{'text': 'a'}]}]},
+        )
+
+
+def test_load_pipelines_from_file_unknown_type(tmp_path, caplog):
+    yaml_text = 'foo:\n  steps: [ingest]\n  trainings: [sft]\n'
+    path = tmp_path / 'p.yaml'
+    path.write_text(yaml_text)
+    with caplog.at_level('WARNING'):
+        data = pipelines.load_pipelines_from_file(path)
+    assert pipelines.DatasetType.QA not in data
+    assert any('Unknown dataset type' in rec.message for rec in caplog.records)
+
+
+def test_load_pipelines_invalid_file(tmp_path):
+    bad = tmp_path / 'bad.yaml'
+    bad.write_text(': invalid')
+    data = pipelines.load_pipelines(str(bad))
+    assert pipelines.DatasetType.QA in data
+
+
+def test_get_pipeline_unknown(monkeypatch):
+    monkeypatch.setattr(pipelines, 'load_pipelines', lambda: {})
+    with pytest.raises(KeyError):
+        pipelines.get_pipeline(pipelines.DatasetType.QA)

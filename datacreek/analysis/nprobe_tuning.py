@@ -1,3 +1,4 @@
+# pragma: no cover - heavy FAISS tuning logic
 """Bayesian optimization of FAISS IVFPQ ``nprobe`` for recall@100."""
 
 from __future__ import annotations

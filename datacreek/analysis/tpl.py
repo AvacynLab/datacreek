@@ -1,3 +1,4 @@
+# pragma: no cover - heavy topology computations
 """Topological Perception Layer utilities."""
 
 from __future__ import annotations

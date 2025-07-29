@@ -1,5 +1,0 @@
-[run]
-omit =
-    datacreek/core/knowledge_graph.py
-    datacreek/core/ingest.py
-    datacreek/core/dataset_full.py

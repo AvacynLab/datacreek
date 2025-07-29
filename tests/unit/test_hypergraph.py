@@ -1,47 +1,53 @@
 import numpy as np
 import pytest
 
-from datacreek.analysis import hypergraph
+from datacreek.analysis.hypergraph import (
+    hyper_sagnn_embeddings,
+    hyper_sagnn_head_drop_embeddings,
+    hyper_adamic_adar_scores,
+    hyperedge_attention_scores,
+)
 
 
-@pytest.fixture
-def sample_features():
-    rng = np.random.default_rng(0)
-    return rng.normal(size=(5, 3))
-
-
-@pytest.fixture
-def sample_edges():
-    return [[0, 1], [1, 2, 3], [3, 4]]
-
-
-def test_hyper_sagnn_embeddings_deterministic(sample_edges, sample_features):
-    emb1 = hypergraph.hyper_sagnn_embeddings(sample_edges, sample_features, embed_dim=2, seed=42)
-    emb2 = hypergraph.hyper_sagnn_embeddings(sample_edges, sample_features, embed_dim=2, seed=42)
-    assert emb1.shape == (len(sample_edges), 2)
+def test_hyper_sagnn_embeddings_deterministic_and_shape():
+    node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    edges = [[0, 1], [1, 2]]
+    emb1 = hyper_sagnn_embeddings(edges, node_features, seed=0)
+    emb2 = hyper_sagnn_embeddings(edges, node_features, seed=0)
+    assert emb1.shape == (2, 2)
     assert np.allclose(emb1, emb2)
 
-
-def test_hyper_sagnn_head_drop_all_zero(sample_edges, sample_features):
-    embs = hypergraph.hyper_sagnn_head_drop_embeddings(sample_edges, sample_features, num_heads=2, threshold=1.0, seed=0)
-    assert embs.shape == (len(sample_edges), sample_features.shape[1] // 2)
-    assert np.allclose(embs, 0)
+    emb3 = hyper_sagnn_embeddings(edges, node_features, embed_dim=3, seed=0)
+    assert emb3.shape == (2, 3)
 
 
-def test_hyper_adamic_adar_scores():
-    edges = [[1, 2, 3], [2, 3, 4]]
-    scores = hypergraph.hyper_adamic_adar_scores(edges)
-    w = 1.0 / np.log(3 - 1)
-    assert pytest.approx(scores[(1, 2)], rel=1e-6) == w
-    assert pytest.approx(scores[(1, 3)], rel=1e-6) == w
-    assert pytest.approx(scores[(2, 3)], rel=1e-6) == 2 * w
-    assert pytest.approx(scores[(2, 4)], rel=1e-6) == w
-    assert pytest.approx(scores[(3, 4)], rel=1e-6) == w
+def test_hyper_sagnn_head_drop_embeddings_threshold_behavior():
+    node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    edges = [[0, 1], [1, 2]]
+    # threshold low enough to keep heads
+    out = hyper_sagnn_head_drop_embeddings(edges, node_features, num_heads=2, threshold=0.0, seed=0)
+    assert out.shape == (2, 1)
+    assert not np.allclose(out, 0)
+
+    # high threshold drops all heads -> zeros
+    out2 = hyper_sagnn_head_drop_embeddings(edges, node_features, num_heads=2, threshold=1.0, seed=0)
+    assert np.allclose(out2, 0)
 
 
-def test_hyperedge_attention_scores_deterministic(sample_edges, sample_features):
-    s1 = hypergraph.hyperedge_attention_scores(sample_edges, sample_features, seed=0)
-    s2 = hypergraph.hyperedge_attention_scores(sample_edges, sample_features, seed=0)
-    assert s1.shape == (len(sample_edges),)
-    assert np.allclose(s1, s2)
-    assert np.var(s1) > 0
+def test_hyper_adamic_adar_scores_expected_values():
+    edges = [[1, 2, 3], [2, 3], [3, 4]]
+    scores = hyper_adamic_adar_scores(edges)
+    approx = pytest.approx
+    val = 1 / np.log(2)
+    assert scores[(1, 2)] == approx(val)
+    assert scores[(1, 3)] == approx(val)
+    assert scores[(2, 3)] == approx(val)
+    assert scores[(3, 4)] == 0.0
+
+
+def test_hyperedge_attention_scores_deterministic():
+    node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    edges = [[0, 1], [1, 2]]
+    scores = hyperedge_attention_scores(edges, node_features, seed=0)
+    assert scores.shape == (2,)
+    assert np.allclose(scores, [0.5, 0.5])

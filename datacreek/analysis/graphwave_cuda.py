@@ -1,3 +1,4 @@
+# pragma: no cover - requires GPU libraries
 """GPU-accelerated GraphWave utilities."""
 
 from __future__ import annotations

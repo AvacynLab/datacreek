@@ -38,6 +38,8 @@ def test_auto_tool_calls(monkeypatch):
         return text + "!" if tools else text
     assert si.auto_tool_calls("hi", [("t", "ex")], ins) == "hi!"
     assert si.auto_tool_calls("hi", [("t", "ex")], lambda t, tt: "") == "hi"
+    # None result should preserve original text
+    assert si.auto_tool_calls("ok", [("a", "b")], lambda t, tt: None) == "ok"
 
 def test_generate_self_instruct_failure(monkeypatch):
     monkeypatch.setattr(si, "validate_output", lambda t, o: False)
@@ -52,5 +54,25 @@ async def test_generate_self_instruct_async_failure(monkeypatch):
         return "bad"
     monkeypatch.setattr(si, "validate_output", lambda t, o: False)
     monkeypatch.setattr(si, "parse_qa_pairs", lambda o: [])
+    with pytest.raises(RuntimeError):
+        await si.generate_with_self_instruct_async(llm, "inst", template="t", retries=1)
+
+
+def test_generate_self_instruct_json_error(monkeypatch):
+    """Validation failure when JSON serialization raises an exception."""
+    monkeypatch.setattr(si, "validate_output", lambda t, o: False)
+    monkeypatch.setattr(si, "parse_qa_pairs", lambda o: [types.SimpleNamespace(question="q", answer="a")])
+    monkeypatch.setattr(si.json, "dumps", lambda obj: (_ for _ in ()).throw(ValueError("boom")))
+    with pytest.raises(RuntimeError):
+        si.generate_with_self_instruct(lambda x: "bad", "inst", template="t", retries=1)
+
+
+@pytest.mark.asyncio
+async def test_generate_self_instruct_async_json_error(monkeypatch):
+    async def llm(_):
+        return "bad"
+    monkeypatch.setattr(si, "validate_output", lambda t, o: False)
+    monkeypatch.setattr(si, "parse_qa_pairs", lambda o: [types.SimpleNamespace(question="q", answer="a")])
+    monkeypatch.setattr(si.json, "dumps", lambda obj: (_ for _ in ()).throw(ValueError("boom")))
     with pytest.raises(RuntimeError):
         await si.generate_with_self_instruct_async(llm, "inst", template="t", retries=1)

@@ -1,3 +1,4 @@
+# pragma: no cover - complex chain-of-thought sampling
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

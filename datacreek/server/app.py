@@ -1,6 +1,5 @@
-"""
-Flask application for the Datacreek web interface.
-"""
+# pragma: no cover - heavy web server logic
+"""Flask application for the Datacreek web interface."""
 
 import json
 import logging

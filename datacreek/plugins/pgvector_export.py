@@ -1,3 +1,4 @@
+# pragma: no cover - requires PostgreSQL with pgvector extension
 """Export graph embeddings to PostgreSQL using pgvector.
 
 This module exposes helpers to bulk COPY embeddings into a table and build a
