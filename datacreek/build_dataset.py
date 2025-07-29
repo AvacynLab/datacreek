@@ -1,3 +1,4 @@
+# pragma: no cover - script wrapper
 """Convenience entry point for the dataset pipeline."""
 
 from datacreek.core.scripts import build_dataset

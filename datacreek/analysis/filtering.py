@@ -80,7 +80,9 @@ def entropy_triangle_threshold(
     weights = [abs(data.get(weight, 1.0)) for _, _, data in graph.edges(data=True)]
     if not weights:
         return 1
-    arr = np.asarray(weights, dtype=float)
-    p = arr / arr.sum()
-    H = -float(np.sum(p * np.log(p)) / np.log(base))
+    arr = [float(w) for w in weights]
+    total = sum(arr) or 1.0
+    p = [w / total for w in arr]
+    from math import log
+    H = -float(sum(pi * log(pi, base) for pi in p))
     return max(1, int(round(scale * H)))

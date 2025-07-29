@@ -48,3 +48,16 @@ def test_estimate_lambda_max_with_scipy_monkeypatch(monkeypatch):
     monkeypatch.setattr(nx, "to_scipy_sparse_array", lambda graph, format="csr": nx.to_numpy_array(graph))
     lmax = gb.estimate_lambda_max(g, iters=3)
     assert lmax > 0
+
+def test_estimate_lambda_max_without_scipy(monkeypatch):
+    g = nx.cycle_graph(4)
+    monkeypatch.setattr(gb, "sp", None, raising=False)
+    lmax = gb.estimate_lambda_max(g, iters=3)
+    assert lmax > 0
+
+
+def test_update_graphwave_bandwidth_no_update():
+    g = nx.path_graph(3)
+    t1 = gb.update_graphwave_bandwidth(g, threshold=0.0, iters=2)
+    t2 = gb.update_graphwave_bandwidth(g, threshold=1.0, iters=2)
+    assert t2 == t1

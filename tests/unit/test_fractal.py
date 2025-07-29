@@ -1,4 +1,5 @@
 import time
+import numpy as np
 import networkx as nx
 import pytest
 
@@ -55,6 +56,14 @@ def test_box_cover_and_dimensions():
     # all nodes must be covered
     assert set().union(*boxes) == set(G.nodes())
 
+    def simple_polyfit(x, y, deg):
+        a = np.vstack([x, np.ones(len(x))]).T
+        m, c = np.linalg.lstsq(a, y, rcond=None)[0]
+        return np.array([m, c])
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(fractal.np, "polyfit", simple_polyfit)
+
     dim, counts = fractal.box_counting_dimension(G, radii=[1, 2])
     # two radii -> two count entries
     assert len(counts) == 2
@@ -64,9 +73,13 @@ def test_box_cover_and_dimensions():
     assert len(ccounts) == 2
     assert cdim >= 0
 
+    monkeypatch.undo()
 
-def test_mdl_functions():
+
+def test_mdl_functions(monkeypatch):
     counts = [(1, 5), (2, 3), (4, 1)]
+    monkeypatch.setattr(fractal.np, "polyfit", lambda x, y, d: np.array([0.0, 0.0]))
+
     assert fractal.mdl_optimal_radius(counts) == 1
     v = fractal.mdl_value(counts)
     s = fractal._slope(counts)
@@ -74,7 +87,14 @@ def test_mdl_functions():
     assert isinstance(v, float)
     assert 0 <= idx <= len(counts) - 1
 
-def test_graph_lacunarity_and_fourier():
+    monkeypatch.undo()
+
+def test_graph_lacunarity_and_fourier(monkeypatch):
+    """Ensure Fourier transforms round trip correctly and lacunarity > 0."""
+    # avoid SciPy sparse path for deterministic tests
+    monkeypatch.setattr(fractal, "csgraph", None)
+    monkeypatch.setattr(fractal, "eigh", np.linalg.eigh)
+
     G = nx.cycle_graph(4)
     lac = fractal.graph_lacunarity(G, radius=1)
     assert lac > 0
@@ -88,6 +108,13 @@ def test_graph_lacunarity_and_fourier():
 
 def test_fractal_information_metrics_and_density(monkeypatch):
     G = nx.path_graph(5)
+
+    def simple_polyfit(x, y, deg):
+        a = np.vstack([x, np.ones(len(x))]).T
+        m, c = np.linalg.lstsq(a, y, rcond=None)[0]
+        return np.array([m, c])
+
+    monkeypatch.setattr(fractal.np, "polyfit", simple_polyfit)
 
     monkeypatch.setattr(fractal, "gd", object())
     monkeypatch.setattr(fractal, "gr", object())

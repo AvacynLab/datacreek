@@ -1,4 +1,40 @@
-....................................                                     [100%]
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+........................................................................ [ 44%]
+........................................................................ [ 59%]
+........................................................................ [ 74%]
+......................s.s............................................... [ 89%]
+...................................................                      [100%]
+=============================== warnings summary ===============================
+tests/unit/test_dp_middleware.py::test_no_headers
+tests/unit/test_dp_middleware.py::test_invalid_headers
+tests/unit/test_dp_middleware.py::test_tenant_missing
+tests/unit/test_dp_middleware.py::test_budget_exceeded
+tests/unit/test_dp_middleware.py::test_budget_updated
+  /root/.pyenv/versions/3.12.10/lib/python3.12/site-packages/starlette/applications.py:193: DeprecationWarning: The `route` decorator is deprecated, and will be removed in version 1.0.0. Refer to https://www.starlette.io/routing/ for the recommended approach.
+    warnings.warn(
+
+tests/unit/test_mapper.py::test_cache_mapper_nerve_with_redis_and_lmdb
+  /root/.pyenv/versions/3.12.10/lib/python3.12/site-packages/networkx/readwrite/json_graph/node_link.py:145: FutureWarning: 
+  The default value will be `edges="edges" in NetworkX 3.6.
+  
+  To make this warning go away, explicitly set the edges kwarg, e.g.:
+  
+    nx.node_link_data(G, edges="links") to preserve current behavior, or
+    nx.node_link_data(G, edges="edges") for forward compatibility.
+    warnings.warn(
+
+tests/unit/test_mapper.py::test_cache_mapper_nerve_with_redis_and_lmdb
+  /root/.pyenv/versions/3.12.10/lib/python3.12/site-packages/networkx/readwrite/json_graph/node_link.py:290: FutureWarning: 
+  The default value will be changed to `edges="edges" in NetworkX 3.6.
+  
+  To make this warning go away, explicitly set the edges kwarg, e.g.:
+  
+    nx.node_link_graph(data, edges="links") to preserve current behavior, or
+    nx.node_link_graph(data, edges="edges") for forward compatibility.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.10-final-0 _______________
 
@@ -7,78 +43,81 @@ Name                                             Stmts   Miss  Cover
 datacreek/__init__.py                               15      0   100%
 datacreek/analysis/__init__.py                       1      0   100%
 datacreek/analysis/autotune.py                      70      4    94%
-datacreek/analysis/chebyshev_diag.py                14     14     0%
-datacreek/analysis/compression.py                   94     94     0%
-datacreek/analysis/explain_viz.py                   27     27     0%
-datacreek/analysis/filtering.py                     26     26     0%
-datacreek/analysis/fractal.py                      185    155    16%
-datacreek/analysis/generation.py                   175    175     0%
-datacreek/analysis/governance.py                    54     54     0%
-datacreek/analysis/graphwave_bandwidth.py           35     35     0%
+datacreek/analysis/chebyshev_diag.py                14      0   100%
+datacreek/analysis/compression.py                   94     12    87%
+datacreek/analysis/explain_viz.py                   27      0   100%
+datacreek/analysis/filtering.py                     28      0   100%
+datacreek/analysis/fractal.py                      185     19    90%
+datacreek/analysis/generation.py                   175     20    89%
+datacreek/analysis/governance.py                    54      2    96%
+datacreek/analysis/graphwave_bandwidth.py           35      1    97%
 datacreek/analysis/graphwave_cuda.py                17     17     0%
-datacreek/analysis/hybrid_ann.py                    17     17     0%
-datacreek/analysis/hypergraph.py                    87     87     0%
-datacreek/analysis/index.py                         72     60    17%
-datacreek/analysis/information.py                   88     76    14%
-datacreek/analysis/ingestion.py                     28     28     0%
-datacreek/analysis/mapper.py                       270    270     0%
-datacreek/analysis/monitoring.py                    71     54    24%
-datacreek/analysis/multiview.py                    155    116    25%
+datacreek/analysis/hybrid_ann.py                    17      0   100%
+datacreek/analysis/hypergraph.py                    87      1    99%
+datacreek/analysis/index.py                         72      6    92%
+datacreek/analysis/information.py                   98     10    90%
+datacreek/analysis/ingestion.py                     28      3    89%
+datacreek/analysis/mapper.py                       270     41    85%
+datacreek/analysis/monitoring.py                    71      2    97%
+datacreek/analysis/multiview.py                    155      7    95%
 datacreek/analysis/node2vec_tuning.py               48     48     0%
 datacreek/analysis/nprobe_tuning.py                 61     61     0%
-datacreek/analysis/poincare_recentering.py          94     94     0%
-datacreek/analysis/privacy.py                       14     14     0%
-datacreek/analysis/rollback.py                      24     24     0%
-datacreek/analysis/sheaf.py                        144    144     0%
-datacreek/analysis/symmetry.py                      47     47     0%
+datacreek/analysis/poincare_recentering.py          94      3    97%
+datacreek/analysis/privacy.py                       14      0   100%
+datacreek/analysis/rollback.py                      24      1    96%
+datacreek/analysis/sheaf.py                        144     15    90%
+datacreek/analysis/symmetry.py                      47      4    91%
 datacreek/analysis/tpl.py                           57     57     0%
 datacreek/analysis/tpl_incremental.py               49     49     0%
-datacreek/api.py                                   188    184     2%
+datacreek/api.py                                   188     37    80%
 datacreek/backend/__init__.py                        2      0   100%
 datacreek/backend/array_api.py                      22      3    86%
-datacreek/backends.py                               89     66    26%
+datacreek/backends.py                               89     13    85%
 datacreek/build_dataset.py                           3      3     0%
-datacreek/cli.py                                    13     13     0%
+datacreek/cli.py                                    13      1    92%
 datacreek/config/__init__.py                         0      0   100%
 datacreek/config/schema.py                          14      0   100%
-datacreek/config_models.py                         131     21    84%
-datacreek/core/__init__.py                           6      2    67%
-datacreek/core/cleanup.py                           19     14    26%
-datacreek/core/context.py                            8      2    75%
-datacreek/core/create.py                            29     10    66%
-datacreek/core/curate.py                           158    137    13%
+datacreek/config_models.py                         131     11    92%
+datacreek/core/__init__.py                           6      0   100%
+datacreek/core/cleanup.py                           19      2    89%
+datacreek/core/context.py                            8      0   100%
+datacreek/core/create.py                            29      0   100%
+datacreek/core/curate.py                           158     20    87%
 datacreek/core/dataset.py                            1      0   100%
+datacreek/core/dataset_full.py                     301    301     0%
 datacreek/core/dataset_light.py                     60      3    95%
-datacreek/core/fractal.py                          105    105     0%
-datacreek/core/runners.py                           76     76     0%
-datacreek/core/save_as.py                           66     52    21%
-datacreek/db.py                                     57     57     0%
-datacreek/dp/__init__.py                             2      2     0%
-datacreek/dp/accountant.py                          21     21     0%
-datacreek/generators/__init__.py                    30     30     0%
-datacreek/generators/base.py                        18     18     0%
-datacreek/generators/conversation_generator.py      25     25     0%
+datacreek/core/fractal.py                          105      8    92%
+datacreek/core/ingest.py                           385     75    81%
+datacreek/core/knowledge_graph.py                   57      3    95%
+datacreek/core/runners.py                           76     11    86%
+datacreek/core/save_as.py                           66     10    85%
+datacreek/db.py                                     57      5    91%
+datacreek/dp/__init__.py                             2      0   100%
+datacreek/dp/accountant.py                          21      1    95%
+datacreek/generators/__init__.py                    30      0   100%
+datacreek/generators/base.py                        18      2    89%
+datacreek/generators/conversation_generator.py      25      0   100%
 datacreek/generators/cot_generator.py               97     97     0%
-datacreek/generators/kg_generator.py                64     64     0%
-datacreek/generators/multi_tool_generator.py        30     30     0%
-datacreek/generators/pref_generator.py              59     59     0%
-datacreek/generators/qa_generator.py               218    218     0%
-datacreek/generators/tool_generator.py              30     30     0%
-datacreek/generators/vqa_generator.py              105    105     0%
-datacreek/models/__init__.py                        45     43     4%
+datacreek/generators/kg_generator.py                64     13    80%
+datacreek/generators/multi_tool_generator.py        30      0   100%
+datacreek/generators/pref_generator.py              59      8    86%
+datacreek/generators/qa_generator.py                80     11    86%
+datacreek/generators/tool_generator.py              30      0   100%
+datacreek/generators/vqa_generator.py               59      3    95%
+datacreek/models/__init__.py                        45      0   100%
 datacreek/models/content_type.py                    13      0   100%
 datacreek/models/cot.py                              9      1    89%
-datacreek/models/export_format.py                    7      7     0%
-datacreek/models/llm_client.py                      90     68    24%
-datacreek/models/llm_service.py                     17     17     0%
-datacreek/models/qa.py                              24     12    50%
-datacreek/models/results.py                         61     11    82%
-datacreek/models/stage.py                            7      7     0%
-datacreek/models/task_status.py                     16     16     0%
+datacreek/models/export_format.py                    7      0   100%
+datacreek/models/llm_client.py                      90     17    81%
+datacreek/models/llm_service.py                     17      0   100%
+datacreek/models/qa.py                              24      2    92%
+datacreek/models/results.py                         61      7    89%
+datacreek/models/stage.py                            7      0   100%
+datacreek/models/task_status.py                     16      0   100%
 datacreek/parsers/__init__.py                       18      3    83%
-datacreek/parsers/audio_parser.py                   12      9    25%
-datacreek/parsers/base.py                            3      1    67%
-datacreek/parsers/code_parser.py                     6      2    67%
+datacreek/parsers/audio_parser.py                   12      2    83%
+datacreek/parsers/base.py                            3      0   100%
+datacreek/parsers/code_parser.py                     6      0   100%
 datacreek/parsers/docx_parser.py                    11      0   100%
 datacreek/parsers/html_parser.py                    12      0   100%
 datacreek/parsers/image_parser.py                   12      0   100%
@@ -87,60 +126,60 @@ datacreek/parsers/ppt_parser.py                     11      0   100%
 datacreek/parsers/txt_parser.py                      6      0   100%
 datacreek/parsers/whisper_audio_parser.py           32      6    81%
 datacreek/parsers/youtube_parser.py                 17      2    88%
-datacreek/pipelines.py                             292    125    57%
+datacreek/pipelines.py                             292     27    91%
 datacreek/plugins/__init__.py                        2      2     0%
 datacreek/plugins/pgvector_export.py                53     53     0%
-datacreek/routers/__init__.py                        2      2     0%
-datacreek/routers/explain_router.py                 39     39     0%
-datacreek/routers/vector_router.py                  25     25     0%
-datacreek/schemas.py                                55     55     0%
+datacreek/routers/__init__.py                        2      0   100%
+datacreek/routers/explain_router.py                 39      0   100%
+datacreek/routers/vector_router.py                  25      0   100%
+datacreek/schemas.py                                55      0   100%
 datacreek/security/__init__.py                       0      0   100%
-datacreek/security/dp_budget.py                     43     43     0%
-datacreek/security/dp_middleware.py                 40     40     0%
-datacreek/security/tenant_privacy.py                29     29     0%
+datacreek/security/dp_budget.py                     43      1    98%
+datacreek/security/dp_middleware.py                 40      0   100%
+datacreek/security/tenant_privacy.py                29      1    97%
 datacreek/server/__init__.py                         0      0   100%
 datacreek/server/app.py                           1257   1257     0%
-datacreek/services.py                               98     98     0%
-datacreek/storage.py                                21     10    52%
-datacreek/tasks.py                                 763    763     0%
-datacreek/telemetry.py                              39     39     0%
-datacreek/templates/__init__.py                      1      1     0%
-datacreek/templates/library.py                      43     43     0%
-datacreek/utils/__init__.py                         54     24    56%
+datacreek/services.py                               98     12    88%
+datacreek/storage.py                                21      0   100%
+datacreek/tasks.py                                  77     10    87%
+datacreek/telemetry.py                              39      5    87%
+datacreek/templates/__init__.py                      1      0   100%
+datacreek/templates/library.py                      43      4    91%
+datacreek/utils/__init__.py                         54      6    89%
 datacreek/utils/audio_vad.py                        28      0   100%
-datacreek/utils/backpressure.py                     55     37    33%
-datacreek/utils/batch.py                            38     38     0%
-datacreek/utils/cache.py                            69     49    29%
+datacreek/utils/backpressure.py                     55      3    95%
+datacreek/utils/batch.py                            38      0   100%
+datacreek/utils/cache.py                            69      9    87%
 datacreek/utils/checksum.py                          8      0   100%
-datacreek/utils/chunking.py                         89     78    12%
-datacreek/utils/config.py                          155     94    39%
-datacreek/utils/crypto.py                           25     16    36%
+datacreek/utils/chunking.py                         89      1    99%
+datacreek/utils/config.py                          155     20    87%
+datacreek/utils/crypto.py                           25      0   100%
 datacreek/utils/curation_agent.py                   24      4    83%
-datacreek/utils/dataset_cleanup.py                  16     12    25%
-datacreek/utils/delta_export.py                     24     14    42%
-datacreek/utils/emotion.py                          15     15     0%
-datacreek/utils/entity_extraction.py                16     16     0%
-datacreek/utils/evict_log.py                        36     36     0%
-datacreek/utils/fact_extraction.py                  34     34     0%
-datacreek/utils/format_converter.py                 27     19    30%
-datacreek/utils/gitinfo.py                           8      5    38%
-datacreek/utils/graph_text.py                       56     49    12%
-datacreek/utils/image_captioning.py                 33     33     0%
-datacreek/utils/image_dedup.py                      30     30     0%
-datacreek/utils/kafka_queue.py                      36     27    25%
-datacreek/utils/llm_processing.py                  136    126     7%
-datacreek/utils/metrics.py                           9      6    33%
-datacreek/utils/modality.py                         27     27     0%
-datacreek/utils/neo4j_breaker.py                    26     26     0%
-datacreek/utils/progress.py                         14     14     0%
-datacreek/utils/rate_limit.py                       46     30    35%
-datacreek/utils/redis_helpers.py                    15     11    27%
-datacreek/utils/redis_pid.py                        74     38    49%
-datacreek/utils/retrieval.py                       132    115    13%
-datacreek/utils/self_instruct.py                    42     42     0%
-datacreek/utils/text.py                            119     96    19%
-datacreek/utils/toolformer.py                       42     35    17%
-datacreek/utils/whisper_batch.py                    57     57     0%
+datacreek/utils/dataset_cleanup.py                  16      0   100%
+datacreek/utils/delta_export.py                     24      1    96%
+datacreek/utils/emotion.py                          15      0   100%
+datacreek/utils/entity_extraction.py                16      0   100%
+datacreek/utils/evict_log.py                        36      6    83%
+datacreek/utils/fact_extraction.py                  34      1    97%
+datacreek/utils/format_converter.py                 27      2    93%
+datacreek/utils/gitinfo.py                           8      0   100%
+datacreek/utils/graph_text.py                       56      1    98%
+datacreek/utils/image_captioning.py                 33      2    94%
+datacreek/utils/image_dedup.py                      30      0   100%
+datacreek/utils/kafka_queue.py                      35      4    89%
+datacreek/utils/llm_processing.py                  136     22    84%
+datacreek/utils/metrics.py                           9      0   100%
+datacreek/utils/modality.py                         27      0   100%
+datacreek/utils/neo4j_breaker.py                    26      4    85%
+datacreek/utils/progress.py                         14      0   100%
+datacreek/utils/rate_limit.py                       46      1    98%
+datacreek/utils/redis_helpers.py                    15      0   100%
+datacreek/utils/redis_pid.py                        74      4    95%
+datacreek/utils/retrieval.py                        34      3    91%
+datacreek/utils/self_instruct.py                    42      2    95%
+datacreek/utils/text.py                            119     14    88%
+datacreek/utils/toolformer.py                       42      0   100%
+datacreek/utils/whisper_batch.py                    57      9    84%
 --------------------------------------------------------------------
-TOTAL                                             8672   7382    15%
-36 passed in 2.54s
+TOTAL                                             8458   2561    70%
+481 passed, 2 skipped, 7 warnings in 19.09s

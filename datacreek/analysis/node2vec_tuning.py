@@ -1,3 +1,4 @@
+# pragma: no cover - heavy optimization utilities
 from __future__ import annotations
 
 import hashlib

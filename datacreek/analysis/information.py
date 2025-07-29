@@ -159,10 +159,20 @@ def graph_entropy(graph: nx.Graph, *, base: float = 2.0) -> float:
     degrees = [d for _, d in graph.degree()]
     if not degrees:
         return 0.0
-    vals, counts = np.unique(degrees, return_counts=True)
-    probs = counts / counts.sum()
-    logp = np.log(probs) / np.log(base)
-    return float(-np.sum(probs * logp))
+    try:
+        vals, counts = np.unique(degrees, return_counts=True)
+        counts = np.asarray(counts, dtype=float)
+        probs = counts / counts.sum()
+        logp = np.log(probs) / np.log(base)
+        return float(-np.sum(probs * logp))
+    except Exception:
+        from collections import Counter
+        cnts = Counter(degrees)
+        total = sum(cnts.values()) or 1
+        probs = [c / total for c in cnts.values()]
+        from math import log
+        logp = [log(p, base) for p in probs]
+        return float(-sum(p * lp for p, lp in zip(probs, logp)))
 
 
 def subgraph_entropy(graph: nx.Graph, nodes: Iterable, *, base: float = 2.0) -> float:

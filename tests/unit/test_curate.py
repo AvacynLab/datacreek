@@ -125,3 +125,30 @@ async def test_curate_qa_pairs_async_input_errors(monkeypatch):
     setup_dummy(monkeypatch)
     with pytest.raises(TypeError):
         await curate.curate_qa_pairs_async(123)
+@pytest.mark.asyncio
+async def test_curate_from_file(monkeypatch, tmp_path):
+    setup_dummy(monkeypatch)
+    path = tmp_path / "pairs.json"
+    path.write_text(json.dumps({"qa_pairs": [{"question": "q", "answer": "a"}]}))
+    res = await curate._curate_qa_pairs_impl(
+        str(path), threshold=7, api_base=None, model=None,
+        config_path=None, verbose=False, provider=None, kg=None,
+        batch_size=None, inference_batch=None, keep_ratings=False,
+        temperature=None, resume=False, previous_result=None,
+        as_dataclass=False, use_async_handlers=False,
+    )
+    assert res["metrics"]["filtered"] == 1
+
+@pytest.mark.asyncio
+async def test_curate_resume_invalid_json(monkeypatch):
+    setup_dummy(monkeypatch)
+    data = {"qa_pairs": [{"question": "q", "answer": "a"}]}
+    res = await curate._curate_qa_pairs_impl(
+        data, threshold=7, api_base=None, model=None,
+        config_path=None, verbose=False, provider=None, kg=None,
+        batch_size=None, inference_batch=None, keep_ratings=False,
+        temperature=None, resume=True, previous_result="{invalid",
+        as_dataclass=True, use_async_handlers=True,
+    )
+    assert isinstance(res, CurationResult)
+    assert res.metrics.total == 1
