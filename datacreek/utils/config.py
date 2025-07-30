@@ -1,4 +1,3 @@
-# pragma: no cover
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

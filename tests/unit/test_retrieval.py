@@ -164,3 +164,67 @@ def test_use_hnsw(monkeypatch):
     res = idx.nearest_neighbors(k=1)
     assert res["x"][0] == "y"
     assert idx._hnsw is not None
+
+
+def test_search_hnsw(monkeypatch):
+    """Ensure ``search`` uses the HNSW index when available."""
+    monkeypatch.setattr(retrieval, "TfidfVectorizer", FakeVec)
+    monkeypatch.setattr(retrieval, "NearestNeighbors", FakeNN)
+    monkeypatch.setattr(retrieval, "np", np)
+
+    class FakeHnsw:
+        def __init__(self, space="cosine", dim=0):
+            self.data = None
+
+        def init_index(self, max_elements, ef_construction=100, M=16):
+            pass
+
+        def add_items(self, data, ids):
+            self.data = np.array(data)
+
+        def set_ef(self, ef):
+            pass
+
+        def knn_query(self, query, k):
+            d = np.linalg.norm(self.data - np.array(query)[:, None], axis=2)
+            idx = np.argsort(d, axis=1)[:, :k]
+            return idx, d
+
+    monkeypatch.setattr(retrieval, "hnswlib", type("H", (), {"Index": FakeHnsw}))
+
+    idx = retrieval.EmbeddingIndex(use_hnsw=True)
+    idx.add("x", "zero one")
+    idx.add("y", "zero two")
+    idx.build()
+    assert idx.search("zero", k=1)[0] in {0, 1}
+
+
+def test_import_success(monkeypatch):
+    """Reload module when optional imports succeed to cover import branch."""
+    import importlib, sys
+
+    fake_hnsw = type("F", (), {})
+    monkeypatch.setitem(sys.modules, "hnswlib", fake_hnsw)
+    monkeypatch.setitem(
+        sys.modules,
+        "sklearn.feature_extraction.text",
+        type("M", (), {"TfidfVectorizer": FakeVec}),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "sklearn.neighbors",
+        type("N", (), {"NearestNeighbors": FakeNN}),
+    )
+
+    mod = importlib.reload(retrieval)
+    # force dynamic import branch inside ``build``
+    mod.TfidfVectorizer = None
+    mod.NearestNeighbors = None
+    mod.np = None
+    idx = mod.EmbeddingIndex()
+    idx.add("i", "dummy text")
+    idx.build()
+    assert isinstance(mod.TfidfVectorizer(), FakeVec)
+
+    # reload again to restore original module state
+    importlib.reload(retrieval)

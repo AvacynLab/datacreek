@@ -1,3 +1,4 @@
+import sys
 import networkx as nx
 import numpy as np
 import pytest
@@ -52,7 +53,10 @@ def test_select_facts_requires_kmeans(monkeypatch):
     with pytest.raises(ImportError):
         gen._select_facts(kg, 2)
 
-def test_check_optional_deps_missing():
+def test_check_optional_deps_missing(monkeypatch):
+    """_check_optional_deps should raise when libraries are absent."""
+    monkeypatch.setitem(sys.modules, "datasets", None)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", None)
     with pytest.raises(ImportError):
         vqa_generator._check_optional_deps()
 

@@ -25,3 +25,13 @@ def test_push_metrics_missing(monkeypatch):
     monkeypatch.setitem(sys.modules, 'statsd', None)
     metrics.push_metrics({'x': 1})
 
+
+def test_push_metrics_error(monkeypatch):
+    class ErrClient(FakeClient):
+        def gauge(self, key, value):
+            raise RuntimeError('boom')
+    mod = types.SimpleNamespace(StatsClient=ErrClient)
+    monkeypatch.setitem(sys.modules, 'statsd', mod)
+    metrics.push_metrics({'z': 5})
+    assert ErrClient.instance.recorded == {}
+

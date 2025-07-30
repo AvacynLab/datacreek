@@ -82,3 +82,44 @@ async def test_pid_loop_and_start(monkeypatch):
     task.stop_event.set()
     await task
     assert run["stop"] is task.stop_event
+
+
+@pytest.mark.asyncio
+async def test_update_ttl_error(monkeypatch):
+    """update_ttl should bail out if Redis access fails."""
+    _reset_state()
+    async def fail_get(key):
+        raise RuntimeError
+
+    monkeypatch.setattr(redis_pid, "update_metric", lambda *a, **k: None)
+    client = types.SimpleNamespace(get=fail_get)
+    await redis_pid.update_ttl(client)
+    assert redis_pid.get_current_ttl() == 10
+
+
+@pytest.mark.asyncio
+async def test_update_ttl_clamping(monkeypatch):
+    """TTL updates should remain within safe bounds."""
+    _reset_state()
+    redis_pid._current_ttl = 1
+    monkeypatch.setattr(redis_pid, "update_metric", lambda *a, **k: None)
+    client = DummyRedis(hits=10, miss=0)
+    await redis_pid.update_ttl(client)
+    assert redis_pid.get_current_ttl() >= 1
+    redis_pid._current_ttl = 86400
+    client = DummyRedis(hits=0, miss=10)
+    await redis_pid.update_ttl(client)
+    assert redis_pid.get_current_ttl() <= 86400
+
+
+@pytest.mark.asyncio
+async def test_pid_loop_errors(monkeypatch):
+    """pid_loop should exit early when dependencies fail."""
+    _reset_state()
+    calls = []
+    monkeypatch.setattr(redis_pid, "aioredis", None)
+    await redis_pid.pid_loop(None, stop_event=asyncio.Event())
+
+    monkeypatch.setattr(redis_pid, "aioredis", types.SimpleNamespace(Redis=lambda: (_ for _ in ()).throw(RuntimeError())))
+    await redis_pid.pid_loop(None, stop_event=asyncio.Event())
+

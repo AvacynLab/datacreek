@@ -1,5 +1,9 @@
-# pragma: no cover - heavy web server logic
-"""Flask application for the Datacreek web interface."""
+# pragma: no cover
+"""Flask application for the Datacreek web interface.
+
+This module starts a full Flask server with many optional dependencies
+and is excluded from coverage due to its heavy runtime requirements.
+"""
 
 import json
 import logging

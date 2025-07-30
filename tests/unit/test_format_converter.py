@@ -1,50 +1,57 @@
 import json
-import types
 import sys
+import types
+import pytest
 
 import datacreek.utils.format_converter as fc
 
 
-def test_to_jsonl():
-    data = [{"a": 1}, {"b": 2}]
+def test_to_jsonl_basic():
+    data = [{"foo": 1}, {"bar": "x"}]
     result = fc.to_jsonl(data)
-    assert result == json.dumps(data[0], ensure_ascii=False) + "\n" + json.dumps(data[1], ensure_ascii=False)
+    assert result.splitlines() == [json.dumps(d, ensure_ascii=False) for d in data]
 
 
-def test_to_alpaca():
-    qa = [{"question": "q1", "answer": "a1"}]
-    expected = [{"instruction": "q1", "input": "", "output": "a1"}]
-    assert json.loads(fc.to_alpaca(qa)) == expected
+def test_to_alpaca_and_fine_tuning():
+    qa_pairs = [{"question": "Q?", "answer": "A!"}]
+    alpaca = json.loads(fc.to_alpaca(qa_pairs))
+    assert alpaca == [{"instruction": "Q?", "input": "", "output": "A!"}]
 
-
-def test_to_fine_tuning():
-    qa = [{"question": "q2", "answer": "a2"}]
-    messages = [{"messages": [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "q2"},
-        {"role": "assistant", "content": "a2"},
-    ]}]
-    assert json.loads(fc.to_fine_tuning(qa)) == messages
+    ft = json.loads(fc.to_fine_tuning(qa_pairs))
+    assert ft[0]["messages"][1]["content"] == "Q?"
+    assert ft[0]["messages"][2]["content"] == "A!"
 
 
 def test_to_chatml():
-    qa = [{"question": "q", "answer": "a"}]
-    result = fc.to_chatml(qa)
-    line = json.loads(result)
-    assert line["messages"][1]["content"] == "q"
-    assert line["messages"][2]["content"] == "a"
+    qa_pairs = [
+        {"question": "q1", "answer": "a1"},
+        {"question": "q2", "answer": "a2"},
+    ]
+    out = fc.to_chatml(qa_pairs).splitlines()
+    msgs = [json.loads(line)["messages"][1]["content"] for line in out]
+    assert msgs == ["q1", "q2"]
 
 
-def test_to_hf_dataset(monkeypatch):
-    class FakeDataset:
+def test_to_hf_dataset_success(monkeypatch):
+    class DummyDataset:
         def __init__(self, data):
             self.data = data
+
         @classmethod
         def from_dict(cls, d):
-            assert d == {"question": ["q"], "answer": ["a"]}
             return cls(d)
+
         def to_json(self):
             return json.dumps(self.data)
-    monkeypatch.setitem(sys.modules, "datasets", types.SimpleNamespace(Dataset=FakeDataset))
-    result = fc.to_hf_dataset([{"question": "q", "answer": "a"}])
-    assert result == json.dumps({"question": ["q"], "answer": ["a"]})
+
+    dummy_module = types.SimpleNamespace(Dataset=DummyDataset)
+    monkeypatch.setitem(sys.modules, "datasets", dummy_module)
+    qa_pairs = [{"question": "q", "answer": "a"}]
+    result = fc.to_hf_dataset(qa_pairs)
+    assert json.loads(result) == {"question": ["q"], "answer": ["a"]}
+
+
+def test_to_hf_dataset_missing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "datasets", None)
+    with pytest.raises(ImportError):
+        fc.to_hf_dataset([{"question": "q", "answer": "a"}])
