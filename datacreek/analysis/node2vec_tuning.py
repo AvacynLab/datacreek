@@ -1,4 +1,5 @@
-# pragma: no cover - heavy optimization utilities
+# Heavy optimization utilities for node2vec tuning. Requires large
+# graph datasets and GPU/FAISS support which may slow down tests.
 from __future__ import annotations
 
 import hashlib

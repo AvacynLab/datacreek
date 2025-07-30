@@ -1,4 +1,5 @@
-# pragma: no cover - heavy FAISS tuning logic
+# Heavy FAISS tuning logic. Runs slowly on large datasets but can
+# be exercised on tiny inputs during testing.
 """Bayesian optimization of FAISS IVFPQ ``nprobe`` for recall@100."""
 
 from __future__ import annotations

@@ -1,6 +1,21 @@
 import asyncio
 from pathlib import Path
+import types
+import sys
 import pytest
+
+# Stub heavy optional dependencies so the ingest module imports without them.
+sys.modules.setdefault(
+    "imagehash",
+    types.SimpleNamespace(
+        phash=lambda img: types.SimpleNamespace(
+            hash=types.SimpleNamespace(tobytes=lambda: b"0" * 8)
+        )
+    ),
+)
+dummy_img_mod = types.SimpleNamespace(open=lambda path: types.SimpleNamespace(close=lambda: None))
+sys.modules.setdefault("PIL", types.SimpleNamespace(Image=dummy_img_mod))
+sys.modules.setdefault("PIL.Image", dummy_img_mod)
 
 import datacreek.core.ingest as ing
 from datacreek.core.dataset_light import DatasetBuilder

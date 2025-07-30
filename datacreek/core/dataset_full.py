@@ -1,4 +1,3 @@
-# pragma: no cover
 # pydocstyle: ignore=D100,D101,D102,D103,D107,D401
 from __future__ import annotations
 
@@ -167,7 +166,7 @@ class DatasetBuilder:
         """Ensure background monitoring is terminated when the builder is collected."""
         try:
             self.stop_policy_monitor_thread()
-        except Exception:
+        except Exception:  # pragma: no cover - best effort cleanup
             pass
 
     # ------------------------------------------------------------------
@@ -194,7 +193,7 @@ class DatasetBuilder:
         if self.auto_monitor:
             try:
                 self.start_policy_monitor_thread([1])
-            except Exception:
+            except Exception:  # pragma: no cover - background thread failure
                 logger.exception("Failed to start policy monitor thread")
 
     def configure_llm_service(
@@ -230,7 +229,7 @@ class DatasetBuilder:
                 if self.owner_id is not None:
                     pipe.sadd(f"user:{self.owner_id}:datasets", self.name)
                 pipe.execute()
-            except Exception:
+            except Exception:  # pragma: no cover - persistence failure
                 logger.exception("Failed to persist dataset %s", self.name)
         if self.neo4j_driver and self.name:
             try:
@@ -238,13 +237,13 @@ class DatasetBuilder:
                     self.neo4j_driver,
                     dataset=self.name,
                 )
-            except Exception:
+            except Exception:  # pragma: no cover - Neo4j unavailable
                 logger.exception("Failed to persist graph %s to Neo4j", self.name)
         graph = get_redis_graph(self.name)
         if graph is not None:
             try:
                 DatasetBuilder.save_redis_graph.__wrapped__(self, graph)
-            except Exception:
+            except Exception:  # pragma: no cover - RedisGraph unavailable
                 logger.exception("Failed to persist graph %s to RedisGraph", self.name)
 
     def _touch(self) -> None:
@@ -254,7 +253,7 @@ class DatasetBuilder:
             self.accessed_at = datetime.now(timezone.utc)
             try:
                 self.redis_client.set(self.redis_key, json.dumps(self.to_dict()))
-            except Exception:
+            except Exception:  # pragma: no cover - Redis failure
                 logger.exception("Failed to update access time for %s", self.name)
 
     # ------------------------------------------------------------------

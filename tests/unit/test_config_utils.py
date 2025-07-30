@@ -157,3 +157,20 @@ def test_validation_error(monkeypatch, tmp_path):
     monkeypatch.setattr(json_mod, "load", lambda f: {}, raising=False)
     with pytest.raises(DummyError):
         config.load_config(str(cfg))
+
+
+def test_watcher_and_env_override(monkeypatch, tmp_path):
+    """start and stop the config watcher and check env overrides."""
+    cfg_file = create_config_file(tmp_path)
+    monkeypatch.setenv("DATACREEK_CONFIG", str(cfg_file))
+    # ensure no existing observer
+    config._config_observer = None
+    config.start_config_watcher(cfg_file)
+    assert config._config_observer is not None
+    config.stop_config_watcher()
+    assert config._config_observer is None
+
+    monkeypatch.setenv("GEN_TEST", "42")
+    assert config._env_override("test") == "42"
+    monkeypatch.delenv("GEN_TEST")
+    assert config._env_override("test") is None

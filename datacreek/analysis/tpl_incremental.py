@@ -1,4 +1,5 @@
-# pragma: no cover - heavy topology utilities
+# Incremental topology utilities typically require extensive data but
+# remain testable on small graphs.
 from __future__ import annotations
 
 from typing import Dict

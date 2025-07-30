@@ -1,4 +1,20 @@
 from PIL import Image
+import importlib
+import sys
+import types
+
+# Ensure we use the real Pillow Image module even if previous tests stubbed it
+if isinstance(sys.modules.get("PIL.Image"), types.SimpleNamespace):
+    sys.modules.pop("PIL.Image", None)
+    sys.modules.pop("PIL", None)
+    Image = importlib.import_module("PIL.Image")
+    import datacreek.utils.image_dedup as dedup
+    dedup.Image = Image
+
+if isinstance(sys.modules.get("imagehash"), types.SimpleNamespace):
+    sys.modules.pop("imagehash", None)
+    real_imagehash = importlib.import_module("imagehash")
+    dedup.imagehash = real_imagehash
 
 import datacreek.utils.image_dedup as dedup
 

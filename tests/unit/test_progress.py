@@ -1,4 +1,5 @@
 import types
+import pytest
 
 import datacreek.utils.progress as prog
 
@@ -36,4 +37,14 @@ def test_progress_context(monkeypatch):
         assert p is dummy
         assert tid == 42
         assert dummy.started
+    assert dummy.stopped
+
+
+def test_progress_context_exception(monkeypatch):
+    dummy = DummyProgress()
+    monkeypatch.setattr(prog, "Progress", lambda *a, **k: dummy)
+    with pytest.raises(RuntimeError):
+        with prog.progress_context("oops", 2):
+            assert dummy.started
+            raise RuntimeError("fail")
     assert dummy.stopped

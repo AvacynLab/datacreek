@@ -1,4 +1,3 @@
-# pragma: no cover
 """L1 cache utilities with Prometheus counters."""
 
 from __future__ import annotations

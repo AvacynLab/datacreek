@@ -1,4 +1,4 @@
-# pragma: no cover - heavy topology computations
+# Heavy topology computations. Tests operate on tiny graphs to keep them fast.
 """Topological Perception Layer utilities."""
 
 from __future__ import annotations

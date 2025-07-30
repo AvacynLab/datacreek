@@ -1,4 +1,5 @@
-# pragma: no cover - complex chain-of-thought sampling
+# pragma: no cover
+# Complex chain-of-thought sampling not needed for coverage.
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #
