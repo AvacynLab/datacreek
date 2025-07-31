@@ -101,7 +101,7 @@ def test_dataset_builder_basic(monkeypatch):
     builder.add_section('d1', 's1')
     builder.add_chunk('d1', 'c1', 'txt')
     builder.add_image('d1', 'i1', 'img.png')
-    builder.add_audio('d1', 'a1', 'aud.wav')
+    builder.add_audio('d1', 'a1', 'aud.wav', lang='en')
     card = builder.generate_model_card(0.1, 'sha')
     html = dataset_full.DatasetBuilder.model_card_html(card)
     assert 'bias' in html

@@ -61,7 +61,12 @@ __all__ = [
     "embedding_entropy",
     "hyper_sagnn_embeddings",
     "hyper_sagnn_head_drop_embeddings",
+    "hyper_sagnn_embeddings_stream",
     "hyperedge_attention_scores",
+    "fp8_quantize",
+    "fp8_dequantize",
+    "online_pca_reduce",
+    "fractal_encoder",
     "mdl_description_length",
     "select_mdl_motifs",
     "product_embedding",
@@ -155,6 +160,14 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from .compression import FractalNetPruner as _fp
 
         return _fp
+    if name in {"fp8_quantize", "fp8_dequantize"}:
+        from .compression import fp8_quantize as _q, fp8_dequantize as _dq
+
+        return {"fp8_quantize": _q, "fp8_dequantize": _dq}[name]
+    if name in {"online_pca_reduce", "fractal_encoder"}:
+        from .fractal_encoder import online_pca_reduce as _opr, fractal_encoder as _fe
+
+        return {"online_pca_reduce": _opr, "fractal_encoder": _fe}[name]
     if name in {
         "search_with_fallback",
         "recall10",
@@ -178,15 +191,18 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         "hyper_sagnn_embeddings",
         "hyper_sagnn_head_drop_embeddings",
         "hyperedge_attention_scores",
+        "hyper_sagnn_embeddings_stream",
     }:
         from .hypergraph import hyper_sagnn_embeddings as _hs
         from .hypergraph import hyper_sagnn_head_drop_embeddings as _hd
         from .hypergraph import hyperedge_attention_scores as _att
+        from .hyper_sagnn_cuda import hyper_sagnn_embeddings_stream as _hs_stream
 
         return {
             "hyper_sagnn_embeddings": _hs,
             "hyper_sagnn_head_drop_embeddings": _hd,
             "hyperedge_attention_scores": _att,
+            "hyper_sagnn_embeddings_stream": _hs_stream,
         }[name]
     if name in {"mdl_description_length", "select_mdl_motifs"}:
         from .information import mdl_description_length as _mdl_desc

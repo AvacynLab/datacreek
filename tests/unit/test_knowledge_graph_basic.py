@@ -41,7 +41,7 @@ def test_knowledge_graph_basic(tmp_path, monkeypatch):
     kg.add_fact("ent1", "rel", "ent2", fact_id="fact1")
     kg.link_entity("chunk1", "ent1")
     kg.add_image("doc", "img1", "/p", alt_text="Alt")
-    kg.add_audio("doc", "aud1", "/a")
+    kg.add_audio("doc", "aud1", "/a", lang="en")
     kg.add_atom("doc", "atom1", "Atom", "word")
     kg.add_molecule("doc", "mol1", ["atom1"])
     kg.add_hyperedge("he1", ["chunk1", "ent1"])

@@ -40,7 +40,10 @@ def test_to_from_neo4j_roundtrip():
     kg.add_chunk("d1", "c1", "hello")
     driver = DummyDriver()
     kg.to_neo4j(driver, dataset="ds")
-    assert driver.session_obj.queries
+    # the first MERGE statement for documents should include timestamp fields
+    merged = "".join(driver.session_obj.queries)
+    assert "first_seen" in merged
+    assert "last_ingested" in merged
     kg2 = KnowledgeGraph.from_neo4j(driver, dataset="ds")
     assert kg2.graph.nodes["d1"]["type"] == "document"
     assert kg2.graph.nodes["c1"].get("text") == "hello"
