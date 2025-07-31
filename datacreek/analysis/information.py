@@ -167,10 +167,12 @@ def graph_entropy(graph: nx.Graph, *, base: float = 2.0) -> float:
         return float(-np.sum(probs * logp))
     except Exception:
         from collections import Counter
+
         cnts = Counter(degrees)
         total = sum(cnts.values()) or 1
         probs = [c / total for c in cnts.values()]
         from math import log
+
         logp = [log(p, base) for p in probs]
         return float(-sum(p * lp for p, lp in zip(probs, logp)))
 
@@ -219,6 +221,8 @@ def structural_entropy(graph: nx.Graph, tau: int, *, base: float = 2.0) -> float
     """
     g = graph.copy()
     tri = nx.triangles(g)
-    to_remove = [(u, v) for u, v in g.edges() if tri.get(u, 0) < tau or tri.get(v, 0) < tau]
+    to_remove = [
+        (u, v) for u, v in g.edges() if tri.get(u, 0) < tau or tri.get(v, 0) < tau
+    ]
     g.remove_edges_from(to_remove)
     return graph_entropy(g, base=base)

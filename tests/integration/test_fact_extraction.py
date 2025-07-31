@@ -15,7 +15,9 @@ def test_dataset_extract_facts():
     ds.add_document("d", source="src")
     ds.add_chunk("d", "c1", "Paris is the capital of France.")
     ds.extract_facts()
-    fact_nodes = [n for n, d in ds.graph.graph.nodes(data=True) if d.get("type") == "fact"]
+    fact_nodes = [
+        n for n, d in ds.graph.graph.nodes(data=True) if d.get("type") == "fact"
+    ]
     assert len(fact_nodes) == 1
     edges = ds.graph.graph.edges(fact_nodes[0])
     assert any(ds.graph.graph.edges[e]["relation"] == "subject" for e in edges)

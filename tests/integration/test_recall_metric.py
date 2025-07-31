@@ -10,10 +10,17 @@ from datacreek.core.knowledge_graph import KnowledgeGraph
 
 def test_recall_metric_simple():
     G = nx.Graph()
-    G.add_node("a", embedding=[1, 0], graphwave_embedding=[1, 0], poincare_embedding=[1, 0])
-    G.add_node("b", embedding=[0, 1], graphwave_embedding=[0, 1], poincare_embedding=[0, 1])
     G.add_node(
-        "c", embedding=[0.9, 0.1], graphwave_embedding=[0.9, 0.1], poincare_embedding=[0.9, 0.1]
+        "a", embedding=[1, 0], graphwave_embedding=[1, 0], poincare_embedding=[1, 0]
+    )
+    G.add_node(
+        "b", embedding=[0, 1], graphwave_embedding=[0, 1], poincare_embedding=[0, 1]
+    )
+    G.add_node(
+        "c",
+        embedding=[0.9, 0.1],
+        graphwave_embedding=[0.9, 0.1],
+        poincare_embedding=[0.9, 0.1],
     )
     kg = KnowledgeGraph(G)
     ds = DatasetBuilder(kg)

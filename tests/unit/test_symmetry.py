@@ -1,4 +1,5 @@
 import networkx as nx
+
 from datacreek.analysis import symmetry
 
 

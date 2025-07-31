@@ -43,7 +43,9 @@ def test_process_file_no_output(monkeypatch, tmp_path):
         def process_document(self, *a, **k):
             return types.SimpleNamespace(to_dict=lambda: {"qa_pairs": []})
 
-    monkeypatch.setattr("datacreek.core.ingest.determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr(
+        "datacreek.core.ingest.determine_parser", lambda f, c: DummyParser()
+    )
     monkeypatch.setattr("datacreek.generators.qa_generator.QAGenerator", DummyGenerator)
     monkeypatch.setattr(
         "datacreek.core.create.init_llm_client",
@@ -74,7 +76,9 @@ def test_process_file_redis_output(monkeypatch, tmp_path):
         def process_document(self, *a, **k):
             return types.SimpleNamespace(to_dict=lambda: {"qa_pairs": []})
 
-    monkeypatch.setattr("datacreek.core.ingest.determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr(
+        "datacreek.core.ingest.determine_parser", lambda f, c: DummyParser()
+    )
     monkeypatch.setattr("datacreek.generators.qa_generator.QAGenerator", DummyGenerator)
     monkeypatch.setattr(
         "datacreek.core.create.init_llm_client",
@@ -115,7 +119,9 @@ def test_process_file_backend(monkeypatch, tmp_path):
         def process_document(self, *a, **k):
             return types.SimpleNamespace(to_dict=lambda: {"qa_pairs": []})
 
-    monkeypatch.setattr("datacreek.core.ingest.determine_parser", lambda f, c: DummyParser())
+    monkeypatch.setattr(
+        "datacreek.core.ingest.determine_parser", lambda f, c: DummyParser()
+    )
     monkeypatch.setattr("datacreek.generators.qa_generator.QAGenerator", DummyGenerator)
     monkeypatch.setattr(
         "datacreek.core.create.init_llm_client",

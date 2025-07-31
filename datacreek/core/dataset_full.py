@@ -538,7 +538,9 @@ class DatasetBuilder:
         self.graph.add_audio(doc_id, audio_id, path, page=page, lang=lang)
         self._record_event("add_audio", f"Added audio {audio_id} to {doc_id}")
 
-    def ingest_text_atoms(self, path: str, doc_id: str) -> list[str]:  # pragma: no cover
+    def ingest_text_atoms(
+        self, path: str, doc_id: str
+    ) -> list[str]:  # pragma: no cover
         """Parse ``path`` into textual atoms and add them under ``doc_id``."""
 
         from ..analysis.ingestion import partition_files_to_atoms
@@ -550,7 +552,9 @@ class DatasetBuilder:
             atoms.append(atom_id)
         return atoms
 
-    def ingest_code_atoms(self, path: str, doc_id: str) -> list[str]:  # pragma: no cover
+    def ingest_code_atoms(
+        self, path: str, doc_id: str
+    ) -> list[str]:  # pragma: no cover
         """Parse Python code into atoms (functions/classes) under ``doc_id``."""
 
         from ..analysis.ingestion import parse_code_to_atoms
@@ -726,7 +730,9 @@ class DatasetBuilder:
         )
         return ids
 
-    def search(self, query: str, node_type: str = "chunk") -> list[str]:  # pragma: no cover
+    def search(
+        self, query: str, node_type: str = "chunk"
+    ) -> list[str]:  # pragma: no cover
         """Return node IDs of ``node_type`` matching ``query``."""
 
         return self.graph.search(query, node_type=node_type)
@@ -916,7 +922,9 @@ class DatasetBuilder:
             )
         return added
 
-    def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:  # pragma: no cover
+    def get_similar_chunks(
+        self, chunk_id: str, k: int = 3
+    ) -> list[str]:  # pragma: no cover
         """Return up to ``k`` chunk IDs most similar to ``chunk_id``."""
 
         return self.graph.get_similar_chunks(chunk_id, k=k)
@@ -928,22 +936,30 @@ class DatasetBuilder:
 
         return self.graph.get_similar_chunks_data(chunk_id, k=k)
 
-    def get_chunk_neighbors(self, k: int = 3) -> Dict[str, List[str]]:  # pragma: no cover
+    def get_chunk_neighbors(
+        self, k: int = 3
+    ) -> Dict[str, List[str]]:  # pragma: no cover
         """Return the ``k`` nearest neighbors for each chunk."""
 
         return self.graph.get_chunk_neighbors(k=k)
 
-    def get_chunk_neighbors_data(self, k: int = 3) -> Dict[str, List[Dict[str, Any]]]:  # pragma: no cover
+    def get_chunk_neighbors_data(
+        self, k: int = 3
+    ) -> Dict[str, List[Dict[str, Any]]]:  # pragma: no cover
         """Return neighbor information for every chunk."""
 
         return self.graph.get_chunk_neighbors_data(k=k)
 
-    def get_similar_sections(self, section_id: str, k: int = 3) -> list[str]:  # pragma: no cover
+    def get_similar_sections(
+        self, section_id: str, k: int = 3
+    ) -> list[str]:  # pragma: no cover
         """Return up to ``k`` section IDs most similar to ``section_id``."""
 
         return self.graph.get_similar_sections(section_id, k=k)
 
-    def get_similar_documents(self, doc_id: str, k: int = 3) -> list[str]:  # pragma: no cover
+    def get_similar_documents(
+        self, doc_id: str, k: int = 3
+    ) -> list[str]:  # pragma: no cover
         """Return up to ``k`` document IDs most similar to ``doc_id``."""
 
         return self.graph.get_similar_documents(doc_id, k=k)
@@ -1097,14 +1113,18 @@ class DatasetBuilder:
         self._record_event("mitigate_bias_wasserstein", f"groups={len(groups)}")
         return res
 
-    def average_hyperbolic_radius(self, *, attr: str = "poincare_embedding") -> float:  # pragma: no cover
+    def average_hyperbolic_radius(
+        self, *, attr: str = "poincare_embedding"
+    ) -> float:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.average_hyperbolic_radius`."""
 
         radius = self.graph.average_hyperbolic_radius(attr=attr)
         self._record_event("average_hyperbolic_radius", f"radius={radius:.4f}")
         return radius
 
-    def apply_k_out_privacy(self, ids: List[str], k: int = 2) -> List[str]:  # pragma: no cover
+    def apply_k_out_privacy(
+        self, ids: List[str], k: int = 2
+    ) -> List[str]:  # pragma: no cover
         """Return ``ids`` after applying k-out randomized response."""
 
         from ..analysis.privacy import k_out_randomized_response
@@ -1123,7 +1143,9 @@ class DatasetBuilder:
         self.dp_budgets.add_user(user, epsilon)
         self._record_event("add_privacy_budget", f"user={user} eps={epsilon}")
 
-    def consume_privacy_budget(self, user: str, amount: float) -> bool:  # pragma: no cover
+    def consume_privacy_budget(
+        self, user: str, amount: float
+    ) -> bool:  # pragma: no cover
         """Consume ``amount`` from ``user``'s privacy budget."""
 
         ok = self.dp_budgets.consume(user, amount)
@@ -1462,7 +1484,9 @@ class DatasetBuilder:
         )
         return val
 
-    def embedding_entropy(self, node_attr: str = "embedding") -> float:  # pragma: no cover
+    def embedding_entropy(
+        self, node_attr: str = "embedding"
+    ) -> float:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.embedding_entropy`."""
 
         val = self.graph.embedding_entropy(node_attr=node_attr)
@@ -1543,7 +1567,9 @@ class DatasetBuilder:
         )
         return result
 
-    def haa_link_score(self, driver: "Driver", a_id: str, b_id: str) -> float | None:  # pragma: no cover
+    def haa_link_score(
+        self, driver: "Driver", a_id: str, b_id: str
+    ) -> float | None:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.haa_link_score`."""
 
         result = self.graph.haa_link_score(driver, a_id, b_id)
@@ -1599,7 +1625,9 @@ class DatasetBuilder:
         )
         return result
 
-    def hyper_adamic_adar_scores(self) -> Dict[tuple[str, str], float]:  # pragma: no cover
+    def hyper_adamic_adar_scores(
+        self,
+    ) -> Dict[tuple[str, str], float]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.hyper_adamic_adar_scores`."""
 
         result = self.graph.hyper_adamic_adar_scores()
@@ -1914,7 +1942,9 @@ class DatasetBuilder:
             bottleneck=bottleneck,
         )
 
-    def prune_embeddings(self, *, tol: float = 1e-3) -> Dict[str, int]:  # pragma: no cover
+    def prune_embeddings(
+        self, *, tol: float = 1e-3
+    ) -> Dict[str, int]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.prune_embeddings`."""
 
         mapping = self.graph.prune_embeddings(tol=tol)
@@ -2042,7 +2072,9 @@ class DatasetBuilder:
         )
         return dist
 
-    def detect_automorphisms(self, max_count: int = 10) -> List[Dict[str, str]]:  # pragma: no cover
+    def detect_automorphisms(
+        self, max_count: int = 10
+    ) -> List[Dict[str, str]]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.detect_automorphisms`."""
 
         autos = self.graph.detect_automorphisms(max_count=max_count)
@@ -2077,7 +2109,9 @@ class DatasetBuilder:
         )
         return q, mapping
 
-    def mapper_nerve(self, radius: int) -> tuple[nx.Graph, list[set[str]]]:  # pragma: no cover
+    def mapper_nerve(
+        self, radius: int
+    ) -> tuple[nx.Graph, list[set[str]]]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.mapper_nerve`."""
 
         nerve, cover = self.graph.mapper_nerve(radius)
@@ -2095,7 +2129,9 @@ class DatasetBuilder:
         self.graph.clear_mapper_cache()
         self._record_event("clear_mapper_cache", "Mapper cache cleared")
 
-    def rollback_gremlin_diff(self, output: str = "rollback.diff") -> str:  # pragma: no cover
+    def rollback_gremlin_diff(
+        self, output: str = "rollback.diff"
+    ) -> str:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.rollback_gremlin_diff`."""
 
         path = self.graph.rollback_gremlin_diff(output)
@@ -2122,7 +2158,9 @@ class DatasetBuilder:
     # Graph generation wrappers
     # --------------------------------------------------------------
 
-    def generate_graph_rnn_like(self, num_nodes: int, num_edges: int) -> nx.Graph:  # pragma: no cover
+    def generate_graph_rnn_like(
+        self, num_nodes: int, num_edges: int
+    ) -> nx.Graph:  # pragma: no cover
         """Return a random graph mimicking GraphRNN output."""
 
         g = self.graph.generate_graph_rnn_like(num_nodes, num_edges)
@@ -2351,7 +2389,9 @@ class DatasetBuilder:
         )
         return selected
 
-    def sample_diverse_chunks(self, count: int, radii: Iterable[int]) -> list[str]:  # pragma: no cover
+    def sample_diverse_chunks(
+        self, count: int, radii: Iterable[int]
+    ) -> list[str]:  # pragma: no cover
         """Return ``count`` chunk IDs that best cover unexplored graph regions.
 
         The helper computes diversification scores using ``radii`` and
@@ -2371,7 +2411,9 @@ class DatasetBuilder:
         )
         return selected
 
-    def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:  # pragma: no cover
+    def hyperbolic_neighbors(
+        self, node_id: str, k: int = 5
+    ) -> List[tuple[str, float]]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.hyperbolic_neighbors`."""
 
         neighs = self.graph.hyperbolic_neighbors(node_id, k=k)
@@ -2509,7 +2551,9 @@ class DatasetBuilder:
         )
         return lac
 
-    def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:  # pragma: no cover
+    def sheaf_laplacian(
+        self, edge_attr: str = "sheaf_sign"
+    ) -> np.ndarray:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.sheaf_laplacian`."""
 
         L = self.graph.sheaf_laplacian(edge_attr=edge_attr)
@@ -2614,7 +2658,9 @@ class DatasetBuilder:
         )
         return val
 
-    def sheaf_consistency_score(self, *, edge_attr: str = "sheaf_sign") -> float:  # pragma: no cover
+    def sheaf_consistency_score(
+        self, *, edge_attr: str = "sheaf_sign"
+    ) -> float:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.sheaf_consistency_score`."""
 
         val = self.graph.sheaf_consistency_score(edge_attr=edge_attr)
@@ -2723,7 +2769,9 @@ class DatasetBuilder:
         self._record_event("graph_entropy", "Graph entropy computed", base=base)
         return val
 
-    def subgraph_entropy(self, nodes: Iterable, *, base: float = 2.0) -> float:  # pragma: no cover
+    def subgraph_entropy(
+        self, nodes: Iterable, *, base: float = 2.0
+    ) -> float:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.subgraph_entropy`."""
 
         val = self.graph.subgraph_entropy(nodes, base=base)
@@ -2735,7 +2783,9 @@ class DatasetBuilder:
         )
         return val
 
-    def structural_entropy(self, tau: int, *, base: float = 2.0) -> float:  # pragma: no cover
+    def structural_entropy(
+        self, tau: int, *, base: float = 2.0
+    ) -> float:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.structural_entropy`."""
 
         val = self.graph.structural_entropy(tau, base=base)
@@ -2871,7 +2921,9 @@ class DatasetBuilder:
         )
         return sub
 
-    def select_mdl_motifs(self, motifs: Iterable[nx.Graph]) -> List[nx.Graph]:  # pragma: no cover
+    def select_mdl_motifs(
+        self, motifs: Iterable[nx.Graph]
+    ) -> List[nx.Graph]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.select_mdl_motifs`."""
 
         selected = self.graph.select_mdl_motifs(motifs)
@@ -2944,7 +2996,9 @@ class DatasetBuilder:
         )
         return ent
 
-    def persistence_diagrams(self, max_dim: int = 2) -> Dict[int, np.ndarray]:  # pragma: no cover
+    def persistence_diagrams(
+        self, max_dim: int = 2
+    ) -> Dict[int, np.ndarray]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.persistence_diagrams`."""
 
         diags = self.graph.persistence_diagrams(max_dim)
@@ -2971,7 +3025,9 @@ class DatasetBuilder:
         )
         return dist
 
-    def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:  # pragma: no cover
+    def topological_signature(
+        self, max_dim: int = 1
+    ) -> Dict[str, Any]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.topological_signature`."""
 
         sig = self.graph.topological_signature(max_dim=max_dim)
@@ -3005,7 +3061,9 @@ class DatasetBuilder:
         )
         return h
 
-    def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:  # pragma: no cover
+    def fractalize_level(
+        self, radius: int
+    ) -> tuple[nx.Graph, Dict[str, int]]:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.fractalize_level`."""
 
         coarse, mapping = self.graph.fractalize_level(radius)
@@ -3056,7 +3114,9 @@ class DatasetBuilder:
         )
         return score
 
-    def verify_answer(self, answer: str, *, max_hops: int = 3) -> float:  # pragma: no cover
+    def verify_answer(
+        self, answer: str, *, max_hops: int = 3
+    ) -> float:  # pragma: no cover
         """Return confidence score for ``answer`` based on graph facts.
 
         The text is parsed with :func:`extract_facts` to obtain triples which are
@@ -3227,7 +3287,9 @@ class DatasetBuilder:
         )
         return metrics
 
-    def dynamic_reconfigure(self, radii: Iterable[int], *, loops: int = 1) -> None:  # pragma: no cover
+    def dynamic_reconfigure(
+        self, radii: Iterable[int], *, loops: int = 1
+    ) -> None:  # pragma: no cover
         """Refresh fractal levels and resolve cohomology.
 
         Parameters
@@ -3386,7 +3448,9 @@ class DatasetBuilder:
             max_levels=max_levels,
         )
 
-    def annotate_mdl_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:  # pragma: no cover
+    def annotate_mdl_levels(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> None:  # pragma: no cover
         """Wrapper for :meth:`KnowledgeGraph.annotate_mdl_levels`."""
 
         self.graph.annotate_mdl_levels(radii, max_levels=max_levels)
@@ -4306,7 +4370,9 @@ class DatasetBuilder:
         )
         return matches
 
-    def auto_tool_calls(self, text: str, tools: Iterable[tuple[str, str]]) -> str:  # pragma: no cover
+    def auto_tool_calls(
+        self, text: str, tools: Iterable[tuple[str, str]]
+    ) -> str:  # pragma: no cover
         """Insert simple tool call placeholders into ``text``."""
 
         from ..utils import insert_tool_calls
@@ -4436,7 +4502,9 @@ class DatasetBuilder:
             "update_embeddings", "Embeddings materialized", node_type=node_type
         )
 
-    def extract_facts(self, client: Optional["LLMClient"] = None) -> None:  # pragma: no cover
+    def extract_facts(
+        self, client: Optional["LLMClient"] = None
+    ) -> None:  # pragma: no cover
         """Run fact extraction on all chunk nodes."""
 
         from datacreek.utils.fact_extraction import extract_facts
@@ -4459,13 +4527,17 @@ class DatasetBuilder:
                 )
         self._record_event("extract_facts", "Facts extracted")
 
-    def extract_entities(self, model: str | None = "en_core_web_sm") -> None:  # pragma: no cover
+    def extract_entities(
+        self, model: str | None = "en_core_web_sm"
+    ) -> None:  # pragma: no cover
         """Run named entity recognition on all chunks."""
 
         self.graph.extract_entities(model=model)
         self._record_event("extract_entities", "Entities extracted", model=model)
 
-    def find_conflicting_facts(self) -> List[tuple[str, str, Dict[str, List[str]]]]:  # pragma: no cover
+    def find_conflicting_facts(
+        self,
+    ) -> List[tuple[str, str, Dict[str, List[str]]]]:  # pragma: no cover
         """Return edges with the same subject/predicate but different objects."""
 
         conflicts: Dict[tuple[str, str], Dict[str, List[str]]] = {}
@@ -4542,7 +4614,9 @@ class DatasetBuilder:
     def get_sections_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover
         return self.graph.get_sections_for_document(doc_id)
 
-    def get_document_for_section(self, section_id: str) -> str | None:  # pragma: no cover
+    def get_document_for_section(
+        self, section_id: str
+    ) -> str | None:  # pragma: no cover
         return self.graph.get_document_for_section(section_id)
 
     def get_document_for_chunk(self, chunk_id: str) -> str | None:  # pragma: no cover
@@ -5353,7 +5427,9 @@ class DatasetBuilder:
     # ------------------------------------------------------------------
 
     @persist_after
-    def save_redis_graph(self, graph: RGGraph | None = None) -> None:  # pragma: no cover
+    def save_redis_graph(
+        self, graph: RGGraph | None = None
+    ) -> None:  # pragma: no cover
         """Persist the knowledge graph to RedisGraph."""
 
         graph = graph or get_redis_graph(self.name)
@@ -5385,7 +5461,9 @@ class DatasetBuilder:
         self._record_event("save_redis_graph", "Graph saved to RedisGraph")
 
     @persist_after
-    def load_redis_graph(self, graph: RGGraph | None = None) -> None:  # pragma: no cover
+    def load_redis_graph(
+        self, graph: RGGraph | None = None
+    ) -> None:  # pragma: no cover
         """Load the knowledge graph from RedisGraph."""
 
         graph = graph or get_redis_graph(self.name)
@@ -5410,7 +5488,9 @@ class DatasetBuilder:
             self.graph.graph.add_edge(src, dst, relation=rel, **props)
         self._record_event("load_redis_graph", "Graph loaded from RedisGraph")
 
-    def delete_redis_graph(self, graph: RGGraph | None = None) -> None:  # pragma: no cover
+    def delete_redis_graph(
+        self, graph: RGGraph | None = None
+    ) -> None:  # pragma: no cover
         """Remove the dataset's graph from RedisGraph if configured."""
 
         graph = graph or get_redis_graph(self.name)

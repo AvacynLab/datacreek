@@ -86,7 +86,11 @@ async def _curate_qa_pairs_impl(
         except Exception:
             pass
         existing_set = {(p.question, p.answer) for p in existing_rated}
-        qa_pairs = [p for p in qa_pairs if (p.get("question"), p.get("answer")) not in existing_set]
+        qa_pairs = [
+            p
+            for p in qa_pairs
+            if (p.get("question"), p.get("answer")) not in existing_set
+        ]
     if not isinstance(qa_pairs, list):
         raise ValueError("Input must contain a 'qa_pairs' list")
     if not qa_pairs:
@@ -105,7 +109,9 @@ async def _curate_qa_pairs_impl(
     curate_config = get_curate_settings(client.config)
     batch_size = batch_size or curate_config.batch_size
     inference_batch = inference_batch or curate_config.inference_batch
-    rating_temperature = temperature if temperature is not None else curate_config.temperature
+    rating_temperature = (
+        temperature if temperature is not None else curate_config.temperature
+    )
     if threshold is None:
         threshold = curate_config.threshold
 
@@ -120,12 +126,16 @@ async def _curate_qa_pairs_impl(
         rating_prompt_template = get_prompt(client.config, "qa_rating")
         facts_text = None
 
-    batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
+    batches = [
+        qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)
+    ]
     all_messages = []
     for batch in batches:
         batch_json = json.dumps(batch, indent=2)
         if facts_text and "{facts}" in rating_prompt_template:
-            rating_prompt = rating_prompt_template.format(pairs=batch_json, facts=facts_text)
+            rating_prompt = rating_prompt_template.format(
+                pairs=batch_json, facts=facts_text
+            )
         else:
             rating_prompt = rating_prompt_template.format(pairs=batch_json)
         messages = [{"role": "system", "content": rating_prompt}]
@@ -376,7 +386,9 @@ def apply_curation_threshold(
     metrics = CurationMetrics(
         total=len(base.rated_pairs),
         filtered=len(filtered),
-        retention_rate=round(len(filtered) / len(base.rated_pairs), 2) if base.rated_pairs else 0,
+        retention_rate=(
+            round(len(filtered) / len(base.rated_pairs), 2) if base.rated_pairs else 0
+        ),
         avg_score=(
             round(
                 sum(p.rating for p in base.rated_pairs if p.rating is not None)

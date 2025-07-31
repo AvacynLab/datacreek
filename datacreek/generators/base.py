@@ -35,5 +35,7 @@ class BaseGenerator:
 
         self.generation_config = get_generation_config(self.config)
 
-    def process_document(self, *args: Any, **kwargs: Any) -> Any:  # pragma: no cover - base stub
+    def process_document(
+        self, *args: Any, **kwargs: Any
+    ) -> Any:  # pragma: no cover - base stub
         raise NotImplementedError

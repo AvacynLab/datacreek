@@ -1,5 +1,6 @@
 import importlib
 import sys
+
 import pytest
 
 pytest.importorskip("PIL")

@@ -1,4 +1,5 @@
 import types
+
 import pytest
 
 from datacreek.utils import chunking
@@ -18,6 +19,7 @@ class FakeVectorizer:
                 return self._data
 
         return Arr(sentences)
+
 
 def fake_np_dot(a, b):
     return a[0] * b[0]
@@ -74,6 +76,8 @@ def test_semantic_chunk_split(monkeypatch):
 
 
 def test_summarized_chunk_split(monkeypatch):
-    monkeypatch.setattr(chunking, "semantic_chunk_split", lambda t, max_tokens: ["c1", "c2", "c3"])
+    monkeypatch.setattr(
+        chunking, "semantic_chunk_split", lambda t, max_tokens: ["c1", "c2", "c3"]
+    )
     res = chunking.summarized_chunk_split("irrelevant", max_tokens=5, summary_len=1)
     assert res == ["c1", "c1 c2", "c2 c3"]

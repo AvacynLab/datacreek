@@ -1,5 +1,7 @@
-import pytest
 from types import SimpleNamespace
+
+import pytest
+
 from datacreek.core import knowledge_graph as kg
 
 
@@ -19,11 +21,13 @@ def test_start_stop_watcher(monkeypatch, tmp_path):
     monkeypatch.setattr(kg, "_load_cleanup", lambda: None)
     monkeypatch.setattr(kg, "apply_cleanup_config", lambda: None)
     calls = []
-    observer = SimpleNamespace(schedule=lambda *a, **k: calls.append("sched"),
-                               start=lambda: calls.append("start"),
-                               stop=lambda: calls.append("stop"),
-                               join=lambda timeout=None: calls.append("join"),
-                               daemon=False)
+    observer = SimpleNamespace(
+        schedule=lambda *a, **k: calls.append("sched"),
+        start=lambda: calls.append("start"),
+        stop=lambda: calls.append("stop"),
+        join=lambda timeout=None: calls.append("join"),
+        daemon=False,
+    )
     monkeypatch.setattr(kg, "Observer", lambda: observer)
     kg._observer = None
     kg.start_cleanup_watcher(interval=0.0)

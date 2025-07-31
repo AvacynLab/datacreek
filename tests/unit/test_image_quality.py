@@ -1,6 +1,7 @@
 import importlib
 import sys
 import types
+
 import pytest
 
 if isinstance(sys.modules.get("PIL"), types.SimpleNamespace):

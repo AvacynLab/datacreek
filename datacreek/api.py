@@ -202,28 +202,35 @@ def create_persisted_dataset(
     current_user: User = Depends(get_current_user),
 ):  # pragma: no cover
     """Initialize an empty dataset in Redis and Neo4j."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     client = get_redis_client()  # pragma: no cover
     if client is None:  # pragma: no cover
-        raise HTTPException(status_code=503, detail="Redis unavailable")  # pragma: no cover
-  # pragma: no cover
+        raise HTTPException(
+            status_code=503, detail="Redis unavailable"
+        )  # pragma: no cover
+    # pragma: no cover
     key = f"dataset:{name}"  # pragma: no cover
     if client.exists(key):  # pragma: no cover
-        raise HTTPException(status_code=409, detail="Dataset already exists")  # pragma: no cover
-  # pragma: no cover
+        raise HTTPException(
+            status_code=409, detail="Dataset already exists"
+        )  # pragma: no cover
+    # pragma: no cover
     driver = get_neo4j_driver()  # pragma: no cover
     ds = DatasetBuilder(  # pragma: no cover
-        params.dataset_type, name=name, redis_client=client, neo4j_driver=driver  # pragma: no cover
+        params.dataset_type,
+        name=name,
+        redis_client=client,
+        neo4j_driver=driver,  # pragma: no cover
     )  # pragma: no cover
     ds.owner_id = current_user.id  # pragma: no cover
     ds.history.append("Dataset created")  # pragma: no cover
     ds._persist()  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     client.sadd("datasets", name)  # pragma: no cover
     client.sadd(f"user:{current_user.id}:datasets", name)  # pragma: no cover
     if driver:  # pragma: no cover
         driver.close()  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     return {"name": name, "stage": ds.stage}  # pragma: no cover
 
 
@@ -233,7 +240,9 @@ def add_dataset(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):  # pragma: no cover
-    ds = create_dataset(db, current_user.id, payload.source_id, payload.path)  # pragma: no cover
+    ds = create_dataset(
+        db, current_user.id, payload.source_id, payload.path
+    )  # pragma: no cover
     return ds  # pragma: no cover
 
 
@@ -245,10 +254,12 @@ def delete_persisted_dataset(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Delete a persisted dataset from Redis and Neo4j."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     _load_dataset(name, current_user)  # pragma: no cover
-  # pragma: no cover
-    celery_task = dataset_delete_task.apply_async(args=[name, current_user.id])  # pragma: no cover
+    # pragma: no cover
+    celery_task = dataset_delete_task.apply_async(
+        args=[name, current_user.id]
+    )  # pragma: no cover
     return {"task_id": celery_task.id}  # pragma: no cover
 
 
@@ -257,7 +268,9 @@ def list_datasets(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):  # pragma: no cover
-    return db.query(Dataset).filter(Dataset.owner_id == current_user.id).all()  # pragma: no cover
+    return (
+        db.query(Dataset).filter(Dataset.owner_id == current_user.id).all()
+    )  # pragma: no cover
 
 
 @app.get("/datasets/events", summary="Get global dataset events")
@@ -267,7 +280,7 @@ def global_dataset_events(
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """Return recent dataset events across all datasets."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     client = get_redis_client()  # pragma: no cover
     if client is None:  # pragma: no cover
         return []  # pragma: no cover
@@ -294,7 +307,9 @@ def get_dataset(
 ):  # pragma: no cover
     ds = get_dataset_by_id(db, ds_id)  # pragma: no cover
     if not ds or ds.owner_id != current_user.id:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Dataset not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Dataset not found"
+        )  # pragma: no cover
     return ds  # pragma: no cover
 
 
@@ -307,12 +322,16 @@ def update_dataset(
 ):  # pragma: no cover
     record = get_dataset_by_id(db, ds_id)  # pragma: no cover
     if not record or record.owner_id != current_user.id:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Dataset not found")  # pragma: no cover
-  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Dataset not found"
+        )  # pragma: no cover
+    # pragma: no cover
     ds = db.get(Dataset, ds_id)  # pragma: no cover
     if ds is None:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Dataset not found")  # pragma: no cover
-  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Dataset not found"
+        )  # pragma: no cover
+    # pragma: no cover
     if payload.path:  # pragma: no cover
         ds.path = payload.path  # pragma: no cover
     db.commit()  # pragma: no cover
@@ -329,7 +348,9 @@ def delete_dataset_route(
 ):  # pragma: no cover
     ds = get_dataset_by_id(db, ds_id)  # pragma: no cover
     if not ds or ds.owner_id != current_user.id:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Dataset not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Dataset not found"
+        )  # pragma: no cover
     db.delete(ds)  # pragma: no cover
     db.commit()  # pragma: no cover
     return {"status": "deleted"}  # pragma: no cover
@@ -366,7 +387,9 @@ def dataset_versions(
 ) -> list[dict]:
     """Return generation versions stored for ``name``."""  # pragma: no cover
     ds = _load_dataset(name, current_user)  # pragma: no cover
-    return [{"index": i + 1, **v} for i, v in enumerate(ds.versions)]  # pragma: no cover
+    return [
+        {"index": i + 1, **v} for i, v in enumerate(ds.versions)
+    ]  # pragma: no cover
 
 
 @app.get("/datasets/{name}/versions/{index}", summary="Get dataset version")
@@ -413,12 +436,14 @@ def restore_dataset_version_item(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Copy version ``index`` to the end of the version list."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     ds = _load_dataset(name, current_user)  # pragma: no cover
     try:  # pragma: no cover
         ds.restore_version(index)  # pragma: no cover
     except IndexError:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Version not found") from None  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Version not found"
+        ) from None  # pragma: no cover
     return {"status": "restored"}  # pragma: no cover
 
 
@@ -446,17 +471,25 @@ def graph_progress(
     """Return progress information stored for a knowledge graph."""  # pragma: no cover
     client = get_redis_client()  # pragma: no cover
     if client is None:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Graph not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Graph not found"
+        )  # pragma: no cover
     try:  # pragma: no cover
         driver = get_neo4j_driver()  # pragma: no cover
-        ds = DatasetBuilder.from_redis(client, f"graph:{name}", driver)  # pragma: no cover
+        ds = DatasetBuilder.from_redis(
+            client, f"graph:{name}", driver
+        )  # pragma: no cover
     except KeyError:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Graph not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Graph not found"
+        )  # pragma: no cover
     finally:  # pragma: no cover
         if driver:  # pragma: no cover
             driver.close()  # pragma: no cover
     if ds.owner_id not in {None, current_user.id}:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Graph not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Graph not found"
+        )  # pragma: no cover
     key = f"graph:{name}:progress"  # pragma: no cover
     return decode_hash(client.hgetall(key))  # pragma: no cover
 
@@ -494,17 +527,25 @@ def graph_progress_history(
     """Return progress status history stored for a knowledge graph."""  # pragma: no cover
     client = get_redis_client()  # pragma: no cover
     if client is None:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Graph not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Graph not found"
+        )  # pragma: no cover
     try:  # pragma: no cover
         driver = get_neo4j_driver()  # pragma: no cover
-        ds = DatasetBuilder.from_redis(client, f"graph:{name}", driver)  # pragma: no cover
+        ds = DatasetBuilder.from_redis(
+            client, f"graph:{name}", driver
+        )  # pragma: no cover
     except KeyError:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Graph not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Graph not found"
+        )  # pragma: no cover
     finally:  # pragma: no cover
         if driver:  # pragma: no cover
             driver.close()  # pragma: no cover
     if ds.owner_id not in {None, current_user.id}:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Graph not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Graph not found"
+        )  # pragma: no cover
     key = f"graph:{name}:progress:history"  # pragma: no cover
     raw = client.lrange(key, 0, -1)  # pragma: no cover
     history: list[dict] = []  # pragma: no cover
@@ -527,7 +568,7 @@ def dataset_ingest_route(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Schedule ingestion of a file into a persisted dataset."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     ds = _load_dataset(name, current_user)  # pragma: no cover
     result = enqueue_dataset_ingest(  # pragma: no cover
         name,  # pragma: no cover
@@ -554,7 +595,7 @@ def dataset_generate_route(
     """Schedule the generation pipeline for a persisted dataset."""
 
     _load_dataset(name, current_user)  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     celery_task = dataset_generate_task.apply_async(  # pragma: no cover
         args=[name, params or {}, current_user.id]  # pragma: no cover
     )  # pragma: no cover
@@ -570,9 +611,9 @@ def dataset_cleanup_route(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Schedule cleanup operations on a persisted dataset."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     _load_dataset(name, current_user)  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     celery_task = dataset_cleanup_task.apply_async(  # pragma: no cover
         args=[name, params or {}, current_user.id]  # pragma: no cover
     )  # pragma: no cover
@@ -588,10 +629,12 @@ def dataset_export_task_route(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Schedule dataset export to the requested format."""  # pragma: no cover
-  # pragma: no cover
+    # pragma: no cover
     _load_dataset(name, current_user)  # pragma: no cover
-  # pragma: no cover
-    celery_task = dataset_export_task.apply_async(args=[name, fmt, current_user.id])  # pragma: no cover
+    # pragma: no cover
+    celery_task = dataset_export_task.apply_async(
+        args=[name, fmt, current_user.id]
+    )  # pragma: no cover
     return {"task_id": celery_task.id}  # pragma: no cover
 
 
@@ -635,10 +678,16 @@ def download_dataset(
 ):  # pragma: no cover
     ds = get_dataset_by_id(db, ds_id)  # pragma: no cover
     if not ds or ds.owner_id != current_user.id:  # pragma: no cover
-        raise HTTPException(status_code=404, detail="Dataset not found")  # pragma: no cover
+        raise HTTPException(
+            status_code=404, detail="Dataset not found"
+        )  # pragma: no cover
     filename = f"dataset_{ds_id}.json"  # pragma: no cover
-    headers = {"Content-Disposition": f"attachment; filename={filename}"}  # pragma: no cover
-    return Response(ds.content or "{}", media_type="application/json", headers=headers)  # pragma: no cover
+    headers = {
+        "Content-Disposition": f"attachment; filename={filename}"
+    }  # pragma: no cover
+    return Response(
+        ds.content or "{}", media_type="application/json", headers=headers
+    )  # pragma: no cover
 
 
 # ----- Asynchronous task endpoints -----
@@ -729,7 +778,9 @@ def dp_sample(current_user: User = Depends(get_current_user)) -> dict:
 
 
 @app.get("/dp/budget", summary="Return remaining DP budget for the user")
-def get_dp_budget(current_user: User = Depends(get_current_user)) -> dict:  # pragma: no cover
+def get_dp_budget(
+    current_user: User = Depends(get_current_user),
+) -> dict:  # pragma: no cover
     """Expose current user's epsilon budget information.
 
     This endpoint allows clients to monitor how much differential privacy

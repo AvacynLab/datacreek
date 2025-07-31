@@ -1,4 +1,5 @@
 import types
+
 from datacreek.utils import kafka_queue
 
 

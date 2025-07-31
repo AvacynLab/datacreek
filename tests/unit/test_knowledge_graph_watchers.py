@@ -5,6 +5,7 @@ import pytest
 
 from datacreek.core import knowledge_graph as kg
 
+
 class DummyObserver:
     def __init__(self):
         self.started = False
@@ -24,6 +25,7 @@ class DummyObserver:
 
     def join(self, timeout=None):
         self.joined = True
+
 
 class DummyEvent:
     def __init__(self, path):

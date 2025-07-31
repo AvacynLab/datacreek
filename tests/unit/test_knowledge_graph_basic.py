@@ -1,14 +1,16 @@
 import os
 from pathlib import Path
+
 import pytest
+
 from datacreek.core.knowledge_graph import (
+    KnowledgeGraph,
     _load_cleanup,
-    get_cleanup_cfg,
     apply_cleanup_config,
-    verify_thresholds,
+    get_cleanup_cfg,
     start_cleanup_watcher,
     stop_cleanup_watcher,
-    KnowledgeGraph,
+    verify_thresholds,
 )
 
 
@@ -36,7 +38,14 @@ def test_knowledge_graph_basic(tmp_path, monkeypatch):
     kg = KnowledgeGraph()
     kg.add_document("doc", "src", text="<b>Hello</b>", author="auth")
     kg.add_section("doc", "sec1", title="Sec")
-    kg.add_chunk("doc", "chunk1", "<i>Chunk1</i>", section_id="sec1", emotion="joy", modality="text")
+    kg.add_chunk(
+        "doc",
+        "chunk1",
+        "<i>Chunk1</i>",
+        section_id="sec1",
+        emotion="joy",
+        modality="text",
+    )
     kg.add_entity("ent1", "Entity", source="src")
     kg.add_fact("ent1", "rel", "ent2", fact_id="fact1")
     kg.link_entity("chunk1", "ent1")

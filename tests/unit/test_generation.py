@@ -1,6 +1,5 @@
 import logging
 import random
-import types
 import sys
 import types
 
@@ -23,7 +22,9 @@ def test_generate_graph_rnn_all_edges(monkeypatch):
     assert g.number_of_edges() == 3
     # edges are undirected so orientations may vary
     valid = {(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)}
-    assert set(map(tuple, map(sorted, g.edges()))) <= set(map(tuple, map(sorted, valid)))
+    assert set(map(tuple, map(sorted, g.edges()))) <= set(
+        map(tuple, map(sorted, valid))
+    )
 
 
 def test_generate_graph_rnn_stateful_seed():
@@ -57,17 +58,28 @@ def test_bias_reweighting_upweights(monkeypatch):
     neighbors = {"A": 1}
     global_demog = {"A": 1, "B": 1}
     weights = {"A": 1.0, "B": 1.0}
-    adjusted = generation.bias_reweighting(neighbors, global_demog, weights, threshold=0.1)
+    adjusted = generation.bias_reweighting(
+        neighbors, global_demog, weights, threshold=0.1
+    )
     assert pytest.approx(adjusted["B"], abs=1e-6) == 1.2
 
 
 def test_sheaf_consistency_real(monkeypatch):
     def fake_laplacian(g, edge_attr="sheaf_sign"):
         return np.eye(2)
+
     dummy_cg = lambda A, b, atol=1e-6: (np.zeros_like(b), None)
-    monkeypatch.setitem(sys.modules, "scipy.sparse", types.SimpleNamespace(csr_matrix=lambda x: x))
-    monkeypatch.setitem(sys.modules, "scipy.sparse.linalg", types.SimpleNamespace(cg=dummy_cg))
-    monkeypatch.setitem(sys.modules, "datacreek.analysis.sheaf", types.SimpleNamespace(sheaf_laplacian=fake_laplacian))
+    monkeypatch.setitem(
+        sys.modules, "scipy.sparse", types.SimpleNamespace(csr_matrix=lambda x: x)
+    )
+    monkeypatch.setitem(
+        sys.modules, "scipy.sparse.linalg", types.SimpleNamespace(cg=dummy_cg)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "datacreek.analysis.sheaf",
+        types.SimpleNamespace(sheaf_laplacian=fake_laplacian),
+    )
     g = nx.Graph()
     g.add_nodes_from([0, 1])
     g.add_edge(0, 1, sheaf_sign=1)
@@ -78,6 +90,7 @@ def test_sheaf_consistency_real(monkeypatch):
 def test_apply_logit_bias(monkeypatch, caplog):
     def fake_bw(loc, glob, logits):
         return [l * 0.5 for l in logits], 0.2
+
     monkeypatch.setattr(generation, "bias_wasserstein", fake_bw)
     caplog.set_level(logging.INFO)
     payload = {"logits": [2.0, 4.0]}
@@ -88,8 +101,12 @@ def test_apply_logit_bias(monkeypatch, caplog):
 
 
 def test_bias_wasserstein_scaling(monkeypatch):
-    torch_stub = types.SimpleNamespace(as_tensor=lambda x, dtype=None: np.asarray(x, dtype=float), float32=None)
-    geom_stub = types.SimpleNamespace(SamplesLoss=lambda *_a, **_k: (lambda a, b: np.array(0.3)))
+    torch_stub = types.SimpleNamespace(
+        as_tensor=lambda x, dtype=None: np.asarray(x, dtype=float), float32=None
+    )
+    geom_stub = types.SimpleNamespace(
+        SamplesLoss=lambda *_a, **_k: (lambda a, b: np.array(0.3))
+    )
     monkeypatch.setitem(sys.modules, "torch", torch_stub)
     monkeypatch.setitem(sys.modules, "geomloss", geom_stub)
     scaled, w = generation.bias_wasserstein([0, 1], [1, 0], [2.0, 2.0])
@@ -98,7 +115,9 @@ def test_bias_wasserstein_scaling(monkeypatch):
 
 
 def test_generate_chatml_alpaca(monkeypatch):
-    monkeypatch.setattr(generation, "bias_wasserstein", lambda a, b, c: ([x * 0.5 for x in c], 0.1))
+    monkeypatch.setattr(
+        generation, "bias_wasserstein", lambda a, b, c: ([x * 0.5 for x in c], 0.1)
+    )
     p = {"logits": [4, 4]}
     assert generation.generate_chatml(p.copy(), [1], [1])["logits"] == [2, 2]
     assert generation.generate_alpaca(p.copy(), [1], [1])["logits"] == [2, 2]
@@ -106,7 +125,9 @@ def test_generate_chatml_alpaca(monkeypatch):
 
 def test_sheaf_score(monkeypatch):
     dummy_cg = lambda A, b, **k: (np.zeros_like(b), None)
-    monkeypatch.setitem(sys.modules, "scipy.sparse.linalg", types.SimpleNamespace(cg=dummy_cg))
+    monkeypatch.setitem(
+        sys.modules, "scipy.sparse.linalg", types.SimpleNamespace(cg=dummy_cg)
+    )
     Delta = np.eye(2)
     score = generation.sheaf_score([1.0, 1.0], Delta)
     expected = 1.0 / (1.0 + np.linalg.norm([1.0, 1.0]))

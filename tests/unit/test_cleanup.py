@@ -39,7 +39,9 @@ class DummyBuilder:
 
 def test_cleanup_no_builder(monkeypatch):
     kg = DummyKG()
-    monkeypatch.setattr("datacreek.core.knowledge_graph.verify_thresholds", lambda: None)
+    monkeypatch.setattr(
+        "datacreek.core.knowledge_graph.verify_thresholds", lambda: None
+    )
     stats = router.cleanup_knowledge_graph(kg, resolve_aliases={"a": ["b"]})
     assert stats.removed == 1 and stats.cleaned == 2
     assert ("resolve", 0.8, {"a": ["b"]}) in kg.calls
@@ -49,7 +51,9 @@ def test_cleanup_no_builder(monkeypatch):
 def test_cleanup_with_builder(monkeypatch):
     kg = DummyKG()
     builder = DummyBuilder()
-    monkeypatch.setattr("datacreek.core.knowledge_graph.verify_thresholds", lambda: None)
+    monkeypatch.setattr(
+        "datacreek.core.knowledge_graph.verify_thresholds", lambda: None
+    )
     stats = router.cleanup_knowledge_graph(
         kg,
         dataset_builder=builder,

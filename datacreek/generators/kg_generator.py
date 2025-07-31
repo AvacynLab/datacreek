@@ -21,7 +21,9 @@ class KGGenerator(BaseGenerator):
     def _select_facts(self, kg: KnowledgeGraph, num: int) -> List[str]:
         """Return ``num`` fact IDs chosen to maximize coverage."""
 
-        fact_nodes = [n for n, d in kg.graph.nodes(data=True) if d.get("type") == "fact"]
+        fact_nodes = [
+            n for n, d in kg.graph.nodes(data=True) if d.get("type") == "fact"
+        ]
         if len(fact_nodes) <= num:
             return fact_nodes
 
@@ -110,7 +112,9 @@ class KGGenerator(BaseGenerator):
                 max_tokens=max_tokens,
             ).strip()
 
-            confidence = kg.fact_confidence(fact["subject"], fact["predicate"], fact["object"])
+            confidence = kg.fact_confidence(
+                fact["subject"], fact["predicate"], fact["object"]
+            )
             answers = 2 if multi_answer else 1
             for _ in range(answers):
                 if len(qa_pairs) >= num_pairs:

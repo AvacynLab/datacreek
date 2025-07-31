@@ -1,6 +1,10 @@
 import networkx as nx
 import numpy as np
-from datacreek.analysis.filtering import filter_semantic_cycles, entropy_triangle_threshold
+
+from datacreek.analysis.filtering import (
+    entropy_triangle_threshold,
+    filter_semantic_cycles,
+)
 
 
 def test_filter_semantic_cycles_remove_stopword_cycle():
@@ -32,7 +36,9 @@ def test_filter_semantic_cycles_max_len():
 
 def test_entropy_triangle_threshold_simple():
     G = nx.Graph()
-    G.add_edges_from([(1, 2, {"weight": 1}), (2, 3, {"weight": 1}), (3, 1, {"weight": 1})])
+    G.add_edges_from(
+        [(1, 2, {"weight": 1}), (2, 3, {"weight": 1}), (3, 1, {"weight": 1})]
+    )
     # uniform weights -> entropy=log2(3) ~1.58 => round(5*1.58)=8
     assert entropy_triangle_threshold(G, scale=5) == 8
 

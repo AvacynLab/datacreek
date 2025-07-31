@@ -13,7 +13,7 @@ class DummyMetric:
         self._stored = []
 
     def inc(self):
-        self._stored.append('inc')
+        self._stored.append("inc")
 
 
 class DummyGauge:
@@ -41,11 +41,7 @@ def test_cache_l1_injects_client(monkeypatch):
 
 
 def test_l1_cache_hit_and_miss(monkeypatch):
-    responses = {
-        "exists": True,
-        "get": b"cached",
-        "setex": []
-    }
+    responses = {"exists": True, "get": b"cached", "setex": []}
 
     class FakeRedis:
         def exists(self, key):

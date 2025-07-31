@@ -1,7 +1,8 @@
 import importlib
-import types
 import sys
+import types
 from pathlib import Path
+
 import pytest
 
 
@@ -13,19 +14,19 @@ def reload_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("DATACREEK_CONFIG", str(cfg))
 
     redis_stub = types.SimpleNamespace(Redis=lambda: DummyRedis(), RedisError=Exception)
-    monkeypatch.setitem(sys.modules, 'redis', redis_stub)
+    monkeypatch.setitem(sys.modules, "redis", redis_stub)
 
     metrics_stub = types.SimpleNamespace(
         CollectorRegistry=lambda: None,
         Counter=lambda *a, **k: DummyCounter(),
         Gauge=lambda *a, **k: DummyGauge(),
     )
-    monkeypatch.setitem(sys.modules, 'prometheus_client', metrics_stub)
+    monkeypatch.setitem(sys.modules, "prometheus_client", metrics_stub)
 
-    if 'datacreek.utils.cache' in sys.modules:
-        del sys.modules['datacreek.utils.cache']
-    mod = importlib.import_module('datacreek.utils.cache')
-    monkeypatch.setattr(mod.TTLManager, 'start', lambda self: None)
+    if "datacreek.utils.cache" in sys.modules:
+        del sys.modules["datacreek.utils.cache"]
+    mod = importlib.import_module("datacreek.utils.cache")
+    monkeypatch.setattr(mod.TTLManager, "start", lambda self: None)
     return mod
 
 
@@ -93,9 +94,9 @@ def test_l1_cache_decorator(reload_cache):
         return f"val-{key}"
 
     # first call -> miss -> store value
-    assert compute('a') == 'val-a'
-    assert r.store['k:a'] == 'val-a'
+    assert compute("a") == "val-a"
+    assert r.store["k:a"] == "val-a"
     assert cache.miss.value == 1
     # second call -> hit -> no new setex
-    assert compute('a') == 'val-a'
+    assert compute("a") == "val-a"
     assert cache.hits.value == 1

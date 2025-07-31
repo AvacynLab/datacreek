@@ -1,5 +1,7 @@
 import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
+
 
 def build_kg():
     kg = KnowledgeGraph()
@@ -33,4 +35,3 @@ def test_get_chunk_neighbors(monkeypatch):
     )
     neighbors = kg.get_chunk_neighbors(k=2)
     assert neighbors == {"c1": ["c2", "c3"], "c2": ["c1"], "c3": ["c2", "c1"]}
-

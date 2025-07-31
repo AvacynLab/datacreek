@@ -1,7 +1,8 @@
-import json
 import importlib
-from fastapi import HTTPException
+import json
+
 import pytest
+from fastapi import HTTPException
 
 router = importlib.import_module("datacreek.routers.vector_router")
 

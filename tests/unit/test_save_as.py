@@ -1,5 +1,6 @@
 import json
 import types
+
 import pytest
 
 from datacreek.core.save_as import _format_pairs, convert_format
@@ -61,8 +62,16 @@ def test_convert_format_variants(tmp_path, monkeypatch):
 def test_convert_format_hf_and_storage(monkeypatch):
     pairs = [{"question": "q", "answer": "a"}]
     backend = DummyBackend()
-    monkeypatch.setattr("datacreek.core.save_as.to_hf_dataset", lambda data, key: f"HF:{key}")
-    result = convert_format({"qa_pairs": pairs}, "jsonl", storage_format="hf", backend=backend, redis_key="k")
+    monkeypatch.setattr(
+        "datacreek.core.save_as.to_hf_dataset", lambda data, key: f"HF:{key}"
+    )
+    result = convert_format(
+        {"qa_pairs": pairs},
+        "jsonl",
+        storage_format="hf",
+        backend=backend,
+        redis_key="k",
+    )
     assert result == "HF:k"
 
 
@@ -70,11 +79,16 @@ def test_convert_format_to_backend_and_redis(monkeypatch):
     pairs = [{"question": "q", "answer": "a"}]
     backend = DummyBackend()
     redis_client = DummyRedis()
-    monkeypatch.setattr("datacreek.core.save_as.logger", types.SimpleNamespace(exception=lambda *a, **k: None))
+    monkeypatch.setattr(
+        "datacreek.core.save_as.logger",
+        types.SimpleNamespace(exception=lambda *a, **k: None),
+    )
     key = convert_format({"qa_pairs": pairs}, "jsonl", backend=backend, redis_key="k")
     assert backend.saved == [("k", _format_pairs(pairs, "jsonl"))]
     assert key == "ok:k"
 
-    key = convert_format({"qa_pairs": pairs}, "jsonl", redis_client=redis_client, redis_key="r")
+    key = convert_format(
+        {"qa_pairs": pairs}, "jsonl", redis_client=redis_client, redis_key="r"
+    )
     assert redis_client.data["r"]
     assert key == "r"

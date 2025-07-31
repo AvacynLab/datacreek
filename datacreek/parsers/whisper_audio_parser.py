@@ -37,6 +37,7 @@ class WhisperAudioParser(BaseParser):  # type: ignore[misc]
         try:
             import wave
             from tempfile import NamedTemporaryFile
+
             from datacreek.utils.audio_vad import split_on_silence
         except Exception as exc:  # pragma: no cover - optional dependency
             raise ImportError(

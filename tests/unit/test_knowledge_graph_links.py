@@ -1,5 +1,7 @@
 import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
+
 
 def build_graph():
     kg = KnowledgeGraph()
@@ -16,6 +18,7 @@ def build_graph():
     kg.index.build()
     return kg
 
+
 def test_link_helpers_and_conflicts():
     kg = build_graph()
     assert kg.link_chunks_by_entity() >= 0
@@ -25,6 +28,7 @@ def test_link_helpers_and_conflicts():
     count = kg.mark_conflicting_facts()
     assert isinstance(count, int)
 
+
 def test_remove_and_renumber():
     kg = build_graph()
     kg.remove_chunk("c1")
@@ -33,4 +37,3 @@ def test_remove_and_renumber():
     assert "d2" not in kg.graph
     kg.consolidate_schema()
     assert kg.graph.nodes["d1"]["type"] == "document"
-

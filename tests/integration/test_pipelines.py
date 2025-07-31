@@ -376,7 +376,9 @@ def test_run_generation_pipeline_dataclass(monkeypatch):
     from datacreek.models.results import QAGenerationResult
 
     def fake_generate(*args, **kwargs):
-        return QAGenerationResult(summary="", qa_pairs=[QAPair(question="q", answer="a")])
+        return QAGenerationResult(
+            summary="", qa_pairs=[QAPair(question="q", answer="a")]
+        )
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
@@ -519,7 +521,12 @@ def test_run_generation_pipeline_deduplicate(monkeypatch):
     """Duplicate QA pairs should be removed after curation."""
 
     def fake_generate(*args, **kwargs):
-        return {"qa_pairs": [{"question": "q", "answer": "a"}, {"question": "q", "answer": "a"}]}
+        return {
+            "qa_pairs": [
+                {"question": "q", "answer": "a"},
+                {"question": "q", "answer": "a"},
+            ]
+        }
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
 
@@ -679,7 +686,9 @@ def test_redis_resume(monkeypatch):
     ds = DatasetBuilder(DatasetType.QA, name="demo")
     ds.add_document("d", source="s", text="t")
 
-    run_generation_pipeline(DatasetType.QA, ds.graph, dataset_builder=ds, redis_client=client)
+    run_generation_pipeline(
+        DatasetType.QA, ds.graph, dataset_builder=ds, redis_client=client
+    )
     assert client.hget("dataset:demo:progress", "generate_qa") is not None
 
     res = run_generation_pipeline(
@@ -741,7 +750,9 @@ def test_kg_cleanup_with_params(monkeypatch):
         return 0, 0
 
     monkeypatch.setattr("datacreek.pipelines.process_file", fake_generate)
-    monkeypatch.setattr("datacreek.core.dataset.DatasetBuilder.cleanup_graph", fake_cleanup)
+    monkeypatch.setattr(
+        "datacreek.core.dataset.DatasetBuilder.cleanup_graph", fake_cleanup
+    )
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
 
@@ -768,9 +779,12 @@ def test_kg_cleanup_with_params(monkeypatch):
 def test_pipeline_records_step_events(monkeypatch):
     """Pipeline should log events for each executed step."""
 
-    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []})
     monkeypatch.setattr(
-        "datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: {"qa_pairs": d["qa_pairs"]}
+        "datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []}
+    )
+    monkeypatch.setattr(
+        "datacreek.pipelines.curate_qa_pairs",
+        lambda d, *a, **k: {"qa_pairs": d["qa_pairs"]},
     )
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
 
@@ -818,7 +832,9 @@ def test_kg_cleanup_failure(monkeypatch):
     def bad_cleanup(self, *a, **k):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("datacreek.core.dataset.DatasetBuilder.cleanup_graph", bad_cleanup)
+    monkeypatch.setattr(
+        "datacreek.core.dataset.DatasetBuilder.cleanup_graph", bad_cleanup
+    )
     monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {})
     monkeypatch.setattr("datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: d)
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: a[0])
@@ -842,9 +858,12 @@ def test_pipeline_progress_timestamps(monkeypatch):
 
     client = fakeredis.FakeStrictRedis()
 
-    monkeypatch.setattr("datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []})
     monkeypatch.setattr(
-        "datacreek.pipelines.curate_qa_pairs", lambda d, *a, **k: {"qa_pairs": d["qa_pairs"]}
+        "datacreek.pipelines.process_file", lambda *a, **k: {"qa_pairs": []}
+    )
+    monkeypatch.setattr(
+        "datacreek.pipelines.curate_qa_pairs",
+        lambda d, *a, **k: {"qa_pairs": d["qa_pairs"]},
     )
     monkeypatch.setattr("datacreek.pipelines.convert_format", lambda *a, **k: "done")
 

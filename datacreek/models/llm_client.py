@@ -96,7 +96,10 @@ class LLMClient:
                     "OpenAI library is not installed. Install with 'pip install openai>=1.0.0'"
                 )
 
-            api_endpoint_config = {**get_openai_settings(self.config).__dict__, **profile_cfg}
+            api_endpoint_config = {
+                **get_openai_settings(self.config).__dict__,
+                **profile_cfg,
+            }
             self._configure_openai(
                 api_base,
                 api_key,
@@ -275,7 +278,7 @@ class LLMClient:
         verbose = logger.isEnabledFor(logging.DEBUG)
 
         if self.provider == "api-endpoint":
-# pragma: no cover
+            # pragma: no cover
             return self._openai_chat_completion(
                 messages,
                 temperature,

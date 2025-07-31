@@ -82,7 +82,9 @@ class EmbeddingIndex:
             self._matrix = self._vectorizer.transform(self.texts)
             if self.use_hnsw:
                 self._hnsw = hnswlib.Index(space="cosine", dim=self._matrix.shape[1])
-                self._hnsw.init_index(max_elements=len(self.ids), ef_construction=100, M=16)
+                self._hnsw.init_index(
+                    max_elements=len(self.ids), ef_construction=100, M=16
+                )
                 self._hnsw.add_items(self._matrix.toarray(), list(range(len(self.ids))))
                 self._hnsw.set_ef(50)
                 self._nn = None
@@ -95,7 +97,11 @@ class EmbeddingIndex:
             self._hnsw = hnswlib.Index(space="cosine", dim=self._matrix.shape[1])
             self._hnsw.init_index(max_elements=len(self.ids), ef_construction=100, M=16)
             self._hnsw.add_items(
-                self._matrix if isinstance(self._matrix, np.ndarray) else self._matrix.toarray(),
+                (
+                    self._matrix
+                    if isinstance(self._matrix, np.ndarray)
+                    else self._matrix.toarray()
+                ),
                 list(range(len(self.ids))),
             )
             self._hnsw.set_ef(50)
@@ -163,7 +169,9 @@ class EmbeddingIndex:
         if self.use_hnsw and self._hnsw is not None:
             indices, _ = self._hnsw.knn_query(query_vec.toarray(), k)
             return indices[0].tolist()
-        distances, indices = self._nn.kneighbors(query_vec, n_neighbors=min(k, len(self.ids)))
+        distances, indices = self._nn.kneighbors(
+            query_vec, n_neighbors=min(k, len(self.ids))
+        )
         return indices[0].tolist()
 
     def get_text(self, idx: int) -> str:

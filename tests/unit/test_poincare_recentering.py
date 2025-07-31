@@ -1,8 +1,9 @@
-import types
-import numpy as np
 import builtins
 import importlib
 import sys
+import types
+
+import numpy as np
 
 import datacreek.analysis.poincare_recentering as pr
 
@@ -39,7 +40,9 @@ def test_trace_overshoot_parquet(monkeypatch, tmp_path):
     fake_pa = types.ModuleType("pyarrow")
     fake_pa.table = lambda d: d
     fake_pq = types.ModuleType("pyarrow.parquet")
-    fake_pq.write_table = lambda tbl, path: captured.update({"rows": len(tbl["kappa"]), "path": path})
+    fake_pq.write_table = lambda tbl, path: captured.update(
+        {"rows": len(tbl["kappa"]), "path": path}
+    )
     monkeypatch.setitem(sys.modules, "pyarrow", fake_pa)
     monkeypatch.setitem(sys.modules, "pyarrow.parquet", fake_pq)
     out = tmp_path / "o.parquet"

@@ -1,5 +1,6 @@
 import sys
 import types
+
 import networkx as nx
 import numpy as np
 import pytest
@@ -9,11 +10,14 @@ from datacreek.analysis import information
 
 class DummyLR:
     """Minimal deterministic stand-in for LogisticRegression."""
+
     def __init__(self, max_iter=1000, n_jobs=1):
         pass
+
     def fit(self, X, y):
         self.classes_ = np.unique(y)
         self.means = {c: X[y == c].mean(axis=0) for c in self.classes_}
+
     def predict_proba(self, X):
         dists = np.stack(
             [np.linalg.norm(X - self.means[c], axis=1) for c in self.classes_],
@@ -31,7 +35,11 @@ def fake_logreg(monkeypatch):
 
 
 def test_graph_information_bottleneck_value():
-    features = {0: np.array([0.0, 0.0]), 1: np.array([1.0, 1.0]), 2: np.array([2.0, 2.0])}
+    features = {
+        0: np.array([0.0, 0.0]),
+        1: np.array([1.0, 1.0]),
+        2: np.array([2.0, 2.0]),
+    }
     labels = {0: 0, 1: 1, 2: 1}
     val = information.graph_information_bottleneck(features, labels)
 

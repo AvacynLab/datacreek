@@ -1,6 +1,7 @@
 import types
-import numpy as np
+
 import networkx as nx
+import numpy as np
 import pytest
 
 import datacreek.analysis.index as idx
@@ -9,6 +10,7 @@ import datacreek.analysis.index as idx
 class DummyTimer:
     def __init__(self, times):
         self._it = iter(times)
+
     def monotonic(self):
         return next(self._it)
 
@@ -16,8 +18,10 @@ class DummyTimer:
 class Flat:
     def __init__(self, d):
         self.d = d
+
     def add(self, xb):
         self.xb = xb
+
     def search(self, xq, k):
         return None, np.tile(np.arange(k), (xq.shape[0], 1))
 
@@ -34,7 +38,9 @@ def test_search_with_fallback(monkeypatch):
     xq = xb[:1]
     timer = DummyTimer([0.0, 0.2, 0.3, 0.4])
     monkeypatch.setattr(idx, "time", timer)
-    monkeypatch.setattr(idx, "faiss", types.SimpleNamespace(IndexFlatIP=Flat, IndexHNSWFlat=HNSWFlat))
+    monkeypatch.setattr(
+        idx, "faiss", types.SimpleNamespace(IndexFlatIP=Flat, IndexHNSWFlat=HNSWFlat)
+    )
     monkeypatch.setattr(idx, "np", np)
     out_idx, lat, index = idx.search_with_fallback(xb, xq, k=1, latency_threshold=0.1)
     assert lat == pytest.approx(0.1)

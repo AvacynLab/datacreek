@@ -1,5 +1,6 @@
 import sys
 import types
+
 import numpy as np
 import pytest
 
@@ -76,7 +77,9 @@ def test_fractalnetpruner_prune_revert(monkeypatch):
     pruner.model = model
 
     dummy_counter = DummyCounter()
-    monkeypatch.setattr(compression, "prune_reverts_total", dummy_counter, raising=False)
+    monkeypatch.setattr(
+        compression, "prune_reverts_total", dummy_counter, raising=False
+    )
     monkeypatch.setattr(compression, "save_checkpoint", lambda *a, **k: None)
     monkeypatch.setattr(compression, "restore_checkpoint", lambda p: "restored")
     fake_cfg_mod = types.SimpleNamespace(

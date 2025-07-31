@@ -3,8 +3,13 @@ from datacreek.models.qa import QAPair
 
 def test_to_dict_full():
     pair = QAPair(
-        question="q", answer="a", rating=0.5, confidence=0.9,
-        chunk="c", source="s", facts=["f1", "f2"]
+        question="q",
+        answer="a",
+        rating=0.5,
+        confidence=0.9,
+        chunk="c",
+        source="s",
+        facts=["f1", "f2"],
     )
     expected = {
         "question": "q",

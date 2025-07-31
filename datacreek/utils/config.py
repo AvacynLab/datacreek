@@ -45,6 +45,7 @@ except Exception:  # pragma: no cover - fallback when pydantic missing
 
         pass
 
+
 from datacreek.config.schema import ConfigSchema
 from datacreek.config_models import (
     CurateSettings,
@@ -415,7 +416,9 @@ class _ConfigHandler(FileSystemEventHandler):
                 logger.exception("config reload failed")
 
 
-def start_config_watcher(cfg_path: str | os.PathLike | None = None) -> None:  # pragma: no cover
+def start_config_watcher(
+    cfg_path: str | os.PathLike | None = None,
+) -> None:  # pragma: no cover
     """Start watchdog observer reloading the global configuration."""
 
     global _config_observer

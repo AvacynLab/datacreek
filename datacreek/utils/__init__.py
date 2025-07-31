@@ -34,33 +34,16 @@ except Exception:  # pragma: no cover - fallback when heavy deps missing
     def _missing(*_a, **_k):
         raise RuntimeError("configuration utilities require pydantic and yaml")
 
-    get_curate_config = (
-        get_curate_settings
-    ) = (
-        get_format_config
-    ) = (
+    get_curate_config = get_curate_settings = get_format_config = (
         get_format_settings
-    ) = (
-        get_generation_config
-    ) = (
-        get_llm_settings
-    ) = (
-        get_openai_config
-    ) = (
+    ) = get_generation_config = get_llm_settings = get_openai_config = (
         get_openai_settings
-    ) = (
-        get_prompt
-    ) = (
-        get_vllm_config
-    ) = get_vllm_settings = load_config = merge_configs = _missing  # type: ignore
+    ) = get_prompt = get_vllm_config = get_vllm_settings = load_config = (
+        merge_configs
+    ) = _missing  # type: ignore
 from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
-from .delta_export import (
-    export_delta,
-    lakefs_commit,
-    delta_optimize,
-    delta_vacuum,
-)
+from .delta_export import delta_optimize, delta_vacuum, export_delta, lakefs_commit
 from .gitinfo import get_commit_hash
 from .kafka_queue import enqueue_ingest
 from .rate_limit import consume_token

@@ -1,19 +1,21 @@
-import types
-import sys
-import subprocess
-from pathlib import Path
 import random
+import subprocess
+import sys
+import types
+from pathlib import Path
 
 import pytest
 
-from datacreek.analysis import ingestion, explain_viz, privacy, rollback
+from datacreek.analysis import explain_viz, ingestion, privacy, rollback
 
 
 def test_partition_files_to_atoms_fallback(tmp_path, monkeypatch):
     path = tmp_path / "f.txt"
     path.write_text("a\nb\n\nc\n")
     # stub unstructured.partition.auto.partition to raise
-    mod = types.SimpleNamespace(partition=lambda p: (_ for _ in ()).throw(RuntimeError()))
+    mod = types.SimpleNamespace(
+        partition=lambda p: (_ for _ in ()).throw(RuntimeError())
+    )
     monkeypatch.setitem(sys.modules, "unstructured.partition.auto", mod)
     atoms = ingestion.partition_files_to_atoms(str(path))
     assert atoms == ["a", "b", "c"]
@@ -51,7 +53,11 @@ class C:
 def test_parse_code_to_atoms_fallback(tmp_path, monkeypatch):
     p = tmp_path / "a.py"
     p.write_text("print('hi')\n")
-    monkeypatch.setitem(sys.modules, "ast", types.SimpleNamespace(parse=lambda x: (_ for _ in ()).throw(RuntimeError())))
+    monkeypatch.setitem(
+        sys.modules,
+        "ast",
+        types.SimpleNamespace(parse=lambda x: (_ for _ in ()).throw(RuntimeError())),
+    )
     atoms = ingestion.parse_code_to_atoms(str(p))
     assert atoms == ["print('hi')"]
 
@@ -85,12 +91,18 @@ def test_blip_caption_image(monkeypatch):
         def from_pretrained(cls, name):
             return cls()
 
-    monkeypatch.setitem(sys.modules, "PIL", types.SimpleNamespace(Image=types.SimpleNamespace(open=lambda p: FakeImage())))
+    monkeypatch.setitem(
+        sys.modules,
+        "PIL",
+        types.SimpleNamespace(Image=types.SimpleNamespace(open=lambda p: FakeImage())),
+    )
     monkeypatch.setitem(
         sys.modules,
         "transformers",
         types.SimpleNamespace(
-            BlipForConditionalGeneration=types.SimpleNamespace(from_pretrained=lambda n: FakeModel()),
+            BlipForConditionalGeneration=types.SimpleNamespace(
+                from_pretrained=lambda n: FakeModel()
+            ),
             BlipProcessor=FakeProcessor,
         ),
     )
@@ -103,10 +115,19 @@ def test_rollback_gremlin_diff(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
     f = repo / "f.txt"
     f.write_text("a")
-    subprocess.run(["git", "add", "f.txt"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "add", "f.txt"], cwd=repo, check=True, stdout=subprocess.DEVNULL
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "init"], cwd=repo, check=True, stdout=subprocess.DEVNULL
+    )
     f.write_text("b")
-    subprocess.run(["git", "commit", "-am", "change"], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        ["git", "commit", "-am", "change"],
+        cwd=repo,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
     diff = rollback.rollback_gremlin_diff(str(repo))
     assert Path(diff).exists() and Path(diff).read_text()
 
@@ -122,7 +143,7 @@ def test_sheaf_sla():
 def test_explain_to_svg_basic():
     data = {"nodes": ["A", "B"], "edges": [("A", "B")], "attention": {"A->B": 0.8}}
     svg = explain_viz.explain_to_svg(data)
-    assert svg.startswith('<svg') and 'A' in svg and 'B' in svg
+    assert svg.startswith("<svg") and "A" in svg and "B" in svg
 
 
 def test_k_out_randomized_response(monkeypatch):

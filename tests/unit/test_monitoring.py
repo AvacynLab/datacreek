@@ -53,8 +53,13 @@ def monitoring(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "prometheus_client", prom)
     # avoid automatic startup during import
-    monkeypatch.setitem(sys.modules, "datacreek.utils.config", types.SimpleNamespace(load_config=lambda: {}))
+    monkeypatch.setitem(
+        sys.modules,
+        "datacreek.utils.config",
+        types.SimpleNamespace(load_config=lambda: {}),
+    )
     import datacreek.analysis.monitoring as mon
+
     mon = importlib.reload(mon)
     ports.clear()
     mon._SERVER_STARTED = False

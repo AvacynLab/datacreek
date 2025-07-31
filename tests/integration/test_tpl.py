@@ -10,7 +10,8 @@ def test_tpl_correct_graph_function():
     g2 = nx.cycle_graph(4)
     if (
         tpl_correct_graph.__module__ == "datacreek.analysis.tpl"
-        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd") is None
+        and getattr(__import__("datacreek.analysis.fractal", fromlist=["gd"]), "gd")
+        is None
     ):
         pytest.skip("gudhi not available")
     res = tpl_correct_graph(g1, g2, epsilon=0.0, max_iter=2)

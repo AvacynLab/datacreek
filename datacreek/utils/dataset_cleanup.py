@@ -6,7 +6,9 @@ from difflib import SequenceMatcher
 from typing import Any, Dict, List
 
 
-def deduplicate_pairs(pairs: List[Dict[str, Any]], threshold: float = 0.9) -> List[Dict[str, Any]]:
+def deduplicate_pairs(
+    pairs: List[Dict[str, Any]], threshold: float = 0.9
+) -> List[Dict[str, Any]]:
     """Return ``pairs`` with near-duplicates removed.
 
     Examples are considered duplicates when both the question and answer are

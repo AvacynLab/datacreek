@@ -82,7 +82,10 @@ class VQAGenerator:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                    },
                     {"type": "text", "text": f"{query} Final answer: {label}"},
                 ],
             },

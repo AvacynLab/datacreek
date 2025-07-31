@@ -1,5 +1,6 @@
-import types
 import sys
+import types
+
 import pytest
 
 from datacreek.parsers.docx_parser import DOCXParser
@@ -14,33 +15,45 @@ def test_docx_parser_returns_joined_text(monkeypatch):
     calls = {}
 
     def fake_partition_docx(filename):
-        calls['filename'] = filename
-        return [DummyElement('foo'), DummyElement('bar')]
+        calls["filename"] = filename
+        return [DummyElement("foo"), DummyElement("bar")]
 
-    monkeypatch.setitem(sys.modules, 'unstructured.partition.docx', types.SimpleNamespace(partition_docx=fake_partition_docx))
+    monkeypatch.setitem(
+        sys.modules,
+        "unstructured.partition.docx",
+        types.SimpleNamespace(partition_docx=fake_partition_docx),
+    )
     parser = DOCXParser()
-    result = parser.parse('dummy.docx')
-    assert result == 'foo\nbar'
-    assert calls['filename'] == 'dummy.docx'
+    result = parser.parse("dummy.docx")
+    assert result == "foo\nbar"
+    assert calls["filename"] == "dummy.docx"
 
 
 def test_docx_parser_return_elements(monkeypatch):
-    elems = [DummyElement('a')]
+    elems = [DummyElement("a")]
 
     def fake_partition_docx(filename):
         return elems
 
-    monkeypatch.setitem(sys.modules, 'unstructured.partition.docx', types.SimpleNamespace(partition_docx=fake_partition_docx))
+    monkeypatch.setitem(
+        sys.modules,
+        "unstructured.partition.docx",
+        types.SimpleNamespace(partition_docx=fake_partition_docx),
+    )
     parser = DOCXParser()
-    result = parser.parse('x.docx', return_elements=True)
+    result = parser.parse("x.docx", return_elements=True)
     assert result is elems
 
 
 def test_docx_parser_error(monkeypatch):
     def fake_partition_docx(filename):
-        raise ValueError('boom')
+        raise ValueError("boom")
 
-    monkeypatch.setitem(sys.modules, 'unstructured.partition.docx', types.SimpleNamespace(partition_docx=fake_partition_docx))
+    monkeypatch.setitem(
+        sys.modules,
+        "unstructured.partition.docx",
+        types.SimpleNamespace(partition_docx=fake_partition_docx),
+    )
     parser = DOCXParser()
     with pytest.raises(RuntimeError):
-        parser.parse('x.docx')
+        parser.parse("x.docx")

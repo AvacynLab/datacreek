@@ -37,7 +37,10 @@ class MultiToolGenerator(BaseGenerator):
 
         return asyncio.run(
             self._process_document_impl(
-                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
+                use_async=async_mode,
             )
         )
 
@@ -64,7 +67,9 @@ class MultiToolGenerator(BaseGenerator):
     ) -> ConversationResult:
         from .qa_generator import QAGenerator
 
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
+        qa_gen = QAGenerator(
+            self.client, self.config_path, kg=self.kg, config_overrides=None
+        )
 
         if use_async:
             result = await qa_gen.process_document_async(
@@ -72,7 +77,10 @@ class MultiToolGenerator(BaseGenerator):
             )
         else:
             result = await asyncio.to_thread(
-                qa_gen.process_document, document_text, num_pairs=num_pairs, verbose=verbose
+                qa_gen.process_document,
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
             )
 
         def add_tools(conv: List[Dict[str, Any]], pair: Any) -> None:
@@ -80,7 +88,10 @@ class MultiToolGenerator(BaseGenerator):
                 2,
                 {
                     "role": "assistant",
-                    "tool_call": {"name": "search", "arguments": {"query": pair.question}},
+                    "tool_call": {
+                        "name": "search",
+                        "arguments": {"query": pair.question},
+                    },
                 },
             )
             conv.insert(3, {"role": "tool", "name": "search", "content": pair.answer})
@@ -88,10 +99,15 @@ class MultiToolGenerator(BaseGenerator):
                 4,
                 {
                     "role": "assistant",
-                    "tool_call": {"name": "calculator", "arguments": {"input": pair.answer}},
+                    "tool_call": {
+                        "name": "calculator",
+                        "arguments": {"input": pair.answer},
+                    },
                 },
             )
-            conv.insert(5, {"role": "tool", "name": "calculator", "content": pair.answer})
+            conv.insert(
+                5, {"role": "tool", "name": "calculator", "content": pair.answer}
+            )
 
         conversations = qa_pairs_to_records(result.qa_pairs, modify=add_tools)
 

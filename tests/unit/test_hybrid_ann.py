@@ -1,6 +1,7 @@
 import importlib
-import numpy as np
 import types
+
+import numpy as np
 import pytest
 
 import datacreek.analysis.hybrid_ann as ha
@@ -31,4 +32,3 @@ def test_functions_require_faiss(monkeypatch):
         ha.rerank_pq(xb, xq)
     with pytest.raises(RuntimeError):
         ha.search_hnsw_pq(xb, xq)
-

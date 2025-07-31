@@ -1,8 +1,10 @@
 import os
 import tempfile
+
 import pytest
 
 from datacreek.utils import modality
+
 
 @pytest.mark.heavy
 def test_detect_modality_files(tmp_path):
@@ -16,6 +18,7 @@ def test_detect_modality_files(tmp_path):
     assert modality.detect_modality(str(audio_file)) == "AUDIO"
     assert modality.detect_modality(str(code_file)) == "CODE"
     assert modality.detect_modality(str(image_file)) == "IMAGE"
+
 
 @pytest.mark.heavy
 def test_detect_modality_text():

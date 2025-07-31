@@ -1,5 +1,11 @@
 import pytest
-from datacreek.utils.crypto import xor_encrypt, xor_decrypt, encrypt_pii_fields, decrypt_pii_fields
+
+from datacreek.utils.crypto import (
+    decrypt_pii_fields,
+    encrypt_pii_fields,
+    xor_decrypt,
+    xor_encrypt,
+)
 
 
 def test_xor_encrypt_decrypt_roundtrip():
@@ -32,4 +38,3 @@ def test_encrypt_skip_missing_or_none():
     # unchanged due to None or missing
     assert encrypted["name"] is None
     assert "missing" not in encrypted
-

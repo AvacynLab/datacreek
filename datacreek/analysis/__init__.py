@@ -161,11 +161,13 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
 
         return _fp
     if name in {"fp8_quantize", "fp8_dequantize"}:
-        from .compression import fp8_quantize as _q, fp8_dequantize as _dq
+        from .compression import fp8_dequantize as _dq
+        from .compression import fp8_quantize as _q
 
         return {"fp8_quantize": _q, "fp8_dequantize": _dq}[name]
     if name in {"online_pca_reduce", "fractal_encoder"}:
-        from .fractal_encoder import online_pca_reduce as _opr, fractal_encoder as _fe
+        from .fractal_encoder import fractal_encoder as _fe
+        from .fractal_encoder import online_pca_reduce as _opr
 
         return {"online_pca_reduce": _opr, "fractal_encoder": _fe}[name]
     if name in {
@@ -193,10 +195,10 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         "hyperedge_attention_scores",
         "hyper_sagnn_embeddings_stream",
     }:
+        from .hyper_sagnn_cuda import hyper_sagnn_embeddings_stream as _hs_stream
         from .hypergraph import hyper_sagnn_embeddings as _hs
         from .hypergraph import hyper_sagnn_head_drop_embeddings as _hd
         from .hypergraph import hyperedge_attention_scores as _att
-        from .hyper_sagnn_cuda import hyper_sagnn_embeddings_stream as _hs_stream
 
         return {
             "hyper_sagnn_embeddings": _hs,

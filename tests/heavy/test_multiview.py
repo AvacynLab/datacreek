@@ -1,7 +1,8 @@
-import numpy as np
-import pytest
 import sys
 import types
+
+import numpy as np
+import pytest
 
 from datacreek.analysis import multiview
 
@@ -40,7 +41,9 @@ def test_product_embedding_and_train():
     emb = multiview.product_embedding(hyper, eucl)
     assert np.allclose(emb["a"], [0.0, 0.5, 1.0, 0.0])
     before = np.linalg.norm(np.array(hyper["a"]) - np.array(hyper["b"])) ** 2
-    h_new, _ = multiview.train_product_manifold(hyper, eucl, [("a", "b")], epochs=3, lr=0.1)
+    h_new, _ = multiview.train_product_manifold(
+        hyper, eucl, [("a", "b")], epochs=3, lr=0.1
+    )
     after = np.linalg.norm(h_new["a"] - h_new["b"]) ** 2
     assert after < before
 
@@ -65,7 +68,9 @@ def test_hybrid_contrastive_and_meta(monkeypatch):
     n2v = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
     gw = {"a": [1.0, 0.0], "b": [0.0, 1.0]}
     hyp = {"a": [0.1, 0.0], "b": [0.0, 0.1]}
-    score = multiview.hybrid_score(n2v["a"], n2v["b"], gw["a"], gw["b"], hyp["a"], hyp["b"])
+    score = multiview.hybrid_score(
+        n2v["a"], n2v["b"], gw["a"], gw["b"], hyp["a"], hyp["b"]
+    )
     assert score != 0.0
     loss = multiview.multiview_contrastive_loss(n2v, gw, hyp, tau=0.5)
     assert loss >= 0.0

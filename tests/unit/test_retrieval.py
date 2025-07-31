@@ -1,6 +1,7 @@
 import builtins
-import builtins
+
 import numpy as np
+
 from datacreek.utils import retrieval
 
 
@@ -17,6 +18,7 @@ class FakeVec:
             counts = {w: t.split().count(w) for w in self.vocab}
             rows.append([counts[w] for w in self.vocab])
         arr = np.array(rows, dtype=float)
+
         # emulate sparse matrix API of scikit-learn
         class Mat:
             def __init__(self, array):
@@ -97,8 +99,10 @@ def test_fallback_count_vectors(monkeypatch):
     class FakeNN:
         def __init__(self, metric="cosine"):
             self.X = None
+
         def fit(self, X):
             self.X = np.array(X)
+
         def kneighbors(self, X, n_neighbors):
             X = np.array(X)
             d = np.linalg.norm(self.X - X[:, None], axis=2)
@@ -107,6 +111,7 @@ def test_fallback_count_vectors(monkeypatch):
             return dist, idx
 
     original_import = builtins.__import__
+
     def fake_import(name, *args, **kwargs):
         if name.startswith("sklearn"):
             raise ImportError
@@ -143,12 +148,16 @@ def test_use_hnsw(monkeypatch):
     class FakeHnsw:
         def __init__(self, space="cosine", dim=0):
             self.data = None
+
         def init_index(self, max_elements, ef_construction=100, M=16):
             pass
+
         def add_items(self, data, ids):
             self.data = np.array(data)
+
         def set_ef(self, ef):
             pass
+
         def knn_query(self, query, k):
             d = np.linalg.norm(self.data - np.array(query)[:, None], axis=2)
             idx = np.argsort(d, axis=1)[:, :k]
@@ -201,7 +210,8 @@ def test_search_hnsw(monkeypatch):
 
 def test_import_success(monkeypatch):
     """Reload module when optional imports succeed to cover import branch."""
-    import importlib, sys
+    import importlib
+    import sys
 
     fake_hnsw = type("F", (), {})
     monkeypatch.setitem(sys.modules, "hnswlib", fake_hnsw)

@@ -1,5 +1,5 @@
-import numpy as np
 import networkx as nx
+import numpy as np
 import pytest
 
 from datacreek.analysis import graphwave_bandwidth as gb
@@ -38,6 +38,7 @@ def test_update_graphwave_bandwidth_updates_and_caches():
 class DummySp:
     def diags(self, d):
         return np.diag(d)
+
     def eye(self, n, format=None):
         return np.eye(n)
 
@@ -45,9 +46,14 @@ class DummySp:
 def test_estimate_lambda_max_with_scipy_monkeypatch(monkeypatch):
     g = nx.cycle_graph(3)
     monkeypatch.setattr(gb, "sp", DummySp(), raising=False)
-    monkeypatch.setattr(nx, "to_scipy_sparse_array", lambda graph, format="csr": nx.to_numpy_array(graph))
+    monkeypatch.setattr(
+        nx,
+        "to_scipy_sparse_array",
+        lambda graph, format="csr": nx.to_numpy_array(graph),
+    )
     lmax = gb.estimate_lambda_max(g, iters=3)
     assert lmax > 0
+
 
 def test_estimate_lambda_max_without_scipy(monkeypatch):
     g = nx.cycle_graph(4)

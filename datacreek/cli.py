@@ -1,6 +1,8 @@
 import typer
 
-app_cli = typer.Typer(help="Maintenance utilities for datacreek (database init, tests, upgrades)")
+app_cli = typer.Typer(
+    help="Maintenance utilities for datacreek (database init, tests, upgrades)"
+)
 
 
 @app_cli.command()

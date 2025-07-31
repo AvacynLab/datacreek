@@ -33,12 +33,16 @@ def parse_qa_pairs(text: str) -> List[QAPair]:
             cleaned_text = re.sub(
                 r"(\n\s*|\r\s*)", " ", json_text
             )  # Remove newlines and extra spaces
-            cleaned_text = re.sub(r",(\s*\}|\s*\])", r"\1", cleaned_text)  # Remove trailing commas
+            cleaned_text = re.sub(
+                r",(\s*\}|\s*\])", r"\1", cleaned_text
+            )  # Remove trailing commas
 
             try:
                 pairs = json.loads(cleaned_text)
                 if verbose:
-                    logger.debug("Successfully parsed %d QA pairs", len(pairs))  # pragma: no cover
+                    logger.debug(
+                        "Successfully parsed %d QA pairs", len(pairs)
+                    )  # pragma: no cover
                 return [
                     QAPair(question=p.get("question", ""), answer=p.get("answer", ""))
                     for p in pairs
@@ -46,8 +50,12 @@ def parse_qa_pairs(text: str) -> List[QAPair]:
                 ]
             except json.JSONDecodeError as e:  # pragma: no cover
                 if verbose:
-                    logger.debug("Direct JSON parsing failed: %s", e)  # pragma: no cover
-                    logger.debug("Attempted to parse: %s...", cleaned_text[:200])  # pragma: no cover
+                    logger.debug(
+                        "Direct JSON parsing failed: %s", e
+                    )  # pragma: no cover
+                    logger.debug(
+                        "Attempted to parse: %s...", cleaned_text[:200]
+                    )  # pragma: no cover
     except Exception as e:  # pragma: no cover
         if verbose:
             logger.debug("Error during JSON extraction: %s", e)  # pragma: no cover
@@ -55,7 +63,9 @@ def parse_qa_pairs(text: str) -> List[QAPair]:
     # Fallback to regex pattern matching
     if verbose:
         logger.debug("Falling back to regex pattern matching")  # pragma: no cover
-    qa_pattern = r'"question":\s*"((?:[^"\\]|\\.)*)"\s*,\s*"answer":\s*"((?:[^"\\]|\\.)*)"\s*'
+    qa_pattern = (
+        r'"question":\s*"((?:[^"\\]|\\.)*)"\s*,\s*"answer":\s*"((?:[^"\\]|\\.)*)"\s*'
+    )
     pairs = []
 
     for match in re.finditer(qa_pattern, text):
@@ -69,17 +79,25 @@ def parse_qa_pairs(text: str) -> List[QAPair]:
 
     if pairs:
         if verbose:
-            logger.debug("Extracted %d QA pairs with regex", len(pairs))  # pragma: no cover
+            logger.debug(
+                "Extracted %d QA pairs with regex", len(pairs)
+            )  # pragma: no cover
     else:
         if verbose:
-            logger.debug("No QA pairs extracted. Check the model output format.")  # pragma: no cover
+            logger.debug(
+                "No QA pairs extracted. Check the model output format."
+            )  # pragma: no cover
         else:
-            logger.error("Failed to parse QA pairs from response: %s", text[:100])  # pragma: no cover
+            logger.error(
+                "Failed to parse QA pairs from response: %s", text[:100]
+            )  # pragma: no cover
 
     return pairs
 
 
-def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> List[QAPair]:
+def parse_ratings(
+    text: str, original_items: List[Dict[str, str]] = None
+) -> List[QAPair]:
     """Parse rated items from LLM output
 
     Attempts to parse JSON from LLM response. Will raise an exception if
@@ -112,7 +130,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
         return {"chunk": None, "source": None}
 
     if verbose:
-        logger.debug("Parsing ratings response of length %d", len(text))  # pragma: no cover
+        logger.debug(
+            "Parsing ratings response of length %d", len(text)
+        )  # pragma: no cover
         logger.debug("Raw response: %r", text[:500])  # pragma: no cover
 
     # The multiple passes are to for edge cases that emerge when using 8B or smaller models for generating synthetic data. This is to make a comprehensive parser for faster protoyping.
@@ -124,7 +144,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
         json_content = text.strip()
 
         # Try to normalize escape sequences
-        json_content = json_content.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
+        json_content = (
+            json_content.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
+        )
 
         # Check if we have a JSON object
         if "{" in json_content and "}" in json_content:
@@ -141,7 +163,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                 parsed = json.loads(json_text)
                 if isinstance(parsed, dict) and "rating" in parsed:
                     if verbose:
-                        logger.debug("Successfully parsed single JSON object")  # pragma: no cover
+                        logger.debug(
+                            "Successfully parsed single JSON object"
+                        )  # pragma: no cover
                     meta = _meta(0)
                     return [
                         QAPair(
@@ -154,7 +178,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     ]
             except json.JSONDecodeError as e:
                 if verbose:
-                    logger.debug("JSON parse error for object: %s", e)  # pragma: no cover
+                    logger.debug(
+                        "JSON parse error for object: %s", e
+                    )  # pragma: no cover
 
         # Check if we have a JSON array
         if "[" in json_content and "]" in json_content:
@@ -171,10 +197,14 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     for item in parsed:
                         if not isinstance(item, dict) or "rating" not in item:
                             if verbose:
-                                logger.debug("Array contains invalid item: %s", item)  # pragma: no cover
+                                logger.debug(
+                                    "Array contains invalid item: %s", item
+                                )  # pragma: no cover
                             return []
                     if verbose:
-                        logger.debug("Successfully parsed %d items in JSON array", len(parsed))  # pragma: no cover
+                        logger.debug(
+                            "Successfully parsed %d items in JSON array", len(parsed)
+                        )  # pragma: no cover
                     result = []
                     for idx, item in enumerate(parsed):
                         meta = _meta(idx)
@@ -190,7 +220,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     return result
             except json.JSONDecodeError as e:  # pragma: no cover
                 if verbose:
-                    logger.debug("JSON parse error for array: %s", e)  # pragma: no cover
+                    logger.debug(
+                        "JSON parse error for array: %s", e
+                    )  # pragma: no cover
 
     except Exception as e:  # pragma: no cover
         if verbose:
@@ -208,7 +240,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                     parsed = json.loads(clean_block)
                     if isinstance(parsed, dict) and "rating" in parsed:
                         if verbose:
-                            logger.debug("Successfully parsed from code block (single object)")  # pragma: no cover
+                            logger.debug(
+                                "Successfully parsed from code block (single object)"
+                            )  # pragma: no cover
                         meta = _meta(0)
                         return [
                             QAPair(
@@ -228,7 +262,8 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
                         if valid_items and len(parsed) > 0:
                             if verbose:
                                 logger.debug(  # pragma: no cover
-                                    "Successfully parsed %d items from code block", len(parsed)
+                                    "Successfully parsed %d items from code block",
+                                    len(parsed),
                                 )
                             result = []
                             for idx, item in enumerate(parsed):
@@ -271,7 +306,9 @@ def parse_ratings(text: str, original_items: List[Dict[str, str]] = None) -> Lis
     raise ValueError(f"Could not parse JSON with ratings: {error_snippet}")
 
 
-def _parse_line_by_line(text: str, original_items, verbose: bool = False):  # pragma: no cover
+def _parse_line_by_line(
+    text: str, original_items, verbose: bool = False
+):  # pragma: no cover
     """Slow fallback that searches for ratings next to questions."""
     try:
         if original_items and len(original_items) > 0:
@@ -284,8 +321,16 @@ def _parse_line_by_line(text: str, original_items, verbose: bool = False):  # pr
                     try:
                         rating = float(match.group(1))
                         meta = {
-                            "chunk": item.get("chunk") if isinstance(item, dict) else getattr(item, "chunk", None),
-                            "source": item.get("source") if isinstance(item, dict) else getattr(item, "source", None),
+                            "chunk": (
+                                item.get("chunk")
+                                if isinstance(item, dict)
+                                else getattr(item, "chunk", None)
+                            ),
+                            "source": (
+                                item.get("source")
+                                if isinstance(item, dict)
+                                else getattr(item, "source", None)
+                            ),
                         }
                         found_items.append(
                             QAPair(
@@ -306,7 +351,9 @@ def _parse_line_by_line(text: str, original_items, verbose: bool = False):  # pr
                         pass
             if found_items:
                 if verbose:
-                    logger.debug("Extracted %d ratings using pattern matching", len(found_items))  # pragma: no cover
+                    logger.debug(
+                        "Extracted %d ratings using pattern matching", len(found_items)
+                    )  # pragma: no cover
                 return found_items
     except Exception as e:
         if verbose:
@@ -329,7 +376,9 @@ def _parse_regex(text: str, _meta, verbose: bool):  # pragma: no cover
                         parsed = json.loads(clean_match)
                         if isinstance(parsed, dict) and "rating" in parsed:
                             if verbose:
-                                logger.debug("Successfully parsed using regex (single object)")  # pragma: no cover
+                                logger.debug(
+                                    "Successfully parsed using regex (single object)"
+                                )  # pragma: no cover
                             meta = _meta(0)
                             return [
                                 QAPair(
@@ -340,9 +389,14 @@ def _parse_regex(text: str, _meta, verbose: bool):  # pragma: no cover
                                     source=meta["source"],
                                 )
                             ]
-                        elif isinstance(parsed, list) and all("rating" in item for item in parsed):
+                        elif isinstance(parsed, list) and all(
+                            "rating" in item for item in parsed
+                        ):
                             if verbose:
-                                logger.debug("Successfully parsed %d items using regex", len(parsed))  # pragma: no cover
+                                logger.debug(
+                                    "Successfully parsed %d items using regex",
+                                    len(parsed),
+                                )  # pragma: no cover
                             result = []
                             for idx, item in enumerate(parsed):
                                 meta = _meta(idx)
@@ -367,11 +421,14 @@ def _parse_regex(text: str, _meta, verbose: bool):  # pragma: no cover
 def _parse_json5(text: str, _meta, verbose: bool):  # pragma: no cover
     try:
         import json5
+
         try:
             parsed = json5.loads(text)
             if isinstance(parsed, dict) and "rating" in parsed:
                 if verbose:
-                    logger.debug("Successfully parsed using json5 (single object)")  # pragma: no cover
+                    logger.debug(
+                        "Successfully parsed using json5 (single object)"
+                    )  # pragma: no cover
                 meta = _meta(0)
                 return [
                     QAPair(
@@ -384,7 +441,9 @@ def _parse_json5(text: str, _meta, verbose: bool):  # pragma: no cover
                 ]
             elif isinstance(parsed, list) and all("rating" in item for item in parsed):
                 if verbose:
-                    logger.debug("Successfully parsed %d items using json5", len(parsed))  # pragma: no cover
+                    logger.debug(
+                        "Successfully parsed %d items using json5", len(parsed)
+                    )  # pragma: no cover
                 result = []
                 for idx, item in enumerate(parsed):
                     meta = _meta(idx)
@@ -415,7 +474,9 @@ def convert_to_conversation_format(
     ``qa_pairs`` can contain either raw dictionaries or :class:`QAPair` objects.
     """
     if system_prompt is None:
-        system_prompt = "You are a helpful AI assistant that provides accurate, detailed responses."
+        system_prompt = (
+            "You are a helpful AI assistant that provides accurate, detailed responses."
+        )
 
     conversations = []
     for pair in qa_pairs:
@@ -449,5 +510,7 @@ def qa_pairs_to_records(
     for pair, conv in zip(qa_pairs, convs):
         if modify:
             modify(conv, pair)
-        records.append({"conversations": conv, "chunk": pair.chunk, "source": pair.source})
+        records.append(
+            {"conversations": conv, "chunk": pair.chunk, "source": pair.source}
+        )
     return records

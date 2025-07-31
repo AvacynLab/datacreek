@@ -1,10 +1,10 @@
 import time
-import numpy as np
+
 import networkx as nx
+import numpy as np
 import pytest
 
 from datacreek.analysis import fractal
-
 
 
 class DummyCounter:
@@ -44,7 +44,9 @@ def test_with_timeout_fallback():
         time.sleep(0.05)
         return 1.0
 
-    wrapped = fractal.with_timeout(0.01, counter=counter, duration_gauge=gauge, fallback=lambda: 3.0)(slow)
+    wrapped = fractal.with_timeout(
+        0.01, counter=counter, duration_gauge=gauge, fallback=lambda: 3.0
+    )(slow)
     assert wrapped() == 3.0
     assert counter.count == 1
     assert pytest.approx(gauge.value, rel=0.2) == 0.01
@@ -88,6 +90,7 @@ def test_mdl_functions(monkeypatch):
     assert 0 <= idx <= len(counts) - 1
 
     monkeypatch.undo()
+
 
 def test_graph_lacunarity_and_fourier(monkeypatch):
     """Ensure Fourier transforms round trip correctly and lacunarity > 0."""

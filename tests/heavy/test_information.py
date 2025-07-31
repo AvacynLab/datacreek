@@ -3,6 +3,7 @@ import types
 
 import networkx as nx
 import numpy as np
+
 from datacreek.analysis import information
 
 
@@ -30,11 +31,16 @@ sys.modules["sklearn.linear_model"] = types.SimpleNamespace(LogisticRegression=D
 
 
 def test_graph_information_bottleneck_real_lr():
-    features = {0: np.array([0.0, 0.0]), 1: np.array([1.0, 1.0]), 2: np.array([2.0, 2.0])}
+    features = {
+        0: np.array([0.0, 0.0]),
+        1: np.array([1.0, 1.0]),
+        2: np.array([2.0, 2.0]),
+    }
     labels = {0: 0, 1: 1, 2: 1}
     val = information.graph_information_bottleneck(features, labels)
 
     from sklearn.linear_model import LogisticRegression
+
     X = np.stack([features[n] for n in labels])
     y = np.array([labels[n] for n in labels])
     model = LogisticRegression(max_iter=1000, n_jobs=1)

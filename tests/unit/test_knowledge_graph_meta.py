@@ -1,5 +1,6 @@
-import pytest
 import numpy as np
+import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 

@@ -26,7 +26,9 @@ def test_estimate_lambda_max_with_scipy(monkeypatch):
     g = nx.path_graph(3)
 
     monkeypatch.setattr(gw, "sp", DummySP)
-    monkeypatch.setattr(nx, "to_scipy_sparse_array", lambda *a, **k: nx.to_numpy_array(*a))
+    monkeypatch.setattr(
+        nx, "to_scipy_sparse_array", lambda *a, **k: nx.to_numpy_array(*a)
+    )
     lmax = gw.estimate_lambda_max(g, iters=2)
     assert lmax > 0
 

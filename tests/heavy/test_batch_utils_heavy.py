@@ -1,6 +1,9 @@
 import asyncio
+
 import pytest
+
 import datacreek.utils.batch as batch
+
 
 class DummyClient:
     def __init__(self):
@@ -10,13 +13,17 @@ class DummyClient:
         self.calls.append((messages, temperature, batch_size))
         return ["resp:" + m[0]["content"] for m in messages]
 
+
 class AsyncDummyClient:
     def __init__(self):
         self.calls = []
 
-    async def async_batch_completion(self, messages, *, temperature=None, batch_size=None):
+    async def async_batch_completion(
+        self, messages, *, temperature=None, batch_size=None
+    ):
         self.calls.append((messages, temperature, batch_size))
         return ["aresp:" + m[0]["content"] for m in messages]
+
 
 @pytest.mark.heavy
 def test_process_batches_success():
@@ -31,6 +38,7 @@ def test_process_batches_success():
     )
     assert res == ["RESP:A", "RESP:B"]
     assert len(client.calls) == 2
+
 
 @pytest.mark.heavy
 def test_process_batches_error_handling():
@@ -59,6 +67,7 @@ def test_process_batches_error_handling():
             raise_on_error=True,
         )
 
+
 @pytest.mark.heavy
 def test_async_process_batches_success():
     client = AsyncDummyClient()
@@ -76,6 +85,7 @@ def test_async_process_batches_success():
 
     asyncio.run(run())
     assert len(client.calls) == 2
+
 
 @pytest.mark.heavy
 def test_async_process_batches_error_handling():

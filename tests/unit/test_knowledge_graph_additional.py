@@ -1,6 +1,8 @@
-import numpy as np
 import types
+
+import numpy as np
 import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -50,9 +52,11 @@ def test_fractal_and_hyperbolic_helpers(monkeypatch):
     kg = build_complex_graph()
     # patch fractal helpers to return simple values
     calls = [0]
+
     def fake_cov(g):
         calls[0] += 1
         return 0.0 if calls[0] == 1 else 0.5
+
     monkeypatch.setattr("datacreek.analysis.fractal.fractal_level_coverage", fake_cov)
     monkeypatch.setattr(
         "datacreek.analysis.fractal.diversification_score",
@@ -88,11 +92,15 @@ def test_fractal_and_hyperbolic_helpers(monkeypatch):
     assert kg.hyperbolic_reasoning("c1", "c2") == ["c1", "c2"]
     assert kg.hyperbolic_hypergraph_reasoning("c1", "c2") == ["c1", "c2"]
     # predict hyperedges uses hyper_sagnn embeddings
-    import sys, types
-    sp = types.SimpleNamespace(cosine_similarity=lambda x: np.array([[1.0, 0.9], [0.9, 1.0]]))
+    import sys
+    import types
+
+    sp = types.SimpleNamespace(
+        cosine_similarity=lambda x: np.array([[1.0, 0.9], [0.9, 1.0]])
+    )
     sk = types.SimpleNamespace(metrics=types.SimpleNamespace(pairwise=sp))
-    monkeypatch.setitem(sys.modules, 'sklearn', sk)
-    monkeypatch.setitem(sys.modules, 'sklearn.metrics', sk.metrics)
-    monkeypatch.setitem(sys.modules, 'sklearn.metrics.pairwise', sp)
+    monkeypatch.setitem(sys.modules, "sklearn", sk)
+    monkeypatch.setitem(sys.modules, "sklearn.metrics", sk.metrics)
+    monkeypatch.setitem(sys.modules, "sklearn.metrics.pairwise", sp)
     preds = kg.predict_hyperedges(k=1, threshold=0.5)
     assert isinstance(preds, list)

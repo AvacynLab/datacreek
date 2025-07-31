@@ -24,7 +24,9 @@ def test_kg_generator_basic():
     fid = kg.add_fact("Earth", "is", "round")
     gen = KGGenerator(DummyClient())
     result = gen.process_graph(kg, num_pairs=1)
-    assert result == {"qa_pairs": [{"question": "What?", "answer": "Because", "facts": [fid]}]}
+    assert result == {
+        "qa_pairs": [{"question": "What?", "answer": "Because", "facts": [fid]}]
+    }
     assert len(gen.client.calls) == 2
 
 

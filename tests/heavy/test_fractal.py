@@ -1,8 +1,9 @@
 import math
 import time
 import types
-import numpy as np
+
 import networkx as nx
+import numpy as np
 import pytest
 
 import datacreek.analysis.fractal as fr
@@ -55,19 +56,23 @@ def test_with_timeout_and_density(monkeypatch):
     class Counter:
         def __init__(self):
             self.n = 0
+
         def inc(self):
             self.n += 1
 
     class Gauge:
         def __init__(self):
             self.val = None
+
         def set(self, v):
             self.val = v
 
     counter = Counter()
     gauge = Gauge()
 
-    wrapped = fr.with_timeout(0.01, counter=counter, duration_gauge=gauge, fallback=lambda: 2)(lambda: time.sleep(0.02))
+    wrapped = fr.with_timeout(
+        0.01, counter=counter, duration_gauge=gauge, fallback=lambda: 2
+    )(lambda: time.sleep(0.02))
     res = wrapped()
     assert res == 2
     assert counter.n == 1
