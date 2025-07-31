@@ -8,6 +8,7 @@ numpy
 pytest-cov
 rich
 pyyaml
+python-dateutil
 fastapi
 uvicorn
 sqlalchemy
@@ -33,3 +34,6 @@ bitsandbytes>=0.43
 pydocstyle
 docstring-checker>=1.2
 interrogate>=1.7
+pytest-asyncio
+pillow
+imagehash

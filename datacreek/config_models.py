@@ -1,7 +1,23 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+try:  # optional dependency
+    from pydantic import BaseModel
+except Exception:  # pragma: no cover - fallback when pydantic missing
+
+    class BaseModel:  # lightweight stub mimicking pydantic model
+        """Minimal replacement for :class:`pydantic.BaseModel`."""
+
+        def __init__(self, **data: Any) -> None:  # type: ignore[override]
+            for key, value in data.items():
+                setattr(self, key, value)
+
+        @classmethod
+        def model_validate(cls, data: Dict[str, Any]):
+            return cls(**data)
+
+        def model_dump(self) -> Dict[str, Any]:
+            return self.__dict__
 
 
 @dataclass

@@ -36,7 +36,14 @@ except Exception:  # pragma: no cover - fallback when watchdog is absent
 
     Observer = _DummyObserver  # type: ignore[assignment]
 
-from pydantic import ValidationError
+try:  # optional dependency
+    from pydantic import ValidationError
+except Exception:  # pragma: no cover - fallback when pydantic missing
+
+    class ValidationError(Exception):
+        """Fallback validation error used when pydantic is absent."""
+
+        pass
 
 from datacreek.config.schema import ConfigSchema
 from datacreek.config_models import (

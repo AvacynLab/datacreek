@@ -1,8 +1,30 @@
 from __future__ import annotations
 
+from typing import Any, Dict
+
 """Typed configuration models."""
 
-from pydantic import BaseModel, ConfigDict, Field
+try:  # optional dependency
+    from pydantic import BaseModel, ConfigDict, Field
+except Exception:  # pragma: no cover - fallback when pydantic missing
+
+    class BaseModel:  # lightweight stub for missing pydantic
+        def __init__(self, **data: Any):
+            for k, v in data.items():
+                setattr(self, k, v)
+
+        @classmethod
+        def model_validate(cls, data: Dict[str, Any]):
+            return cls(**data)
+
+        def model_dump(self) -> Dict[str, Any]:
+            return self.__dict__
+
+    class ConfigDict(dict):
+        pass
+
+    def Field(default: Any = None, *args, **kwargs):
+        return default
 
 
 class PidConfig(BaseModel):
