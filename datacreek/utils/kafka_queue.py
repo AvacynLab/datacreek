@@ -1,9 +1,11 @@
+"""Kafka producer/consumer utilities with exactly-once semantics."""
+
 import json
 import os
 from typing import Any
 
 try:  # optional kafka dependency
-    from kafka import KafkaProducer, KafkaConsumer
+    from kafka import KafkaConsumer, KafkaProducer
 except Exception:  # pragma: no cover - when kafka not available
     KafkaProducer = None  # type: ignore
     KafkaConsumer = None  # type: ignore
@@ -144,11 +146,17 @@ def get_consumer(topic: str | None = None) -> Any:
         ),  # pragma: no cover - heavy
     )
     # Attach config details for transactional offset commits
-    setattr(_CONSUMER, "config", {"group_id": group_id, "transactional_id": transactional_id})
+    setattr(
+        _CONSUMER,
+        "config",
+        {"group_id": group_id, "transactional_id": transactional_id},
+    )
     return _CONSUMER
 
 
-def process_messages(consumer: Any, handler: callable, *, producer: Any | None = None) -> None:
+def process_messages(
+    consumer: Any, handler: callable, *, producer: Any | None = None
+) -> None:
     """Consume messages and commit offsets only after successful handling.
 
     When ``producer`` is provided and exposes transactional helpers,

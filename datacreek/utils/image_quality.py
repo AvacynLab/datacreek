@@ -33,7 +33,7 @@ def sharpness_exposure(path: str) -> tuple[float, float]:
 
 
 def should_caption(path: str, threshold: float = 0.4) -> bool:
-    """Return ``True`` if the image should be captioned with BLIP.
+    r"""Return ``True`` if the image should be captioned with BLIP.
 
     The quality metric :math:`Q=\sqrt{sharpness\cdot exposure}` must
     exceed ``threshold`` to trigger captioning.
