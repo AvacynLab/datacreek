@@ -1,3 +1,5 @@
+"""Task orchestration helpers for ingestion and export pipelines."""
+
 from __future__ import annotations
 
 import asyncio
@@ -242,7 +244,9 @@ def generate_task(  # pragma: no cover - heavy
 
 
 @celery_app.task
-def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:  # pragma: no cover - heavy
+def curate_task(
+    user_id: int, ds_id: int, threshold: float | None
+) -> dict:  # pragma: no cover - heavy
     with SessionLocal() as db:
         ds = db.get(Dataset, ds_id)
         if not ds or ds.owner_id != user_id:
@@ -258,7 +262,9 @@ def curate_task(user_id: int, ds_id: int, threshold: float | None) -> dict:  # p
 
 
 @celery_app.task
-def save_task(user_id: int, ds_id: int, fmt: ExportFormat) -> dict:  # pragma: no cover - heavy
+def save_task(
+    user_id: int, ds_id: int, fmt: ExportFormat
+) -> dict:  # pragma: no cover - heavy
     with SessionLocal() as db:
         ds = db.get(Dataset, ds_id)
         if not ds or ds.owner_id != user_id:
@@ -509,6 +515,7 @@ def dataset_export_task(  # pragma: no cover - heavy
     progress_key = f"dataset:{name}:progress"
     _update_status(client, progress_key, TaskStatus.EXPORTING, 0.0)
     try:
+        commit_id = None
         if ds.versions and ds.versions[-1].get("result") is not None:
             data = ds.versions[-1]["result"]
             if fmt is ExportFormat.DELTA:
@@ -520,8 +527,9 @@ def dataset_export_task(  # pragma: no cover - heavy
                     kind=ds.dataset_type.value,
                 )
                 repo = os.getenv("LAKEFS_REPO")
-                if repo:
-                    lakefs_commit(path, repo)
+                commit_id = lakefs_commit(path, repo) if repo else None
+                delta_optimize(Path(root_dir))
+                delta_vacuum(Path(root_dir))
                 _update_status(client, progress_key, TaskStatus.EXPORTING, 0.5)
                 key = str(path)
                 payload = ""
@@ -544,6 +552,8 @@ def dataset_export_task(  # pragma: no cover - heavy
         ds.mark_exported()
         ts = datetime.now(timezone.utc).isoformat()
         info = {"fmt": fmt.value, "key": key, "time": ts}
+        if commit_id:
+            info["lakefs_commit"] = commit_id
         if storage:
             info["s3_key"] = s3_key
         client.hset(progress_key, "export", json.dumps(info))
@@ -556,7 +566,9 @@ def dataset_export_task(  # pragma: no cover - heavy
 
 
 @celery_app.task
-def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
+def dataset_save_neo4j_task(
+    name: DatasetName, user_id: int | None = None
+) -> dict:  # pragma: no cover - heavy
     """Persist the dataset graph to Neo4j."""
 
     client = get_redis_client()
@@ -594,7 +606,9 @@ def dataset_save_neo4j_task(name: DatasetName, user_id: int | None = None) -> di
 
 
 @celery_app.task
-def dataset_load_neo4j_task(name: DatasetName, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
+def dataset_load_neo4j_task(
+    name: DatasetName, user_id: int | None = None
+) -> dict:  # pragma: no cover - heavy
     """Load the dataset graph from Neo4j."""
 
     client = get_redis_client()
@@ -848,7 +862,9 @@ def dataset_delete_version_task(  # pragma: no cover - heavy
 
 
 @celery_app.task
-def datasets_prune_versions_task(limit: int | None = None) -> dict:  # pragma: no cover - heavy
+def datasets_prune_versions_task(
+    limit: int | None = None,
+) -> dict:  # pragma: no cover - heavy
     """Prune stored versions for all datasets."""
 
     client = get_redis_client()
@@ -994,7 +1010,9 @@ def dataset_extract_entities_task(  # pragma: no cover - heavy
 
 
 @celery_app.task
-def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
+def dataset_delete_task(
+    name: DatasetName, user_id: int | None = None
+) -> dict:  # pragma: no cover - heavy
     """Remove a dataset from Redis and Neo4j."""
 
     client = get_redis_client()
@@ -1062,7 +1080,9 @@ def dataset_delete_task(name: DatasetName, user_id: int | None = None) -> dict: 
 
 
 @celery_app.task
-def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
+def graph_save_neo4j_task(
+    name: str, user_id: int | None = None
+) -> dict:  # pragma: no cover - heavy
     """Persist a knowledge graph to Neo4j."""
 
     client = get_redis_client()
@@ -1100,7 +1120,9 @@ def graph_save_neo4j_task(name: str, user_id: int | None = None) -> dict:  # pra
 
 
 @celery_app.task
-def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
+def graph_load_neo4j_task(
+    name: str, user_id: int | None = None
+) -> dict:  # pragma: no cover - heavy
     """Load a knowledge graph from Neo4j."""
 
     client = get_redis_client()
@@ -1136,7 +1158,9 @@ def graph_load_neo4j_task(name: str, user_id: int | None = None) -> dict:  # pra
 
 
 @celery_app.task
-def graph_delete_task(name: str, user_id: int | None = None) -> dict:  # pragma: no cover - heavy
+def graph_delete_task(
+    name: str, user_id: int | None = None
+) -> dict:  # pragma: no cover - heavy
     """Remove a knowledge graph from Redis and Neo4j."""
 
     client = get_redis_client()

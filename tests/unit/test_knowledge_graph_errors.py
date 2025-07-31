@@ -35,8 +35,8 @@ def test_unknown_nodes_and_invalid_property():
         kg.link_entity("missing", "e")
     with pytest.raises(ValueError):
         kg.link_transcript("missing", "noaudio")
-    kg.add_audio("d", "a1", "path")
+    kg.add_audio("d", "a1", "path", lang="en")
     with pytest.raises(ValueError):
-        kg.add_audio("d", "a1", "path")
+        kg.add_audio("d", "a1", "path", lang="en")
     with pytest.raises(ValueError):
         kg.set_property("invalid space", 1)

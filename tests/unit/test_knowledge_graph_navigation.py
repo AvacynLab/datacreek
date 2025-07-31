@@ -10,7 +10,7 @@ def build_graph():
     kg.add_chunk("doc", "c1", "one", section_id="sec1")
     kg.add_chunk("doc", "c2", "two", section_id="sec1")
     kg.add_chunk("doc", "c3", "three", section_id="sec2")
-    kg.add_audio("doc", "a1", "/a")
+    kg.add_audio("doc", "a1", "/a", lang="en")
     kg.link_transcript("c3", "a1")
     return kg
 

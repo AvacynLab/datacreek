@@ -13,7 +13,7 @@ def build_complex_graph():
     kg.add_chunk("d1", "c2", "bar", section_id="s2")
     # adding image with alt_text automatically creates a caption node
     kg.add_image("d1", "img1", "/i1", alt_text="cap")
-    kg.add_audio("d1", "a1", "/a1")
+    kg.add_audio("d1", "a1", "/a1", lang="en")
     kg.add_atom("d1", "at1", "A", "t")
     kg.add_molecule("d1", "m1", ["at1"])
     kg.add_hyperedge("he1", ["c1", "c2"])  # small hyperedge

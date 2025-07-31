@@ -208,3 +208,23 @@ class FractalNetPruner:
         )
         logger.info("PRUNE_REVERTED=%s", str(was_reverted).lower())
         return not was_reverted and delta <= 0.01, perplexity
+
+def fp8_quantize(vec: "np.ndarray") -> tuple["np.ndarray", float]:
+    """Return INT8 quantization and scale for ``vec``.
+
+    The quantized representation uses a single scale ``S`` so that
+    ``vec \approx q * S / 127`` when de-quantised. ``vec`` is clipped to
+    [-S, S] before scaling.
+    """
+    if np is None:
+        raise RuntimeError("numpy required for fp8 quantization")
+    scale = float(np.max(np.abs(vec))) or 1.0
+    q = np.clip(np.round(vec / scale * 127), -128, 127).astype(np.int8)
+    return q, scale
+
+
+def fp8_dequantize(q: "np.ndarray", scale: float) -> "np.ndarray":
+    """Return float32 reconstruction from INT8 values and ``scale``."""
+    if np is None:
+        raise RuntimeError("numpy required for fp8 quantization")
+    return q.astype(np.float32) * scale / 127

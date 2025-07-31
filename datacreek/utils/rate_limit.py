@@ -1,4 +1,9 @@
-"""Tenant-level token bucket rate limiter using Redis."""
+"""Tenant-level token bucket rate limiter using Redis.
+
+The default configuration enforces a refill rate ``r=100`` messages per
+second with a bucket capacity ``C=500``. Limits may be overridden via the
+``INGEST_RATE`` and ``INGEST_BURST`` environment variables.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +18,9 @@ except Exception:  # pragma: no cover - optional dependency missing
 
 __all__ = ["configure", "consume_token"]
 
+# Default refill rate and capacity (messages per second / bucket size)
 _RATE = int(os.getenv("INGEST_RATE", "100"))
-_BURST = int(os.getenv("INGEST_BURST", "200"))
+_BURST = int(os.getenv("INGEST_BURST", "500"))
 _CLIENT: Optional["redis.Redis"] = None
 _SCRIPT_SHA: Optional[str] = None
 _LOCAL_BUCKETS: Dict[str, Tuple[float, int]] = {}

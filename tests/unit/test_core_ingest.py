@@ -121,8 +121,8 @@ class DummyDataset(DatasetBuilder):
         self.add_chunk_calls.append((chunk_id, text))
         self.graph.add_chunk(doc_id, chunk_id, text)
 
-    def add_audio(self, doc_id, audio_id, path):
-        self.add_audio_calls.append((audio_id, path))
+    def add_audio(self, doc_id, audio_id, path, lang=None):
+        self.add_audio_calls.append((audio_id, path, lang))
 
     def get_atoms_for_document(self, doc_id):
         return self.graph.get_atoms_for_document(doc_id)
@@ -157,6 +157,7 @@ def test_to_kg_pages(monkeypatch):
 def test_to_kg_elements(monkeypatch):
     setup_ingest(monkeypatch)
     monkeypatch.setattr(ing, "check_duplicate", lambda path: False)
+    monkeypatch.setattr(ing, "should_caption", lambda path: True)
     ds = DummyDataset()
     el = types.SimpleNamespace(text="img", image_path="img.png", metadata=types.SimpleNamespace(page_number=1))
     ing.to_kg("text", ds, "d2", {}, elements=[el])
@@ -166,6 +167,7 @@ def test_to_kg_elements(monkeypatch):
 def test_to_kg_image_batch(monkeypatch):
     setup_ingest(monkeypatch)
     monkeypatch.setattr(ing, "check_duplicate", lambda p: False)
+    monkeypatch.setattr(ing, "should_caption", lambda p: True)
     monkeypatch.setitem(sys.modules, "datacreek.utils.image_captioning", types.SimpleNamespace(caption_images_parallel=lambda paths: [f"alt{i}" for i, _ in enumerate(paths)]))
     ds = DummyDataset()
     elements = [types.SimpleNamespace(text="t", image_path="p.png", metadata=types.SimpleNamespace(page_number=1)) for _ in range(260)]
@@ -184,6 +186,7 @@ def test_to_kg_default(monkeypatch):
 def test_to_kg_text_elements(monkeypatch):
     setup_ingest(monkeypatch)
     monkeypatch.setattr(ing, "check_duplicate", lambda p: False)
+    monkeypatch.setattr(ing, "should_caption", lambda p: True)
     monkeypatch.setitem(sys.modules, "datacreek.utils.entity_extraction", types.SimpleNamespace(extract_entities=lambda text, model=None: ["ent"]))
     ds = DummyDataset()
     elem = types.SimpleNamespace(text="hello", metadata=types.SimpleNamespace(page_number=2))

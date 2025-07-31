@@ -9,6 +9,7 @@ and ``miss`` updated elsewhere in the application.
 
 import asyncio
 import logging
+from datetime import datetime
 from math import sqrt
 from typing import Optional
 
@@ -34,7 +35,9 @@ else:  # basic defaults for tests when config unavailable
 
 # Controller parameters (fallback to legacy cache keys)
 TARGET_HIT = float(pid_cfg.get("target_hit_ratio", cache_cfg.get("pid_target", 0.45)))
-K_P = float(pid_cfg.get("Kp", cache_cfg.get("pid_kp", 0.4)))
+K_P_DAY = float(pid_cfg.get("Kp_day", 0.3))
+K_P_NIGHT = float(pid_cfg.get("Kp_night", 0.5))
+K_P = float(pid_cfg.get("Kp", K_P_DAY if 8 <= datetime.now().hour < 20 else K_P_NIGHT))
 K_I = float(pid_cfg.get("Ki", cache_cfg.get("pid_ki", 0.05)))
 # Maximum absolute value for the integral term (anti-windup)
 I_MAX = float(pid_cfg.get("I_max", cache_cfg.get("pid_i_max", 5)))
@@ -46,10 +49,17 @@ _current_ttl = int(cache_cfg.get("l1_ttl_init", 3600))
 _integral_err = 0.0
 _kp_dynamic = K_P
 _err_mean = 0.0
-_err_var = 1.0
+_err_var = 1.0  # variance of hit-ratio overshoot used for Kalman gain
 _sigma_e0 = 1.0
 _Q = float(pid_cfg.get("kalman_q", 1e-4))
 _R = float(pid_cfg.get("kalman_r", 1e-2))
+
+
+def _get_base_kp(now: datetime | None = None) -> float:
+    """Return gain based on time-of-day (day vs night)."""
+
+    ref = now or datetime.now()
+    return K_P_DAY if 8 <= ref.hour < 20 else K_P_NIGHT
 
 
 async def update_ttl(client: "aioredis.Redis") -> None:
@@ -74,7 +84,8 @@ async def update_ttl(client: "aioredis.Redis") -> None:
     sigma_e = sqrt(_err_var)
     if _sigma_e0 == 1.0 and sigma_e > 0:
         _sigma_e0 = sigma_e
-    _kp_dynamic = K_P * (sigma_e / (_sigma_e0 or 1.0))
+    base_kp = _get_base_kp()
+    _kp_dynamic = base_kp * (sigma_e / (_sigma_e0 or 1.0))
     if redis_hit_ratio_stdev is not None:
         try:
             update_metric("redis_hit_ratio_stdev", sigma_e)

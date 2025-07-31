@@ -35,8 +35,11 @@ def test_delta_export_lakefs(monkeypatch, tmp_path):
     ds, client = setup_ds(tmp_path, monkeypatch)
     calls = []
 
-    def fake_run(cmd, check):
+    def fake_run(cmd, check, **kwargs):
         calls.append(cmd)
+        if "lakefs" in cmd[0]:
+            return type("R", (), {"stdout": json.dumps({"id": "sha"})})()
+        return None
 
     monkeypatch.setenv("DELTA_EXPORT_ROOT", str(tmp_path))
     monkeypatch.setenv("LAKEFS_REPO", "repo")
@@ -48,4 +51,8 @@ def test_delta_export_lakefs(monkeypatch, tmp_path):
     file_path = Path(tmp_path) / "org_id=42" / "kind=text" / date / "data.jsonl"
     assert file_path.exists()
     assert any("lakefs" in c[0] for c in calls)
+    assert any("optimize" in c[0] for c in calls)
+    assert any("vacuum" in c[0] for c in calls)
     assert result["key"] == str(file_path)
+    info = json.loads(client.hget("dataset:demo:progress", "export"))
+    assert info["lakefs_commit"] == "sha"

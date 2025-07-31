@@ -564,6 +564,7 @@ class KnowledgeGraph:
         source: str | None = None,
         *,
         page: int | None = None,
+        lang: str | None = None,
     ) -> None:
         """Insert an audio node linked to ``doc_id``."""
 
@@ -583,6 +584,7 @@ class KnowledgeGraph:
             path=path,
             source=source,
             page=page,
+            **({"lang": lang} if lang else {}),
         )
         self.graph.add_edge(
             doc_id,
@@ -802,6 +804,41 @@ class KnowledgeGraph:
             self.graph.remove_node(doc_id)
         if chunks:
             self.index.build()
+
+    def cascade_delete_document(self, doc_id: str, driver: object | None = None) -> None:  # pragma: no cover - heavy
+        """Remove ``doc_id`` from the graph, Neo4j and FAISS with tombstone."""
+
+        vector = None
+        if self.graph.has_node(doc_id):
+            vector = self.graph.nodes[doc_id].get(self.faiss_node_attr)
+        self.remove_document(doc_id)
+        if driver is not None:
+            try:
+                with driver.session() as session:
+                    session.run(
+                        "MATCH (d:Doc {uid:$uid}) DETACH DELETE d",
+                        uid=doc_id,
+                    )
+            except Exception:
+                pass
+
+        if (
+            vector is not None
+            and self.faiss_index is not None
+            and self.faiss_ids is not None
+        ):
+            try:
+                import numpy as np
+
+                idx = self.faiss_ids.index(doc_id)
+                self.faiss_index.remove_ids(np.asarray([idx], dtype=np.int64))
+                self.faiss_ids.pop(idx)
+                self.faiss_index.add(np.asarray([vector], dtype=np.float32))
+                self.faiss_ids.append(f"doc:deleted:{doc_id}")
+            except Exception:
+                # index type may not support removal; invalidate instead
+                self.faiss_index = None
+                self.faiss_ids = None
 
     def search(self, query: str, node_type: str = "chunk") -> list[str]:  # pragma: no cover - heavy
         """Return node IDs of the given type matching the query.
@@ -2440,6 +2477,7 @@ class KnowledgeGraph:
         """
 
         from ..analysis.fractal import poincare_embedding
+        from ..analysis import fp8_quantize
 
         emb = poincare_embedding(
             self.graph,
@@ -2450,6 +2488,9 @@ class KnowledgeGraph:
             burn_in=burn_in,
         )
         for node, vec in emb.items():
+            q, scale = fp8_quantize(vec)
+            self.graph.nodes[node]["poincare_fp8"] = q.tolist()
+            self.graph.nodes[node]["poincare_scale"] = scale
             self.graph.nodes[node]["poincare_embedding"] = vec.tolist()
 
     def compute_hyperbolic_hypergraph_embeddings(  # pragma: no cover - heavy
@@ -3334,6 +3375,22 @@ class KnowledgeGraph:
         from ..analysis.information import subgraph_entropy as _se
 
         return _se(self.graph.to_undirected(), nodes, base=base)
+
+    def subgraph_fractal_dimension(self, nodes: Iterable, radii: Iterable[int]) -> float:
+        """Compute box-counting fractal dimension for ``nodes``.
+
+        The resulting dimension is stored in each node's ``fractal_dim``
+        attribute so that downstream analyses can query for complex regions
+        of the graph.
+        """
+
+        from ..analysis.fractal import box_counting_dimension as _bcd
+
+        sub = self.graph.subgraph(nodes)
+        dim, _ = _bcd(sub.to_undirected(), radii)
+        for n in sub.nodes:
+            self.graph.nodes[n]["fractal_dim"] = dim
+        return dim
 
     def structural_entropy(self, tau: int, *, base: float = 2.0) -> float:  # pragma: no cover - heavy
         """Return structural entropy filtered by triangle threshold ``tau``."""
@@ -5223,6 +5280,16 @@ class KnowledgeGraph:
             with driver.session() as session:
                 session.run(query, ds=dataset or "default", val=value)
 
+    def create_fractal_index(self, driver: Driver) -> None:
+        """Ensure full-text index on ``Subgraph.fractal_dim`` exists."""
+
+        query = (
+            'CALL db.index.fulltext.createNodeIndex('
+            '"idx_fractal", ["Subgraph"], ["fractal_dim"])'
+        )
+        with driver.session() as session:
+            session.run(query)
+
     # ------------------------------------------------------------------
     # Neo4j helpers
     # ------------------------------------------------------------------
@@ -5261,7 +5328,9 @@ class KnowledgeGraph:
                     props["dataset"] = dataset
                 if label == "Document" and props.get("uid"):
                     tx.run(
-                        f"MERGE (m:{label} {{uid:$uid{', dataset:$dataset' if dataset else ''}}}) SET m += $props",
+                        f"MERGE (m:{label} {{uid:$uid{', dataset:$dataset' if dataset else ''}}}) "
+                        "ON CREATE SET m.first_seen=timestamp() "
+                        "SET m += $props, m.last_ingested=timestamp()",
                         uid=props["uid"],
                         **({"dataset": dataset} if dataset else {}),
                         props=props,

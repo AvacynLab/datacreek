@@ -36,3 +36,16 @@ tests:
           - exp_labels:
               severity: critical
             exp_annotations: {}
+  - interval: 1m
+    input_series:
+      - series: 'ingest_latency_burn_rate_1h'
+        values: '0 0 1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.2'
+      - series: 'ingest_latency_burn_rate_6h'
+        values: '0 0 1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.2'
+    alert_rule_test:
+      - alertname: IngestLatencyBurnRate
+        eval_time: 11m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations: {}

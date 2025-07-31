@@ -531,10 +531,11 @@ class DatasetBuilder:
         path: str,
         *,
         page: int | None = None,
+        lang: str | None = None,
     ) -> None:
         """Insert an audio node in the dataset graph."""
 
-        self.graph.add_audio(doc_id, audio_id, path, page=page)
+        self.graph.add_audio(doc_id, audio_id, path, page=page, lang=lang)
         self._record_event("add_audio", f"Added audio {audio_id} to {doc_id}")
 
     def ingest_text_atoms(self, path: str, doc_id: str) -> list[str]:  # pragma: no cover

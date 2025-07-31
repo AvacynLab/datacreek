@@ -4,12 +4,15 @@ import pytest
 
 from datacreek.utils import redis_pid
 
+
 class DummyRedis:
     def __init__(self, hits=0, miss=0):
         self.hits = hits
         self.miss = miss
+
     async def get(self, key):
         return {"hits": self.hits, "miss": self.miss}.get(key, 0)
+
 
 def _reset_state():
     redis_pid._current_ttl = 10
@@ -36,7 +39,7 @@ async def test_update_ttl_increase(monkeypatch):
     _reset_state()
     monkeypatch.setattr(redis_pid, "update_metric", lambda *a, **k: None)
     monkeypatch.setattr(redis_pid, "TARGET_HIT", 0.8, raising=False)
-    monkeypatch.setattr(redis_pid, "K_P", 1.5, raising=False)
+    monkeypatch.setattr(redis_pid, "_get_base_kp", lambda now=None: 1.5)
     monkeypatch.setattr(redis_pid, "K_I", 0.1, raising=False)
     monkeypatch.setattr(redis_pid, "INTERVAL", 1, raising=False)
     client = DummyRedis(hits=0, miss=10)
@@ -56,7 +59,11 @@ async def test_pid_loop_and_start(monkeypatch):
     """pid_loop should call update_ttl and start_pid_controller must pass the stop event."""
     _reset_state()
     # make sure the loop runs even without real redis package
-    monkeypatch.setattr(redis_pid, "aioredis", types.SimpleNamespace(Redis=lambda: DummyRedis(hits=5, miss=5)))
+    monkeypatch.setattr(
+        redis_pid,
+        "aioredis",
+        types.SimpleNamespace(Redis=lambda: DummyRedis(hits=5, miss=5)),
+    )
 
     calls = []
     orig_sleep = redis_pid.asyncio.sleep
@@ -88,6 +95,7 @@ async def test_pid_loop_and_start(monkeypatch):
 async def test_update_ttl_error(monkeypatch):
     """update_ttl should bail out if Redis access fails."""
     _reset_state()
+
     async def fail_get(key):
         raise RuntimeError
 
@@ -120,6 +128,15 @@ async def test_pid_loop_errors(monkeypatch):
     monkeypatch.setattr(redis_pid, "aioredis", None)
     await redis_pid.pid_loop(None, stop_event=asyncio.Event())
 
-    monkeypatch.setattr(redis_pid, "aioredis", types.SimpleNamespace(Redis=lambda: (_ for _ in ()).throw(RuntimeError())))
-    await redis_pid.pid_loop(None, stop_event=asyncio.Event())
 
+def test_gain_schedule(monkeypatch):
+    _reset_state()
+    monkeypatch.setattr(redis_pid, "_get_base_kp", lambda now=None: 0.3)
+    monkeypatch.setattr(redis_pid, "update_metric", lambda *a, **k: None)
+    redis_pid._err_var = 0.25
+    asyncio.run(redis_pid.update_ttl(DummyRedis(hits=5, miss=5)))
+    day_kp = redis_pid.get_current_kp()
+    monkeypatch.setattr(redis_pid, "_get_base_kp", lambda now=None: 0.5)
+    asyncio.run(redis_pid.update_ttl(DummyRedis(hits=5, miss=5)))
+    night_kp = redis_pid.get_current_kp()
+    assert day_kp != night_kp

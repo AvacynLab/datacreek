@@ -34,6 +34,7 @@ from datacreek.parsers import (
 )
 from datacreek.utils.config import get_generation_config, load_config
 from datacreek.utils.image_dedup import check_duplicate
+from datacreek.utils.image_quality import should_caption
 from datacreek.utils.modality import detect_modality
 from datacreek.utils.text import clean_text, split_into_chunks
 
@@ -268,12 +269,17 @@ def to_kg(
                     to_caption: list[tuple[str, str, int]] = []
                     for item in pending_imgs:
                         pid, ppath, ppage = item
-                        skip = False
+                        dup = False
                         try:
-                            skip = check_duplicate(ppath)
+                            dup = check_duplicate(ppath)
                         except Exception:
-                            skip = False
-                        if skip:
+                            dup = False
+                        quality = True
+                        try:
+                            quality = should_caption(ppath)
+                        except Exception:
+                            quality = True
+                        if dup or not quality:
                             if blip_skipped_total is not None:
                                 blip_skipped_total.inc()
                             dataset.add_image(
@@ -389,12 +395,17 @@ def to_kg(
 
             to_caption: list[tuple[str, str, int]] = []
             for pid, ppath, ppage in pending_imgs:
-                skip = False
+                dup = False
                 try:
-                    skip = check_duplicate(ppath)
+                    dup = check_duplicate(ppath)
                 except Exception:
-                    skip = False
-                if skip:
+                    dup = False
+                quality = True
+                try:
+                    quality = should_caption(ppath)
+                except Exception:
+                    quality = True
+                if dup or not quality:
                     if blip_skipped_total is not None:
                         blip_skipped_total.inc()
                     dataset.add_image(doc_id, pid, ppath, page=ppage, alt_text="")
@@ -629,7 +640,13 @@ def ingest_into_dataset(
 
         if isinstance(parser, (WhisperAudioParser, YouTubeParser)):
             audio_id = f"{doc_id}_audio_0"
-            dataset.add_audio(doc_id, audio_id, file_path)
+            try:
+                from datacreek.utils.text import detect_language
+
+                lang = detect_language(text)
+            except Exception:
+                lang = "und"
+            dataset.add_audio(doc_id, audio_id, file_path, lang=lang)
             for cid in dataset.graph.get_chunks_for_document(doc_id):
                 dataset.graph.link_transcript(cid, audio_id, provenance=file_path)
     except Exception:  # pragma: no cover - optional deps may be missing

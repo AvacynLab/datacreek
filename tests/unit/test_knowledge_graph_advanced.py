@@ -12,7 +12,7 @@ def build_graph():
     kg.add_chunk("d1", "c2", "hello two", section_id="s1", page=2)
     kg.add_chunk("d1", "c3", "hello three", section_id="s2", page=3)
     kg.add_image("d1", "img1", "/img", alt_text="an image")
-    kg.add_audio("d1", "aud1", "/aud", page=1)
+    kg.add_audio("d1", "aud1", "/aud", page=1, lang="en")
     kg.add_atom("d1", "a1", "H", "element")
     kg.add_molecule("d1", "m1", ["a1"])
     kg.add_entity("e1", "Alice", source="src")

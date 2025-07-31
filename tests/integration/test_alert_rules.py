@@ -64,6 +64,15 @@ def test_jitter_alert_rule():
     assert latency["for"] == "15m"
     assert latency["labels"]["severity"] == "critical"
 
+    burn_alert = rules.get("IngestLatencyBurnRate")
+    assert burn_alert is not None
+    assert (
+        burn_alert["expr"]
+        == "ingest_latency_burn_rate_1h > 1 and ingest_latency_burn_rate_6h > 1"
+    )
+    assert burn_alert["for"] == "10m"
+    assert burn_alert["labels"]["severity"] == "critical"
+
     burn1 = rules.get("ingest_latency_burn_rate_1h")
     assert burn1 is not None
     assert burn1["expr"] == "avg_over_time(ingest_latency_p999[1h]) / 5"
