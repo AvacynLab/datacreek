@@ -1,4 +1,4 @@
-"""Pydantic schemas used for ingestion payload validation.
+r"""Pydantic schemas used for ingestion payload validation.
 
 The models include basic path checking and optional quality metrics used as
 "quality gates" during ingestion. Metrics follow:
@@ -15,7 +15,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, constr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    constr,
+    field_validator,
+)
 
 
 class BaseIngest(BaseModel):
