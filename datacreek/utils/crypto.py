@@ -23,7 +23,9 @@ def xor_decrypt(token: str, key: str) -> str:
     return out.decode()
 
 
-def encrypt_pii_fields(record: Dict[str, Any], key: str, fields: Iterable[str]) -> Dict[str, Any]:
+def encrypt_pii_fields(
+    record: Dict[str, Any], key: str, fields: Iterable[str]
+) -> Dict[str, Any]:
     """Encrypt selected fields of ``record`` in-place and return it."""
     for f in fields:
         if f in record and record[f] is not None:
@@ -31,7 +33,9 @@ def encrypt_pii_fields(record: Dict[str, Any], key: str, fields: Iterable[str]) 
     return record
 
 
-def decrypt_pii_fields(record: Dict[str, Any], key: str, fields: Iterable[str]) -> Dict[str, Any]:
+def decrypt_pii_fields(
+    record: Dict[str, Any], key: str, fields: Iterable[str]
+) -> Dict[str, Any]:
     """Decrypt selected fields of ``record`` in-place and return it."""
     for f in fields:
         if f in record and record[f] is not None:

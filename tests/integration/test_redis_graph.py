@@ -60,7 +60,9 @@ class DummyGraph:
     def query(self, q, params=None):
         self.queries.append(q)
         if "RETURN n.id" in q:
-            return type("R", (), {"result_set": [["d", "Document", {"dataset": "demo"}]]})
+            return type(
+                "R", (), {"result_set": [["d", "Document", {"dataset": "demo"}]]}
+            )
         return type("R", (), {"result_set": [["d", "c1", "REL", {"dataset": "demo"}]]})
 
 
@@ -87,7 +89,10 @@ def test_dataset_redis_graph_tasks(monkeypatch):
     assert dummy.queries
     prog = json.loads(client.hget("dataset:demo:progress", "save_redis_graph"))
     assert prog["nodes"] == len(ds.graph.graph)
-    assert client.hget("dataset:demo:progress", "status").decode() == TaskStatus.COMPLETED.value
+    assert (
+        client.hget("dataset:demo:progress", "status").decode()
+        == TaskStatus.COMPLETED.value
+    )
 
 
 def test_persist_uses_redis_graph(monkeypatch):
@@ -101,7 +106,9 @@ def test_persist_uses_redis_graph(monkeypatch):
     monkeypatch.setattr("datacreek.core.dataset.RGEdge", DummyEdge)
 
     monkeypatch.setenv("DATACREEK_REQUIRE_PERSISTENCE", "0")
-    ds = DatasetBuilder(DatasetType.TEXT, name="demo", redis_client=client, neo4j_driver=None)
+    ds = DatasetBuilder(
+        DatasetType.TEXT, name="demo", redis_client=client, neo4j_driver=None
+    )
     ds.add_document("d", source="s")
     ds._persist()
     assert dummy.queries

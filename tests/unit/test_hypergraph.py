@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 
 from datacreek.analysis.hypergraph import (
+    hyper_adamic_adar_scores,
     hyper_sagnn_embeddings,
     hyper_sagnn_head_drop_embeddings,
-    hyper_adamic_adar_scores,
     hyperedge_attention_scores,
 )
 
@@ -25,12 +25,16 @@ def test_hyper_sagnn_head_drop_embeddings_threshold_behavior():
     node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
     edges = [[0, 1], [1, 2]]
     # threshold low enough to keep heads
-    out = hyper_sagnn_head_drop_embeddings(edges, node_features, num_heads=2, threshold=0.0, seed=0)
+    out = hyper_sagnn_head_drop_embeddings(
+        edges, node_features, num_heads=2, threshold=0.0, seed=0
+    )
     assert out.shape == (2, 1)
     assert not np.allclose(out, 0)
 
     # high threshold drops all heads -> zeros
-    out2 = hyper_sagnn_head_drop_embeddings(edges, node_features, num_heads=2, threshold=1.0, seed=0)
+    out2 = hyper_sagnn_head_drop_embeddings(
+        edges, node_features, num_heads=2, threshold=1.0, seed=0
+    )
     assert np.allclose(out2, 0)
 
 

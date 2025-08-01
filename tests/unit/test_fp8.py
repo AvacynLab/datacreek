@@ -1,6 +1,6 @@
 import numpy as np
 
-from datacreek.analysis.compression import fp8_quantize, fp8_dequantize
+from datacreek.analysis.compression import fp8_dequantize, fp8_quantize
 
 
 def test_fp8_roundtrip():

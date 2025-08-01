@@ -1,5 +1,6 @@
-import types
 import importlib
+import types
+
 import pytest
 
 import datacreek.utils.text as text
@@ -59,7 +60,9 @@ def test_detect_language_missing_file(monkeypatch):
         def predict(self, t):
             return ["__label__en"], [1.0]
 
-    monkeypatch.setattr(text, "fasttext", types.SimpleNamespace(load_model=lambda p: DummyModel()))
+    monkeypatch.setattr(
+        text, "fasttext", types.SimpleNamespace(load_model=lambda p: DummyModel())
+    )
     monkeypatch.setattr(text.os.path, "exists", lambda p: False)
     with pytest.raises(FileNotFoundError):
         text.detect_language("hi", model_path="missing")

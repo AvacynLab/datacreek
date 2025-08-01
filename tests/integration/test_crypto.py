@@ -1,6 +1,11 @@
 import pytest
 
-from datacreek.utils.crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
+from datacreek.utils.crypto import (
+    decrypt_pii_fields,
+    encrypt_pii_fields,
+    xor_decrypt,
+    xor_encrypt,
+)
 
 
 def test_xor_roundtrip():

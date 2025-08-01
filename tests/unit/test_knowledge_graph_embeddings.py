@@ -1,6 +1,8 @@
-import numpy as np
 import sys
 import types
+
+import numpy as np
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -12,8 +14,10 @@ def test_embedding_algorithms(monkeypatch):
     class DummyWV(dict):
         def __getitem__(self, key):
             return np.array([0.0, 0.0])
+
     class DummyModel:
         wv = DummyWV()
+
     class DummyNode2Vec:
         def __init__(self, *a, **k):
             pass
@@ -22,17 +26,27 @@ def test_embedding_algorithms(monkeypatch):
             return DummyModel()
 
     # Stub node2vec to avoid heavy dependency requirement
-    monkeypatch.setitem(sys.modules, "node2vec", types.SimpleNamespace(Node2Vec=DummyNode2Vec))
+    monkeypatch.setitem(
+        sys.modules, "node2vec", types.SimpleNamespace(Node2Vec=DummyNode2Vec)
+    )
 
     kg.compute_node2vec_embeddings(dimensions=2, walk_length=1, num_walks=1)
     assert "embedding" in kg.graph.nodes["d"]
 
-    monkeypatch.setattr("datacreek.analysis.fractal.graphwave_embedding", lambda g, s, num_points: {n: np.array([1.0, 0.0]) for n in g})
+    monkeypatch.setattr(
+        "datacreek.analysis.fractal.graphwave_embedding",
+        lambda g, s, num_points: {n: np.array([1.0, 0.0]) for n in g},
+    )
     kg.compute_graphwave_embeddings([1.0], num_points=2)
     assert "graphwave_embedding" in kg.graph.nodes["d"]
 
-    monkeypatch.setattr("datacreek.analysis.fractal.poincare_embedding", lambda g, **k: {n: np.array([0.5, 0.5]) for n in g})
-    kg.compute_poincare_embeddings(dim=2, negative=1, epochs=1, learning_rate=0.1, burn_in=1)
+    monkeypatch.setattr(
+        "datacreek.analysis.fractal.poincare_embedding",
+        lambda g, **k: {n: np.array([0.5, 0.5]) for n in g},
+    )
+    kg.compute_poincare_embeddings(
+        dim=2, negative=1, epochs=1, learning_rate=0.1, burn_in=1
+    )
     assert "poincare_embedding" in kg.graph.nodes["d"]
 
 
@@ -54,20 +68,37 @@ def test_relational_and_product_embeddings(monkeypatch):
     monkeypatch.setattr(
         KnowledgeGraph,
         "compute_node2vec_embeddings",
-        lambda self, **k: [self.graph.nodes[n].update({"embedding": [0.2, 0.2]}) for n in self.graph.nodes],
+        lambda self, **k: [
+            self.graph.nodes[n].update({"embedding": [0.2, 0.2]})
+            for n in self.graph.nodes
+        ],
     )
     monkeypatch.setattr(
         KnowledgeGraph,
         "compute_graphwave_embeddings",
-        lambda self, scales, num_points: [self.graph.nodes[n].update({"graphwave_embedding": [0.3, 0.3]}) for n in self.graph.nodes],
+        lambda self, scales, num_points: [
+            self.graph.nodes[n].update({"graphwave_embedding": [0.3, 0.3]})
+            for n in self.graph.nodes
+        ],
     )
     monkeypatch.setattr(
         KnowledgeGraph,
         "compute_poincare_embeddings",
-        lambda self, **k: [self.graph.nodes[n].update({"poincare_embedding": [0.4, 0.4]}) for n in self.graph.nodes],
+        lambda self, **k: [
+            self.graph.nodes[n].update({"poincare_embedding": [0.4, 0.4]})
+            for n in self.graph.nodes
+        ],
     )
 
-    kg.compute_multigeometric_embeddings(node2vec_dim=2, graphwave_scales=[1.0], graphwave_points=2, poincare_dim=2, negative=1, epochs=1, burn_in=1)
+    kg.compute_multigeometric_embeddings(
+        node2vec_dim=2,
+        graphwave_scales=[1.0],
+        graphwave_points=2,
+        poincare_dim=2,
+        negative=1,
+        epochs=1,
+        burn_in=1,
+    )
     assert kg.graph.nodes["d1"]["poincare_embedding"] == [0.4, 0.4]
 
     def fake_prod(h, e):
@@ -75,6 +106,7 @@ def test_relational_and_product_embeddings(monkeypatch):
 
     # patch the analysis entrypoint to avoid heavy multiview dependency
     import datacreek.analysis.multiview as mv
+
     monkeypatch.setattr(mv, "product_embedding", fake_prod)
     kg.compute_product_manifold_embeddings(write_property="prod")
     assert np.allclose(kg.graph.nodes["d1"]["prod"], [0.4, 0.4, 0.2, 0.2])
@@ -89,8 +121,12 @@ def test_graphsage_and_hyper_embeddings(monkeypatch):
     monkeypatch.setattr(
         KnowledgeGraph,
         "compute_node2vec_embeddings",
-        lambda self, **k: [self.graph.nodes[n].update({"embedding": [1.0, 0.0]}) for n in self.graph.nodes],
+        lambda self, **k: [
+            self.graph.nodes[n].update({"embedding": [1.0, 0.0]})
+            for n in self.graph.nodes
+        ],
     )
+
     class DummyPCA:
         def __init__(self, n_components, random_state=0):
             self.n_components = n_components
@@ -111,7 +147,7 @@ def test_graphsage_and_hyper_embeddings(monkeypatch):
 
     monkeypatch.setattr(
         "datacreek.analysis.hypergraph.hyper_sagnn_embeddings",
-        lambda edges, feats, embed_dim=None, seed=None: np.array([[0.1, 0.2]])
+        lambda edges, feats, embed_dim=None, seed=None: np.array([[0.1, 0.2]]),
     )
     out = kg.compute_hyper_sagnn_embeddings(embed_dim=2)
     assert out == {"he": [0.1, 0.2]}
@@ -119,7 +155,7 @@ def test_graphsage_and_hyper_embeddings(monkeypatch):
 
     monkeypatch.setattr(
         "datacreek.analysis.hypergraph.hyper_sagnn_head_drop_embeddings",
-        lambda edges, feats, num_heads=4, threshold=0.1, seed=None: np.array([[1.0]])
+        lambda edges, feats, num_heads=4, threshold=0.1, seed=None: np.array([[1.0]]),
     )
     out_hd = kg.compute_hyper_sagnn_head_drop_embeddings()
     assert out_hd == {"he": [1.0]}
@@ -136,7 +172,10 @@ def test_train_product_manifold_and_hyper_aa(monkeypatch):
     kg.graph.nodes["d2"]["embedding"] = [0.4]
     monkeypatch.setattr(
         "datacreek.analysis.multiview.train_product_manifold",
-        lambda h, e, ctx, alpha=0.5, lr=0.01, epochs=1: ({k: np.array([0.5]) for k in h}, {k: np.array([0.6]) for k in e}),
+        lambda h, e, ctx, alpha=0.5, lr=0.01, epochs=1: (
+            {k: np.array([0.5]) for k in h},
+            {k: np.array([0.6]) for k in e},
+        ),
     )
     kg.train_product_manifold_embeddings([("d1", "d2")], epochs=1)
     assert kg.graph.nodes["d1"]["poincare_embedding"] == [0.5]

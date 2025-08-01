@@ -24,3 +24,4 @@ KPIs: BLIP save ≥20%, WER gain ≥4%, Hit-ratio oscillation ±1%, P95 ingest �
 #### History
 - Implemented quality gates, exactly-once Kafka, image dedup, VAD chunking with langid, PID gain schedule, Neo4j timestamps.
 - Added fractal dimension persistence, CUDA stream embeddings, FP8 compression, LakeFS governance, Prometheus alerts, cascade delete.
+- Adjusted CI to run unit tests only and trigger heavy tests on main merges or deployments.

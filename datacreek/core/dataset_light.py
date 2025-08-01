@@ -1,16 +1,18 @@
 from __future__ import annotations
+
 import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
-from .context import AppContext  # minimal dependency
-from ..utils import push_metrics
 from ..pipelines import DatasetType
+from ..utils import push_metrics
+from .context import AppContext  # minimal dependency
 
 MAX_NAME_LENGTH = 64
 NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
 
 @dataclass
 class HistoryEvent:
@@ -27,6 +29,7 @@ class FakeGraph:
     def __getattr__(self, name: str):
         def method(*args, **kwargs):
             return None
+
         return method
 
 
@@ -59,7 +62,9 @@ class DatasetBuilder:
         for k in ["sigma_db", "coverage_frac"]:
             self.graph.__getattr__(k)()
 
-    def add_document(self, doc_id: str, source: str, *, text: str | None = None) -> None:
+    def add_document(
+        self, doc_id: str, source: str, *, text: str | None = None
+    ) -> None:
         self.graph.add_document(doc_id, source, text=text)
         self._record_event("add_document", doc_id, source=source)
 
@@ -75,4 +80,3 @@ class DatasetBuilder:
         push_metrics({"prompts_exported": 1.0})
         self._record_event("export_prompts", "done")
         return [{"tag": "inferred"}]
-

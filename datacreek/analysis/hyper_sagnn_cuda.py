@@ -45,11 +45,15 @@ def hyper_sagnn_embeddings_stream(
         torch = None  # type: ignore
 
     use_cuda = (
-        device == "cuda" and torch is not None and getattr(torch.cuda, "is_available", lambda: False)()
+        device == "cuda"
+        and torch is not None
+        and getattr(torch.cuda, "is_available", lambda: False)()
     )
     if not use_cuda:
         # fallback to pure NumPy implementation
-        return hyper_sagnn_embeddings(hyperedges, node_features, embed_dim=embed_dim, seed=seed)
+        return hyper_sagnn_embeddings(
+            hyperedges, node_features, embed_dim=embed_dim, seed=seed
+        )
 
     feat_dim = node_features.shape[1]
     d = embed_dim or feat_dim

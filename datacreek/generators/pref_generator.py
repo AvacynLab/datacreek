@@ -36,7 +36,10 @@ class PrefPairGenerator(BaseGenerator):
 
         return asyncio.run(
             self._process_pair_impl(
-                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
+                use_async=async_mode,
             )
         )
 
@@ -63,7 +66,9 @@ class PrefPairGenerator(BaseGenerator):
     ) -> PrefPairResult:
         from .qa_generator import QAGenerator
 
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
+        qa_gen = QAGenerator(
+            self.client, self.config_path, kg=self.kg, config_overrides=None
+        )
 
         if use_async:
             result = await qa_gen.process_document_async(
@@ -71,7 +76,10 @@ class PrefPairGenerator(BaseGenerator):
             )
         else:
             result = await asyncio.to_thread(
-                qa_gen.process_document, document_text, num_pairs=num_pairs * 2, verbose=verbose
+                qa_gen.process_document,
+                document_text,
+                num_pairs=num_pairs * 2,
+                verbose=verbose,
             )
 
         pairs: List[Dict[str, Any]] = []
@@ -157,7 +165,9 @@ class PrefListGenerator(BaseGenerator):
     ) -> PrefListResult:
         from .qa_generator import QAGenerator
 
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
+        qa_gen = QAGenerator(
+            self.client, self.config_path, kg=self.kg, config_overrides=None
+        )
 
         total = num_lists * list_size
         if use_async:

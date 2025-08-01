@@ -2,10 +2,11 @@ import os
 import pickle
 import time
 
+import fakeredis
 import lmdb
 import networkx as nx
-import fakeredis
 import numpy as np
+
 from datacreek.analysis import mapper
 
 
@@ -37,32 +38,43 @@ def test_cache_mapper_nerve_with_redis_and_lmdb(tmp_path):
     client = fakeredis.FakeRedis()
     db = str(tmp_path / "cache.mdb")
     ssd = str(tmp_path / "ssd")
-    nerve1, cover1 = mapper.cache_mapper_nerve(g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd)
+    nerve1, cover1 = mapper.cache_mapper_nerve(
+        g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd
+    )
     # second call should hit the cache
-    nerve2, cover2 = mapper.cache_mapper_nerve(g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd)
+    nerve2, cover2 = mapper.cache_mapper_nerve(
+        g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd
+    )
     assert nx.is_isomorphic(nerve1, nerve2)
     assert cover1 == cover2
     assert client.get(f"1_{mapper._hash_graph(g)}") is not None
 
     # force LMDB fallback then SSD fallback
     client.flushall()
-    nerve3, cover3 = mapper.cache_mapper_nerve(g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd)
+    nerve3, cover3 = mapper.cache_mapper_nerve(
+        g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd
+    )
     assert nx.is_isomorphic(nerve1, nerve3)
     assert cover1 == cover3
     # remove LMDB entry to trigger SSD read
     env = lmdb.open(db, readonly=False)
     env.close()
     import shutil
+
     shutil.rmtree(db)
     client.flushall()
-    nerve4, _ = mapper.cache_mapper_nerve(g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd)
+    nerve4, _ = mapper.cache_mapper_nerve(
+        g, 1, redis_client=client, lmdb_path=db, ssd_dir=ssd
+    )
     assert nx.is_isomorphic(nerve1, nerve4)
 
 
 def test_adjust_ttl_updates(monkeypatch):
     """TTL decreases when hit ratio is low."""
 
-    monkeypatch.setattr(mapper, "os", type("O", (), {"getloadavg": lambda: (0, 0, 0)})())
+    monkeypatch.setattr(
+        mapper, "os", type("O", (), {"getloadavg": lambda: (0, 0, 0)})()
+    )
     start = mapper._redis_ttl = 1000
     mapper._redis_hits = 1
     mapper._redis_misses = 9
@@ -75,26 +87,35 @@ def test_adjust_ttl_updates(monkeypatch):
 
 def test_adjust_ttl_high_load(monkeypatch):
     """High hit ratio combined with CPU load increases TTL."""
-    monkeypatch.setattr(mapper, "os", type("O", (), {"getloadavg": lambda: (1.0,), "cpu_count": lambda: 1})())
+    monkeypatch.setattr(
+        mapper,
+        "os",
+        type("O", (), {"getloadavg": lambda: (1.0,), "cpu_count": lambda: 1})(),
+    )
     start = mapper._redis_ttl = 300
     mapper._redis_hits = 10
     mapper._redis_misses = 0
     mapper._hit_ema = 0.9
     mapper._last_ttl_eval = 0
     monkeypatch.setattr(mapper.time, "time", lambda: 301.0)
+
     class Gauge:
         def __init__(self):
             self.value = None
+
         def set(self, v):
             self.value = v
+
     class ErrorRedis(fakeredis.FakeRedis):
         def config_set(self, *a, **k):
             raise RuntimeError
+
         def expire(self, *a, **k):
             raise RuntimeError
 
     monkeypatch.setattr(mapper, "redis", fakeredis)
     import datacreek.analysis.monitoring as mon
+
     monkeypatch.setattr(mon, "redis_hit_ratio", Gauge())
     client = ErrorRedis()
     mapper._adjust_ttl(client, key="a")

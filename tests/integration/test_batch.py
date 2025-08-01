@@ -9,7 +9,9 @@ class DummyClient:
     def __init__(self):
         self.calls = []
 
-    async def async_batch_completion(self, batches, *, temperature=None, batch_size=None):
+    async def async_batch_completion(
+        self, batches, *, temperature=None, batch_size=None
+    ):
         self.calls.append((batches, temperature, batch_size))
         return ["resp:" + batch[0]["content"] for batch in batches]
 
@@ -42,11 +44,15 @@ def test_curate_async_mode(monkeypatch):
                 "curate": {"batch_size": 1, "temperature": 0.1, "threshold": 0.0},
             }
 
-        async def async_batch_completion(self, batches, *, temperature=None, batch_size=None):
+        async def async_batch_completion(
+            self, batches, *, temperature=None, batch_size=None
+        ):
             async_called["count"] = len(batches)
             return ['{"rating": 9}'] * len(batches)
 
-    monkeypatch.setattr("datacreek.core.curate.LLMClient", lambda *a, **k: DummyClient2())
+    monkeypatch.setattr(
+        "datacreek.core.curate.LLMClient", lambda *a, **k: DummyClient2()
+    )
 
     async def fake_async(client, msgs, *, batch_size, temperature, parse_fn, **kwargs):
         async_called["count"] = len(msgs)
@@ -59,7 +65,9 @@ def test_curate_async_mode(monkeypatch):
         "datacreek.core.curate.parse_ratings",
         lambda resp, orig: [QAPair(question="q", answer="a", rating=9)],
     )
-    monkeypatch.setattr("datacreek.core.curate.convert_to_conversation_format", lambda pairs: [])
+    monkeypatch.setattr(
+        "datacreek.core.curate.convert_to_conversation_format", lambda pairs: []
+    )
 
     from datacreek.core.curate import curate_qa_pairs
 
@@ -75,7 +83,8 @@ def test_curate_threshold_validation():
 
     with pytest.raises(ValueError):
         curate_qa_pairs(
-            {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]}, threshold=11
+            {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]},
+            threshold=11,
         )
 
 

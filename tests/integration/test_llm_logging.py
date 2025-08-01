@@ -42,8 +42,12 @@ def test_debug_mode_uses_logging(monkeypatch):
         called["debug"] = logger.isEnabledFor(logging.DEBUG)
         return "ok"
 
-    monkeypatch.setattr(LLMClient, "_openai_chat_completion", fake_openai_chat_completion)
-    dummy._openai_chat_completion = fake_openai_chat_completion.__get__(dummy, DummyLLMClient)
+    monkeypatch.setattr(
+        LLMClient, "_openai_chat_completion", fake_openai_chat_completion
+    )
+    dummy._openai_chat_completion = fake_openai_chat_completion.__get__(
+        dummy, DummyLLMClient
+    )
 
     old_level = logger.level
     os.environ["SDK_DEBUG"] = "true"

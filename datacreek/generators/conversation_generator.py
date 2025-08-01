@@ -42,7 +42,10 @@ class ConversationGenerator(BaseGenerator):
 
         return asyncio.run(
             self._process_document_impl(
-                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
+                use_async=async_mode,
             )
         )
 
@@ -69,7 +72,9 @@ class ConversationGenerator(BaseGenerator):
     ) -> ConversationResult:
         from .qa_generator import QAGenerator
 
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
+        qa_gen = QAGenerator(
+            self.client, self.config_path, kg=self.kg, config_overrides=None
+        )
 
         if use_async:
             result = await qa_gen.process_document_async(
@@ -77,7 +82,10 @@ class ConversationGenerator(BaseGenerator):
             )
         else:
             result = await asyncio.to_thread(
-                qa_gen.process_document, document_text, num_pairs=num_pairs, verbose=verbose
+                qa_gen.process_document,
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
             )
 
         conversations = qa_pairs_to_records(result.qa_pairs)

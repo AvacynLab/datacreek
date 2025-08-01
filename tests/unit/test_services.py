@@ -1,23 +1,29 @@
 import types
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from datacreek import services
-from datacreek.db import Base, User, Dataset, SourceData
+from datacreek.db import Base, Dataset, SourceData, User
+
 
 class FakeRedis:
     def __init__(self):
         self.store = {}
+
     def hset(self, name, key=None, value=None, mapping=None):
         if mapping is not None:
             self.store.setdefault(name, {}).update(mapping)
         else:
             self.store.setdefault(name, {})[key] = value
+
     def hget(self, name, key):
         return self.store.get(name, {}).get(key)
+
     def hgetall(self, name):
         return self.store.get(name, {})
+
 
 @pytest.fixture
 def db_session(tmp_path):
@@ -27,6 +33,7 @@ def db_session(tmp_path):
     session = Session()
     yield session
     session.close()
+
 
 @pytest.fixture
 def fake_redis(monkeypatch):

@@ -1,4 +1,5 @@
 import numpy as np
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -18,8 +19,10 @@ def test_embeddings_and_clustering(monkeypatch):
     class DummyKMeans:
         def __init__(self, n_clusters, n_init):
             pass
+
         def fit_predict(self, X):
             return [0] * len(X)
+
     monkeypatch.setattr("datacreek.core.knowledge_graph.KMeans", DummyKMeans)
 
     kg.cluster_chunks(n_clusters=1)
@@ -46,13 +49,23 @@ def test_schema_and_entropy(monkeypatch):
 
     kg.graph.nodes["DOC"]["embedding"] = [0.1, 0.2]
     kg.graph.nodes["CHUNK"]["embedding"] = [0.2, 0.3]
-    monkeypatch.setattr("datacreek.analysis.fractal.embedding_entropy", lambda emb: 0.123)
+    monkeypatch.setattr(
+        "datacreek.analysis.fractal.embedding_entropy", lambda emb: 0.123
+    )
     assert kg.embedding_entropy() == 0.123
 
-    monkeypatch.setattr("datacreek.core.knowledge_graph.KnowledgeGraph.graphwave_entropy", lambda self: 0.05)
+    monkeypatch.setattr(
+        "datacreek.core.knowledge_graph.KnowledgeGraph.graphwave_entropy",
+        lambda self: 0.05,
+    )
+
     def fake_compute(self, scales, num_points):
         for n in self.graph.nodes:
             self.graph.nodes[n]["graphwave_embedding"] = [0.1, 0.1]
-    monkeypatch.setattr("datacreek.core.knowledge_graph.KnowledgeGraph.compute_graphwave_embeddings", fake_compute)
+
+    monkeypatch.setattr(
+        "datacreek.core.knowledge_graph.KnowledgeGraph.compute_graphwave_embeddings",
+        fake_compute,
+    )
     monkeypatch.setattr("numpy.random.uniform", lambda a, b: 0.0)
     assert kg.ensure_graphwave_entropy(0.1) == 0.05

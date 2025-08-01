@@ -1,20 +1,27 @@
 import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
+
 
 class DummySession:
     def __init__(self):
         self.last_query = None
+
     def run(self, q, **params):
         self.last_query = (q, params)
         return []
+
     def __enter__(self):
         return self
+
     def __exit__(self, exc_type, exc, tb):
         pass
+
 
 class DummyDriver:
     def __init__(self):
         self.session_obj = DummySession()
+
     def session(self):
         return self.session_obj
 
@@ -45,7 +52,9 @@ def test_text_helpers_and_auto_tools(monkeypatch):
     out = kg.graph_to_text()
     assert "hello" in out and "world" in out
 
-    monkeypatch.setattr("datacreek.utils.toolformer.insert_tool_calls", lambda t, p: t + "!")
+    monkeypatch.setattr(
+        "datacreek.utils.toolformer.insert_tool_calls", lambda t, p: t + "!"
+    )
     res = kg.auto_tool_calls("c1", [("t", "h")])
     assert res.endswith("!")
     all_res = kg.auto_tool_calls_all([("t", "h")])

@@ -14,7 +14,11 @@ class PPTParser(BaseParser):
     """Parser for PowerPoint presentations"""
 
     def parse(
-        self, file_path: str, *, use_unstructured: bool = True, return_elements: bool = False
+        self,
+        file_path: str,
+        *,
+        use_unstructured: bool = True,
+        return_elements: bool = False
     ) -> str | list[Any]:
         """Parse a PPTX file into plain text
 
@@ -30,7 +34,11 @@ class PPTParser(BaseParser):
             elements = partition_pptx(filename=file_path)
             if return_elements:
                 return elements
-            texts = [getattr(el, "text", str(el)) for el in elements if getattr(el, "text", None)]
+            texts = [
+                getattr(el, "text", str(el))
+                for el in elements
+                if getattr(el, "text", None)
+            ]
             return "\n".join(texts)
         except Exception as exc:  # pragma: no cover - unexpected failures
             raise RuntimeError("Failed to parse PPTX with unstructured") from exc

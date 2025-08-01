@@ -8,7 +8,9 @@ from typing import Dict, Iterable
 import numpy as np
 
 
-def online_pca_reduce(matrix: np.ndarray, *, n_components: int = 256, batch_size: int = 128) -> np.ndarray:
+def online_pca_reduce(
+    matrix: np.ndarray, *, n_components: int = 256, batch_size: int = 128
+) -> np.ndarray:
     """Return PCA-reduced matrix using an incremental sketch.
 
     Parameters

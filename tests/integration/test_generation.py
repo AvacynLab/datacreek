@@ -6,8 +6,16 @@ from datacreek.analysis.generation import (
     generate_graph_rnn_sequential,
     generate_graph_rnn_stateful,
 )
-from datacreek.utils.graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
-from datacreek.utils.toolformer import execute_tool_calls, generate_with_tools, insert_tool_calls
+from datacreek.utils.graph_text import (
+    graph_to_text,
+    neighborhood_to_sentence,
+    subgraph_to_text,
+)
+from datacreek.utils.toolformer import (
+    execute_tool_calls,
+    generate_with_tools,
+    insert_tool_calls,
+)
 
 
 def test_generate_graph_rnn_like():

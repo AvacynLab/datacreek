@@ -23,7 +23,6 @@ def test_link_similar_sections_and_documents(monkeypatch):
     assert ("d1", "d2") in kg.graph.edges or ("d2", "d1") in kg.graph.edges
 
 
-
 def test_get_similar_sections_and_documents(monkeypatch):
     kg = KnowledgeGraph()
     kg.add_document("d1", "src", text="hello world")

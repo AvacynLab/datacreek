@@ -1,6 +1,10 @@
 import pytest
 
-from datacreek.utils.toolformer import insert_tool_calls, execute_tool_calls, generate_with_tools
+from datacreek.utils.toolformer import (
+    execute_tool_calls,
+    generate_with_tools,
+    insert_tool_calls,
+)
 
 
 def test_insert_tool_calls_basic_and_invalid():

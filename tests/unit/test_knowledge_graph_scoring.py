@@ -1,6 +1,8 @@
-import numpy as np
 import sys
 import types
+
+import numpy as np
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -21,11 +23,14 @@ def test_hybrid_score_and_similar(monkeypatch):
     kg = build_simple_kg()
 
     calls = {}
+
     def fake_score(a, b, gw_a, gw_b, hyp_a, hyp_b, *, gamma=0.5, eta=0.25):
         calls["args"] = (a, b, gw_a, gw_b, hyp_a, hyp_b, gamma, eta)
         return float(a[0] + b[0])
 
-    monkeypatch.setattr("datacreek.analysis.multiview.hybrid_score", fake_score, raising=False)
+    monkeypatch.setattr(
+        "datacreek.analysis.multiview.hybrid_score", fake_score, raising=False
+    )
 
     val = kg.hybrid_score("c1", "c2")
     assert val == 2.0
@@ -42,7 +47,11 @@ def test_recall_at_k(monkeypatch):
         assert k == 10
         return 0.42
 
-    monkeypatch.setitem(sys.modules, "datacreek.analysis.autotune", types.SimpleNamespace(recall_at_k=fake_recall))
+    monkeypatch.setitem(
+        sys.modules,
+        "datacreek.analysis.autotune",
+        types.SimpleNamespace(recall_at_k=fake_recall),
+    )
 
     r = kg.recall_at_k(["c1"], {"c1": ["c2"]}, k=10)
     assert r == 0.42

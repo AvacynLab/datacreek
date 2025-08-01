@@ -1,4 +1,5 @@
 import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -26,9 +27,13 @@ def test_remove_chunk_renumbers_sequences():
     assert kg.graph.edges["d1", "c3"]["sequence"] == 2
     kg.remove_chunk("c1")
     # c2 should now be first with no predecessor
-    assert ("d1", "c2") in kg.graph.edges and kg.graph.edges["d1", "c2"]["sequence"] == 0
+    assert ("d1", "c2") in kg.graph.edges and kg.graph.edges["d1", "c2"][
+        "sequence"
+    ] == 0
     assert not any(
-        kg.graph.edges[cid, "c2"].get("relation") == "next_chunk" for cid in kg.graph.predecessors("c2") if cid != "d1"
+        kg.graph.edges[cid, "c2"].get("relation") == "next_chunk"
+        for cid in kg.graph.predecessors("c2")
+        if cid != "d1"
     )
     assert kg.graph.edges["d1", "c3"]["sequence"] == 1
 

@@ -1,5 +1,5 @@
-import types
 import importlib
+import types
 
 import pytest
 
@@ -48,7 +48,9 @@ def test_transcribe_audio_batch_cpu(monkeypatch):
 
     mod = importlib.import_module("datacreek.analysis.monitoring")
     monkeypatch.setattr(mod, "update_metric", update_metric)
-    transcripts = wb.transcribe_audio_batch(["a", "b"], device="cpu", batch_size=4, max_seconds=1)
+    transcripts = wb.transcribe_audio_batch(
+        ["a", "b"], device="cpu", batch_size=4, max_seconds=1
+    )
     assert transcripts == ["text:a", "text:b"]
     assert metrics["whisper_xrt"] > 0
     assert dummy.calls == ["a", "b"]

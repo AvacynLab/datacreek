@@ -1,4 +1,5 @@
 import types
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 

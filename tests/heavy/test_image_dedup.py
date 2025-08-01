@@ -12,6 +12,7 @@ imagehash = importlib.import_module("imagehash")
 
 dedup = importlib.import_module("datacreek.utils.image_dedup")
 
+
 def test_hashes(tmp_path):
     data = b"abc"
     hs = list(dedup._hashes(data))

@@ -137,7 +137,9 @@ def ensure_graphrnn_checkpoint(
     return local
 
 
-def _laplacian(graph: nx.Graph, *, normed: bool = False) -> np.ndarray:  # pragma: no cover - deterministic
+def _laplacian(
+    graph: nx.Graph, *, normed: bool = False
+) -> np.ndarray:  # pragma: no cover - deterministic
     """Return Laplacian matrix of ``graph``."""
 
     if csgraph is not None:
@@ -186,7 +188,9 @@ def lanczos_lmax(L: np.ndarray, iters: int = 10) -> float:  # pragma: no cover -
     return float(q.dot(L.dot(q)))
 
 
-def lanczos_top_eigenvalue(L: np.ndarray, k: int = 5) -> float:  # pragma: no cover - heavy
+def lanczos_top_eigenvalue(
+    L: np.ndarray, k: int = 5
+) -> float:  # pragma: no cover - heavy
     """Return largest eigenvalue via Lanczos with ``k`` iterations.
 
     Parameters
@@ -642,7 +646,9 @@ def graphwave_embedding_chebyshev(
     return {n: np.asarray(v, dtype=float) for n, v in emb.items()}
 
 
-def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:  # pragma: no cover - rarely used
+def graphwave_entropy(
+    embeddings: Dict[object, Iterable[float]]
+) -> float:  # pragma: no cover - rarely used
     r"""Return GraphWave entropy based on embedding norms.
 
     The differential entropy used for autotuning is computed as
@@ -673,7 +679,9 @@ def graphwave_entropy(embeddings: Dict[object, Iterable[float]]) -> float:  # pr
     return float(-np.log(norms).mean())
 
 
-def embedding_entropy(embeddings: Dict[object, Iterable[float]]) -> float:  # pragma: no cover - rarely used
+def embedding_entropy(
+    embeddings: Dict[object, Iterable[float]]
+) -> float:  # pragma: no cover - rarely used
     r"""Return differential entropy for an embedding dictionary.
 
     This is a generic variant of :func:`graphwave_entropy` that applies to any
@@ -990,7 +998,9 @@ def laplacian_spectrum(
     return np.sort(evals)
 
 
-def spectral_entropy(graph: nx.Graph, *, normed: bool = True) -> float:  # pragma: no cover - heavy computation
+def spectral_entropy(
+    graph: nx.Graph, *, normed: bool = True
+) -> float:  # pragma: no cover - heavy computation
     """Return the Shannon entropy of the Laplacian spectrum.
 
     The eigenvalues of the Laplacian are normalized to form a probability
@@ -1684,7 +1694,9 @@ def fractal_net_prune(
     embeddings: Dict[object, Iterable[float]],
     *,
     tol: float = 1e-3,
-) -> Tuple[Dict[int, np.ndarray], Dict[object, int]]:  # pragma: no cover - iterative routine
+) -> Tuple[
+    Dict[int, np.ndarray], Dict[object, int]
+]:  # pragma: no cover - iterative routine
     """Return pruned embedding centers and node mapping.
 
     The function greedily merges embedding vectors whose Euclidean distance is

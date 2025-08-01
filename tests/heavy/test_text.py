@@ -1,6 +1,6 @@
 import importlib
-import types
 import os
+import types
 
 import pytest
 
@@ -22,11 +22,14 @@ class DummyModel:
 
 def test_split_into_chunks_methods(monkeypatch):
     called = {}
+
     def stub(name):
         def fn(*args, **kwargs):
             called[name] = True
             return [name]
+
         return fn
+
     monkeypatch.setattr(text, "sliding_window_chunks", stub("sliding"))
     monkeypatch.setattr(text, "semantic_chunk_split", stub("semantic"))
     monkeypatch.setattr(text, "contextual_chunk_split", stub("contextual"))
@@ -50,22 +53,32 @@ def test_normalize_units(monkeypatch):
     class DummyUnit:
         def __init__(self, name):
             self.name = name
+
         def __rmul__(self, value):
             return DummyQty(value, self.name)
+
     class DummyQty:
         def __init__(self, magnitude, units):
             self.magnitude = magnitude
             self.units = units
+
         def to_base_units(self):
             if self.units == "km":
                 return DummyQty(self.magnitude * 1000, "meter")
             return self
+
     class DummyRegistry:
         def __call__(self, name):
             return DummyUnit(name)
+
     class DummyParser:
         def parse(self, text):
-            return [types.SimpleNamespace(value=5, unit=types.SimpleNamespace(name="km"), span=(0,4))]
+            return [
+                types.SimpleNamespace(
+                    value=5, unit=types.SimpleNamespace(name="km"), span=(0, 4)
+                )
+            ]
+
     module = reload_text_module()
     monkeypatch.setattr(module, "_PINT_AVAILABLE", True)
     monkeypatch.setattr(module, "_UnitRegistry", DummyRegistry, raising=False)
@@ -74,11 +87,11 @@ def test_normalize_units(monkeypatch):
 
 
 def test_extract_json_from_text():
-    assert text.extract_json_from_text("{\"a\": 1}") == {"a": 1}
-    md = "```json\n{\"a\":2}\n```"
-    assert text.extract_json_from_text(md) == {"a":2}
-    partial = "prefix {\"b\":3} suffix"
-    assert text.extract_json_from_text(partial) == {"b":3}
+    assert text.extract_json_from_text('{"a": 1}') == {"a": 1}
+    md = '```json\n{"a":2}\n```'
+    assert text.extract_json_from_text(md) == {"a": 2}
+    partial = 'prefix {"b":3} suffix'
+    assert text.extract_json_from_text(partial) == {"b": 3}
     with pytest.raises(ValueError):
         text.extract_json_from_text("no json here")
 
@@ -97,7 +110,9 @@ def test_clean_text(monkeypatch):
 def test_fasttext_model_pool(monkeypatch):
     module = reload_text_module()
     dm = DummyModel()
-    monkeypatch.setattr(module, "fasttext", types.SimpleNamespace(load_model=lambda p: dm))
+    monkeypatch.setattr(
+        module, "fasttext", types.SimpleNamespace(load_model=lambda p: dm)
+    )
     monkeypatch.setattr(module.os, "cpu_count", lambda: 1)
     module._FASTTEXT_POOL = None
     module._FT_MODEL = None
@@ -112,9 +127,11 @@ def test_get_fasttext_cached(monkeypatch):
     module = reload_text_module()
     dm = DummyModel()
     called = {}
+
     def loader(path):
         called[path] = called.get(path, 0) + 1
         return dm
+
     monkeypatch.setattr(module, "fasttext", types.SimpleNamespace(load_model=loader))
     if hasattr(module.get_fasttext, "_model"):
         delattr(module.get_fasttext, "_model")
@@ -128,7 +145,9 @@ def test_detect_language(monkeypatch):
     module = reload_text_module()
     dm = DummyModel()
     dm.predict = lambda text: (["__label__fr"], [0.9])
-    monkeypatch.setattr(module, "fasttext", types.SimpleNamespace(load_model=lambda p: dm))
+    monkeypatch.setattr(
+        module, "fasttext", types.SimpleNamespace(load_model=lambda p: dm)
+    )
     monkeypatch.setattr(module.os.path, "exists", lambda p: True)
     monkeypatch.setattr(module, "get_fasttext", lambda: dm)
     assert module.detect_language("bonjour", return_prob=True) == ("fr", 0.9)
@@ -138,7 +157,9 @@ def test_detect_language(monkeypatch):
     assert module.detect_language("hi") == "und"
     module = reload_text_module()
     dm2 = DummyModel()
-    monkeypatch.setattr(module, "fasttext", types.SimpleNamespace(load_model=lambda p: dm2))
+    monkeypatch.setattr(
+        module, "fasttext", types.SimpleNamespace(load_model=lambda p: dm2)
+    )
     monkeypatch.setattr(module.os.path, "exists", lambda p: False)
     monkeypatch.setattr(module, "get_fasttext", lambda: dm2)
     with pytest.raises(FileNotFoundError):

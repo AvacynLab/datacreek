@@ -11,7 +11,8 @@ except Exception:
     pytest.skip("datacreek.api unavailable", allow_module_level=True)
 
 spec = importlib.util.spec_from_file_location(
-    "metrics", Path(__file__).resolve().parents[1] / "datacreek" / "utils" / "metrics.py"
+    "metrics",
+    Path(__file__).resolve().parents[1] / "datacreek" / "utils" / "metrics.py",
 )
 metrics = importlib.util.module_from_spec(spec)
 assert spec.loader is not None

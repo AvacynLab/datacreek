@@ -1,7 +1,9 @@
 import sys
 import types
+
 import numpy as np
 import pytest
+
 from datacreek.analysis import compression
 
 
@@ -21,7 +23,7 @@ def test_prune_fractalnet_numpy():
 
 def test_prune_fractalnet_without_numpy(monkeypatch):
     monkeypatch.setattr(compression, "np", None)
-    result = compression.prune_fractalnet([1.0, -2.0, 0.5], ratio=1/3)
+    result = compression.prune_fractalnet([1.0, -2.0, 0.5], ratio=1 / 3)
     assert result == [0.0, -2.0, 0.0]
 
     zeroed = compression.prune_fractalnet([1.0, -2.0], ratio=0.0)
@@ -49,12 +51,15 @@ def test_fractalnetpruner_prune_no_revert(monkeypatch):
     pruner = compression.FractalNetPruner(lambda_=0.05)
     pruner.model = model
 
-    monkeypatch.setattr(compression, "prune_reverts_total", DummyCounter(), raising=False)
+    monkeypatch.setattr(
+        compression, "prune_reverts_total", DummyCounter(), raising=False
+    )
     monkeypatch.setattr(compression, "save_checkpoint", lambda *a, **k: None)
     monkeypatch.setattr(compression, "restore_checkpoint", lambda p: None)
-    fake_cfg = types.SimpleNamespace(load_config=lambda: {"compression": {"magnitude": 0.05}})
+    fake_cfg = types.SimpleNamespace(
+        load_config=lambda: {"compression": {"magnitude": 0.05}}
+    )
     monkeypatch.setitem(sys.modules, "datacreek.utils.config", fake_cfg)
-
 
     vals = iter([1.0, 0.995])
     accepted, ppl = pruner.prune(lambda m: next(vals))
@@ -73,7 +78,9 @@ def test_fractalnetpruner_prune_revert(monkeypatch):
     monkeypatch.setattr(compression, "prune_reverts_total", counter, raising=False)
     monkeypatch.setattr(compression, "save_checkpoint", lambda *a, **k: None)
     monkeypatch.setattr(compression, "restore_checkpoint", lambda p: "restored")
-    fake_cfg = types.SimpleNamespace(load_config=lambda: {"compression": {"magnitude": 0.05}})
+    fake_cfg = types.SimpleNamespace(
+        load_config=lambda: {"compression": {"magnitude": 0.05}}
+    )
     monkeypatch.setitem(sys.modules, "datacreek.utils.config", fake_cfg)
 
     vals = iter([1.0, 1.1])

@@ -1,8 +1,9 @@
 import sys
+
 import pytest
 
-from datacreek.utils import llm_processing
 from datacreek.models.qa import QAPair
+from datacreek.utils import llm_processing
 
 
 def test_parse_qa_pairs_json():
@@ -73,7 +74,10 @@ def test_parse_ratings_multiple_items_with_meta():
         '[{"question": "Q1", "answer": "A1", "rating": 1},'
         ' {"question": "Q2", "answer": "A2", "rating": 2}]'
     )
-    original = [QAPair("Q1", "A1", chunk="c1", source="s1"), {"question": "Q2", "answer": "A2", "chunk": "c2", "source": "s2"}]
+    original = [
+        QAPair("Q1", "A1", chunk="c1", source="s1"),
+        {"question": "Q2", "answer": "A2", "chunk": "c2", "source": "s2"},
+    ]
     res = llm_processing.parse_ratings(txt, original)
     assert [r.rating for r in res] == [1, 2]
     assert res[0].chunk == "c1" and res[1].source == "s2"
@@ -93,13 +97,13 @@ def test_parse_ratings_line_by_line():
 
 def test_parse_ratings_error():
     with pytest.raises(ValueError):
-        llm_processing.parse_ratings('invalid')
+        llm_processing.parse_ratings("invalid")
 
 
 def test_parse_qa_pairs_no_match(caplog):
-    caplog.set_level('ERROR')
-    assert llm_processing.parse_qa_pairs('nothing here') == []
-    assert any('Failed to parse QA pairs' in r.message for r in caplog.records)
+    caplog.set_level("ERROR")
+    assert llm_processing.parse_qa_pairs("nothing here") == []
+    assert any("Failed to parse QA pairs" in r.message for r in caplog.records)
 
 
 def test_parse_ratings_missing_meta():

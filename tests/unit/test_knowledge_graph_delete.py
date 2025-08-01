@@ -1,30 +1,41 @@
 import types
+
 import numpy as np
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
+
 
 class DummySession:
     def __init__(self, calls):
         self.calls = calls
+
     def __enter__(self):
         return self
+
     def __exit__(self, exc_type, exc, tb):
         pass
+
     def run(self, q, **params):
         self.calls["query"] = q
         self.calls.update(params)
 
+
 class DummyDriver:
     def __init__(self, calls):
         self.calls = calls
+
     def session(self):
         return DummySession(self.calls)
+
 
 class DummyFaiss:
     def __init__(self):
         self.removed = []
         self.added = []
+
     def remove_ids(self, idxs):
         self.removed.extend(idxs.tolist())
+
     def add(self, vec):
         self.added.append(vec.tolist())
 

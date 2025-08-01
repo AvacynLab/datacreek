@@ -17,7 +17,10 @@ def fake_batch(client, message_batches, **kwargs):
         pairs = json.loads(m[0]["content"])
         res.append(
             json.dumps(
-                [{"question": p["question"], "answer": p["answer"], "rating": 10} for p in pairs]
+                [
+                    {"question": p["question"], "answer": p["answer"], "rating": 10}
+                    for p in pairs
+                ]
             )
         )
     return res
@@ -25,7 +28,10 @@ def fake_batch(client, message_batches, **kwargs):
 
 def fake_parse(text, orig):
     data = json.loads(text)
-    return [QAPair(question=d["question"], answer=d["answer"], rating=d["rating"]) for d in data]
+    return [
+        QAPair(question=d["question"], answer=d["answer"], rating=d["rating"])
+        for d in data
+    ]
 
 
 class DummyProgress:
@@ -52,7 +58,10 @@ def test_curate_deduplicate(monkeypatch):
     monkeypatch.setattr(curate, "get_prompt", lambda cfg, name: "{pairs}")
     data = {
         "summary": "",
-        "qa_pairs": [{"question": "q", "answer": "a"}, {"question": "q", "answer": "a"}],
+        "qa_pairs": [
+            {"question": "q", "answer": "a"},
+            {"question": "q", "answer": "a"},
+        ],
     }
     res = curate.curate_qa_pairs(data, batch_size=1, inference_batch=1)
     assert len(res["qa_pairs"]) == 1
@@ -124,7 +133,9 @@ def test_curate_as_dataclass(monkeypatch):
 
     data = {"summary": "", "qa_pairs": [{"question": "q", "answer": "a"}]}
 
-    res = curate.curate_qa_pairs(data, batch_size=1, inference_batch=1, as_dataclass=True)
+    res = curate.curate_qa_pairs(
+        data, batch_size=1, inference_batch=1, as_dataclass=True
+    )
     assert isinstance(res, curate.CurationResult)
 
 

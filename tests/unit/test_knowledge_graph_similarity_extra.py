@@ -13,8 +13,10 @@ def build_kg():
 
 def test_get_similar_sections_filters_types(monkeypatch):
     kg = build_kg()
+
     def fake_search(query, k=3):
         return ["junk", "s2"]
+
     monkeypatch.setattr(kg.index, "search", fake_search)
     monkeypatch.setattr(kg.index, "get_id", lambda i: i)
     assert kg.get_similar_sections("s1", k=2) == ["s2"]
@@ -22,8 +24,10 @@ def test_get_similar_sections_filters_types(monkeypatch):
 
 def test_get_similar_documents_filters_types(monkeypatch):
     kg = build_kg()
+
     def fake_search(query, k=3):
         return ["junk", "d2"]
+
     monkeypatch.setattr(kg.index, "search", fake_search)
     monkeypatch.setattr(kg.index, "get_id", lambda i: i)
     assert kg.get_similar_documents("d1", k=2) == ["d2"]

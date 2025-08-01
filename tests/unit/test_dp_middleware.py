@@ -1,8 +1,9 @@
 import sys
 import types
+
 from starlette.applications import Starlette
-from starlette.responses import Response
 from starlette.middleware import Middleware
+from starlette.responses import Response
 from starlette.testclient import TestClient
 
 import datacreek.security.dp_middleware as dp
@@ -38,9 +39,12 @@ def make_client(entry, monkeypatch):
     monkeypatch.setitem(sys.modules, "datacreek.db", dbmod)
     # Ensure the datacreek package exposes the stub module
     import datacreek
+
     monkeypatch.setattr(datacreek, "db", dbmod, raising=False)
+
     def dummy_compute(vals, alphas=None):
         return vals[0]
+
     # Patch both the middleware module and the public DP module
     monkeypatch.setattr(dp, "compute_epsilon", dummy_compute)
     monkeypatch.setattr("datacreek.dp.compute_epsilon", dummy_compute)
@@ -69,13 +73,25 @@ def test_no_headers():
 
 def test_invalid_headers(monkeypatch):
     client, _ = make_client(None, monkeypatch)
-    resp = client.get("/", headers={dp.DPBudgetMiddleware.header_tenant: "x", dp.DPBudgetMiddleware.header_epsilon: "y"})
+    resp = client.get(
+        "/",
+        headers={
+            dp.DPBudgetMiddleware.header_tenant: "x",
+            dp.DPBudgetMiddleware.header_epsilon: "y",
+        },
+    )
     assert resp.status_code == 400
 
 
 def test_tenant_missing(monkeypatch):
     client, session = make_client(None, monkeypatch)
-    resp = client.get("/", headers={dp.DPBudgetMiddleware.header_tenant: "1", dp.DPBudgetMiddleware.header_epsilon: "0.5"})
+    resp = client.get(
+        "/",
+        headers={
+            dp.DPBudgetMiddleware.header_tenant: "1",
+            dp.DPBudgetMiddleware.header_epsilon: "0.5",
+        },
+    )
     assert resp.status_code == 403
     assert resp.headers.get("X-Epsilon-Remaining") == "0.000000"
     assert not session.committed
@@ -84,7 +100,13 @@ def test_tenant_missing(monkeypatch):
 def test_budget_exceeded(monkeypatch):
     entry = DummyEntry(1.0, 1.5)
     client, session = make_client(entry, monkeypatch)
-    resp = client.get("/", headers={dp.DPBudgetMiddleware.header_tenant: "1", dp.DPBudgetMiddleware.header_epsilon: "1.0"})
+    resp = client.get(
+        "/",
+        headers={
+            dp.DPBudgetMiddleware.header_tenant: "1",
+            dp.DPBudgetMiddleware.header_epsilon: "1.0",
+        },
+    )
     assert resp.status_code == 403
     assert resp.headers.get("X-Epsilon-Remaining") == "0.000000"
     assert entry.epsilon_used == 1.0
@@ -94,7 +116,13 @@ def test_budget_exceeded(monkeypatch):
 def test_budget_updated(monkeypatch):
     entry = DummyEntry(0.2, 1.0)
     client, session = make_client(entry, monkeypatch)
-    resp = client.get("/", headers={dp.DPBudgetMiddleware.header_tenant: "1", dp.DPBudgetMiddleware.header_epsilon: "0.3"})
+    resp = client.get(
+        "/",
+        headers={
+            dp.DPBudgetMiddleware.header_tenant: "1",
+            dp.DPBudgetMiddleware.header_epsilon: "0.3",
+        },
+    )
     assert resp.status_code == 200
     # epsilon_used updated and remaining reflected
     assert entry.epsilon_used == 0.5

@@ -209,6 +209,7 @@ class FractalNetPruner:
         logger.info("PRUNE_REVERTED=%s", str(was_reverted).lower())
         return not was_reverted and delta <= 0.01, perplexity
 
+
 def fp8_quantize(vec: "np.ndarray") -> tuple["np.ndarray", float]:
     """Return INT8 quantization and scale for ``vec``.
 

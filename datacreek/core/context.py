@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from datacreek.utils.config import DEFAULT_CONFIG_PATH, CONFIG_PATH_ENV, load_config
+from datacreek.utils.config import CONFIG_PATH_ENV, DEFAULT_CONFIG_PATH, load_config
 
 
 class AppContext:

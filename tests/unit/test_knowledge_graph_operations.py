@@ -1,8 +1,14 @@
-import types
 import sys
+import types
+
 import numpy as np
 import pytest
-from datacreek.core.knowledge_graph import KnowledgeGraph, CleanupConfig, apply_cleanup_config
+
+from datacreek.core.knowledge_graph import (
+    CleanupConfig,
+    KnowledgeGraph,
+    apply_cleanup_config,
+)
 
 
 def build_graph():
@@ -21,10 +27,18 @@ def build_graph():
 def test_misc_operations(monkeypatch):
     kg = build_graph()
     # stub BeautifulSoup
-    bs4 = types.SimpleNamespace(BeautifulSoup=lambda txt, parser: types.SimpleNamespace(get_text=lambda sep: txt.replace("<b>", "").replace("</b>", "")))
+    bs4 = types.SimpleNamespace(
+        BeautifulSoup=lambda txt, parser: types.SimpleNamespace(
+            get_text=lambda sep: txt.replace("<b>", "").replace("</b>", "")
+        )
+    )
     monkeypatch.setitem(sys.modules, "bs4", bs4)
     # patch nearest_neighbors
-    monkeypatch.setattr(kg.index, "nearest_neighbors", lambda k, return_distances=True: {"c1": [("c2", 0.9)]})
+    monkeypatch.setattr(
+        kg.index,
+        "nearest_neighbors",
+        lambda k, return_distances=True: {"c1": [("c2", 0.9)]},
+    )
     kg.link_similar_chunks()
     assert kg.graph.edges["c1", "c2"].get("relation") == "similar_to"
     assert kg.clean_chunk_texts() == 1

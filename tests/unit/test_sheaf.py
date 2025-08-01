@@ -1,7 +1,8 @@
-import types
 import sys
-import numpy as np
+import types
+
 import networkx as nx
+import numpy as np
 import pytest
 
 import datacreek.analysis.sheaf as sheaf
@@ -45,22 +46,24 @@ def test_spectral_and_blocksmith(monkeypatch):
     # exceeds 0.5 whereas the first eigenvalue is zero. Ensure that
     # spectral_bound_exceeded detects this case correctly.
     assert sheaf.spectral_bound_exceeded(G, 2, 0.5)
-    monkeypatch.setitem(sys.modules, 'sympy', None)
+    monkeypatch.setitem(sys.modules, "sympy", None)
     with pytest.raises(RuntimeError):
         sheaf.block_smith_invariants(np.eye(2, dtype=int))
 
-    mod = types.ModuleType('sympy')
+    mod = types.ModuleType("sympy")
+
     def smith_normal_form(mat):
         return np.eye(len(mat), dtype=int), None, None
-    normalforms = types.ModuleType('normalforms')
+
+    normalforms = types.ModuleType("normalforms")
     normalforms.smith_normal_form = smith_normal_form
-    matrices = types.ModuleType('matrices')
+    matrices = types.ModuleType("matrices")
     matrices.normalforms = normalforms
     mod.matrices = matrices
     mod.Matrix = lambda x: np.array(x)
-    monkeypatch.setitem(sys.modules, 'sympy', mod)
-    monkeypatch.setitem(sys.modules, 'sympy.matrices', matrices)
-    monkeypatch.setitem(sys.modules, 'sympy.matrices.normalforms', normalforms)
+    monkeypatch.setitem(sys.modules, "sympy", mod)
+    monkeypatch.setitem(sys.modules, "sympy.matrices", matrices)
+    monkeypatch.setitem(sys.modules, "sympy.matrices.normalforms", normalforms)
     inv = sheaf.block_smith_invariants(np.eye(2, dtype=int), block_size=1)
     assert inv == [1, 1]
 
@@ -81,27 +84,25 @@ def test_additional_paths(monkeypatch):
 
     # sheaf_first_cohomology_blocksmith reads config when lam_thresh None
     monkeypatch.setattr(
-        'datacreek.utils.config.load_config',
-        lambda: {'sheaf': {'lam_thresh': 2.0}},
+        "datacreek.utils.config.load_config",
+        lambda: {"sheaf": {"lam_thresh": 2.0}},
     )
     assert sheaf.sheaf_first_cohomology_blocksmith(G, block_size=10) == 0
 
     # block_smith_invariants handles empty matrices
-    mod = types.ModuleType('sympy')
+    mod = types.ModuleType("sympy")
     mod.Matrix = lambda x: np.array(x)
-    nf = types.ModuleType('normalforms')
+    nf = types.ModuleType("normalforms")
     nf.smith_normal_form = lambda x: (np.array(x), None, None)
-    matrices = types.ModuleType('matrices')
+    matrices = types.ModuleType("matrices")
     matrices.normalforms = nf
     mod.matrices = matrices
-    monkeypatch.setitem(sys.modules, 'sympy', mod)
-    monkeypatch.setitem(sys.modules, 'sympy.matrices', matrices)
-    monkeypatch.setitem(sys.modules, 'sympy.matrices.normalforms', nf)
+    monkeypatch.setitem(sys.modules, "sympy", mod)
+    monkeypatch.setitem(sys.modules, "sympy.matrices", matrices)
+    monkeypatch.setitem(sys.modules, "sympy.matrices.normalforms", nf)
     assert sheaf.block_smith_invariants(np.zeros((0, 0), int)) == []
     assert sheaf.block_smith(np.zeros((0, 0), int)) == 0
 
     # batched consistency returns one score per batch
     scores = sheaf.sheaf_consistency_score_batched(G, [[0, 1], [1, 2]])
     assert len(scores) == 2
-
-

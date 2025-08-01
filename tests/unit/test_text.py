@@ -1,6 +1,7 @@
 import builtins
 import os
 import types
+
 import pytest
 
 import datacreek.utils.text as text
@@ -13,13 +14,21 @@ def test_split_into_chunks_basic():
 
 
 def test_split_methods(monkeypatch):
-    monkeypatch.setattr(text, "sliding_window_chunks", lambda *a, **k: ["sl"], raising=False)
+    monkeypatch.setattr(
+        text, "sliding_window_chunks", lambda *a, **k: ["sl"], raising=False
+    )
     assert text.split_into_chunks("x", method="sliding") == ["sl"]
-    monkeypatch.setattr(text, "semantic_chunk_split", lambda *a, **k: ["se"], raising=False)
+    monkeypatch.setattr(
+        text, "semantic_chunk_split", lambda *a, **k: ["se"], raising=False
+    )
     assert text.split_into_chunks("x", method="semantic") == ["se"]
-    monkeypatch.setattr(text, "contextual_chunk_split", lambda *a, **k: ["cx"], raising=False)
+    monkeypatch.setattr(
+        text, "contextual_chunk_split", lambda *a, **k: ["cx"], raising=False
+    )
     assert text.split_into_chunks("x", method="contextual") == ["cx"]
-    monkeypatch.setattr(text, "summarized_chunk_split", lambda *a, **k: ["su"], raising=False)
+    monkeypatch.setattr(
+        text, "summarized_chunk_split", lambda *a, **k: ["su"], raising=False
+    )
     assert text.split_into_chunks("x", method="summary") == ["su"]
 
 
@@ -35,10 +44,13 @@ class DummyUReg:
     class DummyQuantity:
         def __init__(self, value):
             self.val = value
+
         def __rmul__(self, other):
             return type(self)(other * self.val)
+
         def to_base_units(self):
             return types.SimpleNamespace(magnitude=self.val, units="m")
+
     def __call__(self, name):
         return self.DummyQuantity(1)
 
@@ -46,14 +58,16 @@ class DummyUReg:
 def test_normalize_units(monkeypatch):
     q = DummyQty(2, "m")
     monkeypatch.setattr(text, "_PINT_AVAILABLE", True, raising=False)
-    monkeypatch.setattr(text, "_qty_parser", types.SimpleNamespace(parse=lambda t: [q]), raising=False)
+    monkeypatch.setattr(
+        text, "_qty_parser", types.SimpleNamespace(parse=lambda t: [q]), raising=False
+    )
     monkeypatch.setattr(text, "_UnitRegistry", DummyUReg, raising=False)
     assert text.normalize_units("2 m") == "2 m"
 
 
 def test_extract_json_variants():
     assert text.extract_json_from_text('{"a":1}') == {"a": 1}
-    md = "```json\n{\"b\":2}\n```"
+    md = '```json\n{"b":2}\n```'
     assert text.extract_json_from_text(md) == {"b": 2}
     with pytest.raises(ValueError):
         text.extract_json_from_text("no json")
@@ -84,6 +98,7 @@ def test_detect_language_paths(monkeypatch, tmp_path):
 
 def test_get_ft_model_and_release(monkeypatch, tmp_path):
     calls = []
+
     def fake_load(path):
         calls.append(path)
         return object()
@@ -100,7 +115,11 @@ def test_get_ft_model_and_release(monkeypatch, tmp_path):
 def test_get_fasttext_singleton(monkeypatch):
     obj = object()
     calls = []
-    monkeypatch.setattr(text, "fasttext", types.SimpleNamespace(load_model=lambda p: (calls.append(p) or obj)))
+    monkeypatch.setattr(
+        text,
+        "fasttext",
+        types.SimpleNamespace(load_model=lambda p: (calls.append(p) or obj)),
+    )
     first = text.get_fasttext()
     second = text.get_fasttext()
     assert first is second is obj
@@ -109,7 +128,9 @@ def test_get_fasttext_singleton(monkeypatch):
 
 def test_detect_language_errors(monkeypatch, tmp_path):
     monkeypatch.setattr(text, "fasttext", object(), raising=False)
-    monkeypatch.setattr(text, "get_fasttext", lambda: types.SimpleNamespace(predict=lambda s: ([], [])))
+    monkeypatch.setattr(
+        text, "get_fasttext", lambda: types.SimpleNamespace(predict=lambda s: ([], []))
+    )
     path = tmp_path / "not.bin"
     with pytest.raises(FileNotFoundError):
         text.detect_language("x", model_path=str(path))

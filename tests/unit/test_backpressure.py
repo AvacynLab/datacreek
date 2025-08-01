@@ -1,5 +1,6 @@
 import json
 import os
+
 import datacreek.utils.backpressure as bp
 
 
@@ -29,7 +30,9 @@ def test_acquire_with_backoff(tmp_path, monkeypatch):
     monkeypatch.setattr(bp.time, "sleep", lambda s: None)
     spool = tmp_path
     data = {"a": 1}
-    result = bp.acquire_slot_with_backoff(retries=1, base_delay=0, spool_dir=str(spool), spool_data=data)
+    result = bp.acquire_slot_with_backoff(
+        retries=1, base_delay=0, spool_dir=str(spool), spool_data=data
+    )
     assert result is False
     files = list(spool.iterdir())
     assert len(files) == 1
@@ -37,4 +40,3 @@ def test_acquire_with_backoff(tmp_path, monkeypatch):
         assert json.load(f) == data
     # cleanup
     bp.release_slot()
-

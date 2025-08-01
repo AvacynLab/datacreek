@@ -1,4 +1,5 @@
 import numpy as np
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -43,6 +44,7 @@ def test_resolve_entities(monkeypatch):
     merged = kg.resolve_entities(threshold=0.0)
     assert merged == 1
     assert "e2" not in kg.graph
+
 
 def test_deduplicate_chunks_fuzzy():
     kg = KnowledgeGraph()

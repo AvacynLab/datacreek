@@ -1,37 +1,45 @@
 import base64
-import types
-import pytest
-from fastapi import HTTPException
-
 import importlib
 import json
+import types
+
+import pytest
+from fastapi import HTTPException
 
 # Import the module itself rather than the router object aggregated in
 # ``datacreek.routers`` so we can monkeypatch its attributes.
 router = importlib.import_module("datacreek.routers.explain_router")
 
+
 class DummyUser:
     def __init__(self, id):
         self.id = id
+
 
 class DummyDS:
     def __init__(self, owner_id=1):
         self.owner_id = owner_id
         self.redis_client = None
+
     def explain_node(self, node, hops=3):
         return {"nodes": [node], "edges": [], "attention": {node: 1.0}}
+
     def _record_event(self, *a, **k):
         pass
+
 
 class DummyDriver:
     def __init__(self):
         self.closed = False
+
     def close(self):
         self.closed = True
+
 
 class DummyRedis:
     def __init__(self):
         self.closed = False
+
     def hset(self, *a, **k):
         pass
 
@@ -51,7 +59,9 @@ def test_load_dataset_success(monkeypatch):
     driver = DummyDriver()
     monkeypatch.setattr(router, "get_redis_client", lambda: DummyRedis())
     monkeypatch.setattr(router, "get_neo4j_driver", lambda: driver)
-    DummyBuilder = type("B", (), {"from_redis": classmethod(lambda cls,c,n,d: dummy)})
+    DummyBuilder = type(
+        "B", (), {"from_redis": classmethod(lambda cls, c, n, d: dummy)}
+    )
     monkeypatch.setattr(router, "DatasetBuilder", DummyBuilder)
     user = DummyUser(3)
     ds = router._load_dataset("demo", user)
@@ -66,12 +76,20 @@ def test_load_dataset_errors(monkeypatch):
         router._load_dataset("x", DummyUser(1))
     monkeypatch.setattr(router, "get_redis_client", lambda: DummyRedis())
     monkeypatch.setattr(router, "get_neo4j_driver", lambda: DummyDriver())
-    DummyBuilder = type("B", (), {"from_redis": classmethod(lambda cls,c,n,d: (_ for _ in ()).throw(KeyError()))})
+    DummyBuilder = type(
+        "B",
+        (),
+        {
+            "from_redis": classmethod(
+                lambda cls, c, n, d: (_ for _ in ()).throw(KeyError())
+            )
+        },
+    )
     monkeypatch.setattr(router, "DatasetBuilder", DummyBuilder)
     with pytest.raises(HTTPException):
         router._load_dataset("x", DummyUser(1))
     dummy = DummyDS(owner_id=2)
-    monkeypatch.setattr(router.DatasetBuilder, "from_redis", lambda c,n,d: dummy)
+    monkeypatch.setattr(router.DatasetBuilder, "from_redis", lambda c, n, d: dummy)
     with pytest.raises(HTTPException):
         router._load_dataset("x", DummyUser(1))
 

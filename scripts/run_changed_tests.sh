@@ -10,7 +10,7 @@ cd "$DIR"
 # Build the test image
 docker build -t datacreek:test .
 
-mapfile -t test_files < <(git diff --name-only "$base" "$head" -- 'tests/*.py')
+mapfile -t test_files < <(git diff --name-only "$base" "$head" -- 'tests/unit/**/*.py')
 mapfile -t src_files < <(git diff --name-only "$base" "$head" -- 'datacreek/**/*.py')
 
 cov_args=()
@@ -30,7 +30,8 @@ if [ "${#test_files[@]}" -gt 0 ]; then
   echo "Running changed tests: ${test_files[*]}"
   cmd+=("${test_files[@]}")
 else
-  echo "No changed tests found, running full test suite"
+  echo "No changed tests found, running full unit test suite"
+  cmd+=(tests/unit)
 fi
 
 set +e

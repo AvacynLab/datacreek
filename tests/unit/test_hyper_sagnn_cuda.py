@@ -7,8 +7,8 @@ spec = importlib.util.find_spec("torch")
 
 
 def test_stream_matches_numpy(monkeypatch):
-    from datacreek.analysis.hypergraph import hyper_sagnn_embeddings
     from datacreek.analysis.hyper_sagnn_cuda import hyper_sagnn_embeddings_stream
+    from datacreek.analysis.hypergraph import hyper_sagnn_embeddings
 
     edges = [[0, 1], [1, 2, 3]]
     feats = np.eye(4)
@@ -34,5 +34,3 @@ def test_stream_gpu_available(monkeypatch):
 
     res = hyper_sagnn_embeddings_stream(edges, feats, embed_dim=3)
     assert res.shape == (2, 3)
-
-

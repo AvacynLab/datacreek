@@ -84,5 +84,6 @@ def entropy_triangle_threshold(
     total = sum(arr) or 1.0
     p = [w / total for w in arr]
     from math import log
+
     H = -float(sum(pi * log(pi, base) for pi in p))
     return max(1, int(round(scale * H)))

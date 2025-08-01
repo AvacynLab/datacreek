@@ -1,6 +1,7 @@
 import json
 import sys
 import types
+
 import pytest
 
 import datacreek.utils.format_converter as fc

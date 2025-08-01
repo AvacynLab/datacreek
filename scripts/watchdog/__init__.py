@@ -11,7 +11,13 @@ from typing import Dict, List
 import requests
 
 METRICS_URL = os.environ.get("METRICS_URL", "http://localhost:8000/metrics")
-STATE_FILE = os.environ.get("WATCHDOG_STATE", "/tmp/datacreek_watchdog.json")
+from tempfile import gettempdir
+
+# Use the OS temporary directory for storing the watchdog state file
+# to avoid hardcoding a specific path.
+STATE_FILE = os.environ.get(
+    "WATCHDOG_STATE", os.path.join(gettempdir(), "datacreek_watchdog.json")
+)
 
 
 def parse_metrics(text: str) -> Dict[str, float]:

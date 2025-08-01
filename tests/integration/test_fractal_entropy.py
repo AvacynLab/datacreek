@@ -1,5 +1,6 @@
 import networkx as nx
 import numpy as np
+
 import datacreek.analysis.fractal as fractal
 
 
@@ -16,4 +17,3 @@ def test_lacunarity_and_coverage():
     assert fractal.graph_lacunarity(g, radius=1) >= 1.0
     cov = fractal.fractal_level_coverage(g)
     assert 0.0 < cov <= 1.0
-

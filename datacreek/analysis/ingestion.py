@@ -38,7 +38,9 @@ def blip_caption_image(path: str) -> str:
         from transformers import BlipForConditionalGeneration, BlipProcessor
 
         img = Image.open(path)
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        processor = BlipProcessor.from_pretrained(
+            "Salesforce/blip-image-captioning-base"
+        )
         model = BlipForConditionalGeneration.from_pretrained(
             "Salesforce/blip-image-captioning-base"
         )

@@ -34,7 +34,9 @@ class COTGenerator(BaseGenerator):
         config_overrides: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize the CoT Generator with an LLM client and optional config"""
-        super().__init__(client, config_path, kg=None, config_overrides=config_overrides)
+        super().__init__(
+            client, config_path, kg=None, config_overrides=config_overrides
+        )
 
     def parse_json_output(self, output_text: str) -> Optional[List[Dict]]:
         """Parse JSON from LLM output text"""
@@ -73,7 +75,11 @@ class COTGenerator(BaseGenerator):
         )
 
     async def _generate_cot_examples_impl(
-        self, document_text: str, num_examples: int | None = None, *, use_async: bool = False
+        self,
+        document_text: str,
+        num_examples: int | None = None,
+        *,
+        use_async: bool = False,
     ) -> List[COTExample]:
         verbose = logger.isEnabledFor(logging.DEBUG)
 
@@ -147,7 +153,8 @@ class COTGenerator(BaseGenerator):
         # Format the prompt
         conversation_str = json.dumps(conversations, ensure_ascii=False, indent=2)
         prompt = prompt_template.format(
-            conversations=conversation_str, include_simple_steps=str(include_simple_steps).lower()
+            conversations=conversation_str,
+            include_simple_steps=str(include_simple_steps).lower(),
         )
 
         # Generate enhanced conversations
@@ -167,7 +174,9 @@ class COTGenerator(BaseGenerator):
 
         if enhanced_conversations is None:
             if verbose:
-                logger.warning("Failed to parse enhanced conversations, returning original")
+                logger.warning(
+                    "Failed to parse enhanced conversations, returning original"
+                )
             return conversations
 
         if verbose:
@@ -221,7 +230,10 @@ class COTGenerator(BaseGenerator):
             summary = await asyncio.to_thread(
                 self.client.chat_completion,
                 [
-                    {"role": "system", "content": "Summarize this document in 2-3 sentences."},
+                    {
+                        "role": "system",
+                        "content": "Summarize this document in 2-3 sentences.",
+                    },
                     {"role": "user", "content": document_text},
                 ],
                 temperature=0.1,
@@ -229,7 +241,10 @@ class COTGenerator(BaseGenerator):
         else:
             summary = self.client.chat_completion(
                 [
-                    {"role": "system", "content": "Summarize this document in 2-3 sentences."},
+                    {
+                        "role": "system",
+                        "content": "Summarize this document in 2-3 sentences.",
+                    },
                     {"role": "user", "content": document_text},
                 ],
                 temperature=0.1,

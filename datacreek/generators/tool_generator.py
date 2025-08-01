@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from datacreek.core.knowledge_graph import KnowledgeGraph
 from datacreek.models.llm_client import LLMClient
 from datacreek.models.results import ConversationResult
-from datacreek.utils import qa_pairs_to_records, convert_to_conversation_format
+from datacreek.utils import convert_to_conversation_format, qa_pairs_to_records
 
 from .base import BaseGenerator
 
@@ -37,7 +37,10 @@ class ToolCallGenerator(BaseGenerator):
 
         return asyncio.run(
             self._process_document_impl(
-                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
+                use_async=async_mode,
             )
         )
 
@@ -64,7 +67,9 @@ class ToolCallGenerator(BaseGenerator):
     ) -> ConversationResult:
         from .qa_generator import QAGenerator
 
-        qa_gen = QAGenerator(self.client, self.config_path, kg=self.kg, config_overrides=None)
+        qa_gen = QAGenerator(
+            self.client, self.config_path, kg=self.kg, config_overrides=None
+        )
 
         if use_async:
             result = await qa_gen.process_document_async(
@@ -72,7 +77,10 @@ class ToolCallGenerator(BaseGenerator):
             )
         else:
             result = await asyncio.to_thread(
-                qa_gen.process_document, document_text, num_pairs=num_pairs, verbose=verbose
+                qa_gen.process_document,
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
             )
 
         conversations: List[Dict[str, Any]] = []
@@ -82,7 +90,10 @@ class ToolCallGenerator(BaseGenerator):
                 2,
                 {
                     "role": "assistant",
-                    "tool_call": {"name": "search", "arguments": {"query": pair.question}},
+                    "tool_call": {
+                        "name": "search",
+                        "arguments": {"query": pair.question},
+                    },
                 },
             )
             conv.insert(

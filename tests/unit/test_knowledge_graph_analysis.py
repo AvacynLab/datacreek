@@ -1,6 +1,8 @@
-import types
 import sys
+import types
+
 import numpy as np
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -22,7 +24,10 @@ def patch_analysis(monkeypatch):
         graph_lacunarity=lambda g, radius=1: 3.0,
         box_counting_dimension=lambda g, radii: (0.9, [(1, 2)]),
         laplacian_spectrum=lambda g, normed=True: np.array([0, 1]),
-        spectral_density=lambda g, bins=50, normed=True: (np.array([0, 1]), np.array([1, 0])),
+        spectral_density=lambda g, bins=50, normed=True: (
+            np.array([0, 1]),
+            np.array([1, 0]),
+        ),
         graph_fourier_transform=lambda g, s, normed=True: np.array([1, 2]),
         inverse_graph_fourier_transform=lambda g, c, normed=True: np.array([1, 2]),
         persistence_entropy=lambda g, dimension=0: 4.0,
@@ -35,18 +40,25 @@ def patch_analysis(monkeypatch):
     )
     fake_sheaf = types.SimpleNamespace(
         sheaf_laplacian=lambda g, edge_attr="sheaf_sign": np.eye(len(g)),
-        sheaf_convolution=lambda g, feats, edge_attr="sheaf_sign", alpha=0.1: {k: np.asarray(v) for k, v in feats.items()},
-        sheaf_neural_network=lambda g, feats, layers=2, alpha=0.1, edge_attr="sheaf_sign": {k: np.asarray(v) for k, v in feats.items()},
+        sheaf_convolution=lambda g, feats, edge_attr="sheaf_sign", alpha=0.1: {
+            k: np.asarray(v) for k, v in feats.items()
+        },
+        sheaf_neural_network=lambda g, feats, layers=2, alpha=0.1, edge_attr="sheaf_sign": {
+            k: np.asarray(v) for k, v in feats.items()
+        },
         sheaf_first_cohomology=lambda g, edge_attr="sheaf_sign", tol=1e-5: 2,
         sheaf_first_cohomology_blocksmith=lambda g, edge_attr="sheaf_sign", block_size=40000, tol=1e-5: 3,
         resolve_sheaf_obstruction=lambda g, edge_attr="sheaf_sign", max_iter=10: 1,
         sheaf_consistency_score=lambda g, edge_attr="sheaf_sign": 0.9,
-        sheaf_consistency_score_batched=lambda g, batches, edge_attr="sheaf_sign": [0.1 for _ in batches],
+        sheaf_consistency_score_batched=lambda g, batches, edge_attr="sheaf_sign": [
+            0.1 for _ in batches
+        ],
         spectral_bound_exceeded=lambda g, k, tau, edge_attr="sheaf_sign": True,
     )
     monkeypatch.setitem(sys.modules, "datacreek.analysis.fractal", fake_fractal)
     monkeypatch.setitem(sys.modules, "datacreek.analysis.sheaf", fake_sheaf)
     import networkx as nx
+
     monkeypatch.setattr(nx, "number_connected_components", lambda g: 1)
 
 

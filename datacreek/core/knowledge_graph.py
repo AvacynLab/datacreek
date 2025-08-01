@@ -149,7 +149,9 @@ class ConfigReloader(FileSystemEventHandler):
     def __init__(self, cfg_path: Path) -> None:  # pragma: no cover - heavy
         self.cfg_path = Path(cfg_path).resolve()
 
-    def on_modified(self, event) -> None:  # pragma: no cover - heavy type: ignore[override]
+    def on_modified(
+        self, event
+    ) -> None:  # pragma: no cover - heavy type: ignore[override]
         if Path(event.src_path).resolve() == self.cfg_path:
             try:
                 _load_cleanup()
@@ -279,7 +281,9 @@ class KnowledgeGraph:
             self.graph.nodes[doc_id]["text"] = text
             self.index.add(doc_id, text)
 
-    def add_entity(self, entity_id: str, text: str, source: str | None = None) -> None:  # pragma: no cover - heavy
+    def add_entity(
+        self, entity_id: str, text: str, source: str | None = None
+    ) -> None:  # pragma: no cover - heavy
         """Insert an entity node."""
 
         if self.graph.has_node(entity_id):
@@ -805,7 +809,9 @@ class KnowledgeGraph:
         if chunks:
             self.index.build()
 
-    def cascade_delete_document(self, doc_id: str, driver: object | None = None) -> None:  # pragma: no cover - heavy
+    def cascade_delete_document(
+        self, doc_id: str, driver: object | None = None
+    ) -> None:  # pragma: no cover - heavy
         """Remove ``doc_id`` from the graph, Neo4j and FAISS with tombstone."""
 
         vector = None
@@ -840,7 +846,9 @@ class KnowledgeGraph:
                 self.faiss_index = None
                 self.faiss_ids = None
 
-    def search(self, query: str, node_type: str = "chunk") -> list[str]:  # pragma: no cover - heavy
+    def search(
+        self, query: str, node_type: str = "chunk"
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return node IDs of the given type matching the query.
 
         For chunks we search in the ``text`` attribute while documents are
@@ -1309,7 +1317,9 @@ class KnowledgeGraph:
             if d.get("type") == "chunk" and d.get("emotion") == emotion
         ]
 
-    def chunks_by_modality(self, modality: str) -> list[str]:  # pragma: no cover - heavy
+    def chunks_by_modality(
+        self, modality: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return chunk IDs tagged with ``modality``."""
 
         return [
@@ -1437,7 +1447,9 @@ class KnowledgeGraph:
                     continue
                 self.graph.add_edge(src, tgt, relation="similar_to", similarity=score)
 
-    def deduplicate_chunks(self, similarity: float = 1.0) -> int:  # pragma: no cover - heavy
+    def deduplicate_chunks(
+        self, similarity: float = 1.0
+    ) -> int:  # pragma: no cover - heavy
         """Remove duplicate chunk nodes based on text similarity."""
 
         from difflib import SequenceMatcher
@@ -1764,7 +1776,9 @@ class KnowledgeGraph:
                 added += 1
         return added
 
-    def _merge_entity_nodes(self, target: str, source: str) -> None:  # pragma: no cover - heavy
+    def _merge_entity_nodes(
+        self, target: str, source: str
+    ) -> None:  # pragma: no cover - heavy
         """Merge ``source`` entity into ``target``."""
 
         for pred, _, edata in list(self.graph.in_edges(source, data=True)):
@@ -1882,7 +1896,9 @@ class KnowledgeGraph:
             self.index.build()
         return merged
 
-    def extract_entities(self, model: str | None = "en_core_web_sm") -> None:  # pragma: no cover - heavy
+    def extract_entities(
+        self, model: str | None = "en_core_web_sm"
+    ) -> None:  # pragma: no cover - heavy
         """Run named entity recognition on all chunks and link entities."""
 
         from datacreek.utils.entity_extraction import extract_entities
@@ -1897,7 +1913,9 @@ class KnowledgeGraph:
                 if not self.graph.has_edge(cid, ent):
                     self.link_entity(cid, ent, provenance=data.get("source"))
 
-    def enrich_entity_wikidata(self, entity_id: str) -> None:  # pragma: no cover - heavy
+    def enrich_entity_wikidata(
+        self, entity_id: str
+    ) -> None:  # pragma: no cover - heavy
         """Fetch description from Wikidata and store it on the entity node."""
 
         node = self.graph.nodes.get(entity_id)
@@ -2008,7 +2026,9 @@ class KnowledgeGraph:
             if "relation" in data:
                 data["relation"] = str(data["relation"]).lower()
 
-    def _node_embedding(self, node: str) -> Optional[np.ndarray]:  # pragma: no cover - heavy
+    def _node_embedding(
+        self, node: str
+    ) -> Optional[np.ndarray]:  # pragma: no cover - heavy
         """Return or compute the embedding vector for ``node``."""
 
         data = self.graph.nodes[node]
@@ -2024,7 +2044,9 @@ class KnowledgeGraph:
         data["embedding"] = vec.tolist()
         return vec
 
-    def update_embeddings(self, node_type: str = "chunk") -> None:  # pragma: no cover - heavy
+    def update_embeddings(
+        self, node_type: str = "chunk"
+    ) -> None:  # pragma: no cover - heavy
         """Materialize embeddings for nodes of ``node_type``."""
 
         for n, d in self.graph.nodes(data=True):
@@ -2438,7 +2460,9 @@ class KnowledgeGraph:
         self.graph.graph["gw_entropy"] = H
         return H
 
-    def embedding_entropy(self, node_attr: str = "embedding") -> float:  # pragma: no cover - heavy
+    def embedding_entropy(
+        self, node_attr: str = "embedding"
+    ) -> float:  # pragma: no cover - heavy
         """Return differential entropy of vectors stored under ``node_attr``."""
 
         feats = {
@@ -2476,8 +2500,8 @@ class KnowledgeGraph:
             Burn-in epochs before negative sampling.
         """
 
-        from ..analysis.fractal import poincare_embedding
         from ..analysis import fp8_quantize
+        from ..analysis.fractal import poincare_embedding
 
         emb = poincare_embedding(
             self.graph,
@@ -2590,7 +2614,9 @@ class KnowledgeGraph:
 
         return result
 
-    def hyper_adamic_adar_scores(self) -> Dict[tuple[str, str], float]:  # pragma: no cover - heavy
+    def hyper_adamic_adar_scores(
+        self,
+    ) -> Dict[tuple[str, str], float]:  # pragma: no cover - heavy
         """Return Hyper-Adamic–Adar scores for node pairs.
 
         Hyperedges are nodes of type ``"hyperedge"`` connected to their members.
@@ -3042,7 +3068,9 @@ class KnowledgeGraph:
         for node, vec in latent.items():
             self.graph.nodes[node][write_property] = vec.tolist()
 
-    def prune_embeddings(self, *, tol: float = 1e-3) -> Dict[str, int]:  # pragma: no cover - heavy
+    def prune_embeddings(
+        self, *, tol: float = 1e-3
+    ) -> Dict[str, int]:  # pragma: no cover - heavy
         """Cluster embeddings using :func:`fractal_net_prune`."""
 
         from ..analysis.fractal import fractal_net_prune as _fp
@@ -3131,7 +3159,9 @@ class KnowledgeGraph:
 
         return _sd(self.graph.to_undirected(), times)
 
-    def spectral_entropy(self, normed: bool = True) -> float:  # pragma: no cover - heavy
+    def spectral_entropy(
+        self, normed: bool = True
+    ) -> float:  # pragma: no cover - heavy
         """Return the Shannon entropy of the Laplacian spectrum."""
 
         from ..analysis.fractal import spectral_entropy as _se
@@ -3145,7 +3175,9 @@ class KnowledgeGraph:
 
         return _sg(self.graph.to_undirected(), normed=normed)
 
-    def laplacian_energy(self, normed: bool = True) -> float:  # pragma: no cover - heavy
+    def laplacian_energy(
+        self, normed: bool = True
+    ) -> float:  # pragma: no cover - heavy
         """Return the Laplacian energy of the graph."""
 
         from ..analysis.fractal import laplacian_energy as _le
@@ -3159,7 +3191,9 @@ class KnowledgeGraph:
 
         return _gl(self.graph.to_undirected(), radius=radius)
 
-    def sheaf_laplacian(self, edge_attr: str = "sheaf_sign") -> np.ndarray:  # pragma: no cover - heavy
+    def sheaf_laplacian(
+        self, edge_attr: str = "sheaf_sign"
+    ) -> np.ndarray:  # pragma: no cover - heavy
         """Return the sheaf Laplacian matrix using ``edge_attr`` for signs."""
 
         from ..analysis.sheaf import sheaf_laplacian as _sl
@@ -3203,7 +3237,9 @@ class KnowledgeGraph:
         )
         return {str(n): vec.tolist() for n, vec in result.items()}
 
-    def sheaf_cohomology(self, edge_attr: str = "sheaf_sign", tol: float = 1e-5) -> int:  # pragma: no cover - heavy
+    def sheaf_cohomology(
+        self, edge_attr: str = "sheaf_sign", tol: float = 1e-5
+    ) -> int:  # pragma: no cover - heavy
         """Return dimension of :math:`H^1` for the sheaf defined by ``edge_attr``."""
 
         from ..analysis.sheaf import sheaf_first_cohomology as _sfc
@@ -3232,7 +3268,9 @@ class KnowledgeGraph:
 
         return _rso(self.graph, edge_attr=edge_attr, max_iter=max_iter)
 
-    def sheaf_consistency_score(self, edge_attr: str = "sheaf_sign") -> float:  # pragma: no cover - heavy
+    def sheaf_consistency_score(
+        self, edge_attr: str = "sheaf_sign"
+    ) -> float:  # pragma: no cover - heavy
         """Return a score in [0, 1] measuring sheaf consistency."""
 
         from ..analysis.sheaf import sheaf_consistency_score as _scs
@@ -3270,14 +3308,18 @@ class KnowledgeGraph:
 
         return _sbe(self.graph, k, tau, edge_attr=edge_attr)
 
-    def rollback_gremlin_diff(self, output: str = "rollback.diff") -> str:  # pragma: no cover - heavy
+    def rollback_gremlin_diff(
+        self, output: str = "rollback.diff"
+    ) -> str:  # pragma: no cover - heavy
         """Write diff of the last commit and return its path."""
 
         from ..analysis.rollback import rollback_gremlin_diff as _rgd
 
         return _rgd(Path.cwd(), output)
 
-    def sheaf_checker_sla(self, failures: Iterable[float]) -> float:  # pragma: no cover - heavy
+    def sheaf_checker_sla(
+        self, failures: Iterable[float]
+    ) -> float:  # pragma: no cover - heavy
         """Return MTTR in hours for sheaf checker failures."""
 
         from ..analysis.rollback import SheafSLA as _sla
@@ -3294,7 +3336,9 @@ class KnowledgeGraph:
 
         return neighborhood_to_sentence(self.graph, path)
 
-    def neighborhood_to_sentence(self, path: Iterable) -> str:  # pragma: no cover - heavy
+    def neighborhood_to_sentence(
+        self, path: Iterable
+    ) -> str:  # pragma: no cover - heavy
         """Alias of :meth:`path_to_text` for backward compatibility."""
 
         return self.path_to_text(path)
@@ -3369,14 +3413,18 @@ class KnowledgeGraph:
 
         return _ge(self.graph.to_undirected(), base=base)
 
-    def subgraph_entropy(self, nodes: Iterable, *, base: float = 2.0) -> float:  # pragma: no cover - heavy
+    def subgraph_entropy(
+        self, nodes: Iterable, *, base: float = 2.0
+    ) -> float:  # pragma: no cover - heavy
         """Return entropy of node degrees restricted to ``nodes``."""
 
         from ..analysis.information import subgraph_entropy as _se
 
         return _se(self.graph.to_undirected(), nodes, base=base)
 
-    def subgraph_fractal_dimension(self, nodes: Iterable, radii: Iterable[int]) -> float:
+    def subgraph_fractal_dimension(
+        self, nodes: Iterable, radii: Iterable[int]
+    ) -> float:
         """Compute box-counting fractal dimension for ``nodes``.
 
         The resulting dimension is stored in each node's ``fractal_dim``
@@ -3392,7 +3440,9 @@ class KnowledgeGraph:
             self.graph.nodes[n]["fractal_dim"] = dim
         return dim
 
-    def structural_entropy(self, tau: int, *, base: float = 2.0) -> float:  # pragma: no cover - heavy
+    def structural_entropy(
+        self, tau: int, *, base: float = 2.0
+    ) -> float:  # pragma: no cover - heavy
         """Return structural entropy filtered by triangle threshold ``tau``."""
 
         from ..analysis.information import structural_entropy as _se
@@ -3568,14 +3618,18 @@ class KnowledgeGraph:
         sub = _ps(self.graph.to_undirected(), feats, labels, class_id, radius=radius)
         return sub
 
-    def select_mdl_motifs(self, motifs: Iterable[nx.Graph]) -> List[nx.Graph]:  # pragma: no cover - heavy
+    def select_mdl_motifs(
+        self, motifs: Iterable[nx.Graph]
+    ) -> List[nx.Graph]:  # pragma: no cover - heavy
         """Return motifs that reduce description length."""
 
         from ..analysis.information import select_mdl_motifs as _sel
 
         return _sel(self.graph.to_undirected(), motifs)
 
-    def laplacian_spectrum(self, normed: bool = True) -> np.ndarray:  # pragma: no cover - heavy
+    def laplacian_spectrum(
+        self, normed: bool = True
+    ) -> np.ndarray:  # pragma: no cover - heavy
         """Return the Laplacian eigenvalues of the graph."""
 
         from ..analysis.fractal import laplacian_spectrum as _ls
@@ -3609,7 +3663,9 @@ class KnowledgeGraph:
 
         return _igft(self.graph.to_undirected(), coeffs, normed=normed)
 
-    def persistence_entropy(self, dimension: int = 0) -> float:  # pragma: no cover - heavy
+    def persistence_entropy(
+        self, dimension: int = 0
+    ) -> float:  # pragma: no cover - heavy
         """Return persistence entropy of the graph."""
 
         from ..analysis.fractal import persistence_entropy as _pe
@@ -3617,7 +3673,9 @@ class KnowledgeGraph:
         g = nx.convert_node_labels_to_integers(self.graph.to_undirected())
         return _pe(g, dimension)
 
-    def persistence_diagrams(self, max_dim: int = 2) -> Dict[int, np.ndarray]:  # pragma: no cover - heavy
+    def persistence_diagrams(
+        self, max_dim: int = 2
+    ) -> Dict[int, np.ndarray]:  # pragma: no cover - heavy
         """Return persistence diagrams up to ``max_dim``."""
 
         from ..analysis.fractal import persistence_diagrams as _pd
@@ -3636,7 +3694,9 @@ class KnowledgeGraph:
         g2 = nx.convert_node_labels_to_integers(other)
         return _pwd(g1, g2, dimension=dimension, order=order)
 
-    def topological_signature(self, max_dim: int = 1) -> Dict[str, Any]:  # pragma: no cover - heavy
+    def topological_signature(
+        self, max_dim: int = 1
+    ) -> Dict[str, Any]:  # pragma: no cover - heavy
         """Return persistence diagrams and entropies for ``max_dim``."""
         try:
             diags = self.persistence_diagrams(max_dim=max_dim)
@@ -3656,7 +3716,9 @@ class KnowledgeGraph:
             "entropy": entropies,
         }
 
-    def topological_signature_hash(self, max_dim: int = 1) -> str:  # pragma: no cover - heavy
+    def topological_signature_hash(
+        self, max_dim: int = 1
+    ) -> str:  # pragma: no cover - heavy
         """Return an MD5 hash of the topological signature."""
 
         import hashlib
@@ -3781,7 +3843,9 @@ class KnowledgeGraph:
                 chosen.append(cand)
         return chosen
 
-    def hyperbolic_neighbors(self, node_id: str, k: int = 5) -> List[tuple[str, float]]:  # pragma: no cover - heavy
+    def hyperbolic_neighbors(
+        self, node_id: str, k: int = 5
+    ) -> List[tuple[str, float]]:  # pragma: no cover - heavy
         r"""Return ``k`` nearest neighbors using the Poincar\xe9 distance.
 
         The neighbors are ranked by :math:`d_{\mathbb{B}}(u,v)` between the
@@ -3944,7 +4008,9 @@ class KnowledgeGraph:
         )
         return [str(n) for n in path]
 
-    def dimension_distortion(self, radii: Iterable[int]) -> float:  # pragma: no cover - heavy
+    def dimension_distortion(
+        self, radii: Iterable[int]
+    ) -> float:  # pragma: no cover - heavy
         """Return difference between graph and embedding fractal dimensions.
 
         The fractal dimension of the graph is estimated with
@@ -4014,7 +4080,9 @@ class KnowledgeGraph:
 
         return _ebcd(coords, radii)
 
-    def detect_automorphisms(self, max_count: int = 10) -> List[Dict[str, str]]:  # pragma: no cover - heavy
+    def detect_automorphisms(
+        self, max_count: int = 10
+    ) -> List[Dict[str, str]]:  # pragma: no cover - heavy
         """Return up to ``max_count`` automorphisms as node mappings."""
 
         from ..analysis.symmetry import automorphisms as _auto
@@ -4022,7 +4090,9 @@ class KnowledgeGraph:
         autos = _auto(self.graph.to_undirected(), max_count=max_count)
         return [{str(k): str(v) for k, v in a.items()} for a in autos]
 
-    def automorphism_group_order(self, max_count: int = 100) -> int:  # pragma: no cover - heavy
+    def automorphism_group_order(
+        self, max_count: int = 100
+    ) -> int:  # pragma: no cover - heavy
         """Return the number of automorphisms explored."""
 
         from ..analysis.symmetry import automorphism_group_order as _ago
@@ -4041,7 +4111,9 @@ class KnowledgeGraph:
         str_map = {str(n): int(m) for n, m in mapping.items()}
         return q, str_map
 
-    def mapper_nerve(self, radius: int) -> tuple[nx.Graph, list[set[str]]]:  # pragma: no cover - heavy
+    def mapper_nerve(
+        self, radius: int
+    ) -> tuple[nx.Graph, list[set[str]]]:  # pragma: no cover - heavy
         """Return the Mapper nerve of the graph with balls of ``radius``.
 
         Results are cached per ``radius`` so repeated calls avoid recomputation.
@@ -4075,7 +4147,9 @@ class KnowledgeGraph:
         sets = [{n for n in c} for c in cover]
         return _im(nerve, sets)
 
-    def fractalize_level(self, radius: int) -> tuple[nx.Graph, Dict[str, int]]:  # pragma: no cover - heavy
+    def fractalize_level(
+        self, radius: int
+    ) -> tuple[nx.Graph, Dict[str, int]]:  # pragma: no cover - heavy
         """Return a coarse-grained graph via box covering."""
 
         from ..analysis.fractal import fractalize_graph as _fg
@@ -4149,7 +4223,9 @@ class KnowledgeGraph:
                     current_map[node] = mapping[box]
                     self.graph.nodes[node]["fractal_level"] = level
 
-    def annotate_mdl_levels(self, radii: Iterable[int], *, max_levels: int = 5) -> None:  # pragma: no cover - heavy
+    def annotate_mdl_levels(
+        self, radii: Iterable[int], *, max_levels: int = 5
+    ) -> None:  # pragma: no cover - heavy
         """Annotate nodes with levels from an MDL-guided hierarchy.
 
         The hierarchy is built using :func:`build_mdl_hierarchy` which stops
@@ -4172,7 +4248,9 @@ class KnowledgeGraph:
     # Graph generation utilities
     # ------------------------------------------------------------------
 
-    def generate_graph_rnn_like(self, num_nodes: int, num_edges: int) -> nx.Graph:  # pragma: no cover - heavy
+    def generate_graph_rnn_like(
+        self, num_nodes: int, num_edges: int
+    ) -> nx.Graph:  # pragma: no cover - heavy
         """Return a random graph mimicking GraphRNN output."""
 
         from ..analysis.generation import generate_graph_rnn_like as _gg
@@ -4566,7 +4644,9 @@ class KnowledgeGraph:
     # Structure helpers
     # ------------------------------------------------------------------
 
-    def get_sections_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_sections_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return IDs of sections belonging to ``doc_id`` ordered by sequence."""
 
         edges = [
@@ -4577,7 +4657,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_chunks_for_section(self, section_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_chunks_for_section(
+        self, section_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return chunk IDs under ``section_id`` ordered by sequence."""
 
         edges = [
@@ -4590,7 +4672,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_section_for_chunk(self, chunk_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_section_for_chunk(
+        self, chunk_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return the section containing ``chunk_id`` if any."""
 
         for pred in self.graph.predecessors(chunk_id):
@@ -4598,7 +4682,9 @@ class KnowledgeGraph:
                 return pred
         return None
 
-    def get_next_section(self, section_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_next_section(
+        self, section_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return the section that follows ``section_id`` if any."""
 
         for _, succ, data in self.graph.out_edges(section_id, data=True):
@@ -4615,7 +4701,9 @@ class KnowledgeGraph:
                     return sections[seq + 1]
         return None
 
-    def get_previous_section(self, section_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_previous_section(
+        self, section_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return the section preceding ``section_id`` if any."""
 
         for pred, _, data in self.graph.in_edges(section_id, data=True):
@@ -4649,7 +4737,9 @@ class KnowledgeGraph:
                     return chunks[seq + 1]
         return None
 
-    def get_previous_chunk(self, chunk_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_previous_chunk(
+        self, chunk_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return the chunk preceding ``chunk_id`` if any."""
 
         for pred, _, data in self.graph.in_edges(chunk_id, data=True):
@@ -4666,7 +4756,9 @@ class KnowledgeGraph:
                     return chunks[seq - 1]
         return None
 
-    def get_page_for_chunk(self, chunk_id: str) -> int | None:  # pragma: no cover - heavy
+    def get_page_for_chunk(
+        self, chunk_id: str
+    ) -> int | None:  # pragma: no cover - heavy
         """Return the page number associated with ``chunk_id``."""
 
         node = self.graph.nodes.get(chunk_id)
@@ -4674,7 +4766,9 @@ class KnowledgeGraph:
             return node.get("page")
         return None
 
-    def get_page_for_section(self, section_id: str) -> int | None:  # pragma: no cover - heavy
+    def get_page_for_section(
+        self, section_id: str
+    ) -> int | None:  # pragma: no cover - heavy
         """Return the starting page recorded for ``section_id``."""
 
         node = self.graph.nodes.get(section_id)
@@ -4682,7 +4776,9 @@ class KnowledgeGraph:
             return node.get("page")
         return None
 
-    def get_chunks_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_chunks_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return all chunk IDs that belong to the given document."""
 
         edges = [
@@ -4693,7 +4789,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_images_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_images_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return image IDs associated with ``doc_id`` ordered by sequence."""
 
         edges = [
@@ -4704,7 +4802,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_captions_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_captions_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return caption IDs linked to ``doc_id`` ordered by sequence."""
 
         edges = [
@@ -4715,7 +4815,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_caption_for_image(self, image_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_caption_for_image(
+        self, image_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return caption ID describing ``image_id`` if present."""
 
         for src, tgt, data in self.graph.in_edges(image_id, data=True):
@@ -4723,7 +4825,9 @@ class KnowledgeGraph:
                 return src
         return None
 
-    def get_audios_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_audios_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return audio IDs associated with ``doc_id`` ordered by sequence."""
 
         edges = [
@@ -4734,7 +4838,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_atoms_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_atoms_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return atom IDs that belong to ``doc_id``."""
 
         edges = [
@@ -4745,7 +4851,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_molecules_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_molecules_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return molecule IDs that belong to ``doc_id``."""
 
         edges = [
@@ -4756,7 +4864,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_atoms_for_molecule(self, molecule_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_atoms_for_molecule(
+        self, molecule_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return atom IDs contained in ``molecule_id``."""
 
         edges = [
@@ -4769,7 +4879,9 @@ class KnowledgeGraph:
         edges.sort(key=lambda x: x[0])
         return [t for _, t in edges]
 
-    def get_facts_for_entity(self, entity_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_facts_for_entity(
+        self, entity_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return IDs of facts linked to ``entity_id``."""
 
         facts = [
@@ -4780,7 +4892,9 @@ class KnowledgeGraph:
         ]
         return facts
 
-    def get_chunks_for_entity(self, entity_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_chunks_for_entity(
+        self, entity_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return chunk IDs that mention ``entity_id``."""
 
         chunks = [
@@ -4791,7 +4905,9 @@ class KnowledgeGraph:
         ]
         return chunks
 
-    def get_facts_for_chunk(self, chunk_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_facts_for_chunk(
+        self, chunk_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return fact IDs attached to ``chunk_id``."""
 
         facts = [
@@ -4802,7 +4918,9 @@ class KnowledgeGraph:
         ]
         return facts
 
-    def get_facts_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_facts_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return fact IDs related to any chunk of ``doc_id``."""
 
         fact_ids: list[str] = []
@@ -4810,7 +4928,9 @@ class KnowledgeGraph:
             fact_ids.extend(self.get_facts_for_chunk(cid))
         return fact_ids
 
-    def get_chunks_for_fact(self, fact_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_chunks_for_fact(
+        self, fact_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return chunk IDs referencing ``fact_id``."""
 
         chunks = [
@@ -4821,7 +4941,9 @@ class KnowledgeGraph:
         ]
         return chunks
 
-    def get_sections_for_fact(self, fact_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_sections_for_fact(
+        self, fact_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return section IDs referencing ``fact_id`` via a chunk."""
 
         sections: list[str] = []
@@ -4831,7 +4953,9 @@ class KnowledgeGraph:
                 sections.append(sec)
         return sections
 
-    def get_documents_for_fact(self, fact_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_documents_for_fact(
+        self, fact_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return document IDs referencing ``fact_id`` via a chunk."""
 
         docs: list[str] = []
@@ -4851,7 +4975,9 @@ class KnowledgeGraph:
                 pages.append(page)
         return pages
 
-    def get_entities_for_fact(self, fact_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_entities_for_fact(
+        self, fact_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return entity IDs linked as subject or object of ``fact_id``."""
 
         entities = [
@@ -4862,7 +4988,9 @@ class KnowledgeGraph:
         ]
         return entities
 
-    def get_entities_for_chunk(self, chunk_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_entities_for_chunk(
+        self, chunk_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return entity IDs mentioned in ``chunk_id``."""
 
         entities = [
@@ -4873,7 +5001,9 @@ class KnowledgeGraph:
         ]
         return entities
 
-    def get_entities_for_document(self, doc_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_entities_for_document(
+        self, doc_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return entity IDs mentioned anywhere in ``doc_id``."""
 
         entities: list[str] = [
@@ -4893,7 +5023,9 @@ class KnowledgeGraph:
                 out.append(e)
         return out
 
-    def get_document_for_section(self, section_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_document_for_section(
+        self, section_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return the document containing ``section_id`` if any."""
 
         for pred in self.graph.predecessors(section_id):
@@ -4901,7 +5033,9 @@ class KnowledgeGraph:
                 return pred
         return None
 
-    def get_document_for_chunk(self, chunk_id: str) -> str | None:  # pragma: no cover - heavy
+    def get_document_for_chunk(
+        self, chunk_id: str
+    ) -> str | None:  # pragma: no cover - heavy
         """Return the document containing ``chunk_id`` if any."""
 
         for pred in self.graph.predecessors(chunk_id):
@@ -4912,7 +5046,9 @@ class KnowledgeGraph:
             return self.get_document_for_section(section_id)
         return None
 
-    def get_similar_chunks(self, chunk_id: str, k: int = 3) -> list[str]:  # pragma: no cover - heavy
+    def get_similar_chunks(
+        self, chunk_id: str, k: int = 3
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return up to ``k`` chunk IDs most similar to ``chunk_id``."""
 
         if (
@@ -4966,7 +5102,9 @@ class KnowledgeGraph:
             )
         return data
 
-    def get_chunk_neighbors(self, k: int = 3) -> dict[str, list[str]]:  # pragma: no cover - heavy
+    def get_chunk_neighbors(
+        self, k: int = 3
+    ) -> dict[str, list[str]]:  # pragma: no cover - heavy
         """Return the ``k`` nearest chunk neighbors for each chunk."""
 
         raw = self.index.nearest_neighbors(k)
@@ -4980,7 +5118,9 @@ class KnowledgeGraph:
             neighbors[cid] = filtered
         return neighbors
 
-    def get_chunk_neighbors_data(self, k: int = 3) -> dict[str, list[dict[str, Any]]]:  # pragma: no cover - heavy
+    def get_chunk_neighbors_data(
+        self, k: int = 3
+    ) -> dict[str, list[dict[str, Any]]]:  # pragma: no cover - heavy
         """Return neighbor information for each chunk."""
 
         raw = self.index.nearest_neighbors(k, return_distances=True)
@@ -5003,7 +5143,9 @@ class KnowledgeGraph:
             out[cid] = data
         return out
 
-    def get_similar_sections(self, section_id: str, k: int = 3) -> list[str]:  # pragma: no cover - heavy
+    def get_similar_sections(
+        self, section_id: str, k: int = 3
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return up to ``k`` section IDs similar to ``section_id``."""
 
         if (
@@ -5029,7 +5171,9 @@ class KnowledgeGraph:
                 break
         return neighbors
 
-    def get_similar_documents(self, doc_id: str, k: int = 3) -> list[str]:  # pragma: no cover - heavy
+    def get_similar_documents(
+        self, doc_id: str, k: int = 3
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return up to ``k`` document IDs similar to ``doc_id``."""
 
         if (
@@ -5086,7 +5230,9 @@ class KnowledgeGraph:
 
         return context
 
-    def get_documents_for_entity(self, entity_id: str) -> list[str]:  # pragma: no cover - heavy
+    def get_documents_for_entity(
+        self, entity_id: str
+    ) -> list[str]:  # pragma: no cover - heavy
         """Return document IDs where ``entity_id`` is mentioned."""
 
         docs: set[str] = set()
@@ -5104,7 +5250,9 @@ class KnowledgeGraph:
                     docs.add(pred)
         return list(docs)
 
-    def get_pages_for_entity(self, entity_id: str) -> list[int]:  # pragma: no cover - heavy
+    def get_pages_for_entity(
+        self, entity_id: str
+    ) -> list[int]:  # pragma: no cover - heavy
         """Return page numbers mentioning ``entity_id`` via chunks."""
 
         pages: list[int] = []
@@ -5140,7 +5288,9 @@ class KnowledgeGraph:
             matches.append(node)
         return matches
 
-    def haa_link_score(self, driver: "Driver", a_id: str, b_id: str) -> float | None:  # pragma: no cover - heavy
+    def haa_link_score(
+        self, driver: "Driver", a_id: str, b_id: str
+    ) -> float | None:  # pragma: no cover - heavy
         """Return Hyper-Adamic–Adar score between two nodes from Neo4j.
 
         The Cypher query uses a composite index on ``(startNodeId, endNodeId)``
@@ -5223,7 +5373,9 @@ class KnowledgeGraph:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "KnowledgeGraph":  # pragma: no cover - heavy
+    def from_dict(
+        cls, data: Dict[str, Any]
+    ) -> "KnowledgeGraph":  # pragma: no cover - heavy
         """Rebuild a :class:`KnowledgeGraph` from ``data``."""
 
         kg = cls()
@@ -5284,7 +5436,7 @@ class KnowledgeGraph:
         """Ensure full-text index on ``Subgraph.fractal_dim`` exists."""
 
         query = (
-            'CALL db.index.fulltext.createNodeIndex('
+            "CALL db.index.fulltext.createNodeIndex("
             '"idx_fractal", ["Subgraph"], ["fractal_dim"])'
         )
         with driver.session() as session:

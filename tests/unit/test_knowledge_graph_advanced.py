@@ -1,4 +1,5 @@
 import pytest
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -66,7 +67,9 @@ def test_structure_helpers_and_queries():
 def test_embeddings_and_centrality():
     kg = build_graph()
     try:
-        kg.compute_node2vec_embeddings(dimensions=2, walk_length=2, num_walks=2, workers=1, seed=0)
+        kg.compute_node2vec_embeddings(
+            dimensions=2, walk_length=2, num_walks=2, workers=1, seed=0
+        )
     except Exception:
         pytest.skip("node2vec failed")
     assert any("embedding" in d for d in kg.graph.nodes.values())
@@ -76,5 +79,7 @@ def test_embeddings_and_centrality():
     kg.summarize_communities()
     kg.cluster_entities(n_clusters=1)
     kg.summarize_entity_groups()
-    kg.compute_poincare_embeddings(dim=2, negative=1, epochs=1, learning_rate=0.1, burn_in=1)
+    kg.compute_poincare_embeddings(
+        dim=2, negative=1, epochs=1, learning_rate=0.1, burn_in=1
+    )
     assert any("poincare_embedding" in d for d in kg.graph.nodes.values())

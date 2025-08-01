@@ -1,6 +1,7 @@
+import builtins
 import sys
 import types
-import builtins
+
 import pytest
 
 from datacreek.parsers.whisper_audio_parser import WhisperAudioParser, matmul_8bit

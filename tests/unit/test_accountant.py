@@ -1,4 +1,5 @@
 import math
+
 import pytest
 
 from datacreek.dp import accountant as acc

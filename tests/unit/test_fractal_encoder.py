@@ -1,6 +1,7 @@
-import numpy as np
 import sys
 import types
+
+import numpy as np
 
 import datacreek.analysis.fractal_encoder as fe
 from datacreek.analysis.fractal_encoder import online_pca_reduce

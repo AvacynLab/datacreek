@@ -1,5 +1,7 @@
 import types
+
 import numpy as np
+
 import datacreek.analysis.hybrid_ann as ha
 
 
@@ -10,12 +12,15 @@ def fake_faiss():
         def __init__(self, d):
             self.d = d
             self.xb = None
+
         def add(self, xb):
             self.xb = np.asarray(xb, dtype=np.float32)
+
         def search(self, xq, k):
             scores = np.dot(np.asarray(xq, dtype=np.float32), self.xb.T)
             idx = np.argsort(-scores, axis=1)[:, :k]
             return scores, idx
+
     class IndexIVFPQ(IndexFlatIP):
         def __init__(self, quantizer, d, nlist, m, nbits):
             super().__init__(d)
@@ -23,20 +28,26 @@ def fake_faiss():
             self.nprobe = 0
             self.nprobe_multi = []
             self.nsq = m
+
         def train(self, xb):
             pass
+
     class IndexHNSWFlat(IndexFlatIP):
         def __init__(self, d, M):
             super().__init__(d)
             self.hnsw = types.SimpleNamespace(efSearch=0)
+
     def index_cpu_to_gpu(res, dev, index):
         return index
+
     def read_index(path):
         idx = IndexFlatIP(2)
         idx.pq = types.SimpleNamespace(M=4)
         return idx
+
     def get_num_gpus():
         return 0
+
     ns.IndexFlatIP = IndexFlatIP
     ns.IndexIVFPQ = IndexIVFPQ
     ns.IndexHNSWFlat = IndexHNSWFlat

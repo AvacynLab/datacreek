@@ -41,28 +41,28 @@ def test_governance_metrics_combines_functions(monkeypatch):
     calls = {}
 
     def fake_corr(x, y):
-        calls['corr'] = True
+        calls["corr"] = True
         return 0.1
 
     def fake_rad(x):
-        calls['rad'] = True
+        calls["rad"] = True
         return 0.2
 
     def fake_bias(*a):
-        calls['bias'] = True
+        calls["bias"] = True
         return 0.3
 
-    monkeypatch.setattr(governance, 'alignment_correlation', fake_corr)
-    monkeypatch.setattr(governance, 'average_hyperbolic_radius', fake_rad)
-    monkeypatch.setattr(governance, 'scale_bias_wasserstein', fake_bias)
+    monkeypatch.setattr(governance, "alignment_correlation", fake_corr)
+    monkeypatch.setattr(governance, "average_hyperbolic_radius", fake_rad)
+    monkeypatch.setattr(governance, "scale_bias_wasserstein", fake_bias)
 
     res = governance.governance_metrics({}, {}, {})
     assert res == {
-        'alignment_corr': 0.1,
-        'hyperbolic_radius': 0.2,
-        'bias_wasserstein': 0.3,
+        "alignment_corr": 0.1,
+        "hyperbolic_radius": 0.2,
+        "bias_wasserstein": 0.3,
     }
-    assert calls == {'corr': True, 'rad': True, 'bias': True}
+    assert calls == {"corr": True, "rad": True, "bias": True}
 
 
 def test_mitigate_bias_wasserstein():

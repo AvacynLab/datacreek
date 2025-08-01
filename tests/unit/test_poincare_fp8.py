@@ -1,8 +1,8 @@
 import numpy as np
 
-from datacreek.core.knowledge_graph import KnowledgeGraph
 import datacreek.analysis.fractal as frac
 from datacreek.analysis.compression import fp8_dequantize
+from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
 def test_poincare_fp8(monkeypatch):

@@ -1,7 +1,9 @@
+import sys
+import types
+
 import networkx as nx
 import numpy as np
-import types
-import sys
+
 from datacreek.core.knowledge_graph import KnowledgeGraph
 
 
@@ -42,6 +44,7 @@ def test_auto_tool_calls_all():
     assert res["n1"].endswith("(one)]")
     assert res["n2"].endswith("(two)]")
 
+
 def test_information_and_threshold(monkeypatch):
     kg = KnowledgeGraph()
     kg.add_document("d1", "src")
@@ -51,10 +54,13 @@ def test_information_and_threshold(monkeypatch):
     kg.graph.nodes["c1"]["embedding"] = [1.0, 0.0]
     kg.graph.nodes["c2"]["embedding"] = [0.0, 1.0]
     labels = {"c1": 0, "c2": 1}
-    dummy = types.SimpleNamespace(LogisticRegression=lambda max_iter=1000, n_jobs=1: types.SimpleNamespace(
-        fit=lambda X, y: None,
-        predict_proba=lambda X: np.ones((len(X), len(set(labels.values())))) / len(set(labels.values()))
-    ))
+    dummy = types.SimpleNamespace(
+        LogisticRegression=lambda max_iter=1000, n_jobs=1: types.SimpleNamespace(
+            fit=lambda X, y: None,
+            predict_proba=lambda X: np.ones((len(X), len(set(labels.values()))))
+            / len(set(labels.values())),
+        )
+    )
     monkeypatch.setitem(sys.modules, "sklearn.linear_model", dummy)
     loss = kg.graph_information_bottleneck(labels)
     assert loss > 0

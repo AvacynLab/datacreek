@@ -35,6 +35,8 @@ def test_svgp_ei_propose_wrappers(monkeypatch):
     monkeypatch.setattr("datacreek.analysis.autotune.svgp_ei_propose", fake)
     ds = DatasetBuilder(DatasetType.TEXT)
     ds.graph = kg
-    vec = ds.svgp_ei_propose([([0.0, 0.0], 1.0)], [(0.0, 1.0), (0.0, 1.0)], m=10, n_samples=20)
+    vec = ds.svgp_ei_propose(
+        [([0.0, 0.0], 1.0)], [(0.0, 1.0), (0.0, 1.0)], m=10, n_samples=20
+    )
     assert called["args"][3] == 10
     assert isinstance(vec, list) and len(vec) == 2

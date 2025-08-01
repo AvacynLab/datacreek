@@ -46,7 +46,9 @@ class QAGenerator(BaseGenerator):
         super().__init__(client, config_path, kg=kg, config_overrides=config_overrides)
         self.curate_config = get_curate_settings(self.config)
 
-    def generate_summary(self, document_text: str, *, verbose: bool | None = None) -> str:
+    def generate_summary(
+        self, document_text: str, *, verbose: bool | None = None
+    ) -> str:
         """Generate a summary of the document"""
         if verbose is None:
             verbose = logger.isEnabledFor(logging.DEBUG)
@@ -158,15 +160,27 @@ class QAGenerator(BaseGenerator):
             # index chunks in knowledge graph if provided
             for i, chunk in enumerate(chunks):
                 cid = f"chunk-{i}"
-                self.kg.add_document("doc", source="inline") if "doc" not in self.kg.graph else None
+                (
+                    self.kg.add_document("doc", source="inline")
+                    if "doc" not in self.kg.graph
+                    else None
+                )
                 self.kg.add_chunk("doc", cid, chunk)
                 chunk_meta.append((cid, chunk, self.kg.graph.nodes[cid].get("source")))
 
         if query and self.kg:
             selected_ids = self.kg.search_embeddings(query, k=top_k)
-            chunks = [self.kg.graph.nodes[c]["text"] for c in selected_ids if c in self.kg.graph]
+            chunks = [
+                self.kg.graph.nodes[c]["text"]
+                for c in selected_ids
+                if c in self.kg.graph
+            ]
             chunk_meta = [
-                (cid, self.kg.graph.nodes[cid]["text"], self.kg.graph.nodes[cid].get("source"))
+                (
+                    cid,
+                    self.kg.graph.nodes[cid]["text"],
+                    self.kg.graph.nodes[cid].get("source"),
+                )
                 for cid in selected_ids
                 if cid in self.kg.graph
             ]
@@ -299,18 +313,25 @@ class QAGenerator(BaseGenerator):
             facts_text = None
 
         # Process in batches
-        batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
+        batches = [
+            qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)
+        ]
 
         rated_pairs: List[QAPair] = []
         total_score = 0.0
 
         from datacreek.utils.batch import async_process_batches, process_batches
 
-        with progress_context("Rating QA pairs", len(batches)) as (progress, rating_task):
+        with progress_context("Rating QA pairs", len(batches)) as (
+            progress,
+            rating_task,
+        ):
 
             message_batches = []
             for batch in batches:
-                batch_dicts = [p.to_dict() if isinstance(p, QAPair) else p for p in batch]
+                batch_dicts = [
+                    p.to_dict() if isinstance(p, QAPair) else p for p in batch
+                ]
                 batch_json = json.dumps(batch_dicts, indent=2)
                 if facts_text and "{facts}" in rating_prompt_template:
                     rating_prompt = rating_prompt_template.format(
@@ -343,7 +364,10 @@ class QAGenerator(BaseGenerator):
 
             for idx, response in enumerate(responses):
                 try:
-                    orig_items = [p.to_dict() if isinstance(p, QAPair) else p for p in batches[idx]]
+                    orig_items = [
+                        p.to_dict() if isinstance(p, QAPair) else p
+                        for p in batches[idx]
+                    ]
                     rated_batch = parse_ratings(response, orig_items)
                     for pair in rated_batch:
                         if pair.rating is not None:
@@ -359,7 +383,9 @@ class QAGenerator(BaseGenerator):
         metrics = {
             "total": len(qa_pairs),
             "filtered": len(rated_pairs),
-            "retention_rate": round(len(rated_pairs) / len(qa_pairs), 2) if qa_pairs else 0,
+            "retention_rate": (
+                round(len(rated_pairs) / len(qa_pairs), 2) if qa_pairs else 0
+            ),
             "avg_score": round(total_score / len(qa_pairs), 1) if qa_pairs else 0,
         }
 
@@ -407,16 +433,23 @@ class QAGenerator(BaseGenerator):
             rating_prompt_template = get_prompt(self.config, "qa_rating")
             facts_text = None
 
-        batches = [qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)]
+        batches = [
+            qa_pairs[i : i + batch_size] for i in range(0, len(qa_pairs), batch_size)
+        ]
         rated_pairs: List[QAPair] = []
         total_score = 0.0
 
         from datacreek.utils.batch import async_process_batches
 
-        with progress_context("Rating QA pairs", len(batches)) as (progress, rating_task):
+        with progress_context("Rating QA pairs", len(batches)) as (
+            progress,
+            rating_task,
+        ):
             message_batches = []
             for batch in batches:
-                batch_dicts = [p.to_dict() if isinstance(p, QAPair) else p for p in batch]
+                batch_dicts = [
+                    p.to_dict() if isinstance(p, QAPair) else p for p in batch
+                ]
                 batch_json = json.dumps(batch_dicts, indent=2)
                 if facts_text and "{facts}" in rating_prompt_template:
                     rating_prompt = rating_prompt_template.format(
@@ -437,7 +470,10 @@ class QAGenerator(BaseGenerator):
 
             for idx, response in enumerate(responses):
                 try:
-                    orig_items = [p.to_dict() if isinstance(p, QAPair) else p for p in batches[idx]]
+                    orig_items = [
+                        p.to_dict() if isinstance(p, QAPair) else p
+                        for p in batches[idx]
+                    ]
                     rated_batch = parse_ratings(response, orig_items)
                     for pair in rated_batch:
                         if pair.rating is not None:
@@ -452,7 +488,9 @@ class QAGenerator(BaseGenerator):
         metrics = {
             "total": len(qa_pairs),
             "filtered": len(rated_pairs),
-            "retention_rate": round(len(rated_pairs) / len(qa_pairs), 2) if qa_pairs else 0,
+            "retention_rate": (
+                round(len(rated_pairs) / len(qa_pairs), 2) if qa_pairs else 0
+            ),
             "avg_score": round(total_score / len(qa_pairs), 1) if qa_pairs else 0,
         }
 
@@ -477,7 +515,10 @@ class QAGenerator(BaseGenerator):
 
         return asyncio.run(
             self._process_document_impl(
-                document_text, num_pairs=num_pairs, verbose=verbose, use_async=async_mode
+                document_text,
+                num_pairs=num_pairs,
+                verbose=verbose,
+                use_async=async_mode,
             )
         )
 
@@ -502,7 +543,9 @@ class QAGenerator(BaseGenerator):
         use_async: bool = False,
     ) -> "QAGenerationResult":
         if use_async:
-            summary = await asyncio.to_thread(self.generate_summary, document_text, verbose=verbose)
+            summary = await asyncio.to_thread(
+                self.generate_summary, document_text, verbose=verbose
+            )
         else:
             summary = self.generate_summary(document_text, verbose=verbose)
 

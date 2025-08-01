@@ -9,18 +9,18 @@ from datacreek.analysis import rollback
 
 
 def _init_repo(tmpdir):
-    subprocess.check_call(['git', 'init'], cwd=tmpdir)
+    subprocess.check_call(["git", "init"], cwd=tmpdir)
     # config user
-    subprocess.check_call(['git', 'config', 'user.email', 'a@b.c'], cwd=tmpdir)
-    subprocess.check_call(['git', 'config', 'user.name', 'test'], cwd=tmpdir)
+    subprocess.check_call(["git", "config", "user.email", "a@b.c"], cwd=tmpdir)
+    subprocess.check_call(["git", "config", "user.name", "test"], cwd=tmpdir)
     # first commit
-    (Path(tmpdir) / 'file.txt').write_text('hello')
-    subprocess.check_call(['git', 'add', 'file.txt'], cwd=tmpdir)
-    subprocess.check_call(['git', 'commit', '-m', 'first'], cwd=tmpdir)
+    (Path(tmpdir) / "file.txt").write_text("hello")
+    subprocess.check_call(["git", "add", "file.txt"], cwd=tmpdir)
+    subprocess.check_call(["git", "commit", "-m", "first"], cwd=tmpdir)
     # second commit
-    (Path(tmpdir) / 'file.txt').write_text('world')
-    subprocess.check_call(['git', 'add', 'file.txt'], cwd=tmpdir)
-    subprocess.check_call(['git', 'commit', '-m', 'second'], cwd=tmpdir)
+    (Path(tmpdir) / "file.txt").write_text("world")
+    subprocess.check_call(["git", "add", "file.txt"], cwd=tmpdir)
+    subprocess.check_call(["git", "commit", "-m", "second"], cwd=tmpdir)
 
 
 def test_rollback_gremlin_diff(tmp_path):
@@ -28,7 +28,7 @@ def test_rollback_gremlin_diff(tmp_path):
     diff_path = rollback.rollback_gremlin_diff(str(tmp_path))
     assert os.path.isfile(diff_path)
     content = open(diff_path).read()
-    assert '-hello' in content and '+world' in content
+    assert "-hello" in content and "+world" in content
 
 
 def test_sheaf_sla():
@@ -40,4 +40,3 @@ def test_sheaf_sla():
     assert sla.sla_met()
     sla.record_failure(now + 3 * 3600)
     assert not sla.sla_met()
-

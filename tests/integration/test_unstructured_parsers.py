@@ -30,7 +30,9 @@ def test_html_parser_unstructured(monkeypatch, tmp_path):
     f = tmp_path / "page.html"
     f.write_text("<html><body><p>Hello</p></body></html>")
     module = types.ModuleType("unstructured.partition.html")
-    module.partition_html = lambda url=None, filename=None: [types.SimpleNamespace(text="hi html")]
+    module.partition_html = lambda url=None, filename=None: [
+        types.SimpleNamespace(text="hi html")
+    ]
     monkeypatch.setitem(sys.modules, "unstructured.partition.html", module)
     parser = HTMLParser()
     assert parser.parse(str(f), use_unstructured=True) == "hi html"

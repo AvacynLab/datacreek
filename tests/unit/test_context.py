@@ -1,5 +1,6 @@
-from datacreek.core.context import AppContext
 from pathlib import Path
+
+from datacreek.core.context import AppContext
 from datacreek.utils.config import DEFAULT_CONFIG_PATH
 
 
