@@ -106,6 +106,11 @@ if Gauge is not None:
         "blip_skipped_total",
         "Images skipped due to phash deduplication",
     )
+    ingest_total = _metric(
+        Counter,
+        "ingest_total",
+        "Total ingest attempts",
+    )
     ingest_validation_fail_total = _metric(
         Counter,
         "ingest_validation_fail_total",
@@ -154,6 +159,7 @@ else:  # pragma: no cover - optional dependency missing
     whisper_fallback_total = None  # type: ignore
     blip_called_total = None  # type: ignore
     blip_skipped_total = None  # type: ignore
+    ingest_total = None  # type: ignore
     ingest_validation_fail_total = None  # type: ignore
     ingest_rate_limited_total = None  # type: ignore
     ingest_queue_fill_ratio = None  # type: ignore
@@ -185,6 +191,7 @@ _METRICS = {
     "whisper_fallback_total": whisper_fallback_total,
     "blip_called_total": blip_called_total,
     "blip_skipped_total": blip_skipped_total,
+    "ingest_total": ingest_total,
     "ingest_validation_fail_total": ingest_validation_fail_total,
     "ingest_rate_limited_total": ingest_rate_limited_total,
     "ingest_queue_fill_ratio": ingest_queue_fill_ratio,
