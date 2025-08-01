@@ -47,6 +47,7 @@ from .delta_export import delta_optimize, delta_vacuum, export_delta, lakefs_com
 from .gitinfo import get_commit_hash
 from .kafka_queue import enqueue_ingest
 from .rate_limit import consume_token
+from .schema_evolution import add_column_if_missing
 
 try:  # optional dependency on networkx
     from .graph_text import graph_to_text, neighborhood_to_sentence, subgraph_to_text
@@ -184,6 +185,7 @@ __all__ = [
     "ingest_has_capacity",
     "consume_token",
     "enqueue_ingest",
+    "add_column_if_missing",
     "propose_merge_split",
     "record_feedback",
     "fine_tune_from_feedback",

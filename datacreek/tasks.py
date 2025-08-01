@@ -57,6 +57,7 @@ from pydantic import ValidationError
 
 from datacreek.analysis.monitoring import (
     ingest_rate_limited_total,
+    ingest_total,
     ingest_validation_fail_total,
 )
 from datacreek.backends import (
@@ -298,6 +299,8 @@ def dataset_ingest_task(  # pragma: no cover - heavy
             ingest_rate_limited_total.inc()
         backpressure.release_slot()
         raise RuntimeError("rate limit exceeded")
+    if ingest_total is not None:
+        ingest_total.inc()
     driver = get_neo4j_driver()
     storage = get_s3_storage()
     ds = DatasetBuilder.from_redis(client, f"dataset:{name}", driver)
@@ -313,10 +316,40 @@ def dataset_ingest_task(  # pragma: no cover - heavy
     ext = Path(path).suffix.lower()
     try:
         if ext in {".jpg", ".jpeg", ".png", ".gif"}:
+            if not {"width", "height", "blur_score"} <= opt_args.keys():
+                try:
+                    from datacreek.utils.quality_metrics import blur_score as _bs
+                    from datacreek.utils.quality_metrics import image_dimensions
+
+                    w, h = image_dimensions(path)
+                    opt_args.setdefault("width", w)
+                    opt_args.setdefault("height", h)
+                    opt_args.setdefault("blur_score", _bs(path))
+                except Exception:
+                    pass
             ImageIngest(path=path, **opt_args)
         elif ext in {".wav", ".mp3", ".flac"}:
+            if not {"sample_rate", "duration", "snr"} <= opt_args.keys():
+                try:
+                    from datacreek.utils.quality_metrics import audio_metrics
+
+                    sr, dur, snr = audio_metrics(path)
+                    opt_args.setdefault("sample_rate", sr)
+                    opt_args.setdefault("duration", dur)
+                    opt_args.setdefault("snr", snr)
+                except Exception:
+                    pass
             AudioIngest(path=path, **opt_args)
         elif ext == ".pdf":
+            if "entropy" not in opt_args:
+                try:
+                    from datacreek.utils.quality_metrics import text_entropy
+
+                    with open(path, "rb") as fh:
+                        text = fh.read().decode("latin1", "ignore")
+                    opt_args["entropy"] = text_entropy(text)
+                except Exception:
+                    pass
             PdfIngest(path=path, **opt_args)
         else:
             BaseIngest(path=path)
