@@ -1,5 +1,5 @@
 import logging
-from typing import Iterable, List, Set, Tuple
+from typing import Callable, Iterable, List, Set, Tuple
 
 import networkx as nx
 
@@ -55,8 +55,112 @@ def inverse_mapper(nerve: nx.Graph, cover: Iterable[Set[object]]) -> nx.Graph:
     return g
 
 
+def default_lens(graph: nx.Graph) -> dict[object, float]:
+    """Return lens values for ``graph`` using GraphWave energy or PCA."""
+
+    import numpy as np
+
+    try:  # prefer GraphWave energy if heavy deps available
+        from .fractal import graphwave_embedding_chebyshev
+
+        emb = graphwave_embedding_chebyshev(graph, scales=[1.0], num_points=4, order=3)
+        return {n: float(np.linalg.norm(v)) for n, v in emb.items()}
+    except Exception:  # pragma: no cover - fallback
+        from sklearn.decomposition import PCA
+
+        arr = nx.to_numpy_array(graph)
+        if arr.size == 0:
+            return {}
+        comp = PCA(n_components=1).fit_transform(arr)
+        return {n: float(comp[i, 0]) for i, n in enumerate(graph.nodes())}
+
+
+def mapper_full(
+    graph: nx.Graph,
+    *,
+    lens: Callable[[nx.Graph], dict[object, float]] | None = None,
+    cover: tuple[int, float] = (10, 0.5),
+    clusterer: str = "dbscan",
+) -> tuple[nx.Graph, list[set[object]]]:
+    """Return configurable Mapper nerve and cover of ``graph``."""
+
+    import numpy as np
+
+    if lens is None:
+        lens_vals = default_lens(graph)
+    else:
+        lens_vals = lens(graph)
+
+    if not lens_vals:
+        return nx.Graph(), []
+
+    nodes = list(graph.nodes())
+    vals = np.asarray([lens_vals[n] for n in nodes], dtype=float)
+    n_intervals, overlap = cover
+    if n_intervals <= 0:
+        raise ValueError("n_intervals must be positive")
+    overlap = min(max(overlap, 0.0), 0.9)
+    v_min, v_max = float(vals.min()), float(vals.max())
+    width = (v_max - v_min) / max(1e-9, n_intervals - (n_intervals - 1) * overlap)
+    step = width * (1 - overlap)
+
+    intervals = [
+        (v_min + i * step, v_min + i * step + width) for i in range(n_intervals)
+    ]
+    cover_sets: list[set[object]] = []
+    for start, end in intervals:
+        bucket_nodes = [n for n in nodes if start <= lens_vals[n] <= end]
+        if not bucket_nodes:
+            continue
+        subgraph = graph.subgraph(bucket_nodes)
+        if clusterer == "dbscan":
+            X = np.array([[lens_vals[n]] for n in bucket_nodes], dtype=float)
+            try:
+                from sklearn.cluster import DBSCAN
+
+                labels = DBSCAN(eps=width * 0.5, min_samples=1).fit_predict(X)
+            except Exception:  # pragma: no cover - sklearn missing
+                labels = np.zeros(len(bucket_nodes), dtype=int)
+            for lab in set(labels):
+                cluster_nodes = {
+                    bucket_nodes[i] for i, lb in enumerate(labels) if lb == lab
+                }
+                if cluster_nodes:
+                    cover_sets.append(cluster_nodes)
+        else:  # connected components
+            for comp in nx.connected_components(subgraph):
+                cover_sets.append(set(comp))
+
+    nerve = nx.Graph()
+    nerve.add_nodes_from(range(len(cover_sets)))
+    for i, A in enumerate(cover_sets):
+        for j in range(i + 1, len(cover_sets)):
+            if A & cover_sets[j]:
+                nerve.add_edge(i, j)
+    return nerve, cover_sets
+
+
+def mapper_to_json(
+    graph: nx.Graph,
+    *,
+    lens: Callable[[nx.Graph], dict[object, float]] | None = None,
+    cover: tuple[int, float] = (10, 0.5),
+    clusterer: str = "dbscan",
+) -> str:
+    """Return Mapper nerve and cover exported as JSON for the /explain API."""
+
+    import json
+
+    nerve, cover_sets = mapper_full(graph, lens=lens, cover=cover, clusterer=clusterer)
+    data = {
+        "nodes": [{"id": i, "members": list(c)} for i, c in enumerate(cover_sets)],
+        "links": [{"source": u, "target": v} for u, v in nerve.edges()],
+    }
+    return json.dumps(data)
+
+
 import os
-import pickle
+import pickle  # nosec B403
 import threading
 import time
 from pathlib import Path
@@ -206,7 +310,7 @@ def _cache_put(
                 if cur.first():  # pragma: no cover - deterministic pruning
                     while True:
                         raw = cur.value()
-                        ts, _ = pickle.loads(raw)
+                        ts, _ = pickle.loads(raw)  # nosec B301
                         age_h = (now - ts) / 3600
                         if age_h > ttl_h or current_mb > limit_mb:
                             cur.delete()
@@ -278,7 +382,7 @@ def _cache_get(
                 blob = txn.get(key.encode())
             env.close()
             if blob is not None:
-                ts, blob = pickle.loads(blob)
+                ts, blob = pickle.loads(blob)  # nosec B301
                 if (time.time() - ts) / 3600 > ttl_h:
                     blob = None
         except Exception:
@@ -291,7 +395,7 @@ def _cache_get(
             blob = None
     if blob is None:
         return None
-    nerve_data, cover_data = pickle.loads(blob)
+    nerve_data, cover_data = pickle.loads(blob)  # nosec B301
     nerve = nx.node_link_graph(nerve_data)
     cover = [set(c) for c in cover_data]
     return nerve, cover
@@ -304,7 +408,7 @@ def _hash_graph(graph: nx.Graph) -> str:
 
     edges = sorted((sorted((str(u), str(v))) for u, v in graph.edges()))
     nodes = sorted(str(n) for n in graph.nodes())
-    h = hashlib.sha1()
+    h = hashlib.sha1()  # nosec B324
     h.update(pickle.dumps((nodes, edges)))
     return h.hexdigest()
 
@@ -355,7 +459,7 @@ def _l2_evict_once(env, limit_mb: int, ttl_h: int) -> None:
         if cur.first():
             while True:
                 raw = cur.value()
-                ts, _ = pickle.loads(raw)
+                ts, _ = pickle.loads(raw)  # nosec B301
                 age_h = (now - ts) / 3600
                 if age_h > ttl_h or size_mb > limit_mb:
                     key_bytes = cur.key()

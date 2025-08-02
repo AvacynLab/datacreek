@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import random
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
@@ -465,23 +466,10 @@ def persistence_entropy(
     return float(entropy.fit_transform([diag])[0])
 
 
-def persistence_diagrams(
-    graph: nx.Graph, max_dim: int = 2
-) -> Dict[int, np.ndarray]:  # pragma: no cover - requires gudhi and heavy computation
-    """Return persistence diagrams of ``graph`` up to ``max_dim`` using the clique complex.
-
-    Parameters
-    ----------
-    graph:
-        Input graph.
-    max_dim:
-        Highest homology dimension for which to compute the diagram.
-
-    Returns
-    -------
-    dict
-        Mapping ``dimension -> array`` with birth-death pairs for each diagram.
-    """
+def _compute_persistence_diagrams(
+    graph: nx.Graph, max_dim: int
+) -> Dict[int, np.ndarray]:
+    """Return persistence diagrams for ``graph`` using a clique filtration."""
 
     st = gd.SimplexTree()
     for node in graph.nodes():
@@ -501,6 +489,35 @@ def persistence_diagrams(
         diag = diag[np.isfinite(diag[:, 1])]
         diags[dim] = diag
     return diags
+
+
+@lru_cache(maxsize=128)
+def _persistence_diagrams_cached(
+    nodes: Tuple[int, ...], edges: Tuple[Tuple[int, int], ...], max_dim: int
+) -> Dict[int, np.ndarray]:
+    """LRU-cached helper keyed by nodes and edges."""
+
+    g = nx.Graph()
+    g.add_nodes_from(nodes)
+    g.add_edges_from(edges)
+    return _compute_persistence_diagrams(g, max_dim)
+
+
+def persistence_diagrams(
+    graph: nx.Graph, max_dim: int = 2
+) -> Dict[int, np.ndarray]:  # pragma: no cover - requires gudhi and heavy computation
+    """Return persistence diagrams of ``graph`` up to ``max_dim`` using the clique complex.
+
+    Results are cached based on the hash of nodes and edges to avoid expensive
+    recomputation on repeated calls.
+    """
+
+    if gd is None:
+        raise RuntimeError("gudhi is required for persistence calculations")
+
+    nodes = tuple(sorted(graph.nodes()))
+    edges = tuple(sorted(tuple(sorted((u, v))) for u, v in graph.edges()))
+    return _persistence_diagrams_cached(nodes, edges, max_dim)
 
 
 def graphwave_embedding(
@@ -963,6 +980,47 @@ def embedding_box_counting_dimension(
             dists = np.linalg.norm(pts[list(remaining | {i})] - pts[i], axis=1)
             cover = {j for j, d in zip(list(remaining | {i}), dists) if d <= r}
             remaining.difference_update(cover)
+            boxes += 1
+        counts.append((float(r), boxes))
+
+    xs = [-math.log(float(r)) for r, _ in counts]
+    ys = [math.log(float(n)) for _, n in counts]
+    if len(xs) < 2:
+        return 0.0, counts
+    slope, _ = np.polyfit(xs, ys, 1)
+    return float(slope), counts
+
+
+def latent_box_dimension(
+    coords: Mapping[object, Iterable[float]],
+    radii: Iterable[float],
+    *,
+    sample: int = 512,
+) -> Tuple[float, List[Tuple[float, int]]]:
+    """Return fast box-counting dimension of embedding coordinates.
+
+    The coordinates are optionally subsampled to ``sample`` points and covered
+    using a KD-tree for efficiency.
+    """
+
+    from scipy.spatial import cKDTree
+
+    pts = np.asarray(list(coords.values()), dtype=float)
+    if pts.size == 0:
+        return 0.0, []
+    if pts.shape[0] > sample:
+        idx = np.random.choice(pts.shape[0], sample, replace=False)
+        pts = pts[idx]
+    tree = cKDTree(pts)
+    counts: list[tuple[float, int]] = []
+    for r in radii:
+        seen = set()
+        boxes = 0
+        for i in range(len(pts)):
+            if i in seen:
+                continue
+            neighbors = tree.query_ball_point(pts[i], r)
+            seen.update(neighbors)
             boxes += 1
         counts.append((float(r), boxes))
 
