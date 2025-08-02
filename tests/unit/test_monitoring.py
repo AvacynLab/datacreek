@@ -1,88 +1,50 @@
-import importlib
 import sys
 import types
+from importlib import reload
 
 import pytest
 
 
+def test_init_wandb(monkeypatch):
+    dummy = types.SimpleNamespace(
+        init=lambda **kwargs: types.SimpleNamespace(kwargs=kwargs)
+    )
+    monkeypatch.setitem(sys.modules, "wandb", dummy)
+    from training import monitoring
+
+    reload(monitoring)
+    run = monitoring.init_wandb(project="proj", entity="me")
+    assert run.kwargs["project"] == "proj" and run.kwargs["entity"] == "me"
+
+
 class DummyGauge:
-    def __init__(self, name, desc, *, labelnames=None, registry=None):
+    def __init__(self, name, desc):
         self.name = name
         self.desc = desc
-        self.labelnames = labelnames
-        self.registry = registry
         self.value = None
-        self.labels_dict = None
-        if registry is not None:
-            registry.store[name] = None
-
-    def labels(self, **labels):
-        self.labels_dict = labels
-        return self
 
     def set(self, value):
         self.value = value
-        if self.registry is not None:
-            self.registry.store[self.name] = value
 
 
-class DummyRegistry:
-    def __init__(self):
-        self.store = {}
+def test_prometheus_logger(monkeypatch):
+    dummy = types.SimpleNamespace(Gauge=DummyGauge, start_http_server=lambda port: None)
+    monkeypatch.setitem(sys.modules, "prometheus_client", dummy)
+    from training import monitoring
+
+    reload(monitoring)
+    logger = monitoring.PrometheusLogger()
+    logger.log(training_loss=0.5, val_metric=0.4, gpu_vram_bytes=1.0, reward_avg=0.7)
+    assert logger.training_loss.value == 0.5
+    assert logger.val_metric.value == 0.4
+    assert logger.gpu_vram_bytes.value == 1.0
+    assert logger.reward_avg.value == 0.7
 
 
-@pytest.fixture
-def monitoring(monkeypatch):
-    """Reload monitoring module with dummy prometheus client."""
-    ports = []
-    pushes = []
+def test_early_stopping():
+    from training.monitoring import EarlyStopping
 
-    def start_http_server(port):
-        ports.append(port)
-
-    def push_to_gateway(gateway, job, registry):
-        pushes.append((gateway, job, registry.store.copy()))
-
-    prom = types.SimpleNamespace(
-        REGISTRY=types.SimpleNamespace(_names_to_collectors={}),
-        CollectorRegistry=DummyRegistry,
-        Counter=DummyGauge,
-        Gauge=DummyGauge,
-        push_to_gateway=push_to_gateway,
-        start_http_server=start_http_server,
-    )
-    monkeypatch.setitem(sys.modules, "prometheus_client", prom)
-    # avoid automatic startup during import
-    monkeypatch.setitem(
-        sys.modules,
-        "datacreek.utils.config",
-        types.SimpleNamespace(load_config=lambda: {}),
-    )
-    import datacreek.analysis.monitoring as mon
-
-    mon = importlib.reload(mon)
-    ports.clear()
-    mon._SERVER_STARTED = False
-    return mon, ports, pushes
-
-
-def test_start_metrics_server_idempotent(monitoring):
-    mon, ports, _ = monitoring
-    mon.start_metrics_server(1234)
-    mon.start_metrics_server(1234)
-    assert ports == [1234]
-    assert mon._SERVER_STARTED is True
-    assert all(mon._METRICS[name] is not None for name in mon._METRICS)
-
-
-def test_update_and_push_metrics(monitoring):
-    mon, _, pushes = monitoring
-    mon.start_metrics_server(0)
-    mon.update_metric("ingest_queue_fill_ratio", 0.5)
-    assert mon._METRICS["ingest_queue_fill_ratio"].value == 0.5
-    mon.update_metric("whisper_xrt", 1.1, labels={"device": "cpu"})
-    gauge = mon._METRICS["whisper_xrt"]
-    assert gauge.labels_dict == {"device": "cpu"}
-    assert gauge.value == 1.1
-    mon.push_metrics_gateway({"a": 2.0}, gateway="gw")
-    assert pushes == [("gw", "datacreek", {"a": 2.0})]
+    stopper = EarlyStopping(patience=2)
+    assert not stopper.step(1.0)
+    assert not stopper.step(1.1)
+    assert stopper.step(1.2)
