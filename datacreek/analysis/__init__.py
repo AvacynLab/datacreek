@@ -7,6 +7,7 @@ __all__ = [
     "box_cover",
     "graphwave_embedding",
     "embedding_box_counting_dimension",
+    "latent_box_dimension",
     "colour_box_dimension",
     "mdl_optimal_radius",
     "persistence_diagrams",
@@ -17,6 +18,7 @@ __all__ = [
     "build_fractal_hierarchy",
     "build_mdl_hierarchy",
     "poincare_embedding",
+    "learn_hyperbolic_projection",
     "recenter_embeddings",
     "spectral_dimension",
     "laplacian_spectrum",
@@ -51,6 +53,8 @@ __all__ = [
     "quotient_graph",
     "mapper_nerve",
     "inverse_mapper",
+    "mapper_full",
+    "mapper_to_json",
     "bootstrap_db",
     "bootstrap_sigma_db",
     "fractal_net_prune",
@@ -105,7 +109,17 @@ __all__ = [
     "chebyshev_diag_hutchpp",
     "search_hnsw_pq",
     "graphwave_embedding_gpu",
+    "persistence_image",
+    "persistence_landscape",
+    "persistence_silhouette",
+    "betti_curve",
+    "diagram_entropy",
+    "augment_embeddings_with_persistence",
+    "hypergraph_laplacian",
+    "chebyshev_conv",
     "chebyshev_heat_kernel_gpu",
+    "fast_persistence_diagrams",
+    "sheaf_hyper_bridge_score",
     "explain_to_svg",
 ]
 
@@ -145,6 +159,7 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         "graphwave_entropy",
         "embedding_entropy",
         "embedding_box_counting_dimension",
+        "latent_box_dimension",
         "colour_box_dimension",
         "bootstrap_db",
         "bootstrap_sigma_db",
@@ -247,7 +262,7 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from . import symmetry as _s
 
         return getattr(_s, name)
-    if name in {"mapper_nerve", "inverse_mapper"}:
+    if name in {"mapper_nerve", "inverse_mapper", "mapper_full", "mapper_to_json"}:
         from . import mapper as _m
 
         return getattr(_m, name)
@@ -359,7 +374,17 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         "chebyshev_diag_hutchpp",
         "search_hnsw_pq",
         "graphwave_embedding_gpu",
+        "persistence_image",
+        "persistence_landscape",
+        "persistence_silhouette",
+        "betti_curve",
+        "diagram_entropy",
+        "augment_embeddings_with_persistence",
+        "hypergraph_laplacian",
+        "chebyshev_conv",
         "chebyshev_heat_kernel_gpu",
+        "fast_persistence_diagrams",
+        "sheaf_hyper_bridge_score",
     }:
         from .chebyshev_diag import chebyshev_diag_hutchpp as _cdh
         from .graphwave_bandwidth import estimate_lambda_max as _el
@@ -367,6 +392,16 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from .graphwave_cuda import chebyshev_heat_kernel_gpu as _gwk
         from .graphwave_cuda import graphwave_embedding_gpu as _gwe
         from .hybrid_ann import search_hnsw_pq as _hpq
+        from .hypergraph_conv import chebyshev_conv as _cc
+        from .hypergraph_conv import hypergraph_laplacian as _hl
+        from .sheaf_hyper_bridge import sheaf_hyper_bridge_score as _shb
+        from .tda_fast import fast_persistence_diagrams as _fpd
+        from .tda_vectorize import augment_embeddings_with_persistence as _ap
+        from .tda_vectorize import betti_curve as _bc
+        from .tda_vectorize import diagram_entropy as _de
+        from .tda_vectorize import persistence_image as _pi
+        from .tda_vectorize import persistence_landscape as _pl
+        from .tda_vectorize import persistence_silhouette as _ps
 
         return {
             "estimate_lambda_max": _el,
@@ -374,8 +409,22 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
             "chebyshev_diag_hutchpp": _cdh,
             "search_hnsw_pq": _hpq,
             "graphwave_embedding_gpu": _gwe,
+            "persistence_image": _pi,
+            "persistence_landscape": _pl,
+            "persistence_silhouette": _ps,
+            "betti_curve": _bc,
+            "diagram_entropy": _de,
+            "augment_embeddings_with_persistence": _ap,
+            "hypergraph_laplacian": _hl,
+            "chebyshev_conv": _cc,
             "chebyshev_heat_kernel_gpu": _gwk,
+            "fast_persistence_diagrams": _fpd,
+            "sheaf_hyper_bridge_score": _shb,
         }[name]
+    if name == "learn_hyperbolic_projection":
+        from .hyp_embed import learn_hyperbolic_projection as _lh
+
+        return _lh
     if name == "explain_to_svg":
         from .explain_viz import explain_to_svg as _ets
 

@@ -1567,6 +1567,39 @@ class DatasetBuilder:
         )
         return result
 
+    def compute_learned_hyperbolic_embeddings(  # pragma: no cover
+        self,
+        *,
+        feature_attr: str = "embedding",
+        write_property: str = "hyperbolic_learned",
+        dim: int = 2,
+        lr: float = 0.01,
+        epochs: int = 50,
+        geo_weight: float = 1.0,
+        frac_weight: float = 0.1,
+        target_dim: float | None = None,
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.compute_learned_hyperbolic_embeddings`."""
+
+        result = self.graph.compute_learned_hyperbolic_embeddings(
+            feature_attr=feature_attr,
+            write_property=write_property,
+            dim=dim,
+            lr=lr,
+            epochs=epochs,
+            geo_weight=geo_weight,
+            frac_weight=frac_weight,
+            target_dim=target_dim,
+        )
+        self._record_event(
+            "compute_learned_hyperbolic_embeddings",
+            "Hyperbolic embeddings learned with fractal regularization",
+            dim=dim,
+            lr=lr,
+            epochs=epochs,
+        )
+        return result
+
     def haa_link_score(
         self, driver: "Driver", a_id: str, b_id: str
     ) -> float | None:  # pragma: no cover
@@ -1622,6 +1655,32 @@ class DatasetBuilder:
             "Hyper-SAGNN embeddings computed with HEAD-Drop",
             num_heads=num_heads,
             threshold=threshold,
+        )
+        return result
+
+    def compute_hgcn_sagnn_embeddings(  # pragma: no cover
+        self,
+        *,
+        node_attr: str = "embedding",
+        edge_attr: str = "hgcn_sagnn_embedding",
+        K: int = 2,
+        embed_dim: int | None = None,
+        seed: int | None = None,
+    ) -> Dict[str, list[float]]:
+        """Wrapper for :meth:`KnowledgeGraph.compute_hgcn_sagnn_embeddings`."""
+
+        result = self.graph.compute_hgcn_sagnn_embeddings(
+            node_attr=node_attr,
+            edge_attr=edge_attr,
+            K=K,
+            embed_dim=embed_dim,
+            seed=seed,
+        )
+        self._record_event(
+            "compute_hgcn_sagnn_embeddings",
+            "Hyper-SAGNN embeddings computed with HGCN spectral features",
+            K=K,
+            embed_dim=embed_dim,
         )
         return result
 

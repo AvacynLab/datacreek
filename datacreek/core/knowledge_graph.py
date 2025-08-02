@@ -2560,6 +2560,49 @@ class KnowledgeGraph:
                 results[node] = vec.tolist()
         return results
 
+    def compute_learned_hyperbolic_embeddings(  # pragma: no cover - heavy
+        self,
+        *,
+        feature_attr: str = "embedding",
+        write_property: str = "hyperbolic_learned",
+        dim: int = 2,
+        lr: float = 0.01,
+        epochs: int = 50,
+        geo_weight: float = 1.0,
+        frac_weight: float = 0.1,
+        target_dim: float | None = None,
+    ) -> Dict[str, list[float]]:
+        """Learn hyperbolic embeddings with fractal regularization."""
+
+        import numpy as np
+
+        nodes = {
+            n: np.asarray(data[feature_attr], dtype=float)
+            for n, data in self.graph.nodes(data=True)
+            if feature_attr in data
+        }
+        if not nodes:
+            return {}
+        from ..analysis import latent_box_dimension as _lbd
+        from ..analysis import learn_hyperbolic_projection as _lhp
+
+        if target_dim is None:
+            target_dim, _ = _lbd(nodes, radii=[0.5, 1.0])
+
+        emb = _lhp(
+            nodes,
+            self.graph.subgraph(nodes.keys()),
+            dim=dim,
+            lr=lr,
+            epochs=epochs,
+            geo_weight=geo_weight,
+            frac_weight=frac_weight,
+            frac_target=target_dim,
+        )
+        for node, vec in emb.items():
+            self.graph.nodes[node][write_property] = vec.astype(float).tolist()
+        return {n: v.astype(float).tolist() for n, v in emb.items()}
+
     def compute_hyper_sagnn_embeddings(  # pragma: no cover - heavy
         self,
         *,
@@ -2723,6 +2766,75 @@ class KnowledgeGraph:
             threshold=threshold,
             seed=seed,
         )
+
+        result: Dict[str, list[float]] = {}
+        for (node, _), vec in zip(hyper_list, embeddings):
+            self.graph.nodes[node][edge_attr] = vec.astype(float).tolist()
+            result[node] = vec.astype(float).tolist()
+
+        return result
+
+    def compute_hgcn_sagnn_embeddings(  # pragma: no cover - heavy
+        self,
+        *,
+        node_attr: str = "embedding",
+        edge_attr: str = "hgcn_sagnn_embedding",
+        K: int = 2,
+        embed_dim: int | None = None,
+        seed: int | None = None,
+    ) -> Dict[str, list[float]]:
+        """Compute Hyper-SAGNN embeddings using HGCN spectral features.
+
+        Node features are first filtered through a hypergraph Laplacian via a
+        :math:`K`-order Chebyshev convolution, capturing global structure. The
+        filtered features are then combined with standard Hyper-SAGNN embeddings
+        computed from the original features. The final embedding is the
+        concatenation of local and spectral components.
+        """
+
+        import numpy as np
+
+        index: Dict[str, int] = {}
+        features: list[np.ndarray] = []
+        for node, data in self.graph.nodes(data=True):
+            if node_attr in data:
+                index[node] = len(features)
+                features.append(np.asarray(data[node_attr], dtype=float))
+
+        if not features:
+            return {}
+
+        hyper_list: list[tuple[str, list[int]]] = []
+        for node, data in self.graph.nodes(data=True):
+            if data.get("type") == "hyperedge":
+                members = [index[v] for _, v in self.graph.edges(node) if v in index]
+                if members:
+                    hyper_list.append((node, members))
+
+        if not hyper_list:
+            return {}
+
+        num_nodes = len(features)
+        num_edges = len(hyper_list)
+        B = np.zeros((num_nodes, num_edges), dtype=float)
+        for j, (_, members) in enumerate(hyper_list):
+            B[members, j] = 1.0
+
+        from ..analysis.hypergraph import hyper_sagnn_embeddings as _hs
+        from ..analysis.hypergraph_conv import chebyshev_conv as _cc
+        from ..analysis.hypergraph_conv import hypergraph_laplacian as _hl
+
+        Delta = _hl(B)
+        feats = np.stack(features)
+        spec_feats = _cc(feats, Delta, K=K)
+
+        local_emb = _hs(
+            [m for _, m in hyper_list], feats, embed_dim=embed_dim, seed=seed
+        )
+        global_emb = _hs(
+            [m for _, m in hyper_list], spec_feats, embed_dim=embed_dim, seed=seed
+        )
+        embeddings = np.concatenate([local_emb, global_emb], axis=1)
 
         result: Dict[str, list[float]] = {}
         for (node, _), vec in zip(hyper_list, embeddings):

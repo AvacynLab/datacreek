@@ -30,6 +30,7 @@ if Gauge is not None:
 
     tpl_w1_g = _metric(Gauge, "tpl_w1", "Wasserstein-1 TPL")
     sheaf_score_g = _metric(Gauge, "sheaf_score", "Sheaf consistency score")
+    sheaf_hyper_score_g = _metric(Gauge, "sheaf_hyper_score", "Sheaf-hyper coherence")
     gw_entropy = _metric(Gauge, "gw_entropy", "GraphWave entropy")
     autotune_cost_g = _metric(Gauge, "autotune_cost", "Current J(theta)")
     bias_wasserstein_last = _metric(
@@ -140,6 +141,7 @@ if Gauge is not None:
 else:  # pragma: no cover - optional dependency missing
     tpl_w1_g = None
     sheaf_score_g = None
+    sheaf_hyper_score_g = None
     gw_entropy = None
     autotune_cost_g = None
     bias_wasserstein_last = None
@@ -172,6 +174,7 @@ _METRICS = {
     "sigma_db": None,
     "recall10": None,
     "sheaf_score": sheaf_score_g,
+    "sheaf_hyper_score": sheaf_hyper_score_g,
     "gw_entropy": gw_entropy,
     "tpl_w1": tpl_w1_g,
     "j_cost": j_cost,
