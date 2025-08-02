@@ -49,3 +49,15 @@ tests:
           - exp_labels:
               severity: critical
             exp_annotations: {}
+  - interval: 1m
+    input_series:
+      - series: 'sheaf_hyper_coherence'
+        values: '1 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4 0.4'
+    alert_rule_test:
+      - alertname: SheafHyperCoherenceLow
+        eval_time: 16m
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Coherence spectrale sheaf-hypergraph < 0.5"

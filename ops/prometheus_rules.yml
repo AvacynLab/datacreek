@@ -52,6 +52,15 @@ groups:
         for: 10m
         labels:
           severity: critical
+      # Alert if spectral coherence between the sheaf and hypergraph drops
+      # below an acceptable 0.5 threshold for a sustained period.
+      - alert: SheafHyperCoherenceLow
+        expr: sheaf_hyper_coherence < 0.5
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Coherence spectrale sheaf-hypergraph < 0.5"
       - record: ingest_latency_burn_rate_1h
         expr: avg_over_time(ingest_latency_p999[1h]) / 5
       - record: ingest_latency_burn_rate_6h
