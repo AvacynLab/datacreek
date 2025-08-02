@@ -79,6 +79,16 @@ This toolkit simplifies the journey of:
     Call `coverage_stats()` to identify unexplored regions of the graph
     and target them in future generation runs.
 
+## Fine-tune with Unsloth + TRL
+
+Use the adaptive pipeline to train models with 4-bit loading, task detection,
+curriculum scheduling and optional RLHF rewards. Refer to
+[`docs/train_pipeline.md`](docs/train_pipeline.md) for a complete guide.
+
+```bash
+python -m cli.train --model Uns7B --dataset-path data.jsonl --task auto
+```
+
 ## Workflow Overview
 
 1. **Ingestion** – parse documents or URLs from multiple sources, clean the text and store everything in a knowledge graph.
