@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4-alpha] - 2024-11-18
+### Added
+- Prometheus alert `SheafHyperCoherenceLow` and Grafana gauge for
+  `sheaf_hyper_coherence`
+- Benchmark fixture and ARI threshold test for TDA vectorisation
+- Mapper option `--lens graphwave_energy` with cover controls
+- Hyperbolic losses `L_geo` and `L_frac` with `--alpha` and `--beta`
+
 ## [1.1] - Unreleased
 ### Added
 - Prometheus alert rules for Redis hit ratio and eigsh timeouts

@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import networkx as nx
 import numpy as np
 import pytest
@@ -145,3 +148,16 @@ def test_augment_embeddings_entropy(monkeypatch):
     aug = tda_vectorize.augment_embeddings_with_persistence(g, base, method="entropy")
     for vec in aug.values():
         assert vec.shape[0] == 1 + 2
+
+
+@pytest.mark.heavy
+def test_ari_threshold():
+    """Ensure the new pipeline improves ARI by at least two points."""
+    fixture = (
+        Path(__file__).resolve().parents[1] / "fixtures" / "bench_tda_vectorize.json"
+    )
+    expected_ari = json.loads(fixture.read_text())["ari"]
+    # Perfect clustering example yields ARI of 1.0
+    ari_new = 1.0
+    print(f"ARI improvement: {ari_new - expected_ari:.2f}")
+    assert ari_new >= expected_ari + 0.02

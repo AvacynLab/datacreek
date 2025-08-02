@@ -47,6 +47,10 @@ This toolkit simplifies the journey of:
 - Datasets can be cloned to experiment with different cleaning steps
 - Optional RedisGraph integration for fast local queries
 - GraphWave embeddings can run on GPU via cuSPARSE when :mod:`cupy` is installed
+- Mapper CLI supports `--lens graphwave_energy` with `--cover-resolution` and
+  `--cover-overlap` to tune the cover parameters
+- Hyperbolic training introduces losses `L_geo` and `L_frac` controlled by
+  `--alpha` and `--beta` flags
 - Continuous monitoring with an `InvariantPolicy` enforces entropy and
   spectral limits at each stage
 - Configuration files are hot-reloaded by a watcher so threshold updates are
