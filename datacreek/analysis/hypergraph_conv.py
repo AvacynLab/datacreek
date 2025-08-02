@@ -38,13 +38,12 @@ def hypergraph_laplacian(B: np.ndarray, w: Iterable[float] | None = None) -> np.
     de_inv = np.diag(1.0 / (de + 1e-12))
     W = np.diag(w)
 
-    return (
-        np.eye(num_nodes)
-        - dv_inv_sqrt @ B @ W @ de_inv @ B.T @ dv_inv_sqrt
-    )
+    return np.eye(num_nodes) - dv_inv_sqrt @ B @ W @ de_inv @ B.T @ dv_inv_sqrt
 
 
-def chebyshev_conv(X: np.ndarray, Delta: np.ndarray, K: int, theta: Iterable[float] | None = None) -> np.ndarray:
+def chebyshev_conv(
+    X: np.ndarray, Delta: np.ndarray, K: int, theta: Iterable[float] | None = None
+) -> np.ndarray:
     """Return Chebyshev spectral convolution on hypergraph features.
 
     Parameters

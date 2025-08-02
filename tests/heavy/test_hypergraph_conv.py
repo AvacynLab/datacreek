@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from datacreek.analysis.hypergraph_conv import hypergraph_laplacian, chebyshev_conv
+from datacreek.analysis.hypergraph_conv import chebyshev_conv, hypergraph_laplacian
 
 
 @pytest.mark.heavy
