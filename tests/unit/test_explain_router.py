@@ -1,6 +1,7 @@
 import base64
 import importlib
 import json
+import time
 import types
 
 import networkx as nx
@@ -119,3 +120,21 @@ def test_sheaf_diff(monkeypatch):
     data = json.loads(resp.body.decode())
     assert data["edges"][0]["u"] == 0
     assert data["edges"][0]["delta"] == 0.5
+
+
+def test_sheaf_diff_latency(monkeypatch):
+    dummy = DummyDS(owner_id=1)
+    g = nx.Graph()
+    g.add_edge(0, 1, sheaf_sign=1)
+    dummy.graph = lambda: g
+    monkeypatch.setattr(router, "_load_dataset", lambda name, user: dummy)
+    monkeypatch.setattr(
+        router,
+        "top_k_incoherent",
+        lambda g, top, tau: [((0, 1), 0.5)] * top,
+    )
+    user = DummyUser(1)
+    start = time.perf_counter()
+    router.sheaf_diff(user=user, top=50)
+    elapsed = time.perf_counter() - start
+    assert elapsed < 0.1

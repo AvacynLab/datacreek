@@ -57,6 +57,7 @@ __all__ = [
     "mapper_full",
     "mapper_to_json",
     "autotune_mapper_overlap",
+    "tune_overlap",
     "bootstrap_db",
     "bootstrap_sigma_db",
     "fractal_net_prune",

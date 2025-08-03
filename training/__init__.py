@@ -2,6 +2,7 @@
 
 from .augmenter import ActiveLearningAugmenter
 from .auto_feedback import build_reward_fn, extract_triplets
+from .callbacks import TrainingEtaSecondsCallback
 from .curriculum_dataloader import CurriculumDataLoader, compute_difficulty
 from .monitoring import EarlyStopping, EtaCallback, PrometheusLogger, init_wandb
 from .reward_fn import build_alias_reward_fn
@@ -27,4 +28,5 @@ __all__ = [
     "PrometheusLogger",
     "EtaCallback",
     "EarlyStopping",
+    "TrainingEtaSecondsCallback",
 ]

@@ -12,7 +12,9 @@ def test_mapper_full_and_json():
     nerve, cover = mapper.mapper_full(g, cover=(3, 0.5), clusterer="single")
     assert nerve.number_of_nodes() == len(cover)
 
-    data = json.loads(mapper.mapper_to_json(g, cover=(3, 0.5), clusterer="single"))
+    data = json.loads(
+        mapper.mapper_to_json(g, cover=(3, 0.5), clusterer="single", autotune=False)
+    )
     assert len(data["nodes"]) == len(cover)
     assert len(data["links"]) == nerve.number_of_edges()
 
