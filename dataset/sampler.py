@@ -67,7 +67,10 @@ class StratifiedReservoirSampler:
 
         self.k = int(k)
         self.ratios = ratios
-        self._rng = random.Random(random_state)
+        # Use the standard pseudo-random generator for deterministic behavior
+        # when a ``random_state`` is provided. The sampler is not used for
+        # cryptographic purposes, so Bandit's B311 warning is suppressed.
+        self._rng = random.Random(random_state)  # nosec B311
 
         # Determine integer quotas per class while ensuring the sum is exactly k
         float_quota = {c: r * self.k for c, r in self.ratios.items()}

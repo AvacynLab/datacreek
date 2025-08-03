@@ -150,3 +150,4 @@
 - Recorded spectral conv benchmark in benchmarks/spectral_perf.json with tests ensuring targets.
 - Added stress test validating NF4 quantization remains finite after 10k cycles.
 - Added unified ingestion pipeline combining language gating and safety guard with tests.
+- Annotated deterministic RNG in stratified sampler to satisfy Bandit.
