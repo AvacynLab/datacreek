@@ -32,6 +32,21 @@ def test_inverse_mapper_cross_edges():
         assert recon.has_edge(u, v)
 
 
+def test_autotune_mapper_overlap_increases_silhouette():
+    """Grid-searching overlap should yield higher silhouette score."""
+
+    g = nx.path_graph(6)
+    lens = lambda graph: {n: float(n) for n in graph.nodes()}
+
+    nerve, cover, ov, score = mapper.autotune_mapper_overlap(
+        g, overlaps=[0.2, 0.3, 0.4, 0.5], n_intervals=2, lens=lens
+    )
+    _, base_cover = mapper.mapper_full(g, lens=lens, cover=(2, 0.5))
+    base_score = mapper._cover_silhouette(lens(g), base_cover)
+    assert score - base_score >= 0.03
+    assert ov in {0.2, 0.3}
+
+
 def test_cache_mapper_nerve_with_redis_and_lmdb(tmp_path):
     """Ensure caching uses Redis and LMDB layers."""
     g = nx.path_graph(4)

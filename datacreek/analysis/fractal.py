@@ -1032,6 +1032,42 @@ def latent_box_dimension(
     return float(slope), counts
 
 
+def fractal_dim_embedding(
+    coords: Mapping[object, Iterable[float]],
+    radii: Iterable[float],
+    *,
+    sample: int = 512,
+) -> float:
+    """Estimate the fractal dimension of embedding coordinates.
+
+    The function applies a box-counting procedure to the embedding vectors and
+    returns the slope of ``\log N_B`` versus ``-\log r`` where ``N_B`` is the
+    number of boxes of radius ``r`` covering the points:
+
+    .. math::
+
+        D_f = \frac{\log N_B(r)}{-\log r}
+
+    Parameters
+    ----------
+    coords:
+        Mapping of node identifiers to embedding vectors.
+    radii:
+        Iterable of cover radii used for the box-counting estimate.
+    sample:
+        Optional number of points to subsample before counting. Defaults to
+        ``512``.
+
+    Returns
+    -------
+    float
+        Estimated fractal dimension of the embedding space.
+    """
+
+    dim, _ = latent_box_dimension(coords, radii, sample=sample)
+    return dim
+
+
 def laplacian_spectrum(
     graph: nx.Graph, *, normed: bool = True
 ) -> np.ndarray:  # pragma: no cover - heavy computation

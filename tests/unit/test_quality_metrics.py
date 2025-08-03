@@ -7,7 +7,10 @@ from datacreek.utils.quality_metrics import (
     audio_metrics,
     audio_snr,
     blur_score,
+    dynamic_snr_threshold,
     image_dimensions,
+    snr_soft_gate,
+    snr_std,
     text_entropy,
 )
 
@@ -70,3 +73,13 @@ def test_audio_metrics(tmp_path):
     assert sr_out == sr
     assert math.isclose(dur, 1.0, rel_tol=1e-3)
     assert snr > 10.0
+
+
+def test_dynamic_snr_threshold_and_gate():
+    history = [10.0, 12.0, 11.0, 9.0, 10.0]
+    sigma = snr_std(history)
+    assert math.isclose(sigma, 1.0198039, rel_tol=1e-5)
+    thr = dynamic_snr_threshold(history)
+    assert math.isclose(thr, 6 + 0.5 * sigma, rel_tol=1e-5)
+    assert snr_soft_gate(thr + 0.1, history)
+    assert not snr_soft_gate(thr - 0.1, history)

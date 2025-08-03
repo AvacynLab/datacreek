@@ -13,7 +13,7 @@ import base64
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from datacreek.analysis import explain_to_svg
+from datacreek.analysis import explain_to_svg, top_k_incoherent
 from datacreek.backends import get_neo4j_driver, get_redis_client
 from datacreek.core.dataset import DatasetBuilder
 from datacreek.db import SessionLocal, User
@@ -48,6 +48,35 @@ def _load_dataset(name: str, user: User) -> DatasetBuilder:
         raise HTTPException(status_code=404, detail="Dataset not found")
     ds.redis_client = client
     return ds
+
+
+@router.get("/sheaf_diff", summary="List incoherent sheaf edges")
+def sheaf_diff(
+    dataset: str = Query("demo", alias="dataset"),
+    top: int = Query(50, ge=1),
+    tau: float = Query(0.0, ge=0.0),
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Return up to ``top`` edges with spectral mismatch > ``tau``.
+
+    The dataset is converted to a NetworkX graph and passed to
+    :func:`top_k_incoherent` which computes the change in eigenvalue
+    discrepancies when removing each edge.  The response contains the list
+    of edges sorted by this difference.
+    """
+
+    ds = _load_dataset(dataset, user)
+    g = getattr(ds, "graph", None)
+    if callable(g):
+        g = g()
+    if g is None:
+        conv = getattr(ds, "to_networkx", None)
+        g = conv() if callable(conv) else None
+    if g is None:
+        raise HTTPException(status_code=404, detail="Graph not found")
+    data = top_k_incoherent(g, top, tau)
+    payload = [{"u": u, "v": v, "delta": d} for (u, v), d in data]
+    return JSONResponse({"edges": payload})
 
 
 @router.get("/{node}", summary="Explain node neighborhood")

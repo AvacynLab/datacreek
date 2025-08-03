@@ -271,3 +271,50 @@ def augment_embeddings_with_persistence(
         base = np.asarray(list(vec), dtype=float)
         aug[node] = np.concatenate([base, v0, v1])
     return aug
+
+
+def reduce_pca(X_PI: np.ndarray, n: int = 50, batch_size: int = 256) -> np.ndarray:
+    """Reduce persistence image vectors using incremental PCA.
+
+    This routine combats the curse of dimensionality by projecting the matrix
+    of persistence images ``X_PI`` onto the first ``n`` principal components of
+    its covariance. The incremental algorithm approximates the solution of
+    ``Y = (X - \mu) W`` where the columns of ``W`` are the leading eigenvectors
+    of ``(X - \mu)^\top (X - \mu)`` computed in mini-batches of size
+    ``batch_size``.
+
+    Parameters
+    ----------
+    X_PI:
+        ``(m, d)`` array of flattened persistence images.
+    n:
+        Number of principal components to retain.
+    batch_size:
+        Size of the chunks processed per ``partial_fit`` iteration. Setting to
+        ``None`` or a non-positive value fits the model in one step.
+
+    Returns
+    -------
+    np.ndarray
+        Matrix of shape ``(m, n)`` with the reduced representation.
+    """
+
+    try:  # prefer scikit-learn's optimised implementation
+        from sklearn.decomposition import IncrementalPCA
+    except Exception:  # fallback to a simple SVD-based reducer
+        IncrementalPCA = None  # type: ignore
+
+    X = np.asarray(X_PI, dtype=float)
+
+    if IncrementalPCA is None:  # pragma: no cover - exercised when sklearn absent
+        Xc = X - X.mean(axis=0, keepdims=True)
+        U, S, _ = np.linalg.svd(Xc, full_matrices=False)
+        return U[:, :n] * S[:n]
+
+    ipca = IncrementalPCA(n_components=n)
+    if not batch_size or batch_size <= 0 or batch_size >= X.shape[0]:
+        ipca.fit(X)
+    else:
+        for start in range(0, X.shape[0], batch_size):
+            ipca.partial_fit(X[start : start + batch_size])
+    return ipca.transform(X)

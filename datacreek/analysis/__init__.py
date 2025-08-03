@@ -8,6 +8,7 @@ __all__ = [
     "graphwave_embedding",
     "embedding_box_counting_dimension",
     "latent_box_dimension",
+    "fractal_dim_embedding",
     "colour_box_dimension",
     "mdl_optimal_radius",
     "persistence_diagrams",
@@ -55,6 +56,7 @@ __all__ = [
     "inverse_mapper",
     "mapper_full",
     "mapper_to_json",
+    "autotune_mapper_overlap",
     "bootstrap_db",
     "bootstrap_sigma_db",
     "fractal_net_prune",
@@ -70,6 +72,7 @@ __all__ = [
     "fp8_quantize",
     "fp8_dequantize",
     "online_pca_reduce",
+    "reduce_pca",
     "fractal_encoder",
     "mdl_description_length",
     "select_mdl_motifs",
@@ -120,6 +123,7 @@ __all__ = [
     "chebyshev_heat_kernel_gpu",
     "fast_persistence_diagrams",
     "sheaf_hyper_bridge_score",
+    "top_k_incoherent",
     "explain_to_svg",
 ]
 
@@ -160,6 +164,7 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         "embedding_entropy",
         "embedding_box_counting_dimension",
         "latent_box_dimension",
+        "fractal_dim_embedding",
         "colour_box_dimension",
         "bootstrap_db",
         "bootstrap_sigma_db",
@@ -262,7 +267,13 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from . import symmetry as _s
 
         return getattr(_s, name)
-    if name in {"mapper_nerve", "inverse_mapper", "mapper_full", "mapper_to_json"}:
+    if name in {
+        "mapper_nerve",
+        "inverse_mapper",
+        "mapper_full",
+        "mapper_to_json",
+        "autotune_mapper_overlap",
+    }:
         from . import mapper as _m
 
         return getattr(_m, name)
@@ -380,11 +391,13 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         "betti_curve",
         "diagram_entropy",
         "augment_embeddings_with_persistence",
+        "reduce_pca",
         "hypergraph_laplacian",
         "chebyshev_conv",
         "chebyshev_heat_kernel_gpu",
         "fast_persistence_diagrams",
         "sheaf_hyper_bridge_score",
+        "top_k_incoherent",
     }:
         from .chebyshev_diag import chebyshev_diag_hutchpp as _cdh
         from .graphwave_bandwidth import estimate_lambda_max as _el
@@ -395,6 +408,7 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from .hypergraph_conv import chebyshev_conv as _cc
         from .hypergraph_conv import hypergraph_laplacian as _hl
         from .sheaf_hyper_bridge import sheaf_hyper_bridge_score as _shb
+        from .sheaf_hyper_bridge import top_k_incoherent as _tki
         from .tda_fast import fast_persistence_diagrams as _fpd
         from .tda_vectorize import augment_embeddings_with_persistence as _ap
         from .tda_vectorize import betti_curve as _bc
@@ -402,6 +416,7 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from .tda_vectorize import persistence_image as _pi
         from .tda_vectorize import persistence_landscape as _pl
         from .tda_vectorize import persistence_silhouette as _ps
+        from .tda_vectorize import reduce_pca as _rp
 
         return {
             "estimate_lambda_max": _el,
@@ -415,11 +430,13 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
             "betti_curve": _bc,
             "diagram_entropy": _de,
             "augment_embeddings_with_persistence": _ap,
+            "reduce_pca": _rp,
             "hypergraph_laplacian": _hl,
             "chebyshev_conv": _cc,
             "chebyshev_heat_kernel_gpu": _gwk,
             "fast_persistence_diagrams": _fpd,
             "sheaf_hyper_bridge_score": _shb,
+            "top_k_incoherent": _tki,
         }[name]
     if name == "learn_hyperbolic_projection":
         from .hyp_embed import learn_hyperbolic_projection as _lh

@@ -54,3 +54,9 @@ repos:
         language: python
         additional_dependencies: ["radon"]
         pass_filenames: false
+      - id: lakefs-schema
+        name: lakefs schema compatibility
+        entry: python scripts/check_schema_break.py
+        language: python
+        files: "^\\.lakefs/schema\\.yaml$"
+        additional_dependencies: ["pyyaml"]

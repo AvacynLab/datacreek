@@ -1,159 +1,182 @@
-### Check-list détaillée : **Pipeline d’entraînement adaptative (Unsloth + TRL) – v2.0**
+### Check-list complète « v2.1 – Hardening Qualité / Perf / Gouvernance »
 
-> Toutes les cases ☐ doivent être cochées pour déclarer la pipeline « production-ready ».
-> Chaque tâche principale inclut : sous-étapes (indentation), formules mathématiques si utile, tableau des variables, **Objectif chiffré** & **Definition of Done (DoD)**.
-> Cette liste tient compte du code actuel (v1.4-alpha) : aucune brique Unsloth/TRL n’existe encore ; les tâches ci-dessous couvrent intégralement les ajouts pertinents mentionnés dans le plan précédent.
+*(chaque case ☐ = action à cocher ; indentation = sous-étape ; formules + objectifs + DoD inclus)*
 
 ---
 
-## 1 – Infrastructure Unsloth : chargement & PEFT
+## 1 – Filtre sémantique & sûreté (⭑⭑⭑)
 
-* [ ] **Créer module `training/unsloth_loader.py`**
+* [x] **Module `ingest/safety_filter.py`**
 
-  * [x] Fonction `load_model(model_id, bits=4, max_seq=8192)`
-    ☑ utilise `FastLanguageModel.from_pretrained()` (Unsloth).
-  * [x] Fonction `add_lora(model, r, alpha, target_modules)`
-    ☑ appelle `FastLanguageModel.get_peft_model()`.
-* **Objectifs** : VRAM ↘ 70 %, vitesse × 1.8 vs HF vanilla.
-* **DoD** : benchmark `bench_unsloth.json` stocké ; test unit vérifie VRAM < 0.6 × baseline.
-
----
-
-## 2 – Détection de **tâche** & formatage dataset
-
-* [x] **`training/task_detector.py`**
-  ☑ Inspecte métadonnées dataset (`task` déjà taguée) ou infère :
-  • présence champ `answer` ⇒ *QA* ;
-  • label unique ⇒ *classification* ;
-  • absence label ⇒ *génération* ;
-  • champs `chosen/rejected` ⇒ *preference RLHF*.
-* [x] **Format builders** `format_sft`, `format_classif`, `format_rlhf`
-  ☑ génèrent prompt + template + EOS.
-* **DoD** : 100 % jeux tests mappés correctement (`tests/unit/test_task_detector.py`).
-
----
-
-## 3 – Sélection dynamique de **Trainer TRL**
-
-| Tâche            | Trainer TRL                | Condition                      |
-| ---------------- | -------------------------- | ------------------------------ |
-| SFT / génération | `SFTTrainer`               | task == "generation"           |
-| Classification   | `SFTTrainer` with `labels` | task == "classification"       |
-| RLHF (PPO)       | `PPOTrainer`               | task == "rlhf_ppo"            |
-| RLHF (DPO)       | `DPOTrainer`               | dataset with `chosen/rejected` |
-
-* [x] **`training/trainer_factory.py`**
-  ☑ construit le trainer avec **kwargs** (batch, lr, PEFT).
-* **DoD** : factory unit-test retourne la bonne classe pour 4 types.
-
----
-
-## 4 – Curriculum learning basé hypergraph
-
-* [x] **Difficulté** $d$ d’un échantillon :
+  * [x] ☐ Charger modèle tiny HF « toxicity » (`distilroberta-toxic`).
+  * [x] ☐ Couper contenu NSFW : regex + score > 0.7.
+  * [x] ☐ Log métrique `ingest_toxic_blocks_total`.
+* **Maths** : score global
 
   $$
-    d = \gamma\,h + \delta\,l + \eta\,c,
-    \quad h=\text{\# hops},\; l=\text{longueur prompt},\; c=\text{centralité cible}
+    s = \tfrac12(s_\text{tox}+s_\text{nsfw})
   $$
 
-  | Var      | Poids default |
-  | -------- | ------------- |
-  | $\gamma$ | 0.5           |
-  | $\delta$ | 0.3           |
-  | $\eta$   | 0.2           |
-* [x] Ordonnancer dataloader : batches du plus simple → plus complexe.
-* **Objectif** : perplexité val – 10 % aux 3 premières époques.
-* **DoD** : `training/curriculum_dataloader.py` tri fonctionne ; test décroissance perplexité.
+  | Var             | Description              |
+  | --------------- | ------------------------ |
+  | $s_\text{tox}$  | prob toxicité modèle     |
+  | $s_\text{nsfw}$ | proba NSFW (regex heur.) |
+* **Objectif** : < 0.5 % toxic payloads passent.
+* **DoD** : test dataset toxique → 95 % blocage, CI.
 
 ---
 
-## 5 – Active-learning & augmentation ciblée
+## 2 – SNR dynamique (PID soft-gating)
 
-* [x] **Erreur top-k** (samples avec perte > p95)
-  ☑ Générer **k variantes** via synonymes / paraphrases du hypergraph.
-* [x] Ré-injecter dans pool d’entraînement toutes les 2 époques.
-* **DoD** : module `training/augmenter.py` ; test montre rappel val +1 pt.
-
----
-
-## 6 – Auto-feedback RLHF (graphe → reward)
-
-* [x] **Extraction triplets** de la réponse (regex + NLP).
-* [x] Vérification contre hypergraph :
+* [x] **Calcul écart-type SNR** :
 
   $$
-    R = \frac{\#\text{triplets vérifiés}}{\#\text{triplets totaux}}
+    \sigma_{SNR} = \sqrt{\tfrac1N\sum (SNR_i-\overline{SNR})^2}
   $$
-* [x] Plug reward $R$ dans `ppo_config.reward_fn`.
-* **Objectif** : hallucination rate ↓ 30 %.
-* **DoD** : `tests/integration/test_auto_feedback.py` passe ; metric Prom `reward_avg` > 0.7.
+* [x] ☐ Adapter seuil : `thr = 6 + 0.5·σ_{SNR}`.
+* **DoD** : taux faux positifs audio silence < 2 %.
 
 ---
 
-## 7 – Surveillance & monitoring
+## 3 – Power iteration λ_max (hypergraph Laplacien) (⭑⭑)
 
-* [x] **Logging** : intégration Weights & Biases (`wandb.init`) via callback.
-* [x] **Prometheus** : exporter
-
-  * `training_loss`,
-  * `val_metric`,
-  * `gpu_vram_bytes`,
-  * `reward_avg`.
-* [x] **Early stopping** callback (patience = 3 evals).
-* **DoD** : dashboard Grafana « Training » OK ; alert `gpu_vram_bytes > cap`.
+* [x] **`analysis/hypergraph_conv.py`**
+  * [x] ☐ Ajouter `estimate_lambda_max(Δ, it=3)` : $v_{k+1}=Δv_k/‖Δv_k‖$.
+* **Objectif** : speed gain > 10× vs eigsh.
+* **DoD** : erreur λ̂/λ < 5 %, benchmark.
 
 ---
 
-## 8 – CLI & configuration
+## 4 – Exporter arêtes incohérentes Sheaf/Hyper (explain)
 
-* [x] `cli/train.py`
-  ☑ arguments : `--model`, `--task`, `--dataset-path`, `--trainer`, `--alpha`, `--beta`, `--bits`, `--epochs`.
-  ☑ charge YAML config éventuelle.
-* **DoD** : `train.py --help` affiche options ; exécution end-to-end unit (small dataset).
-
----
-
-## 9 – Tests et benchmarks
-
-* [x] **Unit** : loader, detector, factory, curriculum.
-* [x] **Heavy** : run 1 époque sur TinyStories (génération) et DBPedia (classif).
-* [x] **Benchmark** : temps/VRAM vs HF baseline.
-* **DoD** : CI passe CPU & GPU ; speed β≥1.7, VRAM ≤0.6×.
+* [x] **`analysis/sheaf_hyper_bridge.py`**
+  * [x] ☐ Fonction `top_k_incoherent(k, τ)` => edges Δλ_i > τ.
+* [x] ☐ Route `/explain/sheaf_diff?top=50`.
+* **DoD** : JSON liste edges, latence < 100 ms pour k=50.
 
 ---
 
-## 10 – Documentation
+## 5 – Kernel PCA sur vecteurs PI (curse of dim)
 
-* [x] `docs/train_pipeline.md` : schéma, exemples.
-* [x] README : ajout section “Fine-tune with Unsloth + TRL”.
-* **DoD** : markdown-lint vert.
+* [x] **`analysis/tda_vectorize.py`**
+  * [x] `reduce_pca(X_PI, n=50)` – sklearn incremental.
+* **DoD** : recall ANN chute < 0.5 % ; dim tot – 75 %.
 
 ---
 
-### KPI finaux v2.0
+## 6 – Re-évaluation dynamique dimension fractale latente
 
-| KPI                    | Cible                   |
-| ---------------------- | ----------------------- |
-| VRAM vs HF baseline    | ≤ 60 %                  |
-| Speedup vs HF baseline | ≥ 1.7×                  |
-| Hallucination rate QA  | –30 %                   |
-| PPL val (curriculum)   | –10 % premières époques |
-| ARI / accuracy task    | +2 pts vs v1.4          |
+* [x] **Callback entraînement** : tous les 2 epochs → `fractal_dim_embedding`.
+* [x] Loss fractale :
 
-**Toute la grille cochée → pipeline d’entraînement adaptative opérationnelle.**
+  $$
+    \mathcal{L}_{frac} = \beta\,|\hat D_f - D_f^{target}|
+  $$
+* **DoD** : log `fractal_loss` ; dim se stabilise ±0.05.
+
+---
+
+## 7 – Overlap Mapper auto-tuning
+
+* [x] **Grid-search** overlap ∈ {0.2,0.3,0.4,0.5}.
+  * [x] Choisir overlap max silhouette score.
+* **DoD** : silhouette ↑ ≥ 0.03 vs overlap fixe.
+
+---
+
+## 8 – LakeFS schema registry (⭑⭑)
+
+* [x] **`.lakefs/schema.yaml`** : champs + types.
+* [x] **Git hook** : refuser commit si breaking change.
+* **DoD** : CI fail sur schema break, OK sinon.
+
+---
+
+## 9 – Snapshot tokenizer
+
+* [x] **`utils/dataset_export.py`**
+  * [x] Sauver `tokenizer.json` dans branch LakeFS (same commit).
+* **DoD** : hash tokenizer stable ; reproduce exact split.
+
+---
+
+## 10 – Alias-aware fact-check reward (⭑⭑⭑)
+
+* [x] **`training/reward_fn.py`**
+  * [x] Mapper alias via Neo4j index `apoc.text.clean`.
+
+  $$
+    R = \frac{\#facts\ validés+\#alias\_validés}{\#facts}
+  $$
+* **DoD** : hallucination rate QA ↓ 30 %.
+
+---
+
+## 11 – Entailment check paraphrases (active learning)
+
+* [x] **`augmenter.py`**
+  * [x] Passer paraphrase + phrase org → model `facebook/bart-large-mnli`, drop si `contradiction`.
+* **DoD** : drift label < 1 %.
+
+---
+
+## 12 – Metric `training_eta_seconds`
+
+* [x] **Callback** : ETA = `(steps_total - step_done)/steps_per_sec`.
+* **DoD** : Grafana montre barre progression.
+
+---
+
+## 13 – Checkpoint pruning (disk)
+
+* [x] **Keep top-k (k=2) checkpoints** basé `val_metric`.
+* **DoD** : Espace disque run heavy ≤ +5 GB.
+
+---
+
+## 14 – Notebook ex : fine-tune QA
+
+* [x] `examples/fine_tune_QA.ipynb` : de l’ingestion à inference.
+* **DoD** : exécute sans erreur sur GPU Colab.
+
+---
+
+## 15 – Property-tests reward_fn
+
+* [x] Hypothesis : si réponse == vérité alors R=1 ; si vide → R=0.
+* **DoD** : tests verts.
+
+---
+
+### KPI v2.1 (post-hardening)
+
+| KPI                        | Cible       |
+| -------------------------- | ----------- |
+| Toxic payloads non filtrés | < 0.5 %     |
+| λ̂ calc time               | −90 %       |
+| ANN recall drop après PCA  | < 0.5 %     |
+| Hallucination QA           | −30 %       |
+| Disk footprint checkpoints | ≤ +5 GB/run |
+
+**Cochez toutes les cases → Datacreek v2.1-beta prêt.**
 
 ### History
-- Reset AGENTS for v2.0 tasks.
-- Implemented `training/unsloth_loader.py` with load and LoRA helpers; added unit tests.
-- Added `training/task_detector.py` with format builders and comprehensive unit tests.
-- Added `training/trainer_factory.py` selecting TRL trainers dynamically with unit tests.
-- Implemented curriculum dataloader with difficulty-based ordering and tests.
-- Added `training/augmenter.py` performing active-learning augmentation with unit tests.
-- Implemented `training/auto_feedback.py` with triplet extraction and graph-based reward, plus integration tests.
-- Added monitoring utilities with W&B initialization, Prometheus gauges, and an early stopping helper alongside unit tests.
-- Introduced `cli/train.py` parsing arguments and YAML configs with unit tests covering help output and config-driven run.
-- Documented the adaptive training pipeline and added a README section on fine-tuning; ran unit tests for core modules.
-- Added `benchmarks/bench_unsloth.json` capturing VRAM and speedup; implemented unit tests asserting targets.
-- Ran one-epoch CLI smoke tests on TinyStories and DBPedia datasets and recorded benchmark durations.
-- Verified checklist implementation; pre-commit and targeted pytest suite pass.
+- Reset AGENTS for v2.1 tasks.
+- Implemented training ETA metric and callback with Prometheus logging; added unit tests.
+
+- Added semantic safety filter with Hugging Face model, NSFW regex, Prometheus counter, and unit tests.
+- Added dynamic SNR soft-gate with adaptive threshold and tests.
+- Added power iteration estimator for hypergraph Laplacian λ_max and accompanying tests.
+- Added sheaf/hypergraph incoherence exporter with API route `/explain/sheaf_diff` and tests.
+- Added incremental PCA reducer `reduce_pca` for persistence-image vectors with unit tests.
+- Added fractal dimension callback with loss logging and Prometheus gauge; added unit tests.
+- Implemented checkpoint pruner keeping top-2 checkpoints by validation metric with unit tests.
+- Added Mapper overlap auto-tuning via silhouette-based grid search with unit test.
+- Implemented alias-aware fact-check reward with Neo4j alias resolution and
+  accompanying unit/property tests.
+- Added contradiction check for paraphrases with bart-large-mnli and unit test.
+- Snapshot tokenizer export saving `tokenizer.json` with LakeFS commit and unit tests.
+- Added LakeFS schema registry with pre-commit guard to block breaking changes; included unit tests.
+- Created fine-tuning QA example notebook demonstrating ingestion, training, and inference.
+- Exposed `EtaCallback` via the top-level `training` package and added test for import.
+- Verified all checklist implementations via targeted unit tests; no further changes required.

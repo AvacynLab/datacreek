@@ -159,6 +159,117 @@ def mapper_to_json(
     return json.dumps(data)
 
 
+def _cover_silhouette(
+    lens_vals: dict[object, float], cover_sets: Iterable[set[object]]
+) -> float:
+    """Return the silhouette coefficient of ``cover_sets`` w.r.t ``lens_vals``.
+
+    Parameters
+    ----------
+    lens_vals:
+        Mapping of node to lens value.
+    cover_sets:
+        Clusters produced by :func:`mapper_full`.
+
+    Notes
+    -----
+    The silhouette coefficient compares mean intra-cluster distances with the
+    smallest mean distance to points in other clusters. For the 1-D lens values
+    used here this simplifies to differences along that axis. If scikit-learn
+    is unavailable or less than two clusters exist, ``0.0`` is returned.
+    """
+
+    try:  # optional dependency, pragma: no cover for failure path
+        from sklearn.metrics import silhouette_score  # type: ignore
+    except Exception:  # pragma: no cover - sklearn missing
+        silhouette_score = None  # type: ignore
+
+    nodes = list(lens_vals.keys())
+    labels = [-1] * len(nodes)
+    for idx, cluster in enumerate(cover_sets):
+        for n in cluster:
+            i = nodes.index(n)
+            if labels[i] == -1:
+                labels[i] = idx  # assign node to first cluster encountered
+    if len(set(labels)) <= 1 or -1 in labels:
+        return 0.0
+
+    X = [[lens_vals[n]] for n in nodes]
+    if silhouette_score is not None:
+        try:
+            return float(silhouette_score(X, labels))
+        except Exception:  # pragma: no cover - numerical issues
+            return 0.0
+
+    # Fallback: manual silhouette computation for 1-D lens values
+    import numpy as np
+
+    X = np.array(X, dtype=float).reshape(-1)
+    labels_arr = np.array(labels)
+    unique = np.unique(labels_arr)
+    sils = []
+    for i, x in enumerate(X):
+        same = X[labels_arr == labels_arr[i]]
+        other = [X[labels_arr == u] for u in unique if u != labels_arr[i]]
+        a = float(np.mean(np.abs(same - x))) if len(same) > 1 else 0.0
+        b = min(float(np.mean(np.abs(o - x))) for o in other) if other else 0.0
+        sils.append((b - a) / max(a, b) if max(a, b) else 0.0)
+    return float(np.mean(sils))
+
+
+def autotune_mapper_overlap(
+    graph: nx.Graph,
+    *,
+    overlaps: Iterable[float] = (0.2, 0.3, 0.4, 0.5),
+    n_intervals: int = 10,
+    lens: Callable[[nx.Graph], dict[object, float]] | None = None,
+    clusterer: str = "dbscan",
+) -> tuple[nx.Graph, list[set[object]], float, float]:
+    """Grid-search the Mapper overlap maximizing the silhouette score.
+
+    The function evaluates :func:`mapper_full` for each candidate overlap and
+    selects the configuration whose clustering of nodes (cover sets) yields the
+    highest silhouette coefficient. The silhouette coefficient ``s`` for an
+    overlap ``\omega`` is computed as
+
+    .. math::
+
+        s(\omega) = \frac{b - a}{\max(a, b)}
+
+    where ``a`` is the mean intra-cluster distance and ``b`` the minimum mean
+    distance to points of other clusters. A higher value indicates better
+    separated clusters.
+
+    Returns
+    -------
+    nerve, cover, best_overlap, best_score
+        The Mapper nerve and cover with the best overlap along with the
+        optimal overlap value and corresponding silhouette coefficient.
+    """
+
+    if lens is None:
+        lens_vals = default_lens(graph)
+    else:
+        lens_vals = lens(graph)
+    if not lens_vals:
+        return nx.Graph(), [], 0.5, 0.0
+
+    best_score = -1.0
+    best_result = (nx.Graph(), [], 0.5, 0.0)
+    for ov in overlaps:
+        nerve, cover_sets = mapper_full(
+            graph,
+            lens=lambda _g: lens_vals,
+            cover=(n_intervals, ov),
+            clusterer=clusterer,
+        )
+        score = _cover_silhouette(lens_vals, cover_sets)
+        if score > best_score:
+            best_score = score
+            best_result = (nerve, cover_sets, ov, score)
+    return best_result
+
+
 import os
 import pickle  # nosec B403
 import threading
