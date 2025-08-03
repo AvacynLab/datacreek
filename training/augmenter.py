@@ -11,6 +11,11 @@ from __future__ import annotations
 import math
 from typing import List, Mapping, Sequence
 
+try:  # optional dependency
+    from transformers import pipeline
+except Exception:  # pragma: no cover - dependency missing
+    pipeline = None  # type: ignore
+
 __all__ = ["ActiveLearningAugmenter"]
 
 
@@ -34,10 +39,42 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
     return d0 + d1
 
 
+# Hugging Face model for natural language inference (contradiction detection)
+_NLI_MODEL_ID = "facebook/bart-large-mnli"
+
+
+def _load_nli_pipeline() -> None:
+    """Load the Hugging Face NLI pipeline if available."""
+
+    global _NLI_PIPE
+    if "_NLI_PIPE" not in globals():
+        globals()["_NLI_PIPE"] = None
+    if globals()["_NLI_PIPE"] is None and pipeline is not None:
+        globals()["_NLI_PIPE"] = pipeline("text-classification", model=_NLI_MODEL_ID)
+
+
+def _is_contradiction(original: str, paraphrase: str) -> bool:
+    """Return ``True`` if the paraphrase contradicts the original sentence."""
+
+    _load_nli_pipeline()
+    pipe = globals().get("_NLI_PIPE")
+    if pipe is None:  # pragma: no cover - dependency missing
+        return False
+    try:
+        res = pipe({"text": original, "text_pair": paraphrase})[0]
+    except Exception:  # pragma: no cover - inference failure
+        return False
+    label = str(res.get("label", "")).lower()
+    return "contradiction" in label
+
+
 def _generate_variants(
     text: str, synonym_map: Mapping[str, Sequence[str]], k: int
 ) -> List[str]:
     """Create ``k`` paraphrased variants by substituting synonyms.
+
+    Contradictory paraphrases are removed using a natural language
+    inference model (:mod:`facebook/bart-large-mnli`).
 
     Parameters
     ----------
@@ -60,12 +97,17 @@ def _generate_variants(
                 new_tokens.append(synonyms[i % len(synonyms)])
             else:
                 new_tokens.append(token)
-        variants.append(" ".join(new_tokens))
+        candidate = " ".join(new_tokens)
+        if not _is_contradiction(text, candidate):
+            variants.append(candidate)
     return variants
 
 
 class ActiveLearningAugmenter:
     """Augment difficult samples at a fixed epoch interval.
+
+    Generated paraphrases are checked with a natural language inference
+    model and any that contradict the source sentence are discarded.
 
     Parameters
     ----------

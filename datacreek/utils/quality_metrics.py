@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import wave
 from collections import Counter
-from typing import Iterable, Tuple
+from typing import Iterable, Sequence, Tuple
 
 import numpy as np
 from PIL import Image
@@ -19,6 +19,9 @@ __all__ = [
     "blur_score",
     "text_entropy",
     "audio_snr",
+    "snr_std",
+    "dynamic_snr_threshold",
+    "snr_soft_gate",
     "image_dimensions",
     "audio_metrics",
 ]
@@ -72,6 +75,52 @@ def audio_snr(pcm: bytes) -> float:
     if noise_rms == 0:
         return float("inf")
     return 20.0 * math.log10(signal_rms / noise_rms)
+
+
+def snr_std(values: Sequence[float]) -> float:
+    r"""Return the standard deviation of SNR samples.
+
+    The dispersion of SNR measurements :math:`\sigma_{SNR}` is
+
+    .. math::
+        \sigma_{SNR} = \sqrt{\tfrac1N \sum_i (SNR_i - \overline{SNR})^2}.
+
+    A larger :math:`\sigma_{SNR}` indicates noisier recordings.
+    """
+
+    if not values:
+        return 0.0
+    arr = np.asarray(values, dtype=float)
+    mean = float(arr.mean())
+    return float(np.sqrt(np.mean((arr - mean) ** 2)))
+
+
+def dynamic_snr_threshold(values: Sequence[float]) -> float:
+    r"""Return the adaptive SNR threshold in decibels.
+
+    The soft gate increases the base threshold of ``6 dB`` according to the
+    variability of recent SNR measurements: ``thr = 6 + 0.5 · σ_SNR``.
+    A higher variance therefore raises the bar for accepting clips.
+    """
+
+    sigma = snr_std(values)
+    return 6.0 + 0.5 * sigma
+
+
+def snr_soft_gate(current: float, history: Sequence[float]) -> bool:
+    """Return ``True`` if ``current`` SNR passes the dynamic gate.
+
+    Parameters
+    ----------
+    current:
+        SNR value of the clip to evaluate.
+    history:
+        Sequence of previously observed SNR values used to compute the
+        dynamic threshold.
+    """
+
+    threshold = dynamic_snr_threshold(history)
+    return current >= threshold
 
 
 def image_dimensions(path: str) -> Tuple[int, int]:

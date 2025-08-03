@@ -3,6 +3,8 @@ import importlib
 import json
 import types
 
+import networkx as nx
+
 import pytest
 from fastapi import HTTPException
 
@@ -104,3 +106,17 @@ def test_explain_node_public(monkeypatch):
     data = json.loads(payload)
     assert data["nodes"] == ["foo"]
     assert base64.b64decode(data["svg"]).decode() == "<svg></svg>"
+
+
+def test_sheaf_diff(monkeypatch):
+    dummy = DummyDS(owner_id=1)
+    g = nx.Graph()
+    g.add_edge(0, 1, sheaf_sign=1)
+    dummy.graph = lambda: g
+    monkeypatch.setattr(router, "_load_dataset", lambda name, user: dummy)
+    monkeypatch.setattr(router, "top_k_incoherent", lambda g, top, tau: [((0, 1), 0.5)])
+    user = DummyUser(1)
+    resp = router.sheaf_diff(user=user)
+    data = json.loads(resp.body.decode())
+    assert data["edges"][0]["u"] == 0
+    assert data["edges"][0]["delta"] == 0.5

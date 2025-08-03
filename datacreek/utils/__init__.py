@@ -44,6 +44,7 @@ except Exception:  # pragma: no cover - fallback when heavy deps missing
 from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
 from .delta_export import delta_optimize, delta_vacuum, export_delta, lakefs_commit
+from .dataset_export import snapshot_tokenizer
 from .gitinfo import get_commit_hash
 from .kafka_queue import enqueue_ingest
 from .rate_limit import consume_token
@@ -189,4 +190,5 @@ __all__ = [
     "propose_merge_split",
     "record_feedback",
     "fine_tune_from_feedback",
+    "snapshot_tokenizer",
 ]

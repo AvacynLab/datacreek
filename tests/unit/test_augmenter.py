@@ -3,6 +3,24 @@
 from training.augmenter import ActiveLearningAugmenter
 
 
+def test_contradictory_paraphrases_are_dropped(monkeypatch):
+    samples = ["sky is blue"]
+    losses = [1.0]
+    synonyms = {"blue": ["green"]}
+
+    # Mock contradiction detector to flag the paraphrase as contradictory.
+    def fake_contradiction(orig: str, para: str) -> bool:
+        return para.endswith("green")
+
+    monkeypatch.setattr(
+        "training.augmenter._is_contradiction", fake_contradiction
+    )
+    augmenter = ActiveLearningAugmenter(synonyms, k=1, percentile=0, interval=1)
+    augmented = augmenter.augment(samples, losses, epoch=1)
+
+    assert augmented == samples  # variant filtered out
+
+
 def _recall(dataset, val_set):
     return sum(1 for s in val_set if s in dataset) / len(val_set)
 
