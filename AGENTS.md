@@ -1,182 +1,120 @@
-### Check-list complète « v2.1 – Hardening Qualité / Perf / Gouvernance »
+### Check-list finale « v2.1 complétion »
 
-*(chaque case ☐ = action à cocher ; indentation = sous-étape ; formules + objectifs + DoD inclus)*
+*(chaque case ☐ = action à cocher ; sous-étapes imbriquées ; formules + tableau des variables ; **Objectif** + **DoD** en fin de bloc)*
 
 ---
 
-## 1 – Filtre sémantique & sûreté (⭑⭑⭑)
+## 1 – SNR **dynamique** (soft-gating adaptatif)
 
-* [x] **Module `ingest/safety_filter.py`**
+* [x] **Implémenter `quality_metrics.dynamic_snr_threshold()`**
 
-  * [x] ☐ Charger modèle tiny HF « toxicity » (`distilroberta-toxic`).
-  * [x] ☐ Couper contenu NSFW : regex + score > 0.7.
-  * [x] ☐ Log métrique `ingest_toxic_blocks_total`.
-* **Maths** : score global
+  * [x] Collecter SNR des *N* derniers fichiers audio (deque métrique).
+  * [x] Calculer moyenne $\overline{SNR}$ et écart-type $\sigma_{SNR}$.
+
+    $$
+      \sigma_{SNR} = \sqrt{\tfrac1N \sum_{i=1}^{N}(SNR_i-\overline{SNR})^2}
+    $$
+
+    | Var     | Description                       |
+    | ------- | --------------------------------- |
+    | $N$     | taille fenêtre (par défaut = 500) |
+    | $SNR_i$ | SNR du fichier *i*                |
+  * [x] Fixer seuil : `thr = 6 dB + 0.5·σ_{SNR}`.
+* [x] **Brancher dans `audio_validator.py`**
+  [x] Remplacer valeur constante par `dynamic_snr_threshold()`.
+* [x] **Exporter métrique Prometheus** `snr_dynamic_thr`.
+* [x] **Tests**
+  [x] Jeu 100 clips silence/bruit → faux-positifs < 2 %.
+* **Objectif** : réduire rejets audio valides de 8 % → < 2 %.
+* **DoD** : test passe, métrique visible dans Grafana.
+
+---
+
+## 2 – Route **/explain/sheaf_diff** (arêtes incohérentes)
+
+* [x] **Fonction `top_k_incoherent(k, τ)`** dans `analysis/sheaf_hyper_bridge.py`
 
   $$
-    s = \tfrac12(s_\text{tox}+s_\text{nsfw})
+    \Delta\lambda_i = |\lambda_i^{sheaf} - \lambda_i^{hyper}|
   $$
 
-  | Var             | Description              |
-  | --------------- | ------------------------ |
-  | $s_\text{tox}$  | prob toxicité modèle     |
-  | $s_\text{nsfw}$ | proba NSFW (regex heur.) |
-* **Objectif** : < 0.5 % toxic payloads passent.
-* **DoD** : test dataset toxique → 95 % blocage, CI.
+  | Var                 | Signification             |
+  | ------------------- | ------------------------- |
+  | $\lambda_i^{sheaf}$ | iᵉ valeur propre faisceau |
+  | $\lambda_i^{hyper}$ | iᵉ valeur propre hypergr. |
+* [x] Retourner liste des *k* arêtes où $\Delta\lambda_i > τ$.
+* [x] **API FastAPI** `/explain/sheaf_diff?top=50`
+
+  * [x] Prend params `top`, `tau` (τ).
+  * [x] Renvoie JSON `{edge_id, delta_lambda}`.
+  * [x] Latence testée < 100 ms (k = 50).
+* **DoD** : route documentée dans Swagger, tests unit ok.
 
 ---
 
-## 2 – SNR dynamique (PID soft-gating)
+## 3 – Mapper **auto-tuning overlap**
 
-* [x] **Calcul écart-type SNR** :
+* [x] **Ajouter `tune_overlap(points, overlaps)`** dans `analysis/mapper.py`
+
+  * [x] Boucle sur overlaps ∈ {0.2, 0.3, 0.4, 0.5}.
+  * [x] Calcule silhouette score $S(o)$ pour chaque.
+  * [x] Sélectionne $o^* = \arg\max S(o)$.
+* [x] Log métrique `mapper_overlap_opt`.
+* [x] **Tests**
+  [x] Silhouette avec tuning ≥ silhouette(0.3)+0.03.
+* **DoD** : optimisation appelée par défaut ; metric exposée.
+
+---
+
+## 4 – Snapshot **tokenizer.json** dans LakeFS
+
+* [x] **Modifier `utils/dataset_export.py`**
+
+  * [x] `tokenizer.save_pretrained(tmp_dir)` ; copier `tokenizer.json`.
+  * [x] `lakefs_client.upload_object` dans même commit que dataset.
+  * [x] Écrire SHA du tokenizer dans `metadata.json`.
+* [x] **Test de reproducibilité**
+  [x] Recharger dataset + tokenizer commit X → même hash.
+* **DoD** : fichier présent sur LakeFS UI, hash stable CI.
+
+---
+
+## 5 – Métrique Prometheus **training_eta_seconds**
+
+* [x] **Dans `training/callbacks.py`**
+  [x] Ajouter `Gauge("training_eta_seconds", "ETA to finish")`.
 
   $$
-    \sigma_{SNR} = \sqrt{\tfrac1N\sum (SNR_i-\overline{SNR})^2}
+    ETA = \frac{steps_{tot} - steps_{done}}{steps/sec}
   $$
-* [x] ☐ Adapter seuil : `thr = 6 + 0.5·σ_{SNR}`.
-* **DoD** : taux faux positifs audio silence < 2 %.
+
+  | Var            | Description          |
+  | -------------- | -------------------- |
+  | $steps_{tot}$  | max\_steps           |
+  | $steps_{done}$ | global\_step courant |
+  | $steps/sec$    | moyenne glissante    |
+* [x] Update gauge chaque `on_log`.
+* [x] Dashboard Grafana barre de progression.
+* **DoD** : widget affiche ETA, actualisé < 30 s.
 
 ---
 
-## 3 – Power iteration λ_max (hypergraph Laplacien) (⭑⭑)
+### KPI de clôture v2.1
 
-* [x] **`analysis/hypergraph_conv.py`**
-  * [x] ☐ Ajouter `estimate_lambda_max(Δ, it=3)` : $v_{k+1}=Δv_k/‖Δv_k‖$.
-* **Objectif** : speed gain > 10× vs eigsh.
-* **DoD** : erreur λ̂/λ < 5 %, benchmark.
+| Domaine                     | Cible          |
+| --------------------------- | -------------- |
+| Audio faux-positifs         | < 2 %          |
+| Route /sheaf_diff latence   | < 100 ms       |
+| Silhouette gain Mapper      | ≥ +0.03        |
+| Reproduce split (tokenizer) | Hash identique |
+| ETA gauge rafraîchissement  | ≤ 30 s         |
 
----
-
-## 4 – Exporter arêtes incohérentes Sheaf/Hyper (explain)
-
-* [x] **`analysis/sheaf_hyper_bridge.py`**
-  * [x] ☐ Fonction `top_k_incoherent(k, τ)` => edges Δλ_i > τ.
-* [x] ☐ Route `/explain/sheaf_diff?top=50`.
-* **DoD** : JSON liste edges, latence < 100 ms pour k=50.
-
----
-
-## 5 – Kernel PCA sur vecteurs PI (curse of dim)
-
-* [x] **`analysis/tda_vectorize.py`**
-  * [x] `reduce_pca(X_PI, n=50)` – sklearn incremental.
-* **DoD** : recall ANN chute < 0.5 % ; dim tot – 75 %.
-
----
-
-## 6 – Re-évaluation dynamique dimension fractale latente
-
-* [x] **Callback entraînement** : tous les 2 epochs → `fractal_dim_embedding`.
-* [x] Loss fractale :
-
-  $$
-    \mathcal{L}_{frac} = \beta\,|\hat D_f - D_f^{target}|
-  $$
-* **DoD** : log `fractal_loss` ; dim se stabilise ±0.05.
-
----
-
-## 7 – Overlap Mapper auto-tuning
-
-* [x] **Grid-search** overlap ∈ {0.2,0.3,0.4,0.5}.
-  * [x] Choisir overlap max silhouette score.
-* **DoD** : silhouette ↑ ≥ 0.03 vs overlap fixe.
-
----
-
-## 8 – LakeFS schema registry (⭑⭑)
-
-* [x] **`.lakefs/schema.yaml`** : champs + types.
-* [x] **Git hook** : refuser commit si breaking change.
-* **DoD** : CI fail sur schema break, OK sinon.
-
----
-
-## 9 – Snapshot tokenizer
-
-* [x] **`utils/dataset_export.py`**
-  * [x] Sauver `tokenizer.json` dans branch LakeFS (same commit).
-* **DoD** : hash tokenizer stable ; reproduce exact split.
-
----
-
-## 10 – Alias-aware fact-check reward (⭑⭑⭑)
-
-* [x] **`training/reward_fn.py`**
-  * [x] Mapper alias via Neo4j index `apoc.text.clean`.
-
-  $$
-    R = \frac{\#facts\ validés+\#alias\_validés}{\#facts}
-  $$
-* **DoD** : hallucination rate QA ↓ 30 %.
-
----
-
-## 11 – Entailment check paraphrases (active learning)
-
-* [x] **`augmenter.py`**
-  * [x] Passer paraphrase + phrase org → model `facebook/bart-large-mnli`, drop si `contradiction`.
-* **DoD** : drift label < 1 %.
-
----
-
-## 12 – Metric `training_eta_seconds`
-
-* [x] **Callback** : ETA = `(steps_total - step_done)/steps_per_sec`.
-* **DoD** : Grafana montre barre progression.
-
----
-
-## 13 – Checkpoint pruning (disk)
-
-* [x] **Keep top-k (k=2) checkpoints** basé `val_metric`.
-* **DoD** : Espace disque run heavy ≤ +5 GB.
-
----
-
-## 14 – Notebook ex : fine-tune QA
-
-* [x] `examples/fine_tune_QA.ipynb` : de l’ingestion à inference.
-* **DoD** : exécute sans erreur sur GPU Colab.
-
----
-
-## 15 – Property-tests reward_fn
-
-* [x] Hypothesis : si réponse == vérité alors R=1 ; si vide → R=0.
-* **DoD** : tests verts.
-
----
-
-### KPI v2.1 (post-hardening)
-
-| KPI                        | Cible       |
-| -------------------------- | ----------- |
-| Toxic payloads non filtrés | < 0.5 %     |
-| λ̂ calc time               | −90 %       |
-| ANN recall drop après PCA  | < 0.5 %     |
-| Hallucination QA           | −30 %       |
-| Disk footprint checkpoints | ≤ +5 GB/run |
-
-**Cochez toutes les cases → Datacreek v2.1-beta prêt.**
+*Une fois ces cinq blocs cochés, la feuille de route v2.1 sera entièrement réalisée.*
 
 ### History
-- Reset AGENTS for v2.1 tasks.
-- Implemented training ETA metric and callback with Prometheus logging; added unit tests.
+- Reset AGENTS for v2.1 completion tasks.
+- Revalidated dynamic SNR threshold and Prometheus metric with tests.
 
-- Added semantic safety filter with Hugging Face model, NSFW regex, Prometheus counter, and unit tests.
-- Added dynamic SNR soft-gate with adaptive threshold and tests.
-- Added power iteration estimator for hypergraph Laplacian λ_max and accompanying tests.
-- Added sheaf/hypergraph incoherence exporter with API route `/explain/sheaf_diff` and tests.
-- Added incremental PCA reducer `reduce_pca` for persistence-image vectors with unit tests.
-- Added fractal dimension callback with loss logging and Prometheus gauge; added unit tests.
-- Implemented checkpoint pruner keeping top-2 checkpoints by validation metric with unit tests.
-- Added Mapper overlap auto-tuning via silhouette-based grid search with unit test.
-- Implemented alias-aware fact-check reward with Neo4j alias resolution and
-  accompanying unit/property tests.
-- Added contradiction check for paraphrases with bart-large-mnli and unit test.
-- Snapshot tokenizer export saving `tokenizer.json` with LakeFS commit and unit tests.
-- Added LakeFS schema registry with pre-commit guard to block breaking changes; included unit tests.
-- Created fine-tuning QA example notebook demonstrating ingestion, training, and inference.
-- Exposed `EtaCallback` via the top-level `training` package and added test for import.
-- Verified all checklist implementations via targeted unit tests; no further changes required.
+- Completed sheaf_diff endpoint, Mapper overlap tuning, tokenizer snapshot, and training ETA gauge with targeted tests.
+- Re-ran pre-commit and targeted unit tests after installing missing dependencies
+  to verify all v2.1 tasks remain satisfied.

@@ -47,6 +47,38 @@ def test_autotune_mapper_overlap_increases_silhouette():
     assert ov in {0.2, 0.3}
 
 
+def test_tune_overlap_logs_metric(monkeypatch):
+    """`tune_overlap` exposes chosen overlap via metric logger."""
+
+    g = nx.path_graph(6)
+    lens = lambda graph: {n: float(n) for n in graph.nodes()}
+
+    recorded = {}
+    monkeypatch.setattr(
+        mapper, "update_metric", lambda name, value: recorded.update({name: value})
+    )
+
+    _, _, ov = mapper.tune_overlap(
+        g, overlaps=[0.2, 0.3, 0.4, 0.5], n_intervals=2, lens=lens
+    )
+    assert recorded["mapper_overlap_opt"] == ov
+
+
+def test_mapper_to_json_autotunes_by_default(monkeypatch):
+    """`mapper_to_json` performs overlap tuning unless disabled."""
+
+    g = nx.path_graph(6)
+    called: dict[str, bool] = {}
+
+    def fake_tune(*args, **kwargs):
+        called["ran"] = True
+        return nx.Graph(), [], 0.3
+
+    monkeypatch.setattr(mapper, "tune_overlap", fake_tune)
+    mapper.mapper_to_json(g)
+    assert called.get("ran")
+
+
 def test_cache_mapper_nerve_with_redis_and_lmdb(tmp_path):
     """Ensure caching uses Redis and LMDB layers."""
     g = nx.path_graph(4)

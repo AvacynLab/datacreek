@@ -101,6 +101,7 @@ except Exception:  # pragma: no cover - fallback when rich is missing
         yield None, 0
 
 
+from .audio_validator import AudioValidator
 from .redis_helpers import decode_hash
 from .redis_pid import get_current_ttl, start_pid_controller
 from .text import clean_text, extract_json_from_text, normalize_units, split_into_chunks
@@ -191,4 +192,5 @@ __all__ = [
     "record_feedback",
     "fine_tune_from_feedback",
     "snapshot_tokenizer",
+    "AudioValidator",
 ]

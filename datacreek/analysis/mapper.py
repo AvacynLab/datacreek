@@ -3,6 +3,8 @@ from typing import Callable, Iterable, List, Set, Tuple
 
 import networkx as nx
 
+from .monitoring import update_metric
+
 
 def mapper_cover(graph: nx.Graph, radius: int = 1) -> List[Set[object]]:
     """Return a greedy cover of ``graph`` using BFS balls of ``radius``.
@@ -146,12 +148,45 @@ def mapper_to_json(
     lens: Callable[[nx.Graph], dict[object, float]] | None = None,
     cover: tuple[int, float] = (10, 0.5),
     clusterer: str = "dbscan",
+    autotune: bool = True,
+    overlaps: Iterable[float] = (0.2, 0.3, 0.4, 0.5),
 ) -> str:
-    """Return Mapper nerve and cover exported as JSON for the /explain API."""
+    """Return Mapper nerve and cover exported as JSON for the ``/explain`` API.
+
+    Parameters
+    ----------
+    graph:
+        Input graph for which to compute the Mapper nerve.
+    lens:
+        Optional mapping from node to scalar lens value.
+    cover:
+        Tuple ``(n_intervals, overlap)`` controlling the interval cover. When
+        ``autotune`` is ``True`` only ``n_intervals`` is used and the overlap is
+        optimised over ``overlaps``.
+    clusterer:
+        Clustering strategy passed to :func:`mapper_full`.
+    autotune:
+        If ``True`` (default) perform overlap grid-search via :func:`tune_overlap`
+        and expose the chosen value through the ``mapper_overlap_opt`` metric.
+    overlaps:
+        Candidate overlap ratios evaluated during autotuning.
+    """
 
     import json
 
-    nerve, cover_sets = mapper_full(graph, lens=lens, cover=cover, clusterer=clusterer)
+    n_intervals, overlap = cover
+    if autotune:
+        nerve, cover_sets, _ = tune_overlap(
+            graph,
+            overlaps=overlaps,
+            n_intervals=n_intervals,
+            lens=lens,
+            clusterer=clusterer,
+        )
+    else:
+        nerve, cover_sets = mapper_full(
+            graph, lens=lens, cover=(n_intervals, overlap), clusterer=clusterer
+        )
     data = {
         "nodes": [{"id": i, "members": list(c)} for i, c in enumerate(cover_sets)],
         "links": [{"source": u, "target": v} for u, v in nerve.edges()],
@@ -268,6 +303,48 @@ def autotune_mapper_overlap(
             best_score = score
             best_result = (nerve, cover_sets, ov, score)
     return best_result
+
+
+def tune_overlap(
+    graph: nx.Graph,
+    overlaps: Iterable[float] = (0.2, 0.3, 0.4, 0.5),
+    *,
+    n_intervals: int = 10,
+    lens: Callable[[nx.Graph], dict[object, float]] | None = None,
+    clusterer: str = "dbscan",
+) -> tuple[nx.Graph, list[set[object]], float]:
+    """Return Mapper nerve and cover for the best overlap.
+
+    Parameters
+    ----------
+    graph:
+        Input graph on which to run the Mapper algorithm.
+    overlaps:
+        Candidate overlap ratios to evaluate.
+    n_intervals:
+        Number of intervals used in the cover for each overlap.
+    lens:
+        Optional lens function mapping nodes to scalar values.
+    clusterer:
+        Clustering strategy passed to :func:`mapper_full`.
+
+    Returns
+    -------
+    nerve, cover, best_overlap
+        The Mapper nerve and cover corresponding to the overlap that maximizes
+        the silhouette score. The chosen overlap is also returned. The selected
+        value is exposed via the Prometheus metric ``mapper_overlap_opt``.
+    """
+
+    nerve, cover, best_overlap, _ = autotune_mapper_overlap(
+        graph,
+        overlaps=overlaps,
+        n_intervals=n_intervals,
+        lens=lens,
+        clusterer=clusterer,
+    )
+    update_metric("mapper_overlap_opt", float(best_overlap))
+    return nerve, cover, best_overlap
 
 
 import os

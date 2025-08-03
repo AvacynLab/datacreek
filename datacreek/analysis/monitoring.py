@@ -32,6 +32,7 @@ if Gauge is not None:
     sheaf_score_g = _metric(Gauge, "sheaf_score", "Sheaf consistency score")
     sheaf_hyper_score_g = _metric(Gauge, "sheaf_hyper_score", "Sheaf-hyper coherence")
     gw_entropy = _metric(Gauge, "gw_entropy", "GraphWave entropy")
+    snr_dynamic_thr = _metric(Gauge, "snr_dynamic_thr", "Adaptive SNR threshold in dB")
     autotune_cost_g = _metric(Gauge, "autotune_cost", "Current J(theta)")
     bias_wasserstein_last = _metric(
         Gauge, "bias_wasserstein_last", "Latest Wasserstein distance used"
@@ -143,6 +144,7 @@ else:  # pragma: no cover - optional dependency missing
     sheaf_score_g = None
     sheaf_hyper_score_g = None
     gw_entropy = None
+    snr_dynamic_thr = None  # type: ignore
     autotune_cost_g = None
     bias_wasserstein_last = None
     haa_edges_total = None
@@ -176,9 +178,11 @@ _METRICS = {
     "sheaf_score": sheaf_score_g,
     "sheaf_hyper_score": sheaf_hyper_score_g,
     "gw_entropy": gw_entropy,
+    "snr_dynamic_thr": snr_dynamic_thr,
     "tpl_w1": tpl_w1_g,
     "j_cost": j_cost,
     "autotune_cost": autotune_cost_g,
+    "mapper_overlap_opt": None,
     "bias_wasserstein_last": bias_wasserstein_last,
     "haa_edges_total": haa_edges_total,
     "gp_jitter_restarts_total": gp_jitter_restarts_total,

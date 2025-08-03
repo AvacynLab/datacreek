@@ -22,21 +22,39 @@ class DummyTokenizer:
 def test_snapshot_tokenizer(tmp_path, monkeypatch):
     tok = DummyTokenizer({"hello": 1})
 
-    called = {}
+    # Record arguments to both the commit helper and LakeFS client
+    called: dict = {}
 
-    def fake_commit(path, repo):  # record arguments
-        called["path"] = Path(path)
-        called["repo"] = repo
+    class FakeClient:
+        def upload_object(self, repo, path, branch="main"):
+            called["upload_repo"] = repo
+            called["upload_path"] = Path(path)
+            called["upload_branch"] = branch
+
+    def fake_commit(path, repo):
+        called["commit_path"] = Path(path)
+        called["commit_repo"] = repo
         return "id"
 
     monkeypatch.setattr("datacreek.utils.dataset_export.lakefs_commit", fake_commit)
 
-    path, digest1 = snapshot_tokenizer(tok, path=tmp_path, repo="foo")
+    path, digest1 = snapshot_tokenizer(
+        tok, path=tmp_path, repo="foo", lakefs_client=FakeClient()
+    )
     assert path == tmp_path / "tokenizer.json"
     data = path.read_bytes()
     assert digest1 == sha256(data).hexdigest()
-    assert called["repo"] == "foo" and called["path"] == tmp_path
+    assert called["commit_repo"] == "foo" and called["commit_path"] == tmp_path
+    assert called["upload_repo"] == "foo"
+    assert called["upload_path"].name == "tokenizer.json"
 
-    # Second snapshot should yield the same hash (stable export)
-    _, digest2 = snapshot_tokenizer(tok, path=tmp_path, repo="foo")
+    meta = json.loads((tmp_path / "metadata.json").read_text())
+    assert meta["tokenizer_sha"] == digest1
+
+    # Second snapshot should yield the same hash and overwrite metadata
+    _, digest2 = snapshot_tokenizer(
+        tok, path=tmp_path, repo="foo", lakefs_client=FakeClient()
+    )
     assert digest2 == digest1
+    meta2 = json.loads((tmp_path / "metadata.json").read_text())
+    assert meta2["tokenizer_sha"] == digest1
