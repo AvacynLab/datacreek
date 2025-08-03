@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-"""Helpers to snapshot tokenizers alongside dataset exports.
+"""Helpers to snapshot tokenizers and prompt templates alongside dataset exports.
 
-The snapshot is saved as ``tokenizer.json`` within the given LakeFS branch
-working copy so that the exact tokenizer used for the dataset can be
-reproduced. The file is committed using ``lakefs commit`` to ensure it shares
-the same commit as the exported dataset.
+The helpers ensure that both the tokenizer and any Jinja prompt template used
+during dataset generation are committed to the same LakeFS revision as the
+exported data. Templates receive a deterministic ``sha256`` header so that
+experiments can reproduce the exact prompts that were used.
 """
 
 import json
@@ -15,7 +15,7 @@ from typing import Tuple
 
 from .delta_export import lakefs_commit
 
-__all__ = ["snapshot_tokenizer"]
+__all__ = ["snapshot_tokenizer", "snapshot_template"]
 
 
 def snapshot_tokenizer(
@@ -94,3 +94,88 @@ def snapshot_tokenizer(
     # allows callers to assert that downstream tokenizers match this snapshot.
     lakefs_commit(dir_path, repo)
     return json_path, digest
+
+
+TEMPLATE_PREFIX = "# sha256: "
+
+
+def snapshot_template(
+    template: str | Path,
+    *,
+    path: str | Path,
+    repo: str,
+    lakefs_client=None,
+    metadata: str | Path | None = None,
+) -> Tuple[Path, str]:
+    """Copy ``template`` into ``path`` with a ``sha256`` header and return its digest.
+
+    The function normalizes the template so that the first line is a comment of
+    the form ``"# sha256: <digest>"`` where ``digest`` is computed over the body of
+    the template (i.e. everything after the header). The resulting file is
+    committed to LakeFS and its digest recorded in ``metadata.json`` under the
+    ``template_shas`` key.
+
+    Parameters
+    ----------
+    template:
+        Source Jinja template to snapshot.
+    path:
+        Directory representing the LakeFS branch working copy where the
+        template should be stored.
+    repo:
+        Name of the LakeFS repository to commit to. The commit is best-effort;
+        failures are logged but do not raise.
+    lakefs_client:
+        Optional LakeFS client exposing ``upload_object``; when provided the
+        template is uploaded before committing so it shares the same revision as
+        the dataset.
+    metadata:
+        Optional path to a ``metadata.json`` file that will receive/extend the
+        ``template_shas`` mapping documenting template digests.
+
+    Returns
+    -------
+    Tuple[Path, str]
+        The path to the normalized template within ``path`` and its SHA256
+        hex digest.
+    """
+
+    template_path = Path(template)
+    dir_path = Path(path)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    out_path = dir_path / template_path.name
+
+    text = template_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if lines and lines[0].startswith(TEMPLATE_PREFIX):
+        body = "\n".join(lines[1:])
+        if text.endswith("\n"):
+            body += "\n"
+    else:
+        body = text if text.endswith("\n") else text + "\n"
+
+    digest = sha256(body.encode("utf-8")).hexdigest()
+    header = f"{TEMPLATE_PREFIX}{digest}"
+    out_path.write_text(header + "\n" + body, encoding="utf-8")
+
+    # Store digest in metadata under "template_shas"
+    if metadata is None:
+        meta_path = dir_path / "metadata.json"
+    else:
+        meta_path = Path(metadata)
+    meta: dict = {}
+    if meta_path.exists():  # pragma: no cover - trivial
+        meta = json.loads(meta_path.read_text())
+    template_shas = meta.get("template_shas", {})
+    template_shas[template_path.name] = digest
+    meta["template_shas"] = template_shas
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, sort_keys=True))
+
+    if lakefs_client is not None:
+        try:
+            lakefs_client.upload_object(repo, str(out_path), branch="main")
+        except Exception:  # pragma: no cover - network failure not fatal
+            pass
+
+    lakefs_commit(dir_path, repo)
+    return out_path, digest

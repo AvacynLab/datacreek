@@ -61,6 +61,13 @@ groups:
           severity: critical
         annotations:
           summary: "Coherence spectrale sheaf-hypergraph < 0.5"
+      - alert: EmbeddingDrift
+        expr: embedding_mmd > 0.1
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Embedding drift detected (MMD > 0.1 for 24h)"
       - record: ingest_latency_burn_rate_1h
         expr: avg_over_time(ingest_latency_p999[1h]) / 5
       - record: ingest_latency_burn_rate_6h

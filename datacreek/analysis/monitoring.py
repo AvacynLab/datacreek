@@ -138,6 +138,11 @@ if Gauge is not None:
         "pgvector_query_ms",
         "Duration of pgvector nearest-neighbour queries in milliseconds",
     )
+    embedding_mmd_g = _metric(
+        Gauge,
+        "embedding_mmd",
+        "Squared MMD between baseline and new embedding means",
+    )
     j_cost = autotune_cost_g
 else:  # pragma: no cover - optional dependency missing
     tpl_w1_g = None
@@ -169,6 +174,7 @@ else:  # pragma: no cover - optional dependency missing
     ingest_queue_fill_ratio = None  # type: ignore
     breaker_state = None  # type: ignore
     pgvector_query_ms = None  # type: ignore
+    embedding_mmd_g = None
     j_cost = None
 
 
@@ -204,6 +210,7 @@ _METRICS = {
     "ingest_queue_fill_ratio": ingest_queue_fill_ratio,
     "breaker_state": breaker_state,
     "pgvector_query_ms": pgvector_query_ms,
+    "embedding_mmd": embedding_mmd_g,
     # ingestion statistics
     "atoms_total": None,
     "avg_chunk_len": None,

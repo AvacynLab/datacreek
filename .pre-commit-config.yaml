@@ -60,3 +60,8 @@ repos:
         language: python
         files: "^\\.lakefs/schema\\.yaml$"
         additional_dependencies: ["pyyaml"]
+      - id: template-sha
+        name: enforce template sha256 header
+        entry: python scripts/validate_template_sha.py
+        language: python
+        files: "^templates/.*\\.jinja$"
