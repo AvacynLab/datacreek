@@ -258,7 +258,10 @@ def autotune_mapper_overlap(
     best_result = (nx.Graph(), [], 0.5, 0.0)
     for ov in overlaps:
         nerve, cover_sets = mapper_full(
-            graph, lens=lambda _g: lens_vals, cover=(n_intervals, ov), clusterer=clusterer
+            graph,
+            lens=lambda _g: lens_vals,
+            cover=(n_intervals, ov),
+            clusterer=clusterer,
         )
         score = _cover_silhouette(lens_vals, cover_sets)
         if score > best_score:

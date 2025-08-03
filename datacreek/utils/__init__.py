@@ -43,8 +43,8 @@ except Exception:  # pragma: no cover - fallback when heavy deps missing
     ) = _missing  # type: ignore
 from .crypto import decrypt_pii_fields, encrypt_pii_fields, xor_decrypt, xor_encrypt
 from .dataset_cleanup import deduplicate_pairs
-from .delta_export import delta_optimize, delta_vacuum, export_delta, lakefs_commit
 from .dataset_export import snapshot_tokenizer
+from .delta_export import delta_optimize, delta_vacuum, export_delta, lakefs_commit
 from .gitinfo import get_commit_hash
 from .kafka_queue import enqueue_ingest
 from .rate_limit import consume_token

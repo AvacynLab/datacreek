@@ -29,9 +29,7 @@ def test_snapshot_tokenizer(tmp_path, monkeypatch):
         called["repo"] = repo
         return "id"
 
-    monkeypatch.setattr(
-        "datacreek.utils.dataset_export.lakefs_commit", fake_commit
-    )
+    monkeypatch.setattr("datacreek.utils.dataset_export.lakefs_commit", fake_commit)
 
     path, digest1 = snapshot_tokenizer(tok, path=tmp_path, repo="foo")
     assert path == tmp_path / "tokenizer.json"

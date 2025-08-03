@@ -61,7 +61,9 @@ def _resolve_alias(driver: Driver | None, name: str) -> Set[str]:
     return resolved or {name}
 
 
-def build_alias_reward_fn(graph: HyperGraph, driver: Driver | None) -> Callable[[str], float]:
+def build_alias_reward_fn(
+    graph: HyperGraph, driver: Driver | None
+) -> Callable[[str], float]:
     """Create an alias-aware reward function.
 
     The returned callable extracts triplets from a model ``response`` and

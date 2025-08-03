@@ -12,9 +12,7 @@ def test_contradictory_paraphrases_are_dropped(monkeypatch):
     def fake_contradiction(orig: str, para: str) -> bool:
         return para.endswith("green")
 
-    monkeypatch.setattr(
-        "training.augmenter._is_contradiction", fake_contradiction
-    )
+    monkeypatch.setattr("training.augmenter._is_contradiction", fake_contradiction)
     augmenter = ActiveLearningAugmenter(synonyms, k=1, percentile=0, interval=1)
     augmented = augmenter.augment(samples, losses, epoch=1)
 

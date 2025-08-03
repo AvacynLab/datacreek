@@ -97,9 +97,7 @@ def top_k_incoherent(
         return []
     L_s = sheaf_laplacian(graph, edge_attr=edge_attr)
     L_h = B @ B.T
-    base = float(
-        np.sum(np.abs(np.linalg.eigvalsh(L_s) - np.linalg.eigvalsh(L_h)))
-    )
+    base = float(np.sum(np.abs(np.linalg.eigvalsh(L_s) - np.linalg.eigvalsh(L_h))))
 
     incoherent: list[tuple[tuple[int, int], float]] = []
     for u, v in graph.edges():
@@ -111,12 +109,7 @@ def top_k_incoherent(
         L_s2 = sheaf_laplacian(g2, edge_attr=edge_attr)
         L_h2 = B2 @ B2.T
         diff = float(
-            np.sum(
-                np.abs(
-                    np.linalg.eigvalsh(L_s2)
-                    - np.linalg.eigvalsh(L_h2)
-                )
-            )
+            np.sum(np.abs(np.linalg.eigvalsh(L_s2) - np.linalg.eigvalsh(L_h2)))
         )
         delta = abs(diff - base)
         if delta > tau:

@@ -11,7 +11,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -28,7 +28,7 @@ def load_previous_schema(path: Path) -> Optional[Dict[str, Any]]:
     """Return the schema tracked in ``HEAD`` or ``None`` if it does not exist."""
     try:
         res = subprocess.run(
-            ["git", "show", f"HEAD:{path.as_posix()}"] ,
+            ["git", "show", f"HEAD:{path.as_posix()}"],
             check=True,
             capture_output=True,
             text=True,

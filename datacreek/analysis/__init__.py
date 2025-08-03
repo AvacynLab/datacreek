@@ -267,7 +267,13 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from . import symmetry as _s
 
         return getattr(_s, name)
-    if name in {"mapper_nerve", "inverse_mapper", "mapper_full", "mapper_to_json", "autotune_mapper_overlap"}:
+    if name in {
+        "mapper_nerve",
+        "inverse_mapper",
+        "mapper_full",
+        "mapper_to_json",
+        "autotune_mapper_overlap",
+    }:
         from . import mapper as _m
 
         return getattr(_m, name)
@@ -401,10 +407,8 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
         from .hybrid_ann import search_hnsw_pq as _hpq
         from .hypergraph_conv import chebyshev_conv as _cc
         from .hypergraph_conv import hypergraph_laplacian as _hl
-        from .sheaf_hyper_bridge import (
-            sheaf_hyper_bridge_score as _shb,
-            top_k_incoherent as _tki,
-        )
+        from .sheaf_hyper_bridge import sheaf_hyper_bridge_score as _shb
+        from .sheaf_hyper_bridge import top_k_incoherent as _tki
         from .tda_fast import fast_persistence_diagrams as _fpd
         from .tda_vectorize import augment_embeddings_with_persistence as _ap
         from .tda_vectorize import betti_curve as _bc

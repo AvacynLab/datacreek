@@ -4,7 +4,6 @@ import json
 import types
 
 import networkx as nx
-
 import pytest
 from fastapi import HTTPException
 

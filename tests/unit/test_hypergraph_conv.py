@@ -1,10 +1,7 @@
 import numpy as np
 import pytest
 
-from datacreek.analysis.hypergraph_conv import (
-    hypergraph_laplacian,
-    estimate_lambda_max,
-)
+from datacreek.analysis.hypergraph_conv import estimate_lambda_max, hypergraph_laplacian
 
 
 def build_simple_laplacian():

@@ -10,7 +10,9 @@ from training.reward_fn import build_alias_reward_fn
 
 # Strategies generating valid triplet strings compatible with ``extract_triplets``
 subjects = st.sampled_from(["alice", "bob", "paris", "london"])
-predicates = st.sampled_from(["is", "likes", "has", "knows", "located_in", "capital_of"])
+predicates = st.sampled_from(
+    ["is", "likes", "has", "knows", "located_in", "capital_of"]
+)
 objects = st.sampled_from(["apples", "carol", "france", "uk", "usa"])
 triplets = st.builds(lambda s, p, o: f"{s} {p} {o}", subjects, predicates, objects)
 

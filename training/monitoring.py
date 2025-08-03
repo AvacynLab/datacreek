@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Monitoring utilities for training metrics and callbacks."""
 
-from dataclasses import dataclass
-from typing import Iterable, Mapping, Optional
-import time
-from pathlib import Path
 import shutil
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Mapping, Optional
 
 from datacreek.analysis import fractal_dim_embedding
 
@@ -163,9 +163,7 @@ class FractalDimCallback:
         self.logger = logger
         self._epoch = 0
 
-    def update(
-        self, embeddings: Mapping[object, Iterable[float]]
-    ) -> Optional[float]:
+    def update(self, embeddings: Mapping[object, Iterable[float]]) -> Optional[float]:
         """Update the estimate and log the fractal loss.
 
         Parameters
@@ -254,6 +252,6 @@ class CheckpointPruner:
         # Sort according to metric quality.
         self._checkpoints.sort(key=lambda x: x[0], reverse=self.mode == "max")
         # Remove checkpoints beyond the top-k.
-        for _, obsolete in self._checkpoints[self.k:]:
+        for _, obsolete in self._checkpoints[self.k :]:
             shutil.rmtree(obsolete, ignore_errors=True)
         self._checkpoints = self._checkpoints[: self.k]
