@@ -110,10 +110,11 @@ class TenantRouter:
         if not tenant or not model_version:
             return {"error": "missing headers"}
 
-        # Divert 5 % of ``prod`` traffic to the canary deployment when it
-        # exists. Requests for other model versions are routed directly.
+        # Divert a small fraction of ``prod`` traffic to the canary deployment
+        # using non-cryptographic randomness. Other model versions are routed
+        # directly to their matching deployment.
         target_version = model_version
-        if model_version == "prod" and random.random() < 0.05:
+        if model_version == "prod" and random.random() < 0.05:  # nosec B311
             target_version = "canary"
 
         deployment_name = f"{tenant}-{target_version}"
