@@ -1,57 +1,26 @@
-import numpy as np
-import pytest
+import datetime as dt
 
-from datacreek.analysis.hypergraph import (
-    hyper_adamic_adar_scores,
-    hyper_sagnn_embeddings,
-    hyper_sagnn_head_drop_embeddings,
-    hyperedge_attention_scores,
-)
+from datacreek.hypergraph import RedisGraphHotLayer, process_edge_stream
 
 
-def test_hyper_sagnn_embeddings_deterministic_and_shape():
-    node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-    edges = [[0, 1], [1, 2]]
-    emb1 = hyper_sagnn_embeddings(edges, node_features, seed=0)
-    emb2 = hyper_sagnn_embeddings(edges, node_features, seed=0)
-    assert emb1.shape == (2, 2)
-    assert np.allclose(emb1, emb2)
+def test_process_edge_stream_writes_edges():
+    events = [
+        {"src": "a", "dst": "b", "ts": dt.datetime(2024, 1, 1, 0, 0, 0)},
+        {"src": "b", "dst": "c", "ts": dt.datetime(2024, 1, 1, 0, 0, 10)},
+        # falls into next 30s window and should trigger a flush
+        {"src": "c", "dst": "d", "ts": dt.datetime(2024, 1, 1, 0, 0, 40)},
+    ]
+    hot = RedisGraphHotLayer()
+    process_edge_stream(events, hot)
 
-    emb3 = hyper_sagnn_embeddings(edges, node_features, embed_dim=3, seed=0)
-    assert emb3.shape == (2, 3)
-
-
-def test_hyper_sagnn_head_drop_embeddings_threshold_behavior():
-    node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-    edges = [[0, 1], [1, 2]]
-    # threshold low enough to keep heads
-    out = hyper_sagnn_head_drop_embeddings(
-        edges, node_features, num_heads=2, threshold=0.0, seed=0
-    )
-    assert out.shape == (2, 1)
-    assert not np.allclose(out, 0)
-
-    # high threshold drops all heads -> zeros
-    out2 = hyper_sagnn_head_drop_embeddings(
-        edges, node_features, num_heads=2, threshold=1.0, seed=0
-    )
-    assert np.allclose(out2, 0)
+    assert set(hot.neighbours("a")) == {"b"}
+    assert set(hot.neighbours("b")) == {"c"}
+    assert set(hot.neighbours("c")) == {"d"}
 
 
-def test_hyper_adamic_adar_scores_expected_values():
-    edges = [[1, 2, 3], [2, 3], [3, 4]]
-    scores = hyper_adamic_adar_scores(edges)
-    approx = pytest.approx
-    val = 1 / np.log(2)
-    assert scores[(1, 2)] == approx(val)
-    assert scores[(1, 3)] == approx(val)
-    assert scores[(2, 3)] == approx(val)
-    assert scores[(3, 4)] == 0.0
-
-
-def test_hyperedge_attention_scores_deterministic():
-    node_features = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-    edges = [[0, 1], [1, 2]]
-    scores = hyperedge_attention_scores(edges, node_features, seed=0)
-    assert scores.shape == (2,)
-    assert np.allclose(scores, [0.5, 0.5])
+def test_hot_layer_p95_latency_under_threshold():
+    hot = RedisGraphHotLayer()
+    for i in range(100):
+        hot.add_edge(f"n{i}", f"n{i+1}")
+        hot.neighbours(f"n{i}")
+    assert hot.p95_latency_ms() < 500

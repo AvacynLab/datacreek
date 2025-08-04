@@ -55,3 +55,5 @@ interrogate>=1.7
 imagehash>=4.3.0
 kafka-python>=2.0.2
 pillow>=11.0.0
+prometheus-client>=0.22.0
+ray[serve]>=2.9.0
