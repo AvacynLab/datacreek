@@ -1,8 +1,20 @@
 from __future__ import annotations
 
-"""Prometheus callback to expose training ETA through the HF Trainer."""
+"""Callbacks used during training.
+
+This module currently provides:
+
+* :class:`TrainingEtaSecondsCallback` – exports a Prometheus gauge with the
+  estimated time remaining for a run.
+* :class:`MlflowLoggingCallback` – streams key hyperparameters, metrics and the
+  final model artifact to an MLflow tracking server.
+
+Both callbacks are implemented as optional dependencies so that the core
+codebase can be used without Prometheus or MLflow installed.
+"""
 
 import time
+from pathlib import Path
 from typing import Optional
 
 try:  # pragma: no cover - optional dependency
@@ -19,6 +31,11 @@ try:  # pragma: no cover - optional dependency
     from prometheus_client import Gauge
 except Exception:  # pragma: no cover - optional dependency
     Gauge = None  # type: ignore
+
+try:  # pragma: no cover - optional dependency
+    import mlflow
+except Exception:  # pragma: no cover - optional dependency
+    mlflow = None  # type: ignore
 
 
 class TrainingEtaSecondsCallback(TrainerCallback):
@@ -86,4 +103,64 @@ class TrainingEtaSecondsCallback(TrainerCallback):
                     self.gauge.set(eta)
         self._last_time = now
         self._last_step = step
+        return control
+
+
+class MlflowLoggingCallback(TrainerCallback):
+    """Log training information to an MLflow tracking server.
+
+    The callback opens an MLflow run when training begins and streams useful
+    metadata throughout the lifecycle:
+
+    * Hyperparameters such as the learning rate and number of epochs.
+    * Metrics like validation loss and average reward.
+    * The final ``model.gguf`` artifact produced by the trainer.
+
+    Parameters
+    ----------
+    template_sha:
+        Identifier of the prompt template used for the run. Including the SHA
+        ensures reproducibility across experiments.
+    """
+
+    def __init__(self, template_sha: str) -> None:
+        if mlflow is None:  # pragma: no cover - optional dependency
+            raise ImportError("mlflow is not installed")
+        self.template_sha = template_sha
+
+    def on_train_begin(self, args, state, control, **kwargs):  # type: ignore[override]
+        """Start an MLflow run and record hyperparameters."""
+
+        mlflow.start_run()
+        mlflow.log_params(
+            {
+                "learning_rate": getattr(args, "learning_rate", None),
+                "epochs": getattr(args, "num_train_epochs", None),
+                "template_sha": self.template_sha,
+            }
+        )
+        return control
+
+    def on_log(self, args, state, control, logs=None, **kwargs):  # type: ignore[override]
+        """Stream selected metrics to MLflow as they become available."""
+
+        if logs:
+            metrics: dict[str, float] = {}
+            if "val_loss" in logs:
+                metrics["val_loss"] = logs["val_loss"]
+            if "reward_avg" in logs:
+                metrics["reward_avg"] = logs["reward_avg"]
+            if metrics:
+                mlflow.log_metrics(metrics, step=getattr(state, "global_step", None))
+        return control
+
+    def on_train_end(self, args, state, control, **kwargs):  # type: ignore[override]
+        """Log the final model artifact and close the MLflow run."""
+
+        output_dir = getattr(args, "output_dir", None)
+        if output_dir:
+            model_path = Path(output_dir) / "model.gguf"
+            if model_path.exists():
+                mlflow.log_artifact(str(model_path))
+        mlflow.end_run()
         return control
