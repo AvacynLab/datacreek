@@ -138,3 +138,16 @@ def test_sheaf_diff_latency(monkeypatch):
     router.sheaf_diff(user=user, top=50)
     elapsed = time.perf_counter() - start
     assert elapsed < 0.1
+
+
+def test_repair_preview(monkeypatch):
+    redis = types.SimpleNamespace(
+        lrange=lambda k, s, e: [
+            json.dumps({"u": "a", "v": "b", "delta": 1.0, "delete": "D", "merge": "M"})
+        ]
+    )
+    monkeypatch.setattr(router, "get_redis_client", lambda: redis)
+    user = DummyUser(1)
+    resp = router.repair_preview(user=user, limit=1)
+    data = json.loads(resp.body.decode())
+    assert data["suggestions"][0]["u"] == "a"

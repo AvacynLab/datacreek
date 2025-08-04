@@ -4,7 +4,7 @@ import json
 from hashlib import sha256
 from pathlib import Path
 
-from datacreek.utils import snapshot_tokenizer
+from datacreek.utils import snapshot_template, snapshot_tokenizer
 
 
 class DummyTokenizer:
@@ -58,3 +58,36 @@ def test_snapshot_tokenizer(tmp_path, monkeypatch):
     assert digest2 == digest1
     meta2 = json.loads((tmp_path / "metadata.json").read_text())
     assert meta2["tokenizer_sha"] == digest1
+
+
+def test_snapshot_template(tmp_path, monkeypatch):
+    template = tmp_path / "prompt.jinja"
+    template.write_text("Hello {{ name }}!\n", encoding="utf-8")
+
+    called: dict = {}
+
+    class FakeClient:
+        def upload_object(self, repo, path, branch="main"):
+            called["upload_repo"] = repo
+            called["upload_path"] = Path(path)
+            called["upload_branch"] = branch
+
+    def fake_commit(path, repo):
+        called["commit_path"] = Path(path)
+        called["commit_repo"] = repo
+        return "id"
+
+    monkeypatch.setattr("datacreek.utils.dataset_export.lakefs_commit", fake_commit)
+
+    out, digest = snapshot_template(
+        template, path=tmp_path, repo="foo", lakefs_client=FakeClient()
+    )
+    assert out == tmp_path / "prompt.jinja"
+    text = out.read_text(encoding="utf-8")
+    assert text.splitlines()[0] == f"# sha256: {digest}"
+    assert called["commit_repo"] == "foo" and called["commit_path"] == tmp_path
+    assert called["upload_repo"] == "foo"
+    assert called["upload_path"].name == "prompt.jinja"
+
+    meta = json.loads((tmp_path / "metadata.json").read_text())
+    assert meta["template_shas"]["prompt.jinja"] == digest

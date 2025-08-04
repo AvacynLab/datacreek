@@ -126,6 +126,10 @@ __all__ = [
     "sheaf_hyper_bridge_score",
     "top_k_incoherent",
     "explain_to_svg",
+    "baseline_mean",
+    "embedding_mmd",
+    "save_baseline",
+    "load_baseline",
 ]
 
 
@@ -438,6 +442,18 @@ def __getattr__(name: str):  # pragma: no cover - dynamic lazy imports
             "fast_persistence_diagrams": _fpd,
             "sheaf_hyper_bridge_score": _shb,
             "top_k_incoherent": _tki,
+        }[name]
+    if name in {"baseline_mean", "embedding_mmd", "save_baseline", "load_baseline"}:
+        from .drift import baseline_mean as _bm
+        from .drift import embedding_mmd as _em
+        from .drift import load_baseline as _lb
+        from .drift import save_baseline as _sb
+
+        return {
+            "baseline_mean": _bm,
+            "embedding_mmd": _em,
+            "save_baseline": _sb,
+            "load_baseline": _lb,
         }[name]
     if name == "learn_hyperbolic_projection":
         from .hyp_embed import learn_hyperbolic_projection as _lh
