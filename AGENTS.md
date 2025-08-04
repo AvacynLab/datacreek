@@ -202,3 +202,5 @@ ingest  >>   build_dataset   >>  fine_tune_SFT
   tests self-contained.
 - Expanded fine-tuning DAG tests to ensure tenant ID propagates through all downstream tasks.
 - Introduced GPU cost tracking metric and helper computing $C=t_\text{GPU}\times P_\text{unit}$ with tests.
+
+- Formatted DAG and Ray Serve test files via pre-commit and reran targeted tests.

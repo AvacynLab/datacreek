@@ -20,6 +20,7 @@ from typing import Any, Callable, Optional
 try:  # pragma: no cover - Airflow may not be installed
     from airflow import DAG
     from airflow.operators.python import PythonOperator
+
     AIRFLOW_AVAILABLE = True
 except Exception:  # pragma: no cover - lightweight fallback for tests
     AIRFLOW_AVAILABLE = False
@@ -131,6 +132,7 @@ def deploy_canary_task(**context: Any) -> None:
     # Placeholder for deployment logic
     ti.xcom_push(key="tenant", value=tenant)
 
+
 if AIRFLOW_AVAILABLE:
     with DAG(
         dag_id="datacreek_finetune",
@@ -155,18 +157,14 @@ if AIRFLOW_AVAILABLE:
         fine_tune_sft >> [eval_qa, deploy_canary]
 else:  # pragma: no cover - executed in lightweight test mode
     dag = DAG(dag_id="datacreek_finetune")
-    ingest = PythonOperator(
-        task_id="ingest", python_callable=ingest_task, dag=dag
-    )
+    ingest = PythonOperator(task_id="ingest", python_callable=ingest_task, dag=dag)
     build_dataset = PythonOperator(
         task_id="build_dataset", python_callable=build_dataset_task, dag=dag
     )
     fine_tune_sft = PythonOperator(
         task_id="fine_tune_SFT", python_callable=fine_tune_sft_task, dag=dag
     )
-    eval_qa = PythonOperator(
-        task_id="eval_QA", python_callable=eval_qa_task, dag=dag
-    )
+    eval_qa = PythonOperator(task_id="eval_QA", python_callable=eval_qa_task, dag=dag)
     deploy_canary = PythonOperator(
         task_id="deploy_canary", python_callable=deploy_canary_task, dag=dag
     )

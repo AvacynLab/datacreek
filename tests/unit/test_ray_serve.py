@@ -75,7 +75,9 @@ def test_router_uses_headers_to_lookup_deployment():
 def test_deploy_model_invokes_serve_run_with_name():
     with patch("serving.ray_serve.serve.run") as run:
         with patch.object(
-            __import__("serving.ray_serve", fromlist=["ModelDeployment"]).ModelDeployment,
+            __import__(
+                "serving.ray_serve", fromlist=["ModelDeployment"]
+            ).ModelDeployment,
             "bind",
             return_value=None,
             create=True,
