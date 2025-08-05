@@ -42,3 +42,23 @@ def test_exceeding_quota_raises_without_increment():
 
 def test_calculate_cost_helper():
     assert calculate_cost(2.0, 3.5) == 7.0
+
+
+def test_add_credits_and_get_remaining():
+    controller = QuotaController({})
+    assert controller.get_remaining("acme") == 0.0
+    new_balance = controller.add_credits("acme", 15)
+    assert new_balance == 15
+    assert controller.get_remaining("acme") == 15
+    controller.add_credits("acme", 5)
+    assert controller.get_remaining("acme") == 20
+
+
+def test_set_price_controls_subsequent_cost():
+    reset_metrics()
+    controller = QuotaController({"acme": 10})
+    returned = controller.set_price("acme", 0.25)
+    assert returned == 0.25
+    controller.consume("acme", 4)
+    cost_value = REGISTRY.get_sample_value("gpu_cost_total", {"tenant": "acme"})
+    assert cost_value == 1.0

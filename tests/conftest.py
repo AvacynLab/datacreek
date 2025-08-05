@@ -2,6 +2,13 @@ import os
 import sys
 import types
 
+# Ensure the repository root is importable so test modules can resolve local
+# packages such as ``metrics_prometheus`` and ``scripts`` without relying on
+# ``PYTHONPATH`` environment tweaks.
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 os.environ.setdefault("DATACREEK_REQUIRE_PERSISTENCE", "0")
 os.environ.setdefault("DATACREEK_LIGHT_DATASET", "1")
 

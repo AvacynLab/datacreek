@@ -37,6 +37,7 @@
   | $P_\text{unit}$ | prix/min      |
 * [x] **Quota controller** : stop job si crédits < 0
 * [x] **Coût total** `gpu_cost_total{tenant}` via $C=t_\text{GPU}\times P_\text{unit}$
+* [x] **Admin** : top-up & mise à jour prix par tenant
 * **DoD** : job dépasse quota ⇒ état `failed_quota`
 
 ---
@@ -202,5 +203,7 @@ ingest  >>   build_dataset   >>  fine_tune_SFT
   tests self-contained.
 - Expanded fine-tuning DAG tests to ensure tenant ID propagates through all downstream tasks.
 - Introduced GPU cost tracking metric and helper computing $C=t_\text{GPU}\times P_\text{unit}$ with tests.
-
+- Added balance query and credit top-up methods to GPU quota controller with tests.
 - Formatted DAG and Ray Serve test files via pre-commit and reran targeted tests.
+- Added tenant price update method to GPU quota controller with tests.
+- Ensured tests can import local packages by inserting the repository root into ``sys.path``.
