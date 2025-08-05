@@ -59,6 +59,33 @@ class QuotaController:
         self._credits: Dict[str, float] = dict(credits)
         self._prices: Dict[str, float] = dict(prices or {})
 
+    def get_remaining(self, tenant: str) -> float:
+        """Return the remaining GPU minutes for *tenant*.
+
+        Tenants with no recorded balance default to ``0`` which allows callers
+        to query a tenant prior to allocating any credits.
+        """
+
+        return self._credits.get(tenant, 0.0)
+
+    def add_credits(self, tenant: str, minutes: float) -> float:
+        """Add ``minutes`` of GPU credit for *tenant* and return new balance."""
+
+        new_balance = self._credits.get(tenant, 0.0) + minutes
+        self._credits[tenant] = new_balance
+        return new_balance
+
+    def set_price(self, tenant: str, price: float) -> float:
+        """Set GPU price per minute for *tenant* and return the new price.
+
+        Updating the price allows subsequent consumption to reflect revised
+        billing rates, enabling administrators to adjust tenant-specific
+        charges without recreating the controller.
+        """
+
+        self._prices[tenant] = price
+        return price
+
     def consume(self, tenant: str, minutes: float) -> float:
         """Consume GPU minutes for *tenant* and update Prometheus metrics.
 
