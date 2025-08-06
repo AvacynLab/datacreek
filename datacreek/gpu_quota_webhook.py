@@ -26,7 +26,8 @@ from pydantic import BaseModel
 from metrics_prometheus.gpu_billing import QuotaController, QuotaExceededError
 
 # Prometheus gauge tracking the remaining GPU credits for each tenant.  The
-# value follows ``credits_left = credits_0 - \int gpu\_minutes\,dt``.
+# value follows ``credits_left = credits_0 - \int gpu\_minutes\,dt`` and is
+# updated only when a job is accepted.
 gpu_credits_left = Gauge(
     "gpu_credits_left", "Remaining GPU credits for a tenant", ["tenant"]
 )
@@ -45,8 +46,8 @@ class JobSpec(BaseModel):
     """Specification of the training job submitted by a tenant."""
 
     tenant: str
-    t_epoch: float  # minutes per epoch
-    n_epoch: int
+    time_per_epoch: float  # minutes per epoch
+    epochs: int
 
 
 def create_app(controller: QuotaController | None = None) -> FastAPI:
@@ -66,12 +67,13 @@ def create_app(controller: QuotaController | None = None) -> FastAPI:
     def mutate(job: JobSpec) -> dict[str, float]:
         """Approve or reject the submitted job based on remaining credits.
 
-        The expected GPU time ``E_gpu`` is computed as ``t_epoch * n_epoch``.  If
-        the tenant lacks sufficient credits an HTTP 403 error is raised;
-        otherwise credits are decremented and the remaining balance is returned.
+        The expected GPU time :math:`E_{gpu}` is computed as
+        ``time_per_epoch * epochs``.  If the tenant lacks sufficient credits an
+        HTTP 403 error is raised; otherwise credits are decremented and the
+        remaining balance is returned.
         """
 
-        e_gpu = job.t_epoch * job.n_epoch
+        e_gpu = job.time_per_epoch * job.epochs
         remaining = qc.get_remaining(job.tenant)
         if remaining < e_gpu:
             gpu_requests_total.labels(job.tenant, "rejected").inc()

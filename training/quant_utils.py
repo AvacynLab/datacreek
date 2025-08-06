@@ -25,10 +25,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Tuple
 
 import torch
-from bitsandbytes import functional as bnb
+
+try:  # bitsandbytes is optional for bfloat4 tests
+    from bitsandbytes import functional as bnb
+except Exception:  # pragma: no cover - dependency may be absent
+    bnb = None
 
 
 @dataclass
@@ -49,6 +53,22 @@ class QuantizedParam:
     absmax: torch.Tensor
     scale: torch.Tensor
 
+
+@dataclass
+class BFloat4Param:
+    r"""Container holding bfloat4 quantization results for a parameter.
+
+    Attributes
+    ----------
+    qweight:
+        Quantized weights stored as signed 4-bit values packed in ``torch.int8``.
+    scale:
+        Per-group SmoothQuant scale ``s_g = \max|w| / 127`` used for
+        dequantization.
+    """
+
+    qweight: torch.Tensor
+    scale: torch.Tensor
 
 def merge_lora_weights(
     base_state: Dict[str, torch.Tensor],
@@ -94,7 +114,7 @@ def _per_channel_scale(weight: torch.Tensor) -> torch.Tensor:
 
 
 def smoothquant_group_scales(
-    weight: torch.Tensor, *, group_size: int = 64
+    weight: torch.Tensor, *, group_size: int = 128
 ) -> torch.Tensor:
     """Compute SmoothQuant per-group scales with outlier clipping.
 
@@ -109,6 +129,8 @@ def smoothquant_group_scales(
         Tensor containing the weights to be quantized.
     group_size:
         Number of consecutive elements in the last dimension that form a group.
+        The default of ``128`` matches the SmoothQuant configuration used in
+        production.
 
     Returns
     -------
@@ -129,7 +151,7 @@ def smoothquant_group_scales(
 
 
 def quantize_bfloat4(
-    weight: torch.Tensor, *, group_size: int = 64
+    weight: torch.Tensor, *, group_size: int = 128
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Quantize weights to bfloat4 using SmoothQuant scaling.
 
@@ -145,7 +167,8 @@ def quantize_bfloat4(
     weight:
         Tensor of weights to be quantized.
     group_size:
-        Number of elements per group when computing scales.
+        Number of elements per group when computing scales.  The default of
+        ``128`` is the configuration targeted by the v3.1 backlog.
 
     Returns
     -------
@@ -161,6 +184,49 @@ def quantize_bfloat4(
     normalized = groups / scales.unsqueeze(-1)
     quantized = torch.clamp(torch.round(normalized), -8, 7).to(torch.int8)
     return quantized, scales
+
+
+def quantize_state_dict_bfloat4(
+    state: Dict[str, torch.Tensor], *, group_size: int = 128
+) -> Dict[str, BFloat4Param]:
+    r"""Quantize an entire state dict to bfloat4.
+
+    Each tensor in ``state`` is partitioned into groups of ``group_size`` along
+    the last dimension.  For each group we compute a SmoothQuant scale
+    ``s_g = \max(|w|) / 127`` and clip scales above the 99th percentile.
+    Weights are divided by their scale, rounded to integers and clipped to the
+    signed 4-bit range before being stored in ``torch.int8`` containers.
+
+    Parameters
+    ----------
+    state:
+        Mapping of parameter names to tensors to be quantized.
+    group_size:
+        Number of elements per group when computing scales.
+
+    Returns
+    -------
+    Dict[str, BFloat4Param]
+        Mapping from parameter names to their bfloat4 quantized representation.
+    """
+
+    quantized: Dict[str, BFloat4Param] = {}
+    for name, weight in state.items():
+        qweight, scale = quantize_bfloat4(weight, group_size=group_size)
+        quantized[name] = BFloat4Param(qweight=qweight, scale=scale)
+    return quantized
+
+
+def export_bfloat4_gguf(
+    state: Dict[str, torch.Tensor], path: str, *, group_size: int = 128
+) -> None:
+    """Quantize ``state`` to bfloat4 and export to a minimal GGUF container."""
+
+    qstate = quantize_state_dict_bfloat4(state, group_size=group_size)
+    data_path = Path(path)
+    with data_path.open("wb") as f:
+        f.write(b"GGUF")
+        torch.save(qstate, f)
 
 
 def quantize_state_dict_nf4(
@@ -185,7 +251,8 @@ def quantize_state_dict_nf4(
         containing the quantized weights, absmax statistics and per‑channel
         scales.
     """
-
+    if bnb is None:  # pragma: no cover - dependency check
+        raise ImportError("bitsandbytes is required for NF4 quantization")
     quantized: Dict[str, QuantizedParam] = {}
     for name, weight in state.items():
         if weight.ndim == 1:
@@ -208,7 +275,8 @@ def dequantize_state_dict_nf4(
     qstate: Dict[str, QuantizedParam]
 ) -> Dict[str, torch.Tensor]:
     """Reconstruct approximate weights from NF4 quantized parameters."""
-
+    if bnb is None:  # pragma: no cover - dependency check
+        raise ImportError("bitsandbytes is required for NF4 quantization")
     dequantized: Dict[str, torch.Tensor] = {}
     for name, param in qstate.items():
         recovered = bnb.dequantize_nf4(param.qweight, param.absmax)

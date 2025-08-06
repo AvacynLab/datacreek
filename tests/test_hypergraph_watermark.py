@@ -4,6 +4,7 @@ from datacreek.hypergraph import (
     LATE_EDGE_TOTAL,
     RedisGraphHotLayer,
     process_edge_stream_with_watermark,
+    replay_late_events,
 )
 
 
@@ -40,3 +41,20 @@ def test_event_beyond_bound_goes_to_late_sink():
     assert len(late) == 1 and late[0]["dst"] == "too_late"
     if LATE_EDGE_TOTAL is not None:
         assert LATE_EDGE_TOTAL._value.get() == start + 1
+
+
+def test_replay_late_event_merges_into_hot_layer():
+    """Late events sent to the sink can be merged back into the graph."""
+    base = dt.datetime(2024, 1, 1, 0, 0, 0)
+    events = [
+        {"src": "new", "dst": "later", "ts": base + dt.timedelta(minutes=10)},
+        # 15 minutes older than the current max timestamp -> late
+        {"src": "old", "dst": "too_late", "ts": base - dt.timedelta(minutes=5)},
+    ]
+    hot = RedisGraphHotLayer()
+    late: list[dict] = []
+    process_edge_stream_with_watermark(events, hot, late_sink=late.append)
+
+    assert hot.neighbours("old") == []  # not yet merged
+    replay_late_events(late, hot)
+    assert set(hot.neighbours("old")) == {"too_late"}

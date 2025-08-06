@@ -22,6 +22,19 @@ def test_ewma_updates_state_correctly() -> None:
     assert state.sigma == pytest.approx(expected_sigma)
 
 
+def test_default_lambda_is_point_one() -> None:
+    """Detector should use λ=0.1 when no value is provided."""
+    det = TenantEWMA()  # default λ = 0.1
+    det.update("charlie", 0.0)
+    det.update("charlie", 0.5)
+    state = det._state["charlie"]
+    # μ_2 = 0.1 * 0.5 + 0.9 * 0.0
+    assert state.mu == pytest.approx(0.05)
+    # σ should be computed with the same λ
+    expected_sigma = sqrt(0.1 * (0.5 - state.mu) ** 2 + 0.9 * 0.0**2)
+    assert state.sigma == pytest.approx(expected_sigma)
+
+
 def test_alert_triggers_on_large_drift() -> None:
     det = TenantEWMA(lambda_=0.1)
     drift_alert_total.clear()
