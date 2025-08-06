@@ -94,11 +94,16 @@ class TenantEWMA:
     ----------
     lambda_:
         Smoothing factor :math:`\lambda` in ``[0, 1]`` controlling how much
-        weight is given to the latest observation.
+        weight is given to the latest observation.  Defaults to ``0.1`` which
+        offers a good trade‑off between reactivity and stability for most
+        tenants.
     """
 
-    def __init__(self, lambda_: float) -> None:
+    def __init__(self, lambda_: float = 0.1) -> None:
+        """Create a new detector with smoothing factor ``lambda_``."""
+
         self.lambda_ = lambda_
+        # Internal mapping tenant -> (_EWMAState)
         self._state: Dict[str, _EWMAState] = {}
 
     def update(self, tenant: str, drift: float) -> bool:

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from prometheus_client import REGISTRY
 
 from datacreek.gpu_quota_webhook import create_app, gpu_credits_left, gpu_requests_total
-from metrics_prometheus.gpu_billing import QuotaController
+from metrics_prometheus.gpu_billing import QuotaController, gpu_minutes_total
 
 
 def test_job_rejected_when_over_budget() -> None:
@@ -14,13 +14,15 @@ def test_job_rejected_when_over_budget() -> None:
 
     gpu_credits_left.clear()  # ensure a clean registry
     gpu_requests_total.clear()
+    gpu_minutes_total.clear()
     controller = QuotaController({"tenant-a": 50})
     app = create_app(controller)
     client = TestClient(app)
 
     # First submit a small job consuming 20 minutes to leave 30 credits.
     resp_ok = client.post(
-        "/mutate", json={"tenant": "tenant-a", "t_epoch": 10, "n_epoch": 2}
+        "/mutate",
+        json={"tenant": "tenant-a", "time_per_epoch": 10, "epochs": 2},
     )
     assert resp_ok.status_code == 200
     assert resp_ok.json()["credits_left"] == 30
@@ -33,10 +35,15 @@ def test_job_rejected_when_over_budget() -> None:
         "gpu_requests_total", labels={"tenant": "tenant-a", "status": "accepted"}
     )
     assert accepted == 1
+    minutes = REGISTRY.get_sample_value(
+        "gpu_minutes_total", labels={"tenant": "tenant-a"}
+    )
+    assert minutes == 20
 
     # Second job requires 40 minutes which exceeds remaining 30 credits
     resp = client.post(
-        "/mutate", json={"tenant": "tenant-a", "t_epoch": 20, "n_epoch": 2}
+        "/mutate",
+        json={"tenant": "tenant-a", "time_per_epoch": 20, "epochs": 2},
     )
     assert resp.status_code == 403
     # Balance and rejected counter should update accordingly
@@ -48,3 +55,7 @@ def test_job_rejected_when_over_budget() -> None:
         "gpu_requests_total", labels={"tenant": "tenant-a", "status": "rejected"}
     )
     assert rejected == 1
+    minutes_after = REGISTRY.get_sample_value(
+        "gpu_minutes_total", labels={"tenant": "tenant-a"}
+    )
+    assert minutes_after == 20
