@@ -1,209 +1,200 @@
-### Check-list « v3.0 – SaaS Readiness & Scale-Out »
+### Check-list « v3.1 — SaaS hardening (ingestion ⇢ hypergraphe ⇢ coûts ⇢ serve) »
 
-*(chaque ☐ = case à cocher ; indentation → sous-étapes ; formules & tableaux variables inclus ; **Objectif** + **DoD** à la fin de chaque bloc)*
+*(chaque ☐ = action à cocher ; indentation = sous-étapes ; formules + tableau des variables ; **Objectif** & **DoD** à la fin de chaque bloc)*
 
 ---
 
-## 0 – Gouvernance & architecture multi-tenant (P0)
+## 1 · Side-car pré-ingestion (safety + langue + gating audio/image) ★
 
-### 0.1  Namespaces K8s + quotas
+* [x] **Déployer micro-service `ingest-filter` (Rust/Go)**
+  ☑ Exposé via Envoy; intercepte avant Kafka.
+  ☑ Retourne HTTP 422 si payload “fail”.
+* [x] **Chaîne sécurité**
 
-* [x] **Créer script Helm `charts/tenant-ns.tpl`**
-  [x] Namespace `tenant-{{id}}`
-  [x] `ResourceQuota` CPU, GPU (`nvidia.com/gpu`)
-  [x] `LimitRange` mem/CPU par pod
-* [x] **NetworkPolicy** isole egress inter-tenant
-* **Objectif** : aucune pod cross-namespace reachable
-* **DoD** : test `kubectl exec ... curl` fail inter-tenant
+  1. Regex list 3 000 termes.
+  2. Mini-model `distilroberta-toxic` → score $s_\text{tox}$.
+  3. CLIP-NSFW → score $s_\text{nsfw}$.
+  4. **Décision** block si
 
-### 0.2  Neo4j Fabric multi-db
-
-* [x] Instance **Fabric** + DB par tenant
-  [x] Route Cypher : `USING DATABASE $tenant`
-  [x] Flyway migration path `db/migration/<tenant>/`
-* **DoD** : user A ne voit pas nœuds user B (Cypher test)
-
-### 0.3  Crédit-GPU & billing
-
-* [x] **Prometheus exporter** `gpu_minutes_total{tenant}`
+     $$
+       s = \tfrac12(s_\text{tox}+s_\text{nsfw}) > 0.7
+     $$
+* [x] **LangID** fastText → skip BLIP/Whisper si $lang\notin\{\text{fr,en}\}$.
+* [x] **Audio/Image gate** calculé avant push :
 
   $$
-    C = t_\text{GPU}(min)\times P_\text{unit}
+    \text{thr}_{SNR}
+    = 6 + 0.5\,\sigma_{SNR},\quad
+    \sigma_{SNR}=\sqrt{\tfrac1N\sum(SNR_i-\bar SNR)^2}
   $$
-
-  | Var             | Sig.          |
-  | --------------- | ------------- |
-  | $t_\text{GPU}$  | durée minutes |
-  | $P_\text{unit}$ | prix/min      |
-* [x] **Quota controller** : stop job si crédits < 0
-* [x] **Coût total** `gpu_cost_total{tenant}` via $C=t_\text{GPU}\times P_\text{unit}$
-* [x] **Admin** : top-up & mise à jour prix par tenant
-* **DoD** : job dépasse quota ⇒ état `failed_quota`
+* [x] Métrique `snr_block_total` pour payloads audio en dessous du seuil SNR.
+* **Objectif** : −10 % volume Kafka, taux faux positifs audio < 2 %.
+* **DoD** : tests e2e → 95 % contenu tox bloqué, métriques `filter_block_total`, `lang_skipped_total` exposées.
 
 ---
 
-## 1 – Scalabilité GPU & optimisation coût (P0)
+## 2 · Hypergraphe “typed edges” + Laplacien multiplex ★
 
-### 1.1  Spot / on-demand autoscale
-
-* [x] **Cluster-Autoscaler** + GPU-Operator
-  [x] NodeGroup “spot-gpu”, “on-demand-gpu”
-  [x] Taint spot `preemptible=true:NoSchedule`
-* [x] Job spec : `tolerations` + restartPolicy `OnFailure`
-* **DoD** : spot évicté → fallback CPU LoRA 8-bit ; metric `reschedule_latency` < 3 min
-
-### 1.2  ZeRO-3 + gradient accumulation
-
-* [x] `accelerate_config.yaml` enable ZeRO-3
-  [x] `gradient_accumulation_steps = ceil(batch/avail_mem)`
-* **DoD** : batch 4×, VRAM Δ 0
-
----
-
-## 2 – Orchestration MLOps (P1)
-
-### 2.1  **Airflow DAG** `dags/datacreek_finetune.py`
-
-```
-ingest  >>   build_dataset   >>  fine_tune_SFT
-                                 >>  eval_QA
-                                 >>  deploy_canary
-```
-
-* [x] Tasks param `tenant`, push to XCom
-* **DoD** : DAG success end-to-end on dev cluster
-
-### 2.2  MLflow tracking
-
-* [x] **mlflow.start_run** in trainer callback
-  [x] log params (lr, epochs, template_SHA)
-  [x] log metric `val_loss`, `reward_avg`
-  [x] artifact `model.gguf`
-* **DoD** : run visible in MLflow UI ; compare diff runs
-
-### 2.3  Feature Store (Feast)
-
-* [x] **feast/feature_repo.py**
-  [x] Entity `embedding_hash`
-  [x] Feature `vector_fp8`
-* **DoD** : lookup same hash returns cached vector (cache hit rate metric)
-
----
-
-## 3 – Serving & A/B / canary (P1)
-
-* [x] **Ray Serve** deployment
-  [x] `deployment_name = f"{tenant}-{modelVer}"`
-  [x] Router header `X-Tenant`, `X-Model-Version`
-* [x] Canary 5 % traffic, metric `p99_latency`
+* [x] **Étendre schéma Neo4j** : labels `:EDGE_{type}` (`DOC`, `USER`, `TAG`).
+* [x] **Laplacien 3-tenseur**
 
   $$
-    \text{Rollback if } p99_\text{canary} > 2\times p99_\text{prod}
+    \mathcal{L}^{(t)} = I - D_t^{-1/2}\,B_t\,W_t\,D_t^{-1}B_t^\top D_t^{-1/2}
   $$
-* **DoD** : simulate latency spike → auto-rollback
+
+  $$
+    \Delta_\text{multi} = \sum_{t\in T} \alpha_t\;\mathcal{L}^{(t)},
+    \quad \alpha_t \ge 0,\;\sum \alpha_t = 1
+  $$
+
+  | Var        | Signification                     |
+  | ---------- | --------------------------------- |
+  | $B_t$      | Incidence hyperarêtes type t      |
+  | $W_t$      | Poids initiaux (=1)               |
+  | $\alpha_t$ | poids apprenables (meta gradient) |
+* [x] **Meta-gradient** — optimiser $\alpha_t$ sur Macro-F1 validation.
+* **Objectif** : Macro-F1 communauté +1 pt.
+* **DoD** : script d’apprentissage `train_alpha.py`; tests unit → contraintes $\sum \alpha=1$.
 
 ---
 
-## 4 – Data compliance & retention (P1)
+## 3 · Solver ILP « smart-patch » pour incohérences Sheaf ↔ Hyper ★☆
 
-### 4.1  Soft-delete & tombstone
+* [x] **Modèle** : variables binaires $x_e$ « appliquer patch sur arête ».
 
-* [x] Flag `deleted_at` TIMESTAMP on nodes & vectors
-* [x] Lambda purge after 30 d
-* **DoD** : GDPR “undo” possible durant 30 d
+  $$
+    \max_{x} \;\Delta S = \sum_e c_e x_e
+    \quad\text{s.c.}\quad
+    \sum_e w_e x_e \le B
+  $$
 
-### 4.2  Toxic log retention
-
-* [x] S3 lifecycle rule : `ingest-toxic/` expire after 7 d
-* **DoD** : bucket scan shows zero > 7 d
-
----
-
-## 5 – Hypergraph R/T updates (P1)
-
-* [x] **Flink job** window 30 s → write incremental edges
-* [x] RedisGraph hot layer for queries p95 < 500 ms
-* **DoD** : delta latency analytics 0.5 → 0.05 s
+  (poids = risque, $B$=budget patch).
+* [x] Résolution via OR-Tools; stocke patchset id.
+* [x] **Workflow UI** `/edge_review` : bouton *Apply*, *Reject*.
+* **Objectif** : Cohérence S ↑ 10 % sans patch cassé.
+* **DoD** : test propose patch cohérent ; rollback historique versionné.
 
 ---
 
-## 6 – Explainability & curator loop (P2)
+## 4 · Flink watermark & late-event replay ★
 
-* [x] UI `/ui/edge_review`
-  [x] List edges Δλ>τ, accept/reject
-  [x] PATCH Neo4j via backend
-* [x] Version history `edge_repair_log`
-* **DoD** : curator merges patch, audit log ok
-
----
-
-## 7 – TDA H₂ & UMAP lens adaptatif (P2)
-
-### 7.1  H₂ persistance sketch
-
-* [x] Use GUDHI `persistence(p=2)`
-  [x] MinHash 512-bit signature
-* **DoD** : signature added to embedding; recall +0.3 %
-
-### 7.2  UMAP lens selection
-
-* [x] Compute trustworthiness $T(u)$ for candidate lens
-  Choose lens s.t. $T>0.95$
-* **DoD** : Mapper stability (N clusters var < 5 %)
+* [x] `WatermarkStrategy.forBoundedOutOfOrderness(Duration.ofMinutes(10))`
+  ☑ Side output `late-events` re-injected via Kafka topic `late_edges`.
+* **Objectif** : Data loss < 0.1 %.
+* **DoD** : integration test with 8 min delay → edge présent.
 
 ---
 
-## 8 – Embedding drift → alert & retrain (P2)
+## 5 · GPU cost admission controller ★
 
-* [x] Threshold schedule : warn 0.07, crit 0.1
-* [x] Airflow task `trigger_retrain` if crit
-* **DoD** : drift simulation triggers DAG
+* [x] **Mutating admission webhook** (`gpu-quota-webhook`)
+  ☑ Calcule estimate $E_{gpu} = t_\text{epoch}\cdot n_\text{epoch}$.
+  ☑ Refuse si `tenant_credits - E_gpu < 0`.
+* [x] **Prometheus credits** :
+
+  $$
+    \text{credits_left} = credits_0 - \int gpu\_minutes\,dt
+  $$
+* **Objectif** : dépassement quota = 0.
+* **DoD** : e2e submit job over-budget → HTTP 403.
 
 ---
 
-## 9 – Cost dashboards & GC (P2)
+## 6 · SmoothQuant bfloat4 + outlier clipping ★☆
 
-* [x] Grafana : panel `gpu_minutes_total per tenant`
-* [x] Cron `gc_checkpoints.sh`: delete >30 d & not best
-* **DoD** : disk usage stable < 80 %
+* [x] **`training/quant_utils.py`** :
+  ☑ Compute per-group scale $s_g = \max_{w\in g}|w|$/127.
+  ☑ If $s_g > s_{P99}$ ⇒ clip.
+* **DoD** : PPL ↑ < +2 %, CPU latency −5 %, aucune saturation.
 
 ---
 
-### KPI global v3.0
+## 7 · Drift threshold adaptatif par tenant ☆
 
-| KPI                             | Cible        |
-| ------------------------------- | ------------ |
-| Cross-tenant isolation breaches | 0            |
-| GPU cost accounted              | 100 %        |
-| Canary rollback time            | < 2 min      |
-| Real-time query latency         | p95 < 500 ms |
-| Drift resolved <                | 24 h         |
+* [x] **EWMA**
 
-**Lorsque toutes les cases seront cochées, Datacreek atteindra la maturité SaaS v3.0.**
+  $$
+    \mu_{t}=\lambda d_t+(1-\lambda)\mu_{t-1},\;
+    \sigma_{t} =\sqrt{\lambda(d_t-\mu_t)^2+(1-\lambda)\sigma_{t-1}^2}
+  $$
+* [x] Alerte si $d_t > \mu_t + 3\sigma_t$.
+* **DoD** : faux positifs drift divisés par 5 sur tenants faibles.
+
+---
+
+## 8 · Metrics embedding CPU cost ☆
+
+* [x] `analysis/embedding.py` : compteur Prom `embedding_cpu_seconds_total{tenant}`.
+* **DoD** : billing dashboard affiche cost CPU + GPU.
+
+---
+
+## 9 · CronJob GC checkpoints (compléter) ☆
+
+* [x] `k8s/cron/gc.yaml` : schedule `@daily`, job → `cleanup_checkpoints.py`.
+* **DoD** : disque cluster < 80 %.
+
+---
+
+## 10 · Metrics requêtes Ray Serve ☆
+
+* [x] `serving/ray_serve.py` : exposer `serve_requests_total{tenant,model_version}` et `serve_request_latency_seconds`.
+* **DoD** : test unit → compteur + histogramme incrémentent.
+
+---
+
+## 11 · Metrics hypergraph late edges ☆
+
+* [x] `hypergraph.py` : compteur Prom `late_edge_total` comptabilise les edges arrivées après le watermark.
+* **DoD** : test unit → compteur incrémente quand un edge est routé vers `late_edges`.
+
+---
+
+## 12 · GPU quota submission metrics ☆
+
+* [x] `gpu_quota_webhook.py` : compteur Prom `gpu_requests_total{tenant, status}`.
+* **DoD** : test unit → compteur incrémente pour accept et reject.
+
+---
+
+## 13 · Metrics dérive tenant alerts ☆
+
+* [x] `drift.py` : compteur Prom `drift_alert_total{tenant}` incrémenté à chaque alerte.
+* **DoD** : test unit → compteur incrémente lors d'une alerte.
+
+---
+
+### KPI ciblés v3.1
+
+| KPI                     | Cible    |
+| ----------------------- | -------- |
+| Kafka volume réduit     | –10 %    |
+| Toxic false-negative    | ↓ ≥ 50 % |
+| Macro-F1 commu.         | +1 pt    |
+| Cohérence S après patch | +10 %    |
+| Quota breach            | 0        |
+| Data loss late event    | < 0.1 %  |
+
+**Cochez tous les blocs pour passer Datacreek en v3.1-alpha SaaS compliant.**
 
 ### History
-- Reset AGENTS for v3.0 checklist and added Airflow DAG with tenant XCom propagation.
-- Added MLflow trainer callback logging params, metrics and model artifact with tests.
-- Implemented Feast feature repository with cached vector lookups and unit tests.
-- Added Ray Serve tenant-aware deployment with header-based routing and tests.
-- Introduced Helm template for tenant namespaces enforcing quotas and egress isolation with tests.
-- Added Accelerate ZeRO-3 config and gradient accumulation utility with tests.
-- Introduced Neo4j Fabric client for tenant-scoped queries and migration paths with tests.
-- Added GPU credit Prometheus exporter and quota controller with unit tests.
-- Implemented Ray Serve canary routing with p99 latency tracking and auto-rollback tests.
-- Added soft-delete utilities with `deleted_at` timestamps and purge logic, including unit tests.
-- Enforced S3 lifecycle rule expiring `ingest-toxic/` objects after 7 days with tests.
-- Added drift detection utilities with warn/critical thresholds and an Airflow DAG that triggers retraining when critical.
-- Added GPU usage Grafana dashboard and checkpoint GC script with unit tests.
-- Added GPU node group Helm template and job-spec builder with spot tolerations and restart policy tests.
-- Implemented Flink-style edge stream processor and RedisGraph hot layer tracking p95 latency with tests.
-- Built FastAPI edge review UI with Neo4j-backed accept/reject and version log.
-- Added persistence MinHash sketches and UMAP lens selector with trustworthiness metric.
-- Replaced external Feast dependency with lightweight in-tree stubs to keep unit
-  tests self-contained.
-- Expanded fine-tuning DAG tests to ensure tenant ID propagates through all downstream tasks.
-- Introduced GPU cost tracking metric and helper computing $C=t_\text{GPU}\times P_\text{unit}$ with tests.
-- Added balance query and credit top-up methods to GPU quota controller with tests.
-- Formatted DAG and Ray Serve test files via pre-commit and reran targeted tests.
-- Added tenant price update method to GPU quota controller with tests.
-- Ensured tests can import local packages by inserting the repository root into ``sys.path``.
+- Reset AGENTS for v3.1 checklist and imported tasks.
+- Added embedding CPU seconds Prometheus metric with tests.
+- Implemented per-tenant EWMA drift thresholds with alerting tests.
+- Added daily checkpoint GC CronJob manifest and validation tests.
+- Added SmoothQuant per-group scaling with P99 clipping and tests.
+- Added Flink-style watermarking with late-event replay and tests.
+- Added GPU quota admission webhook enforcing per-tenant credits with tests.
+- Implemented multiplex Laplacian computation and alpha meta-gradient optimiser with tests.
+- Added ILP smart-patch solver using OR-Tools with patchset registry and tests.
+- Added FastAPI ingest-filter side-car with language gating, audio SNR threshold
+  and toxic content checks, plus tests.
+- Marked edge review workflow with apply/reject actions as complete.
+- Extended Neo4j schema with typed edge labels and uniqueness constraints.
+- Exposed per-tenant request counters and latency histograms for Ray Serve with tests.
+- Added Prometheus counter for late hypergraph edges with tests.
+- Added GPU quota submission counter with tests.
+- Added drift alert Prometheus counter with tests.
+- Added CPU cost tracker for billing dashboards with tests.
+- Added SNR block metric for ingest filter to separate low SNR rejections.
+- Re-ran linters and embedding CPU metric tests to verify implementation.

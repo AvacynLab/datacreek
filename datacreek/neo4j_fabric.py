@@ -56,3 +56,46 @@ def flyway_migration_path(tenant: str) -> Path:
     PosixPath('db/migration/alpha')
     """
     return Path("db") / "migration" / tenant
+
+
+# Supported hyperedge types for multiplexed graphs.
+EDGE_TYPES = ("DOC", "USER", "TAG")
+
+
+def extend_schema_with_edge_labels(client: Neo4jFabricClient, tenant: str) -> None:
+    """Ensure typed hyperedge labels and constraints exist in Neo4j.
+
+    For every hyperedge type ``t`` in :data:`EDGE_TYPES`, this helper performs two
+    operations on the tenant's database:
+
+    1. Relabel existing ``:EDGE`` nodes that declare ``type = t`` with the more
+       specific label ``:EDGE_{t}``.  This mirrors the typed-edge notion used in
+       the in-memory hypergraph and enables type-selective queries.
+    2. Create a uniqueness constraint on the ``id`` property for nodes carrying
+       that label so that hyperedges can be addressed efficiently.
+
+    Parameters
+    ----------
+    client:
+        Neo4j client used to execute Cypher statements.
+    tenant:
+        Identifier of the tenant database in Fabric.
+    """
+
+    for edge_type in EDGE_TYPES:
+        label = f"EDGE_{edge_type}"
+        # ``MATCH`` is used to update existing :EDGE nodes with a more specific
+        # label so downstream queries can select by type without filtering.
+        client.run(
+            tenant,
+            f"MATCH (e:EDGE {{type: '{edge_type}'}}) SET e:{label}",
+        )
+        # Enforce uniqueness on the ``id`` property for the newly labelled nodes
+        # to keep hyperedge identifiers collision-free.
+        client.run(
+            tenant,
+            (
+                f"CREATE CONSTRAINT edge_{edge_type.lower()}_id IF NOT EXISTS "
+                f"FOR (e:{label}) REQUIRE e.id IS UNIQUE"
+            ),
+        )
