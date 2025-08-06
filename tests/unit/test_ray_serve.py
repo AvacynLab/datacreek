@@ -29,6 +29,8 @@ ray_stub = types.SimpleNamespace(serve=serve_ns)
 sys.modules.setdefault("ray", ray_stub)
 
 from serving.ray_serve import (
+    REQUEST_COUNT,
+    REQUEST_LATENCY,
     ModelDeployment,
     TenantRouter,
     _maybe_rollback,
@@ -121,3 +123,20 @@ def test_maybe_rollback_triggers_when_canary_slower():
     with patch("serving.ray_serve.serve.delete_deployment") as delete:
         assert _maybe_rollback("acme")
         delete.assert_called_once_with("acme-canary")
+
+
+def test_prometheus_metrics_increment_on_request():
+    """Router increments Prometheus counters and histograms."""
+
+    _reset_metrics()
+    request = make_request("acme", "v1")
+    router = TenantRouter()
+    mock_handle = AsyncMock()
+    mock_handle.remote.return_value = {"ok": True}
+
+    with patch("serving.ray_serve.serve.get_deployment_handle") as get_handle:
+        get_handle.return_value = mock_handle
+        asyncio.run(router(request))
+
+    assert REQUEST_COUNT.labels(tenant="acme", model_version="v1")._value.get() == 1
+    assert REQUEST_LATENCY.labels(tenant="acme", model_version="v1")._sum.get() > 0

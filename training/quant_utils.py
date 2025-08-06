@@ -93,6 +93,76 @@ def _per_channel_scale(weight: torch.Tensor) -> torch.Tensor:
     return scale
 
 
+def smoothquant_group_scales(
+    weight: torch.Tensor, *, group_size: int = 64
+) -> torch.Tensor:
+    """Compute SmoothQuant per-group scales with outlier clipping.
+
+    For bfloat4 quantization we partition the weight tensor into groups of
+    ``group_size`` values along the last dimension.  Each group gets a scale
+    ``s_g = max(|w|) / 127``.  To avoid rare extreme values from dominating,
+    any scale above the 99th percentile ``s_{P99}`` is clipped to ``s_{P99}``.
+
+    Parameters
+    ----------
+    weight:
+        Tensor containing the weights to be quantized.
+    group_size:
+        Number of consecutive elements in the last dimension that form a group.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-group scales shaped like ``weight`` with the last dimension divided
+        by ``group_size``.
+    """
+
+    last_dim = weight.shape[-1]
+    if last_dim % group_size != 0:
+        raise ValueError("last dimension must be divisible by group_size")
+    num_groups = last_dim // group_size
+    groups = weight.reshape(*weight.shape[:-1], num_groups, group_size)
+    max_per_group = groups.abs().amax(dim=-1)
+    scales = max_per_group / 127.0
+    p99 = torch.quantile(scales.reshape(-1), 0.99)
+    return torch.clamp(scales, max=p99)
+
+
+def quantize_bfloat4(
+    weight: torch.Tensor, *, group_size: int = 64
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Quantize weights to bfloat4 using SmoothQuant scaling.
+
+    The function first computes per-group scales via
+    :func:`smoothquant_group_scales` and then divides the weights by their
+    respective scale.  Values are rounded to the nearest integer and clipped to
+    the 4-bit signed range ``[-8, 7]``.  The quantized tensor is returned in
+    int8 form alongside the scales so the original values can be approximately
+    reconstructed.
+
+    Parameters
+    ----------
+    weight:
+        Tensor of weights to be quantized.
+    group_size:
+        Number of elements per group when computing scales.
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor]
+        The first tensor contains the quantized values (dtype=torch.int8).
+        The second tensor holds the per-group scales.
+    """
+
+    scales = smoothquant_group_scales(weight, group_size=group_size)
+    # Reshape weights to align groups with their scale
+    last_dim = weight.shape[-1]
+    groups = weight.reshape(*weight.shape[:-1], -1, group_size)
+    normalized = groups / scales.unsqueeze(-1)
+    quantized = torch.clamp(torch.round(normalized), -8, 7).to(torch.int8)
+    return quantized, scales
+
+
 def quantize_state_dict_nf4(
     state: Dict[str, torch.Tensor],
     *,

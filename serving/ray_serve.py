@@ -28,16 +28,42 @@ import random
 import time
 from collections import defaultdict
 
+from prometheus_client import Counter, Histogram
 from ray import serve
 from starlette.requests import Request
 
 _latencies: defaultdict[str, list[float]] = defaultdict(list)
 
+# Prometheus metrics tracking request counts and latency per tenant and model
+# version. These gauges allow operators to monitor production traffic and
+# correlate latency spikes with rollback events.
+REQUEST_COUNT = Counter(
+    "serve_requests_total",
+    "Total number of requests handled by tenant and model version.",
+    ["tenant", "model_version"],
+)
+REQUEST_LATENCY = Histogram(
+    "serve_request_latency_seconds",
+    "Latency of requests handled by tenant and model version.",
+    ["tenant", "model_version"],
+)
+
 
 def _record_latency(deployment: str, duration: float) -> None:
-    """Store the latency for ``deployment`` in memory."""
+    """Store latency for ``deployment`` and update Prometheus metrics.
+
+    Parameters
+    ----------
+    deployment:
+        Name of the Ray Serve deployment in the form ``"tenant-version"``.
+    duration:
+        Observed latency in seconds for the handled request.
+    """
 
     _latencies[deployment].append(duration)
+    tenant, model_version = deployment.split("-", 1)
+    REQUEST_COUNT.labels(tenant=tenant, model_version=model_version).inc()
+    REQUEST_LATENCY.labels(tenant=tenant, model_version=model_version).observe(duration)
 
 
 def _p99(samples: list[float]) -> float:
@@ -70,9 +96,11 @@ def _maybe_rollback(tenant: str) -> bool:
 
 
 def _reset_metrics() -> None:
-    """Clear recorded latency samples (used in tests)."""
+    """Clear recorded metrics (used in tests)."""
 
     _latencies.clear()
+    REQUEST_COUNT.clear()
+    REQUEST_LATENCY.clear()
 
 
 @serve.deployment
